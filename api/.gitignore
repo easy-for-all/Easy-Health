@@ -1,0 +1,11 @@
+/config/master.key
+/config/credentials/*.key
+/.env*
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+/tmp/pids/*
+!/tmp/pids/.keep
+/storage/*
+!/storage/.keep

@@ -1,0 +1,98 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useAuth } from "@/features/auth/auth-context";
+
+export default function SignUpPage() {
+  const { signUp } = useAuth();
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await signUp(name, email, password);
+      router.push("/onboarding");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar conta");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <h1 className="mb-2 text-center text-2xl font-bold text-gray-900">Criar conta</h1>
+        <p className="mb-8 text-center text-sm text-gray-500">Comece sua jornada de saúde</p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+          )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Nome</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              minLength={2}
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+              placeholder="Seu nome"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+              placeholder="seu@email.com"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Senha</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+              placeholder="Mínimo 8 caracteres"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-green-500 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:opacity-50"
+          >
+            {loading ? "Criando conta..." : "Criar conta"}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-gray-500">
+          Já tem conta?{" "}
+          <Link href="/login" className="font-medium text-green-600 hover:underline">
+            Entrar
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}

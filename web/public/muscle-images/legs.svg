@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 320">
+  <rect width="220" height="320" fill="#f8fafc"/>
+  <circle cx="110" cy="42" r="24" fill="#cbd5e1"/>
+  <path d="M70 78c-22 18-34 48-34 88v72h148v-72c0-40-12-70-34-88-14 16-66 16-80 0Z" fill="#e2e8f0"/>
+  <path d="M46 116 24 196M174 116l22 80" stroke="#cbd5e1" stroke-width="24" stroke-linecap="round"/>
+  <path d="M70 222h34l-12 84H66l-18-84h22Z" fill="#22c55e"/>
+  <path d="M116 222h34l22 0-18 84h-26l-12-84Z" fill="#22c55e"/>
+  <text x="110" y="306" text-anchor="middle" font-family="Arial" font-size="16" font-weight="700" fill="#334155">PERNAS</text>
+</svg>

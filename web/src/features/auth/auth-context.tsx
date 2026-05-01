@@ -1,0 +1,72 @@
+"use client";
+
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { api } from "@/shared/lib/api";
+import type { User } from "@/shared/types/user";
+
+interface AuthContextValue {
+  user: User | null;
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (name: string, email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const publicPaths = ["/login", "/sign-up"];
+
+    api.get<User>("/api/v1/auth/me")
+      .then(setUser)
+      .catch(() => {
+        document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
+        setUser(null);
+
+        if (!publicPaths.some((path) => window.location.pathname.startsWith(path))) {
+          window.location.replace("/login");
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function signIn(email: string, password: string) {
+    const u = await api.post<User>("/api/v1/auth/sign_in", { email, password });
+    setUser(u);
+  }
+
+  async function signUp(name: string, email: string, password: string) {
+    const u = await api.post<User>("/api/v1/auth/sign_up", {
+      name,
+      email,
+      password,
+      password_confirmation: password,
+    });
+    setUser(u);
+  }
+
+  async function signOut() {
+    try {
+      await api.delete("/api/v1/auth/sign_out");
+    } finally {
+      document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
+      setUser(null);
+    }
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
+}
