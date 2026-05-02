@@ -1,0 +1,1 @@
+Teste de PR automático via Paperclip
