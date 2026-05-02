@@ -10,6 +10,9 @@ gem "bcrypt", "~> 3.1.7"
 gem "devise"
 gem "rack-cors"
 
+gem "sentry-ruby"
+gem "sentry-rails"
+
 group :development, :test do
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "brakeman", require: false
