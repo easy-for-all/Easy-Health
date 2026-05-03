@@ -134,7 +134,14 @@ export default function WorkoutTodayPage() {
     const state = runtimeFor(exerciseRuntime, exercise);
     const repsBySet = [...state.reps_by_set];
     repsBySet[currentSet - 1] ||= exercise.reps;
-    updateRuntime(exercise.workout_day_exercise_id, { reps_by_set: repsBySet });
+
+    const weightBySet = [...state.weight_by_set];
+    const currentWeight = weightBySet[currentSet - 1];
+    if (currentSet < state.planned_sets && currentWeight && !weightBySet[currentSet]) {
+      weightBySet[currentSet] = currentWeight;
+    }
+
+    updateRuntime(exercise.workout_day_exercise_id, { reps_by_set: repsBySet, weight_by_set: weightBySet });
 
     if (currentSet < state.planned_sets) {
       setCurrentSet((s) => s + 1);
@@ -171,7 +178,7 @@ export default function WorkoutTodayPage() {
       <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
         <h1 className="text-2xl font-bold text-gray-900">Nenhum treino disponível</h1>
         <p className="mt-2 text-sm text-gray-500">Crie um planejamento para começar.</p>
-        <button onClick={() => router.push("/plan")} className="mt-6 rounded-lg bg-green-500 px-6 py-3 text-sm font-semibold text-white">
+        <button onClick={() => router.push("/plan")} className="mt-6 rounded-lg bg-primary-500 px-6 py-3 text-sm font-semibold text-white">
           Ver planejamento
         </button>
       </div>
@@ -216,7 +223,7 @@ export default function WorkoutTodayPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
         <p className="mt-4 text-gray-600">Nenhum exercício encontrado para este treino.</p>
-        <button onClick={() => setPhase("overview")} className="mt-4 text-sm text-green-600 hover:underline">
+        <button onClick={() => setPhase("overview")} className="mt-4 text-sm text-primary-600 hover:underline">
           Voltar
         </button>
       </div>
@@ -227,7 +234,7 @@ export default function WorkoutTodayPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4">
         <p className="text-sm font-medium uppercase tracking-wide text-gray-400">Descanso</p>
-        <p className="mt-4 text-7xl font-bold text-green-500">{restLeft}s</p>
+        <p className="mt-4 text-7xl font-bold text-primary-500">{restLeft}s</p>
         <p className="mt-2 text-gray-500">Próximo: {exercise.name}</p>
         <button onClick={skipRest} className="mt-8 rounded-lg border border-gray-200 px-6 py-3 text-sm text-gray-500 hover:bg-gray-50">
           Pular descanso
@@ -243,7 +250,7 @@ export default function WorkoutTodayPage() {
     return (
       <div className="flex min-h-screen flex-col px-4 py-6">
         <div className="flex flex-1 flex-col justify-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-green-500">Exercício concluído</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-primary-500">Exercício concluído</p>
           <h1 className="mt-2 text-3xl font-bold text-gray-900">{exercise.name}</h1>
           <p className="mt-2 text-gray-500">Como você se sentiu nesse exercício?</p>
           <div className="mt-6 grid grid-cols-2 gap-3">
@@ -251,7 +258,7 @@ export default function WorkoutTodayPage() {
               <button
                 key={feeling.value}
                 onClick={() => finishExercise(feeling.value)}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-4 text-sm font-semibold text-gray-700 hover:border-green-400"
+                className="rounded-xl border border-gray-200 bg-white px-4 py-4 text-sm font-semibold text-gray-700 hover:border-primary-400"
               >
                 {feeling.label}
               </button>
@@ -270,7 +277,7 @@ export default function WorkoutTodayPage() {
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm text-gray-500">{currentIndex + 1}/{exercises.length}</span>
         <div className="mx-4 h-1.5 flex-1 rounded-full bg-gray-100">
-          <div className="h-1.5 rounded-full bg-green-500 transition-all" style={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }} />
+          <div className="h-1.5 rounded-full bg-primary-500 transition-all" style={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }} />
         </div>
         <button onClick={() => setPhase("done")} className="text-sm font-medium text-red-500">Encerrar</button>
       </div>
@@ -280,8 +287,21 @@ export default function WorkoutTodayPage() {
           <SmartImage src={exercise.image_url} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
           <SmartImage src={exercise.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={exercise.muscle_group ?? "músculo"} className="h-48 w-full rounded-xl object-cover" />
         </div>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-green-500">{exercise.muscle_group ?? exercise.exercise_type}</p>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-primary-500">
+          {categoryIcon(exercise.exercise_type, exercise.muscle_group)} {exercise.muscle_group ?? exercise.exercise_type}
+        </p>
         <h2 className="mt-2 text-3xl font-bold text-gray-900">{exercise.name}</h2>
+        {(() => {
+          const prev = lastExerciseLog(sessions, exercise.exercise_id);
+          if (!prev) return null;
+          const date = new Date(prev.session.completed_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+          const weight = prev.log.weight_kg ? `${prev.log.weight_kg} kg` : null;
+          return (
+            <p className="mt-1 text-xs text-gray-400">
+              Última vez: {date}{weight ? ` · ${weight}` : ""}
+            </p>
+          );
+        })()}
         <p className="mt-2 text-gray-500">{exercise.description}</p>
 
         <div className="mt-6 grid grid-cols-3 gap-3">
@@ -300,7 +320,7 @@ export default function WorkoutTodayPage() {
             value={runtime.weight_by_set[currentSet - 1] ?? ""}
             onChange={(event) => updateCurrentSetWeight(exercise, event.target.value)}
             placeholder="kg"
-            className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+            className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
           />
         </label>
 
@@ -312,12 +332,12 @@ export default function WorkoutTodayPage() {
             step="5"
             value={runtime.rest_seconds}
             onChange={(event) => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
-            className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+            className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
           />
         </label>
       </div>
 
-      <button onClick={handleSetDone} className="w-full rounded-2xl bg-green-500 py-4 text-base font-semibold text-white hover:bg-green-600">
+      <button onClick={handleSetDone} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">
         Feito
       </button>
     </div>
@@ -343,9 +363,9 @@ function ChooseScreen({
 
       <div className="mt-6 space-y-3">
         {plan.days.map((day, idx) => (
-          <button key={day.id} onClick={() => onChoose(day)} className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left hover:border-green-300">
+          <button key={day.id} onClick={() => onChoose(day)} className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left hover:border-primary-300">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-50 font-bold text-green-600">{LETTERS[idx] ?? idx + 1}</span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600">{LETTERS[idx] ?? idx + 1}</span>
               <div>
                 <p className="font-semibold text-gray-900">{day.name}</p>
                 <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
@@ -446,48 +466,47 @@ function OverviewScreen({
                 <SmartImage src={ex.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={ex.muscle_group ?? "músculo"} className="h-16 w-14 rounded-lg object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-gray-900">{ex.name}</p>
-                  <p className="text-xs text-gray-400">{ex.muscle_group ?? ex.exercise_type} · {state.planned_sets}x{ex.reps} · {state.rest_seconds}s descanso</p>
+                  <p className="text-xs text-gray-400">{categoryIcon(ex.exercise_type, ex.muscle_group)} {ex.muscle_group ?? ex.exercise_type} · {state.planned_sets}x{ex.reps} · {state.rest_seconds}s descanso</p>
                 </div>
                 <button onClick={() => openSwap(ex)} className="text-xs text-blue-500 hover:underline">Trocar</button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                {Array.from({ length: state.planned_sets }, (_, idx) => (
-                  <label key={idx} className="block text-xs font-medium text-gray-500">
-                    Peso série {idx + 1}
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.5"
-                      value={state.weight_by_set[idx] ?? ""}
-                      onChange={(event) => {
-                        const weightBySet = [...state.weight_by_set];
-                        weightBySet[idx] = event.target.value;
-                        onChangeRuntime(ex.workout_day_exercise_id, { weight_by_set: weightBySet });
-                      }}
-                      placeholder="kg"
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-green-500 focus:outline-none"
-                    />
-                  </label>
-                ))}
+                <label className="block text-xs font-medium text-gray-500">
+                  Peso da série (kg)
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.5"
+                    value={state.weight_by_set[0] ?? ""}
+                    onChange={(event) => {
+                      const weight = event.target.value;
+                      onChangeRuntime(ex.workout_day_exercise_id, {
+                        weight_by_set: Array.from({ length: state.planned_sets }, () => weight),
+                      });
+                    }}
+                    placeholder="kg"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-gray-500">
+                  Descanso (segundos)
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={state.rest_seconds}
+                    onChange={(event) => onChangeRuntime(ex.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+                  />
+                </label>
               </div>
-              <label className="mt-3 block text-xs font-medium text-gray-500">
-                Descanso desse exercício
-                <input
-                  type="number"
-                  min="0"
-                  step="5"
-                  value={state.rest_seconds}
-                  onChange={(event) => onChangeRuntime(ex.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-green-500 focus:outline-none"
-                />
-              </label>
             </div>
           );
         })}
       </div>
 
-      <button onClick={openAdd} className="mt-4 w-full rounded-xl border border-dashed border-green-300 py-3 text-sm font-semibold text-green-600">Adicionar exercício</button>
+      <button onClick={openAdd} className="mt-4 w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-semibold text-primary-600">Adicionar exercício</button>
 
       {(swapMode || addMode) && (
         <div className="fixed inset-0 flex items-end bg-black/40" onClick={() => { setSwapMode(null); setAddMode(false); }}>
@@ -508,7 +527,7 @@ function OverviewScreen({
         </div>
       )}
 
-      <button onClick={onStart} className="mt-auto w-full rounded-2xl bg-green-500 py-4 text-base font-semibold text-white hover:bg-green-600">Iniciar treino</button>
+      <button onClick={onStart} className="mt-auto w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">Iniciar treino</button>
     </div>
   );
 }
@@ -530,10 +549,13 @@ function DoneScreen({
   const [fatigueLevel, setFatigueLevel] = useState(3);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const exercises = useMemo(() => day.exercises ?? [], [day.exercises]);
 
   async function handleSave() {
     setSaving(true);
+    setSaveError("");
+    try {
     await api.post("/api/v1/workout_sessions", {
       workout_day_id: day.id,
       duration_minutes: duration,
@@ -557,6 +579,11 @@ function DoneScreen({
       }),
     });
     router.push("/dashboard");
+    } catch {
+      setSaveError("Erro ao salvar o treino. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -582,21 +609,44 @@ function DoneScreen({
           <label className="text-sm font-semibold text-gray-700">Nível geral de cansaço</label>
           <div className="mt-3 flex gap-2">
             {[1, 2, 3, 4, 5].map((level) => (
-              <button key={level} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold ${fatigueLevel === level ? "bg-green-500 text-white" : "bg-gray-100 text-gray-500"}`}>
+              <button key={level} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold ${fatigueLevel === level ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-500"}`}>
                 {level}
               </button>
             ))}
           </div>
         </div>
 
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alguma anotação? (opcional)" rows={3} className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-green-500 focus:outline-none" />
-        <button onClick={handleSave} disabled={saving} className="w-full rounded-2xl bg-green-500 py-4 text-base font-semibold text-white disabled:opacity-50">
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alguma anotação? (opcional)" rows={3} className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none" />
+        {saveError && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{saveError}</p>}
+        <button onClick={handleSave} disabled={saving} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white disabled:opacity-50">
           {saving ? "Salvando..." : "Registrar treino"}
         </button>
         <button onClick={onBack} className="w-full py-2 text-sm text-gray-400">Não registrar</button>
       </div>
     </div>
   );
+}
+
+function lastExerciseLog(sessions: WorkoutSession[], exerciseId: number) {
+  const sorted = [...sessions].sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
+  for (const session of sorted) {
+    const log = session.exercise_logs?.find((l) => l.exercise_id === exerciseId);
+    if (log) return { session, log };
+  }
+  return null;
+}
+
+function categoryIcon(exerciseType: string, muscleGroup: string | null): string {
+  if (muscleGroup) {
+    const icons: Record<string, string> = {
+      chest: "💪", back: "🏋️", shoulders: "🤸", biceps: "💪", triceps: "💪", legs: "🦵", core: "🧘",
+    };
+    if (icons[muscleGroup]) return icons[muscleGroup];
+  }
+  const typeIcons: Record<string, string> = {
+    cardio: "❤️", corrida: "🏃", natacao: "🏊", caminhada: "🚶", hiit: "⚡", funcional: "🤸",
+  };
+  return typeIcons[exerciseType] ?? "🏋️";
 }
 
 function createRuntime(exercise: WorkoutDayExercise): ExerciseRuntime {
@@ -616,7 +666,7 @@ function runtimeFor(runtime: Record<number, ExerciseRuntime>, exercise: WorkoutD
 function Metric({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div className="flex-1 rounded-xl bg-gray-50 p-4 text-center">
-      <p className={`text-2xl font-bold ${highlight ? "text-green-500" : "text-gray-900"}`}>{value}</p>
+      <p className={`text-2xl font-bold ${highlight ? "text-primary-500" : "text-gray-900"}`}>{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
     </div>
   );

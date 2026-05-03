@@ -31,7 +31,7 @@ export default function HistoryPage() {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <p className="text-4xl">📋</p>
           <p className="mt-3 text-gray-500">Nenhum treino registrado ainda.</p>
-          <Link href="/workout/today" className="mt-4 text-sm font-medium text-green-600 hover:underline">
+          <Link href="/workout/today" className="mt-4 text-sm font-medium text-primary-600 hover:underline">
             Fazer meu primeiro treino
           </Link>
         </div>
