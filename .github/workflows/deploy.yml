@@ -21,12 +21,12 @@ jobs:
           ssh-keyscan -H 177.7.58.46 >> ~/.ssh/known_hosts
       - name: Deploy to VPS
         run: |
-          ssh -i ~/.ssh/id_ed25519 easy@177.7.58.46 << 'EOF'
-            cd /home/easy/Easy-Health
-            git fetch origin main
-            git reset --hard origin/main
-            docker-compose down
-            docker builder prune -af
-            docker-compose build --no-cache
+          ssh -i ~/.ssh/id_ed25519 easy@177.7.58.46 "
+            cd /home/easy/Easy-Health &&
+            git fetch origin main &&
+            git reset --hard origin/main &&
+            docker-compose down &&
+            docker builder prune -af &&
+            docker-compose build --no-cache &&
             docker-compose up -d
-          EOF
+          "
