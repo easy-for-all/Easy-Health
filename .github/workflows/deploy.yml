@@ -19,12 +19,14 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H 177.7.58.46 >> ~/.ssh/known_hosts
-
       - name: Deploy to VPS
         run: |
           ssh -i ~/.ssh/id_ed25519 easy@177.7.58.46 << 'EOF'
             cd /home/easy/Easy-Health
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             docker-compose down
-            docker-compose up -d --build
-          EOF
+            docker builder prune -af
+            docker-compose build --no-cache
+            docker-compose up -d
+          EOF 
