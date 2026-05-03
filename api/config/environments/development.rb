@@ -14,4 +14,5 @@ Rails.application.configure do
   config.active_record.query_log_tags_enabled = true
 
   config.action_controller.raise_on_missing_callback_actions = true
+  config.hosts << "easyhealth.art"
 end
