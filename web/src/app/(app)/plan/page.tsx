@@ -152,7 +152,7 @@ export default function PlanPage() {
             <div
               key={i}
               className={`h-1 flex-1 rounded-full transition-colors ${
-                i <= wizardStep ? "bg-green-500" : "bg-gray-200"
+                i <= wizardStep ? "bg-primary-500" : "bg-gray-200"
               }`}
             />
           ))}
@@ -255,7 +255,7 @@ function WizardProfile({
 
       <button
         onClick={onNext}
-        className="mt-6 w-full rounded-xl bg-green-500 py-3 text-sm font-semibold text-white hover:bg-green-600"
+        className="mt-6 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600"
       >
         Continuar →
       </button>
@@ -298,8 +298,8 @@ function WizardDays({
             onClick={() => onSelect(n)}
             className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold transition ${
               selected === n
-                ? "bg-green-500 text-white shadow-md"
-                : "border-2 border-gray-200 text-gray-600 hover:border-green-300"
+                ? "bg-primary-500 text-white shadow-md"
+                : "border-2 border-gray-200 text-gray-600 hover:border-primary-300"
             }`}
           >
             {n}
@@ -310,7 +310,7 @@ function WizardDays({
 
       <button
         onClick={onNext}
-        className="mt-8 w-full rounded-xl bg-green-500 py-3 text-sm font-semibold text-white hover:bg-green-600"
+        className="mt-8 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600"
       >
         Continuar →
       </button>
@@ -354,7 +354,7 @@ function WizardPrefs({
               onClick={() => onToggle(act)}
               className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
                 isSelected
-                  ? "border-green-500 bg-green-50"
+                  ? "border-primary-500 bg-primary-50"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
@@ -368,7 +368,7 @@ function WizardPrefs({
       <button
         onClick={onConfirm}
         disabled={selected.length === 0}
-        className="mt-6 w-full rounded-xl bg-green-500 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-green-600"
+        className="mt-6 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-primary-600"
       >
         Criar treino
       </button>
@@ -379,7 +379,7 @@ function WizardPrefs({
 function GeneratingView({ step }: { step: number }) {
   return (
     <div className="flex flex-col items-center py-12">
-      <div className="mb-10 h-12 w-12 animate-spin rounded-full border-4 border-green-500 border-t-transparent" />
+      <div className="mb-10 h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
       <div className="w-full space-y-4">
         {GENERATION_STEPS.map((msg, idx) => (
           <div
@@ -391,15 +391,15 @@ function GeneratingView({ step }: { step: number }) {
             <div
               className={`h-2 w-2 flex-shrink-0 rounded-full transition-colors ${
                 idx < step
-                  ? "bg-green-500"
+                  ? "bg-primary-500"
                   : idx === step
-                  ? "animate-pulse bg-green-400"
+                  ? "animate-pulse bg-primary-400"
                   : "bg-gray-200"
               }`}
             />
             <p
               className={`text-sm font-medium ${
-                idx < step ? "text-green-700" : idx === step ? "text-gray-800" : "text-gray-400"
+                idx < step ? "text-primary-700" : idx === step ? "text-gray-800" : "text-gray-400"
               }`}
             >
               {msg}

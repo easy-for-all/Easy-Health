@@ -1,0 +1,141 @@
+{
+  "nav": {
+    "workout": "Workout",
+    "workouts": "Workouts",
+    "profile": "Profile"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "signUp": "Create account",
+    "loginError": "Login error",
+    "noAccount": "Don't have an account?",
+    "alreadyHaveAccount": "Already have an account?",
+    "name": "Name",
+    "nameError": "Error creating account"
+  },
+  "dashboard": {
+    "hello": "Hello,",
+    "days": "days",
+    "trainNow": "Train now",
+    "chooseWorkout": "Choose A, B, C...",
+    "availableWorkouts": "{count} workouts available",
+    "chooseWorkoutButton": "Choose workout →",
+    "yourWorkouts": "Your workouts",
+    "history": "History",
+    "noWorkouts": "No workouts registered yet.",
+    "createPlan": "Create training plan",
+    "completeProfile": "Complete your profile to see your plan.",
+    "completeProfileButton": "Complete profile",
+    "workout": "Workout",
+    "exercises": "exercises",
+    "train": "Train"
+  },
+  "workout": {
+    "chooseTitle": "Choose your workout",
+    "chooseSubtitle": "Do A, B, C or whatever makes sense today.",
+    "back": "← Back",
+    "chooseAnother": "← Choose another",
+    "lastSevenDays": "Last 7 days",
+    "noRecentWorkouts": "No workouts recorded in this period.",
+    "exercises": "exercises",
+    "rest": "Rest",
+    "skipRest": "Skip rest",
+    "endWorkout": "End workout now",
+    "endWorkoutShort": "End",
+    "exerciseDone": "Exercise complete",
+    "howDidYouFeel": "How did you feel during this exercise?",
+    "skip": "Skip",
+    "sets": "sets",
+    "repsSet": "reps set {set}",
+    "currentSet": "current set",
+    "setWeight": "Set weight",
+    "setWeightKg": "Set weight (kg)",
+    "restAfterSet": "Rest after set",
+    "restSeconds": "Rest (seconds)",
+    "done": "Done",
+    "next": "Next:",
+    "swap": "Swap",
+    "addExercise": "Add exercise",
+    "chooseSubstitute": "Choose a substitute",
+    "noAlternatives": "No alternatives available without repeating this workout.",
+    "startWorkout": "Start workout",
+    "noPlan": "No workouts available",
+    "noPlanDesc": "Create a plan to get started.",
+    "seePlan": "See plan",
+    "noExercise": "No exercises found for this workout.",
+    "lastTime": "Last time:",
+    "feeling": {
+      "bem": "Good",
+      "cansado": "Tired",
+      "dolorido": "Sore",
+      "pesado": "Heavy",
+      "dor": "In pain"
+    },
+    "done_screen": {
+      "title": "Workout complete",
+      "weightPerSet": "Weight per set",
+      "fatigueLevel": "Overall fatigue level",
+      "notes": "Any notes? (optional)",
+      "save": "Log workout",
+      "saving": "Saving...",
+      "noSave": "Don't log",
+      "saveError": "Error saving workout. Try again."
+    }
+  },
+  "plan": {
+    "title": "Training plan",
+    "noplan": "No plan created yet."
+  },
+  "profile": {
+    "title": "Profile",
+    "goal": "Goal",
+    "level": "Level",
+    "age": "Age",
+    "weight": "Weight",
+    "height": "Height",
+    "years": "years",
+    "kg": "kg",
+    "cm": "cm",
+    "edit": "Edit",
+    "save": "Save",
+    "saving": "Saving...",
+    "saveError": "Save error",
+    "weightKg": "Weight (kg)",
+    "heightCm": "Height (cm)",
+    "language": "Language",
+    "goals": {
+      "lose_weight": "Lose weight",
+      "gain_muscle": "Gain muscle",
+      "maintain": "Maintain weight",
+      "health": "Overall health"
+    },
+    "levels": {
+      "beginner": "Beginner",
+      "intermediate": "Intermediate",
+      "advanced": "Advanced"
+    }
+  },
+  "muscles": {
+    "chest": "Chest",
+    "back": "Back",
+    "shoulders": "Shoulders",
+    "biceps": "Biceps",
+    "triceps": "Triceps",
+    "legs": "Legs",
+    "core": "Core"
+  },
+  "exerciseTypes": {
+    "musculacao": "Strength training",
+    "cardio": "Cardio",
+    "natacao": "Swimming",
+    "corrida": "Running",
+    "funcional": "Functional",
+    "caminhada": "Walking",
+    "hiit": "HIIT",
+    "push": "Upper body (Push)",
+    "pull": "Upper body (Pull)"
+  }
+}

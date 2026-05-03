@@ -1,0 +1,141 @@
+{
+  "nav": {
+    "workout": "Treino",
+    "workouts": "Treinos",
+    "profile": "Perfil"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Senha",
+    "signIn": "Entrar",
+    "signingIn": "Entrando...",
+    "signUp": "Criar conta",
+    "loginError": "Erro ao fazer login",
+    "noAccount": "Não tem conta?",
+    "alreadyHaveAccount": "Já tem conta?",
+    "name": "Nome",
+    "nameError": "Erro ao criar conta"
+  },
+  "dashboard": {
+    "hello": "Olá,",
+    "days": "dias",
+    "trainNow": "Treinar agora",
+    "chooseWorkout": "Escolha A, B, C...",
+    "availableWorkouts": "{count} treinos disponíveis",
+    "chooseWorkoutButton": "Escolher treino →",
+    "yourWorkouts": "Seus treinos",
+    "history": "Histórico",
+    "noWorkouts": "Nenhum treino cadastrado ainda.",
+    "createPlan": "Criar plano de treinamento",
+    "completeProfile": "Complete seu perfil para ver seu plano.",
+    "completeProfileButton": "Completar perfil",
+    "workout": "Treino",
+    "exercises": "exercícios",
+    "train": "Treinar"
+  },
+  "workout": {
+    "chooseTitle": "Escolha seu treino",
+    "chooseSubtitle": "Faça A, B, C ou qualquer outro que fizer sentido hoje.",
+    "back": "← Voltar",
+    "chooseAnother": "← Escolher outro",
+    "lastSevenDays": "Últimos 7 dias",
+    "noRecentWorkouts": "Nenhum treino registrado nesse período.",
+    "exercises": "exercícios",
+    "rest": "Descanso",
+    "skipRest": "Pular descanso",
+    "endWorkout": "Encerrar treino agora",
+    "endWorkoutShort": "Encerrar",
+    "exerciseDone": "Exercício concluído",
+    "howDidYouFeel": "Como você se sentiu nesse exercício?",
+    "skip": "Pular",
+    "sets": "séries",
+    "repsSet": "reps série {set}",
+    "currentSet": "série atual",
+    "setWeight": "Peso da série",
+    "setWeightKg": "Peso da série (kg)",
+    "restAfterSet": "Descanso após série",
+    "restSeconds": "Descanso (segundos)",
+    "done": "Feito",
+    "next": "Próximo:",
+    "swap": "Trocar",
+    "addExercise": "Adicionar exercício",
+    "chooseSubstitute": "Escolha um substituto",
+    "noAlternatives": "Nenhuma alternativa disponível sem repetir este treino.",
+    "startWorkout": "Iniciar treino",
+    "noPlan": "Nenhum treino disponível",
+    "noPlanDesc": "Crie um planejamento para começar.",
+    "seePlan": "Ver planejamento",
+    "noExercise": "Nenhum exercício encontrado para este treino.",
+    "lastTime": "Última vez:",
+    "feeling": {
+      "bem": "Bem",
+      "cansado": "Cansado",
+      "dolorido": "Dolorido",
+      "pesado": "Pesado",
+      "dor": "Com dor"
+    },
+    "done_screen": {
+      "title": "Treino concluído",
+      "weightPerSet": "Peso por série",
+      "fatigueLevel": "Nível geral de cansaço",
+      "notes": "Alguma anotação? (opcional)",
+      "save": "Registrar treino",
+      "saving": "Salvando...",
+      "noSave": "Não registrar",
+      "saveError": "Erro ao salvar o treino. Tente novamente."
+    }
+  },
+  "plan": {
+    "title": "Plano de treinamento",
+    "noplan": "Nenhum plano criado ainda."
+  },
+  "profile": {
+    "title": "Perfil",
+    "goal": "Objetivo",
+    "level": "Nível",
+    "age": "Idade",
+    "weight": "Peso",
+    "height": "Altura",
+    "years": "anos",
+    "kg": "kg",
+    "cm": "cm",
+    "edit": "Editar",
+    "save": "Salvar",
+    "saving": "Salvando...",
+    "saveError": "Erro ao salvar",
+    "weightKg": "Peso (kg)",
+    "heightCm": "Altura (cm)",
+    "language": "Idioma",
+    "goals": {
+      "lose_weight": "Perder peso",
+      "gain_muscle": "Ganhar músculo",
+      "maintain": "Manter peso",
+      "health": "Saúde geral"
+    },
+    "levels": {
+      "beginner": "Iniciante",
+      "intermediate": "Intermediário",
+      "advanced": "Avançado"
+    }
+  },
+  "muscles": {
+    "chest": "Peito",
+    "back": "Costas",
+    "shoulders": "Ombros",
+    "biceps": "Bíceps",
+    "triceps": "Tríceps",
+    "legs": "Pernas",
+    "core": "Core"
+  },
+  "exerciseTypes": {
+    "musculacao": "Musculação",
+    "cardio": "Cardio",
+    "natacao": "Natação",
+    "corrida": "Corrida",
+    "funcional": "Funcional",
+    "caminhada": "Caminhada",
+    "hiit": "HIIT",
+    "push": "Superiores (Empurrar)",
+    "pull": "Superiores (Puxar)"
+  }
+}

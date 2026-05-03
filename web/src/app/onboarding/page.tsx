@@ -90,7 +90,7 @@ export default function OnboardingPage() {
           <div
             key={n}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              n <= step ? "bg-green-500" : "bg-gray-200"
+              n <= step ? "bg-primary-500" : "bg-gray-200"
             }`}
           />
         ))}
@@ -146,7 +146,7 @@ function StepGoal({ selected, onSelect }: { selected: string; onSelect: (v: Goal
             onClick={() => onSelect(g.value)}
             className={`w-full rounded-xl border-2 p-4 text-left transition ${
               selected === g.value
-                ? "border-green-500 bg-green-50"
+                ? "border-primary-500 bg-primary-50"
                 : "border-gray-200 hover:border-gray-300"
             }`}
           >
@@ -182,7 +182,7 @@ function StepLevel({
             onClick={() => onSelect(l.value)}
             className={`w-full rounded-xl border-2 p-4 text-left transition ${
               selected === l.value
-                ? "border-green-500 bg-green-50"
+                ? "border-primary-500 bg-primary-50"
                 : "border-gray-200 hover:border-gray-300"
             }`}
           >
@@ -232,7 +232,7 @@ function StepBody({
                 min={min}
                 max={max}
                 placeholder={placeholder}
-                className="flex-1 rounded-l-lg border border-r-0 border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+                className="flex-1 rounded-l-lg border border-r-0 border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
               />
               <span className="flex items-center rounded-r-lg border border-gray-300 bg-gray-50 px-3 text-sm text-gray-500">
                 {unit}
@@ -245,7 +245,7 @@ function StepBody({
       <button
         onClick={onNext}
         disabled={!valid}
-        className="mt-8 w-full rounded-lg bg-green-500 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:opacity-50"
+        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
       >
         Continuar →
       </button>
@@ -289,7 +289,7 @@ function StepActivities({
               onClick={() => onToggle(a.value)}
               className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
                 isSelected
-                  ? "border-green-500 bg-green-50"
+                  ? "border-primary-500 bg-primary-50"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
@@ -303,7 +303,7 @@ function StepActivities({
       <button
         onClick={onFinish}
         disabled={selected.length === 0 || loading}
-        className="mt-8 w-full rounded-lg bg-green-500 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:opacity-50"
+        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
       >
         {loading ? "Criando plano..." : "Criar meu plano →"}
       </button>

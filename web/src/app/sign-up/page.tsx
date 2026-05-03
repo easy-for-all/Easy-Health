@@ -47,7 +47,7 @@ export default function SignUpPage() {
               onChange={(e) => setName(e.target.value)}
               required
               minLength={2}
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
               placeholder="Seu nome"
             />
           </div>
@@ -59,7 +59,7 @@ export default function SignUpPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
               placeholder="seu@email.com"
             />
           </div>
@@ -72,7 +72,7 @@ export default function SignUpPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
               placeholder="Mínimo 8 caracteres"
             />
           </div>
@@ -80,7 +80,7 @@ export default function SignUpPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-green-500 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:opacity-50"
+            className="w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
           >
             {loading ? "Criando conta..." : "Criar conta"}
           </button>
@@ -88,7 +88,7 @@ export default function SignUpPage() {
 
         <p className="mt-6 text-center text-sm text-gray-500">
           Já tem conta?{" "}
-          <Link href="/login" className="font-medium text-green-600 hover:underline">
+          <Link href="/login" className="font-medium text-primary-600 hover:underline">
             Entrar
           </Link>
         </p>
