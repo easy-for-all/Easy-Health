@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
+import { ApiError } from "@/shared/lib/api";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -23,7 +24,13 @@ export default function LoginPage() {
       await signIn(email, password);
       router.push("/profile");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("loginError"));
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else if (err instanceof TypeError) {
+        setError("Não foi possível conectar ao servidor. Tente novamente.");
+      } else {
+        setError(t("loginError"));
+      }
     } finally {
       setLoading(false);
     }
@@ -40,8 +47,9 @@ export default function LoginPage() {
           )}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">{t("email")}</label>
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">{t("email")}</label>
             <input
+              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -52,8 +60,9 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">{t("password")}</label>
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">{t("password")}</label>
             <input
+              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
