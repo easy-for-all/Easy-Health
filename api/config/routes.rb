@@ -22,7 +22,9 @@ Rails.application.routes.draw do
       get  "workout_days/:id",        to: "workout_plans#day"
       post "workout_plan/regenerate", to: "workout_plans#regenerate"
 
-      resources :exercises, only: [:index]
+      resources :exercises, only: [:index] do
+        collection { post :ai_substitute }
+      end
 
       post "workout_day_exercises/:id/swap", to: "workout_day_exercises#swap"
       post "workout_days/:workout_day_id/exercises", to: "workout_day_exercises#create"
@@ -30,6 +32,10 @@ Rails.application.routes.draw do
       resources :workout_sessions, only: [:index, :create] do
         collection { get :stats }
       end
+
+      patch "profile/avatar", to: "profile#update_avatar"
+
+      resources :user_media, only: [:index, :create, :destroy]
     end
   end
 end

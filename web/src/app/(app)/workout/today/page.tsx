@@ -8,7 +8,7 @@ import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from "@/shared/types/workout";
 
-type Phase = "choose" | "overview" | "exercising" | "rest" | "exercise_feedback" | "done";
+type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
   id: number;
   name: string;
@@ -47,6 +47,7 @@ export default function WorkoutTodayPage() {
   const [restLeft, setRestLeft] = useState(0);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
+  const [weightError, setWeightError] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export default function WorkoutTodayPage() {
 
   function startWorkout() {
     setStartTime(new Date());
-    setPhase("exercising");
+    setPhase("warmup");
   }
 
   function updateRuntime(wdeId: number, patch: Partial<ExerciseRuntime>) {
@@ -132,12 +133,19 @@ export default function WorkoutTodayPage() {
     if (!day?.exercises) return;
     const exercise = day.exercises[currentIndex];
     const state = runtimeFor(exerciseRuntime, exercise);
+
+    const currentWeight = state.weight_by_set[currentSet - 1];
+    if (!currentWeight) {
+      setWeightError(true);
+      return;
+    }
+    setWeightError(false);
+
     const repsBySet = [...state.reps_by_set];
     repsBySet[currentSet - 1] ||= exercise.reps;
 
     const weightBySet = [...state.weight_by_set];
-    const currentWeight = weightBySet[currentSet - 1];
-    if (currentSet < state.planned_sets && currentWeight && !weightBySet[currentSet]) {
+    if (currentSet < state.planned_sets && !weightBySet[currentSet]) {
       weightBySet[currentSet] = currentWeight;
     }
 
@@ -162,7 +170,7 @@ export default function WorkoutTodayPage() {
       setCurrentSet(1);
       startRest(state.rest_seconds);
     } else {
-      setPhase("done");
+      setPhase("cooldown");
     }
   }
 
@@ -209,6 +217,14 @@ export default function WorkoutTodayPage() {
         onBack={() => setPhase("choose")}
       />
     );
+  }
+
+  if (phase === "warmup") {
+    return <WarmupScreen day={day!} onStart={() => setPhase("exercising")} />;
+  }
+
+  if (phase === "cooldown") {
+    return <CooldownScreen day={day!} onFinish={() => setPhase("done")} />;
   }
 
   if (phase === "done") {
@@ -287,10 +303,7 @@ export default function WorkoutTodayPage() {
           <SmartImage src={exercise.image_url} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
           <SmartImage src={exercise.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={exercise.muscle_group ?? "músculo"} className="h-48 w-full rounded-xl object-cover" />
         </div>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-primary-500">
-          {categoryIcon(exercise.exercise_type, exercise.muscle_group)} {exercise.muscle_group ?? exercise.exercise_type}
-        </p>
-        <h2 className="mt-2 text-3xl font-bold text-gray-900">{exercise.name}</h2>
+        <h2 className="mt-5 text-3xl font-bold text-gray-900">{exercise.name}</h2>
         {(() => {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
           if (!prev) return null;
@@ -310,22 +323,25 @@ export default function WorkoutTodayPage() {
           <Metric label="série atual" value={currentSet} highlight />
         </div>
 
-        <label className="mt-4 block text-sm font-medium text-gray-600">
-          Peso na série {currentSet}
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.5"
-            value={runtime.weight_by_set[currentSet - 1] ?? ""}
-            onChange={(event) => updateCurrentSetWeight(exercise, event.target.value)}
-            placeholder="kg"
-            className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
-          />
-        </label>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-600">
+            Peso (kg)
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.5"
+              value={runtime.weight_by_set[currentSet - 1] ?? ""}
+              onChange={(event) => { setWeightError(false); updateCurrentSetWeight(exercise, event.target.value); }}
+              placeholder="kg"
+              className={`mt-2 w-full rounded-xl border px-4 py-3 text-sm focus:outline-none ${weightError ? "border-red-400 focus:border-red-500" : "border-gray-200 focus:border-primary-500"}`}
+            />
+          </label>
+          {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
+        </div>
 
         <label className="mt-4 block text-sm font-medium text-gray-600">
-          Descanso após série
+          Descanso (s)
           <input
             type="number"
             min="0"
@@ -416,21 +432,41 @@ function OverviewScreen({
   const [swapMode, setSwapMode] = useState<WorkoutDayExercise | null>(null);
   const [addMode, setAddMode] = useState(false);
   const [alternatives, setAlternatives] = useState<ExerciseOption[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<ExerciseOption[]>([]);
   const exercises = day.exercises ?? [];
-  const excludeIds = exercises.map((e) => e.exercise_id).join(",");
+  const [globalRest, setGlobalRest] = useState<number>(exercises[0]?.rest_seconds ?? 90);
 
   async function openSwap(wde: WorkoutDayExercise) {
     const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
-    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${excludeIds}`);
-    setAlternatives(data);
+    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${wde.exercise_id}`);
+    setAlternatives(data.slice(0, 3));
+    setAiSuggestions([]);
     setSwapMode(wde);
     setAddMode(false);
+  }
+
+  async function handleAiPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !swapMode) return;
+    setAiLoading(true);
+    setAiSuggestions([]);
+    try {
+      const form = new FormData();
+      form.append("image", file);
+      form.append("exercise_id", String(swapMode.exercise_id));
+      const result = await api.uploadPost<{ suggestions: ExerciseOption[] }>("/api/v1/exercises/ai_substitute", form);
+      setAiSuggestions(result.suggestions ?? []);
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   async function openAdd() {
     const groups = new Set(exercises.map((e) => e.muscle_group).filter(Boolean));
     const types = new Set(exercises.map((e) => e.exercise_type));
-    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?exclude_ids=${excludeIds}`);
+    const allIds = exercises.map((e) => e.exercise_id).join(",");
+    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?exclude_ids=${allIds}`);
     setAlternatives(data.filter((exercise) => (
       (exercise.muscle_group && groups.has(exercise.muscle_group)) || types.has(exercise.exercise_type)
     )));
@@ -456,7 +492,24 @@ function OverviewScreen({
       <h1 className="text-2xl font-bold text-gray-900">{day.name}</h1>
       <p className="mt-1 text-sm text-gray-500">{exercises.length} exercícios</p>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-4 flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
+        <span className="flex-1 text-sm font-medium text-gray-700">Descanso entre séries</span>
+        <input
+          type="number"
+          min="0"
+          step="5"
+          value={globalRest}
+          onChange={(e) => {
+            const v = Number(e.target.value) || 0;
+            setGlobalRest(v);
+            exercises.forEach((ex) => onChangeRuntime(ex.workout_day_exercise_id, { rest_seconds: v }));
+          }}
+          className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:border-primary-500 focus:outline-none"
+        />
+        <span className="text-sm text-gray-400">s</span>
+      </div>
+
+      <div className="mt-4 space-y-3">
         {exercises.map((ex) => {
           const state = runtimeFor(runtime, ex);
           return (
@@ -466,13 +519,13 @@ function OverviewScreen({
                 <SmartImage src={ex.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={ex.muscle_group ?? "músculo"} className="h-16 w-14 rounded-lg object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-gray-900">{ex.name}</p>
-                  <p className="text-xs text-gray-400">{categoryIcon(ex.exercise_type, ex.muscle_group)} {ex.muscle_group ?? ex.exercise_type} · {state.planned_sets}x{ex.reps} · {state.rest_seconds}s descanso</p>
+                  <p className="text-xs text-gray-400">{state.planned_sets} séries · {ex.reps} reps</p>
                 </div>
                 <button onClick={() => openSwap(ex)} className="text-xs text-blue-500 hover:underline">Trocar</button>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3">
                 <label className="block text-xs font-medium text-gray-500">
-                  Peso da série (kg)
+                  Peso (kg)
                   <input
                     type="number"
                     inputMode="decimal"
@@ -489,17 +542,6 @@ function OverviewScreen({
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
                   />
                 </label>
-                <label className="block text-xs font-medium text-gray-500">
-                  Descanso (segundos)
-                  <input
-                    type="number"
-                    min="0"
-                    step="5"
-                    value={state.rest_seconds}
-                    onChange={(event) => onChangeRuntime(ex.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
-                  />
-                </label>
               </div>
             </div>
           );
@@ -509,20 +551,43 @@ function OverviewScreen({
       <button onClick={openAdd} className="mt-4 w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-semibold text-primary-600">Adicionar exercício</button>
 
       {(swapMode || addMode) && (
-        <div className="fixed inset-0 flex items-end bg-black/40" onClick={() => { setSwapMode(null); setAddMode(false); }}>
-          <div className="max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-8 pt-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => { setSwapMode(null); setAddMode(false); }}>
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="mb-4 text-base font-bold text-gray-900">{swapMode ? "Escolha um substituto" : "Adicionar exercício"}</h3>
             {alternatives.length === 0 ? (
-              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa disponível sem repetir este treino.</p>
+              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa disponível.</p>
             ) : alternatives.map((alt) => (
               <button key={alt.id} onClick={() => swapMode ? doSwap(swapMode.workout_day_exercise_id, alt.id) : doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
                 <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
                 <div>
                   <p className="font-medium text-gray-900">{alt.name}</p>
-                  <p className="text-xs text-gray-400">{alt.muscle_group ?? alt.exercise_type}</p>
+                  <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
                 </div>
               </button>
             ))}
+
+            {swapMode && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Tem um aparelho diferente?</p>
+                {aiLoading ? (
+                  <p className="py-3 text-center text-sm text-gray-400">Analisando foto...</p>
+                ) : (
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-primary-300 px-4 py-3 text-sm text-primary-600">
+                    📷 Enviar foto para IA sugerir substituto
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAiPhoto} />
+                  </label>
+                )}
+                {aiSuggestions.map((alt) => (
+                  <button key={`ai-${alt.id}`} onClick={() => doSwap(swapMode.workout_day_exercise_id, alt.id)} className="mb-2 mt-2 flex w-full gap-3 rounded-lg border border-primary-100 bg-primary-50 p-3 text-left hover:bg-primary-100">
+                    <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
+                    <div>
+                      <p className="font-medium text-gray-900">{alt.name}</p>
+                      <p className="text-xs text-primary-500">{muscleLabel(alt.muscle_group, alt.exercise_type)} · sugerido por IA</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -627,6 +692,133 @@ function DoneScreen({
   );
 }
 
+const WARMUP_BY_TYPE: Record<string, { label: string; duration: string }[]> = {
+  musculacao: [
+    { label: "Rotação de pescoço", duration: "30s cada lado" },
+    { label: "Circundução de ombros", duration: "10 círculos" },
+    { label: "Rotação de quadril", duration: "10 círculos" },
+    { label: "Agachamento livre (sem peso)", duration: "15 reps" },
+    { label: "Polichinelo", duration: "30s" },
+  ],
+  cardio: [
+    { label: "Caminhada lenta", duration: "2 min" },
+    { label: "Elevação de joelhos no lugar", duration: "30s" },
+    { label: "Chute para trás (calcanhar ao glúteo)", duration: "30s" },
+    { label: "Rotação de tornozelos", duration: "10 cada" },
+  ],
+  corrida: [
+    { label: "Caminhada progressiva", duration: "3 min" },
+    { label: "Elevação de joelhos", duration: "30s" },
+    { label: "Skipping leve", duration: "30s" },
+    { label: "Alongamento de panturrilha", duration: "20s cada lado" },
+  ],
+  default: [
+    { label: "Polichinelo", duration: "30s" },
+    { label: "Rotação de tronco", duration: "10 cada lado" },
+    { label: "Agachamento livre", duration: "10 reps" },
+    { label: "Rotação de braços", duration: "10 círculos" },
+  ],
+};
+
+const COOLDOWN_BY_TYPE: Record<string, { label: string; duration: string }[]> = {
+  musculacao: [
+    { label: "Alongamento de peito (mãos entrelaçadas atrás)", duration: "30s" },
+    { label: "Alongamento de costas (abraço de joelhos)", duration: "30s" },
+    { label: "Alongamento de quadríceps", duration: "30s cada lado" },
+    { label: "Alongamento de panturrilha", duration: "30s cada lado" },
+    { label: "Respiração profunda diafragmática", duration: "1 min" },
+  ],
+  cardio: [
+    { label: "Caminhada lenta para desacelerar", duration: "3 min" },
+    { label: "Alongamento de quadríceps", duration: "30s cada lado" },
+    { label: "Alongamento de panturrilha", duration: "30s cada lado" },
+    { label: "Respiração profunda", duration: "1 min" },
+  ],
+  corrida: [
+    { label: "Caminhada para desacelerar", duration: "3 min" },
+    { label: "Alongamento de IT Band", duration: "30s cada lado" },
+    { label: "Alongamento de isquiotibiais", duration: "30s" },
+    { label: "Alongamento de panturrilha", duration: "30s cada lado" },
+  ],
+  default: [
+    { label: "Respiração profunda", duration: "1 min" },
+    { label: "Alongamento de pescoço", duration: "20s cada lado" },
+    { label: "Alongamento de tronco", duration: "30s" },
+    { label: "Caminhada leve", duration: "2 min" },
+  ],
+};
+
+function detectWorkoutType(day: WorkoutDay): string {
+  const exercises = day.exercises ?? [];
+  const types = exercises.map((e) => e.exercise_type);
+  if (types.includes("musculacao")) return "musculacao";
+  if (types.includes("corrida")) return "corrida";
+  if (types.includes("cardio")) return "cardio";
+  return "default";
+}
+
+function WarmupScreen({ day, onStart }: { day: WorkoutDay; onStart: () => void }) {
+  const type = detectWorkoutType(day);
+  const items = WARMUP_BY_TYPE[type] ?? WARMUP_BY_TYPE.default;
+
+  return (
+    <div className="flex min-h-screen flex-col px-4 py-6">
+      <div className="flex flex-1 flex-col">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary-500">Aquecimento</p>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Prepare o corpo</h1>
+        <p className="mt-1 text-sm text-gray-500">Execute os movimentos abaixo antes de começar.</p>
+
+        <div className="mt-6 space-y-3">
+          {items.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-50 text-sm font-bold text-primary-600">{idx + 1}</span>
+              <div>
+                <p className="font-medium text-gray-900">{item.label}</p>
+                <p className="text-xs text-gray-400">{item.duration}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button onClick={onStart} className="mt-6 w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">
+        Estou pronto →
+      </button>
+    </div>
+  );
+}
+
+function CooldownScreen({ day, onFinish }: { day: WorkoutDay; onFinish: () => void }) {
+  const type = detectWorkoutType(day);
+  const items = COOLDOWN_BY_TYPE[type] ?? COOLDOWN_BY_TYPE.default;
+
+  return (
+    <div className="flex min-h-screen flex-col px-4 py-6">
+      <div className="flex flex-1 flex-col">
+        <p className="text-xs font-semibold uppercase tracking-wide text-green-600">Finalização</p>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Recuperação</h1>
+        <p className="mt-1 text-sm text-gray-500">Alongamentos e respiração para encerrar o treino.</p>
+
+        <div className="mt-6 space-y-3">
+          {items.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-50 text-sm font-bold text-green-600">{idx + 1}</span>
+              <div>
+                <p className="font-medium text-gray-900">{item.label}</p>
+                <p className="text-xs text-gray-400">{item.duration}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button onClick={onFinish} className="mt-6 w-full rounded-2xl bg-green-500 py-4 text-base font-semibold text-white hover:bg-green-600">
+        Finalizar treino →
+      </button>
+    </div>
+  );
+}
+
 function lastExerciseLog(sessions: WorkoutSession[], exerciseId: number) {
   const sorted = [...sessions].sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
   for (const session of sorted) {
@@ -634,6 +826,21 @@ function lastExerciseLog(sessions: WorkoutSession[], exerciseId: number) {
     if (log) return { session, log };
   }
   return null;
+}
+
+const MUSCLE_LABELS: Record<string, string> = {
+  chest: "Peito", back: "Costas", shoulders: "Ombros",
+  biceps: "Bíceps", triceps: "Tríceps", legs: "Pernas", core: "Core",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  musculacao: "Musculação", cardio: "Cardio", natacao: "Natação",
+  corrida: "Corrida", funcional: "Funcional", caminhada: "Caminhada", hiit: "HIIT",
+};
+
+function muscleLabel(muscleGroup: string | null, exerciseType: string): string {
+  if (muscleGroup) return MUSCLE_LABELS[muscleGroup] ?? muscleGroup;
+  return TYPE_LABELS[exerciseType] ?? exerciseType;
 }
 
 function categoryIcon(exerciseType: string, muscleGroup: string | null): string {

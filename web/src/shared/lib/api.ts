@@ -30,9 +30,28 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown): Pro
   return data as T;
 }
 
+async function upload<T>(method: HttpMethod, path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    credentials: "include",
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const message = data?.error ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
+    throw new ApiError(message, res.status);
+  }
+
+  return data as T;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body: unknown) => request<T>("POST", path, body),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
+  upload: <T>(path: string, formData: FormData) => upload<T>("PATCH", path, formData),
+  uploadPost: <T>(path: string, formData: FormData) => upload<T>("POST", path, formData),
 };

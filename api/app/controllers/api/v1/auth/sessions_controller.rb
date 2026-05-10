@@ -31,11 +31,13 @@ module Api
         private
 
         def user_json(user)
+          avatar_url = blob_path(user.avatar)
           {
             id: user.id,
             name: user.name,
             email: user.email,
-            created_at: user.created_at
+            created_at: user.created_at,
+            avatar_url: avatar_url
           }
         end
       end

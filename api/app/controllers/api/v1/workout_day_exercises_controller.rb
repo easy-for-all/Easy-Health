@@ -70,7 +70,7 @@ module Api
           exercise_type: exercise.exercise_type,
           description: exercise.description,
           image_url: exercise_image_url(exercise),
-          muscle_image_url: "/muscle-images/#{exercise.muscle_group || 'cardio'}.svg",
+          muscle_image_url: muscle_image_url(exercise.muscle_group),
           sets: wde.sets,
           reps: wde.reps,
           rest_seconds: wde.rest_seconds,
@@ -78,36 +78,7 @@ module Api
         }
       end
 
-      def exercise_image_url(exercise)
-        exercise_gif_urls.fetch(exercise.name, exercise_gif_urls.fetch(exercise.exercise_type, "/exercise-images/treino.svg"))
-      end
-
-      def exercise_gif_urls
-        {
-          "Push-up" => "https://d205bpvrqc9yn1.cloudfront.net/0662.gif",
-          "Bench Press" => "https://d205bpvrqc9yn1.cloudfront.net/0025.gif",
-          "Pull-up" => "https://d205bpvrqc9yn1.cloudfront.net/1429.gif",
-          "Bent-over Row" => "https://d205bpvrqc9yn1.cloudfront.net/0027.gif",
-          "Overhead Press" => "https://d205bpvrqc9yn1.cloudfront.net/0082.gif",
-          "Lateral Raise" => "https://d205bpvrqc9yn1.cloudfront.net/0334.gif",
-          "Bicep Curl" => "https://d205bpvrqc9yn1.cloudfront.net/0023.gif",
-          "Hammer Curl" => "https://d205bpvrqc9yn1.cloudfront.net/0313.gif",
-          "Tricep Dip" => "https://d205bpvrqc9yn1.cloudfront.net/0814.gif",
-          "Skull Crusher" => "https://d205bpvrqc9yn1.cloudfront.net/0035.gif",
-          "Squat" => "https://d205bpvrqc9yn1.cloudfront.net/0043.gif",
-          "Lunges" => "https://d205bpvrqc9yn1.cloudfront.net/0054.gif",
-          "Deadlift" => "https://d205bpvrqc9yn1.cloudfront.net/0032.gif",
-          "Plank" => "https://d205bpvrqc9yn1.cloudfront.net/0463.gif",
-          "Crunch" => "https://d205bpvrqc9yn1.cloudfront.net/0003.gif",
-          "corrida" => "/exercise-images/corrida.svg",
-          "caminhada" => "/exercise-images/caminhada.svg",
-          "natacao" => "/exercise-images/natacao.svg",
-          "cardio" => "/exercise-images/cardio.svg",
-          "hiit" => "/exercise-images/hiit.svg",
-          "funcional" => "/exercise-images/funcional.svg",
-          "musculacao" => "/exercise-images/treino.svg"
-        }
-      end
+      include ExerciseImageHelper
     end
   end
 end
