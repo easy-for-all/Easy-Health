@@ -119,6 +119,8 @@ class WorkoutPlanGeneratorService
       end
 
       raise "Workout plan was not generated" if plan.workout_days.empty?
+      total_exercises = plan.workout_days.sum { |d| d.workout_day_exercises.count }
+      raise "No exercises found — run db:seed in production" if total_exercises.zero?
 
       plan
     end
