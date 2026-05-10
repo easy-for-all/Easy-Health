@@ -30,8 +30,6 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       RAILS_MASTER_KEY: ${RAILS_MASTER_KEY}
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
-    volumes:
-      - api_bundle:/usr/local/bundle
     depends_on:
       db:
         condition: service_healthy
@@ -55,4 +53,3 @@ services:
 
 volumes:
   pg_data:
-  api_bundle:

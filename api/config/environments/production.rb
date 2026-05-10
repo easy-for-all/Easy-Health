@@ -1,6 +1,12 @@
 require "active_support/core_ext/integer/time"
 
 Rails.application.configure do
+  config.assume_ssl = true
+  config.session_store :cookie_store,
+    key: "_easy_health_session",
+    same_site: :lax,
+    secure: true
+
   config.enable_reloading = false
   config.eager_load = true
   config.consider_all_requests_local = false
