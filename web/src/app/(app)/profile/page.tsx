@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
@@ -9,10 +9,20 @@ import { LoadingScreen } from "@/shared/components/loading-screen";
 import { setLocale } from "@/app/actions";
 import type { HealthProfile, Goal, FitnessLevel } from "@/shared/types/health-profile";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
 type Stats = { total_sessions: number; streak: number };
+type MediaCategory = "body_photo" | "exam";
+type UserMedia = {
+  id: number;
+  category: MediaCategory;
+  notes: string | null;
+  captured_at: string;
+  file_url: string;
+};
 
 export default function ProfilePage() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateUser } = useAuth();
   const router = useRouter();
   const t = useTranslations("profile");
   const locale = useLocale();
@@ -26,13 +36,23 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [, startTransition] = useTransition();
 
+  const [mediaTab, setMediaTab] = useState<MediaCategory>("body_photo");
+  const [mediaItems, setMediaItems] = useState<UserMedia[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     Promise.all([
       api.get<HealthProfile>("/api/v1/health_profile").catch(() => null),
       api.get<Stats>("/api/v1/workout_sessions/stats").catch(() => null),
-    ]).then(([p, s]) => {
+      api.get<UserMedia[]>("/api/v1/user_media").catch(() => []),
+    ]).then(([p, s, media]) => {
       setProfile(p);
       setStats(s);
+      setMediaItems(media ?? []);
       if (p) setForm({ age: p.age, weight_kg: p.weight_kg, height_cm: p.height_cm, goal: p.goal, fitness_level: p.fitness_level });
     }).finally(() => setLoading(false));
   }, []);
@@ -67,6 +87,52 @@ export default function ProfilePage() {
     });
   }
 
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append("avatar", file);
+      const result = await api.upload<{ avatar_url: string }>("/api/v1/profile/avatar", formData);
+      updateUser({ avatar_url: result.avatar_url });
+    } catch {
+      // silently ignore for now
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("category", mediaTab);
+      formData.append("captured_at", new Date().toISOString());
+
+      const created = await fetch(`${API_URL}/api/v1/user_media`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      }).then((r) => r.json()) as UserMedia;
+
+      setMediaItems((prev) => [created, ...prev]);
+    } catch {
+      // silently ignore
+    } finally {
+      setUploadingMedia(false);
+      if (mediaInputRef.current) mediaInputRef.current.value = "";
+    }
+  }
+
+  async function handleDeleteMedia(id: number) {
+    await api.delete(`/api/v1/user_media/${id}`).catch(() => null);
+    setMediaItems((prev) => prev.filter((m) => m.id !== id));
+  }
+
   if (loading) return <LoadingScreen />;
 
   const goalLabels: Record<Goal, string> = {
@@ -82,8 +148,16 @@ export default function ProfilePage() {
     advanced:     t("levels.advanced"),
   };
 
+  const bodyPhotos = mediaItems.filter((m) => m.category === "body_photo");
+  const exams      = mediaItems.filter((m) => m.category === "exam");
+  const currentTabItems = mediaTab === "body_photo" ? bodyPhotos : exams;
+
+  const initials = user?.name
+    ? user.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()
+    : "?";
+
   return (
-    <div className="min-h-screen px-4 py-6">
+    <div className="min-h-screen px-4 py-6 pb-28">
       <header className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">{t("title")}</h1>
         <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-red-500">
@@ -91,11 +165,31 @@ export default function ProfilePage() {
         </button>
       </header>
 
-      {/* Usuário */}
+      {/* Usuário + Avatar */}
       <div className="mb-4 rounded-2xl bg-primary-500 px-5 py-6 text-white">
-        <p className="text-2xl font-bold">{user?.name}</p>
-        <p className="mt-1 text-sm text-primary-100">{user?.email}</p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={uploadingAvatar}
+            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-400 text-xl font-bold text-white hover:bg-primary-300 disabled:opacity-60"
+          >
+            {user?.avatar_url ? (
+              <img src={`${API_URL}${user.avatar_url}`} alt="Avatar" className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
+            {uploadingAvatar && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs">...</div>
+            )}
+          </button>
+          <div className="min-w-0">
+            <p className="text-2xl font-bold">{user?.name}</p>
+            <p className="mt-1 text-sm text-primary-100">{user?.email}</p>
+            <p className="mt-1 text-xs text-primary-200">Toque no avatar para alterar</p>
+          </div>
+        </div>
       </div>
+      <input ref={avatarInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
 
       {/* Stats */}
       {stats && (
@@ -144,6 +238,97 @@ export default function ProfilePage() {
             <ProfileRow label={t("weight")} value={`${profile.weight_kg} ${t("kg")}`} />
             <ProfileRow label={t("height")} value={`${profile.height_cm} ${t("cm")}`} />
           </dl>
+        )}
+      </div>
+
+      {/* Fotos e Exames */}
+      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900">Fotos e Exames</h2>
+          <button
+            onClick={() => mediaInputRef.current?.click()}
+            disabled={uploadingMedia}
+            className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            {uploadingMedia ? "Enviando..." : "+ Adicionar"}
+          </button>
+        </div>
+        <input
+          ref={mediaInputRef}
+          type="file"
+          accept="image/*,application/pdf"
+          capture={mediaTab === "body_photo" ? "environment" : undefined}
+          className="hidden"
+          onChange={handleMediaUpload}
+        />
+
+        {/* Tabs */}
+        <div className="mb-4 flex gap-2">
+          {(["body_photo", "exam"] as MediaCategory[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setMediaTab(tab)}
+              className={`flex-1 rounded-lg border py-2 text-xs font-semibold transition ${
+                mediaTab === tab
+                  ? "border-primary-500 bg-primary-50 text-primary-700"
+                  : "border-gray-200 text-gray-500"
+              }`}
+            >
+              {tab === "body_photo" ? "Evolução Corporal" : "Exames"}
+            </button>
+          ))}
+        </div>
+
+        {/* Before/After card — only for body_photo with 2+ photos */}
+        {mediaTab === "body_photo" && bodyPhotos.length >= 2 && (
+          <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">
+            <p className="mb-2 text-xs font-semibold text-primary-600">Antes vs Agora</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[bodyPhotos[bodyPhotos.length - 1], bodyPhotos[0]].map((photo, idx) => (
+                <div key={photo.id} className="text-center">
+                  <img
+                    src={`${API_URL}${photo.file_url}`}
+                    alt={idx === 0 ? "Antes" : "Agora"}
+                    className="h-32 w-full rounded-lg object-cover"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">{idx === 0 ? "Antes" : "Agora"}</p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Grid de fotos */}
+        {currentTabItems.length === 0 ? (
+          <p className="text-center text-sm text-gray-400">
+            {mediaTab === "body_photo" ? "Nenhuma foto ainda." : "Nenhum exame ainda."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {currentTabItems.map((item) => (
+              <div key={item.id} className="relative">
+                <img
+                  src={`${API_URL}${item.file_url}`}
+                  alt="Foto"
+                  className="h-32 w-full rounded-lg object-cover"
+                />
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-xs text-gray-500">
+                    {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                  </p>
+                  <button
+                    onClick={() => handleDeleteMedia(item.id)}
+                    className="text-xs text-red-400 hover:text-red-600"
+                  >
+                    remover
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
