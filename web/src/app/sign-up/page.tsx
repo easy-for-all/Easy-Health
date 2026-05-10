@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
+import { ApiError } from "@/shared/lib/api";
 
 export default function SignUpPage() {
   const { signUp } = useAuth();
@@ -22,7 +23,13 @@ export default function SignUpPage() {
       await signUp(name, email, password);
       router.push("/onboarding");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao criar conta");
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else if (err instanceof TypeError) {
+        setError("Não foi possível conectar ao servidor. Tente novamente.");
+      } else {
+        setError("Erro ao criar conta");
+      }
     } finally {
       setLoading(false);
     }
