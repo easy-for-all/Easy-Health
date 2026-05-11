@@ -8,10 +8,24 @@ class ExerciseDbService
   end
 
   def fetch_gif_map
-    exercises = fetch_all_exercises
-    exercises.each_with_object({}) do |ex, map|
+    fetch_all_exercises.each_with_object({}) do |ex, map|
       name = ex["name"].to_s.downcase.strip
       map[name] = ex["gifUrl"]
+    end
+  end
+
+  # Returns a hash: { normalized_name => { gif_url:, instructions: } }
+  def self.fetch_full_map
+    new.fetch_full_map
+  end
+
+  def fetch_full_map
+    fetch_all_exercises.each_with_object({}) do |ex, map|
+      name = ex["name"].to_s.downcase.gsub(/[-_]/, " ").gsub(/\s+/, " ").strip
+      map[name] = {
+        gif_url:      ex["gifUrl"],
+        instructions: Array(ex["instructions"]).join("\n").presence
+      }
     end
   end
 

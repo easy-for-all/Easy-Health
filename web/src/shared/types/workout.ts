@@ -5,7 +5,9 @@ export interface WorkoutDayExercise {
   muscle_group: string | null;
   exercise_type: string;
   description: string;
+  instructions?: string | null;
   image_url: string;
+  gif_url?: string | null;
   muscle_image_url: string;
   sets: number;
   reps: number;

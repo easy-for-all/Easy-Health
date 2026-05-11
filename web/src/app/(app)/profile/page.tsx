@@ -40,6 +40,7 @@ export default function ProfilePage() {
   const [mediaItems, setMediaItems] = useState<UserMedia[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -91,15 +92,17 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingAvatar(true);
+    setAvatarError("");
     try {
       const formData = new FormData();
       formData.append("avatar", file);
       const result = await api.upload<{ avatar_url: string }>("/api/v1/profile/avatar", formData);
       updateUser({ avatar_url: result.avatar_url });
-    } catch {
-      // silently ignore for now
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : "Erro ao salvar foto");
     } finally {
       setUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
     }
   }
 
@@ -190,6 +193,9 @@ export default function ProfilePage() {
         </div>
       </div>
       <input ref={avatarInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
+      {avatarError && (
+        <p className="mb-3 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{avatarError}</p>
+      )}
 
       {/* Stats */}
       {stats && (
