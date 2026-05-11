@@ -45,7 +45,9 @@ module Api
           muscle_group: exercise.muscle_group,
           exercise_type: exercise.exercise_type,
           description: exercise.description,
+          instructions: exercise.instructions,
           image_url: exercise_image_url(exercise),
+          gif_url: exercise.gif_url,
           muscle_image_url: muscle_image_url(exercise.muscle_group)
         }
       end

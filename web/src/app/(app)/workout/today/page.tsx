@@ -15,7 +15,9 @@ type ExerciseOption = {
   muscle_group: string | null;
   exercise_type: string;
   description: string;
+  instructions?: string | null;
   image_url: string;
+  gif_url?: string | null;
   muscle_image_url: string;
 };
 type ExerciseRuntime = {
@@ -48,6 +50,8 @@ export default function WorkoutTodayPage() {
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
   const [weightError, setWeightError] = useState(false);
+  const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
+  const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -289,6 +293,7 @@ export default function WorkoutTodayPage() {
   }
 
   return (
+    <>
     <div className="flex min-h-screen flex-col px-4 py-6">
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm text-gray-500">{currentIndex + 1}/{exercises.length}</span>
@@ -303,7 +308,24 @@ export default function WorkoutTodayPage() {
           <SmartImage src={exercise.image_url} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
           <SmartImage src={exercise.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={exercise.muscle_group ?? "músculo"} className="h-48 w-full rounded-xl object-cover" />
         </div>
-        <h2 className="mt-5 text-3xl font-bold text-gray-900">{exercise.name}</h2>
+        {(exercise.gif_url || exercise.image_url) && (
+          <button
+            onClick={() => setGifModalExercise(exercise)}
+            className="mt-2 flex items-center gap-1.5 text-sm font-medium text-primary-600"
+          >
+            ▶ Ver demonstração
+          </button>
+        )}
+        <div className="mt-5 flex items-center gap-2">
+          <h2 className="text-3xl font-bold text-gray-900">{exercise.name}</h2>
+          <button
+            onClick={() => setInfoModalExercise(exercise)}
+            className="flex-shrink-0 text-xl text-gray-400 hover:text-gray-600"
+            aria-label="Informações do exercício"
+          >
+            ⓘ
+          </button>
+        </div>
         {(() => {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
           if (!prev) return null;
@@ -357,6 +379,53 @@ export default function WorkoutTodayPage() {
         Feito
       </button>
     </div>
+
+    {/* Modal de informações do exercício */}
+    {infoModalExercise && (
+      <div
+        className="fixed inset-0 z-50 flex items-end bg-black/50"
+        onClick={() => setInfoModalExercise(null)}
+      >
+        <div
+          className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-1 h-1 w-10 rounded-full bg-gray-200 mx-auto" />
+          <h3 className="mt-4 text-xl font-bold text-gray-900">{infoModalExercise.name}</h3>
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">{infoModalExercise.description}</p>
+          {infoModalExercise.instructions && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Como executar</p>
+              <ol className="space-y-2">
+                {infoModalExercise.instructions.split("\n").filter(Boolean).map((step, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-gray-700">
+                    <span className="flex-shrink-0 font-semibold text-primary-500">{i + 1}.</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Modal fullscreen de GIF */}
+    {gifModalExercise && (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90"
+        onClick={() => setGifModalExercise(null)}
+      >
+        <p className="mb-4 text-sm font-medium text-white/70">{gifModalExercise.name}</p>
+        <img
+          src={gifModalExercise.gif_url ?? gifModalExercise.image_url}
+          alt={gifModalExercise.name}
+          className="max-h-[70vh] max-w-full rounded-xl object-contain"
+        />
+        <p className="mt-4 text-xs text-white/50">Toque para fechar</p>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -432,6 +501,7 @@ function OverviewScreen({
   const [swapMode, setSwapMode] = useState<WorkoutDayExercise | null>(null);
   const [addMode, setAddMode] = useState(false);
   const [alternatives, setAlternatives] = useState<ExerciseOption[]>([]);
+  const [swapSearch, setSwapSearch] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<ExerciseOption[]>([]);
   const exercises = day.exercises ?? [];
@@ -439,8 +509,10 @@ function OverviewScreen({
 
   async function openSwap(wde: WorkoutDayExercise) {
     const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
-    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${wde.exercise_id}`);
-    setAlternatives(data.slice(0, 3));
+    const allIds = exercises.map((e) => e.exercise_id).join(",");
+    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${allIds}`);
+    setAlternatives(data);
+    setSwapSearch("");
     setAiSuggestions([]);
     setSwapMode(wde);
     setAddMode(false);
@@ -478,12 +550,14 @@ function OverviewScreen({
     const updated = await api.post<WorkoutDayExercise>(`/api/v1/workout_day_exercises/${wdeId}/swap`, { replacement_exercise_id: replacementId });
     onChangeDay({ ...day, exercises: exercises.map((e) => e.workout_day_exercise_id === wdeId ? updated : e) });
     setSwapMode(null);
+    setSwapSearch("");
   }
 
   async function doAdd(exerciseId: number) {
     const created = await api.post<WorkoutDayExercise>(`/api/v1/workout_days/${day.id}/exercises`, { exercise_id: exerciseId });
     onChangeDay({ ...day, exercises: [...exercises, created] });
     setAddMode(false);
+    setSwapSearch("");
   }
 
   return (
@@ -551,34 +625,24 @@ function OverviewScreen({
       <button onClick={openAdd} className="mt-4 w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-semibold text-primary-600">Adicionar exercício</button>
 
       {(swapMode || addMode) && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => { setSwapMode(null); setAddMode(false); }}>
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => { setSwapMode(null); setAddMode(false); setSwapSearch(""); }}>
           <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-4 text-base font-bold text-gray-900">{swapMode ? "Escolha um substituto" : "Adicionar exercício"}</h3>
-            {alternatives.length === 0 ? (
-              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa disponível.</p>
-            ) : alternatives.map((alt) => (
-              <button key={alt.id} onClick={() => swapMode ? doSwap(swapMode.workout_day_exercise_id, alt.id) : doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
-                <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
-                <div>
-                  <p className="font-medium text-gray-900">{alt.name}</p>
-                  <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
-                </div>
-              </button>
-            ))}
+            <h3 className="mb-3 text-base font-bold text-gray-900">{swapMode ? "Escolha um substituto" : "Adicionar exercício"}</h3>
 
+            {/* Upload IA — posicionado no topo do modal */}
             {swapMode && (
-              <div className="mt-4 border-t border-gray-100 pt-4">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Tem um aparelho diferente?</p>
+              <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-primary-400">Tem um aparelho diferente?</p>
                 {aiLoading ? (
-                  <p className="py-3 text-center text-sm text-gray-400">Analisando foto...</p>
+                  <p className="py-1 text-center text-sm text-gray-400">Analisando foto...</p>
                 ) : (
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-primary-300 px-4 py-3 text-sm text-primary-600">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-primary-600">
                     📷 Enviar foto para IA sugerir substituto
                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAiPhoto} />
                   </label>
                 )}
                 {aiSuggestions.map((alt) => (
-                  <button key={`ai-${alt.id}`} onClick={() => doSwap(swapMode.workout_day_exercise_id, alt.id)} className="mb-2 mt-2 flex w-full gap-3 rounded-lg border border-primary-100 bg-primary-50 p-3 text-left hover:bg-primary-100">
+                  <button key={`ai-${alt.id}`} onClick={() => doSwap(swapMode.workout_day_exercise_id, alt.id)} className="mb-2 mt-2 flex w-full gap-3 rounded-lg border border-primary-200 bg-white p-3 text-left hover:bg-primary-100">
                     <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
                     <div>
                       <p className="font-medium text-gray-900">{alt.name}</p>
@@ -588,6 +652,34 @@ function OverviewScreen({
                 ))}
               </div>
             )}
+
+            {/* Campo de busca */}
+            <input
+              type="text"
+              placeholder="Buscar por nome..."
+              value={swapSearch}
+              onChange={(e) => setSwapSearch(e.target.value)}
+              className="mb-3 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
+            />
+
+            {/* Lista de alternativas filtrada */}
+            {(() => {
+              const filtered = alternatives.filter((alt) =>
+                alt.name.toLowerCase().includes(swapSearch.toLowerCase())
+              );
+              if (filtered.length === 0) {
+                return <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa encontrada.</p>;
+              }
+              return filtered.map((alt) => (
+                <button key={alt.id} onClick={() => swapMode ? doSwap(swapMode.workout_day_exercise_id, alt.id) : doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
+                  <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
+                  <div>
+                    <p className="font-medium text-gray-900">{alt.name}</p>
+                    <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
+                  </div>
+                </button>
+              ));
+            })()}
           </div>
         </div>
       )}
