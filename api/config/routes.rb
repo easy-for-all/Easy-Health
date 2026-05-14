@@ -17,6 +17,7 @@ Rails.application.routes.draw do
       resource  :health_profile, only: [:show, :create, :update]
       patch     "health_profile", to: "health_profiles#update"
 
+      get  "workout_plans",            to: "workout_plans#index"
       get  "workout_plan",            to: "workout_plans#show"
       get  "workout_plan/today",      to: "workout_plans#today"
       get  "workout_days/:id",        to: "workout_plans#day"

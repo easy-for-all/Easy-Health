@@ -1,6 +1,11 @@
 module Api
   module V1
     class WorkoutPlansController < BaseController
+      def index
+        plans = current_user.workout_plans.order(created_at: :desc)
+        render json: plans.map { |p| serialize_plan_summary(p) }
+      end
+
       def show
         plan = current_user.active_workout_plan
         return render json: { error: "No active plan found" }, status: :not_found unless plan
@@ -54,6 +59,17 @@ module Api
       end
 
       private
+
+      def serialize_plan_summary(plan)
+        days = plan.workout_days.includes(workout_day_exercises: :exercise).order(Arel.sql("COALESCE(position, day_of_week) ASC"))
+        {
+          id: plan.id,
+          active: plan.active,
+          created_at: plan.created_at,
+          days_count: days.count,
+          days: days.map { |d| { id: d.id, name: d.name, exercise_count: d.workout_day_exercises.count } }
+        }
+      end
 
       def serialize_plan(plan)
         {

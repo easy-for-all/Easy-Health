@@ -107,7 +107,7 @@ function DayCard({ day, index }: { day: WorkoutDay; index: number }) {
           <p className="font-semibold text-gray-900">{day.name}</p>
           <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
         </div>
-        <Link href="/workout/today" className="rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white">
+        <Link href={`/workout/today?day=${day.id}`} className="rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white">
           Treinar
         </Link>
       </div>

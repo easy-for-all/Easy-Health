@@ -2,8 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from "@/shared/types/workout";
@@ -39,6 +39,7 @@ const FEELINGS = [
 
 export default function WorkoutTodayPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [day, setDay] = useState<WorkoutDay | null>(null);
@@ -55,13 +56,29 @@ export default function WorkoutTodayPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    const dayIdParam = searchParams.get("day");
     Promise.all([
       api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
       api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions?recent=1").catch(() => ({ sessions: [], total: 0 })),
-    ]).then(([p, history]) => {
+    ]).then(async ([p, history]) => {
       setPlan(p);
       setSessions(history.sessions ?? []);
+      if (dayIdParam && p?.days) {
+        const target = p.days.find((d) => String(d.id) === dayIdParam);
+        if (target) {
+          try {
+            const { day: loaded } = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${target.id}`);
+            const runtime = Object.fromEntries((loaded.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
+            setDay(loaded);
+            setExerciseRuntime(runtime);
+            setCurrentIndex(0);
+            setCurrentSet(1);
+            setPhase("overview");
+          } catch { /* fall through to choose screen */ }
+        }
+      }
     }).finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => () => {
@@ -308,23 +325,24 @@ export default function WorkoutTodayPage() {
           <SmartImage src={exercise.image_url} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
           <SmartImage src={exercise.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={exercise.muscle_group ?? "músculo"} className="h-48 w-full rounded-xl object-cover" />
         </div>
-        {(exercise.gif_url || exercise.image_url) && (
-          <button
-            onClick={() => setGifModalExercise(exercise)}
-            className="mt-2 flex items-center gap-1.5 text-sm font-medium text-primary-600"
-          >
-            ▶ Ver demonstração
-          </button>
-        )}
-        <div className="mt-5 flex items-center gap-2">
-          <h2 className="text-3xl font-bold text-gray-900">{exercise.name}</h2>
+        <div className="mt-2 flex gap-2">
+          {(exercise.gif_url || exercise.image_url) && (
+            <button
+              onClick={() => setGifModalExercise(exercise)}
+              className="flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 active:bg-primary-100"
+            >
+              ▶ Ver vídeo
+            </button>
+          )}
           <button
             onClick={() => setInfoModalExercise(exercise)}
-            className="flex-shrink-0 text-xl text-gray-400 hover:text-gray-600"
-            aria-label="Informações do exercício"
+            className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-600 active:bg-gray-100"
           >
-            ⓘ
+            ℹ Mais informações
           </button>
+        </div>
+        <div className="mt-4">
+          <h2 className="text-3xl font-bold text-gray-900">{exercise.name}</h2>
         </div>
         {(() => {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
@@ -356,7 +374,7 @@ export default function WorkoutTodayPage() {
               value={runtime.weight_by_set[currentSet - 1] ?? ""}
               onChange={(event) => { setWeightError(false); updateCurrentSetWeight(exercise, event.target.value); }}
               placeholder="kg"
-              className={`mt-2 w-full rounded-xl border px-4 py-3 text-sm focus:outline-none ${weightError ? "border-red-400 focus:border-red-500" : "border-gray-200 focus:border-primary-500"}`}
+              className={`mt-2 w-36 rounded-xl border px-4 py-3 text-sm focus:outline-none ${weightError ? "border-red-400 focus:border-red-500" : "border-gray-200 focus:border-primary-500"}`}
             />
           </label>
           {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
@@ -429,6 +447,14 @@ export default function WorkoutTodayPage() {
   );
 }
 
+function recommendedDayId(plan: WorkoutPlan, sessions: WorkoutSession[]): number | null {
+  if (!sessions.length) return plan.days[0]?.id ?? null;
+  const lastSession = [...sessions].sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())[0];
+  const lastIdx = plan.days.findIndex((d) => d.id === lastSession.workout_day_id);
+  if (lastIdx === -1) return plan.days[0]?.id ?? null;
+  return plan.days[(lastIdx + 1) % plan.days.length]?.id ?? null;
+}
+
 function ChooseScreen({
   plan,
   sessions,
@@ -440,6 +466,8 @@ function ChooseScreen({
   onChoose: (day: WorkoutDay) => void;
   onBack: () => void;
 }) {
+  const recommendedId = recommendedDayId(plan, sessions);
+
   return (
     <div className="min-h-screen px-4 py-6">
       <button onClick={onBack} className="mb-4 text-sm text-gray-500">← Voltar</button>
@@ -447,17 +475,29 @@ function ChooseScreen({
       <p className="mt-1 text-sm text-gray-500">Faça A, B, C ou qualquer outro que fizer sentido hoje.</p>
 
       <div className="mt-6 space-y-3">
-        {plan.days.map((day, idx) => (
-          <button key={day.id} onClick={() => onChoose(day)} className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left hover:border-primary-300">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600">{LETTERS[idx] ?? idx + 1}</span>
-              <div>
-                <p className="font-semibold text-gray-900">{day.name}</p>
-                <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
+        {plan.days.map((day, idx) => {
+          const isRecommended = day.id === recommendedId;
+          return (
+            <button
+              key={day.id}
+              onClick={() => onChoose(day)}
+              className={`w-full rounded-xl border p-4 text-left transition ${isRecommended ? "border-primary-400 bg-primary-50 hover:border-primary-500" : "border-gray-100 bg-white hover:border-primary-300"}`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600">{LETTERS[idx] ?? idx + 1}</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-gray-900">{day.name}</p>
+                    {isRecommended && (
+                      <span className="rounded-full bg-primary-500 px-2 py-0.5 text-xs font-semibold text-white">Hoje</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
+                </div>
               </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       <section className="mt-8">
@@ -502,20 +542,49 @@ function OverviewScreen({
   const [addMode, setAddMode] = useState(false);
   const [alternatives, setAlternatives] = useState<ExerciseOption[]>([]);
   const [swapSearch, setSwapSearch] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<ExerciseOption[]>([]);
+  const [infoModal, setInfoModal] = useState<WorkoutDayExercise | null>(null);
+  const [gifModal, setGifModal] = useState<WorkoutDayExercise | null>(null);
   const exercises = day.exercises ?? [];
   const [globalRest, setGlobalRest] = useState<number>(exercises[0]?.rest_seconds ?? 90);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const allExcludeIds = exercises.map((e) => e.exercise_id).join(",");
+
+  const fetchByName = useCallback(async (name: string) => {
+    setSearchLoading(true);
+    try {
+      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?name=${encodeURIComponent(name)}&exclude_ids=${allExcludeIds}`);
+      setAlternatives(data);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [allExcludeIds]);
+
+  function handleSwapSearchChange(value: string) {
+    setSwapSearch(value);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (value.trim().length >= 2) {
+      searchTimerRef.current = setTimeout(() => fetchByName(value.trim()), 300);
+    } else if (value.trim().length === 0 && swapMode) {
+      openSwapFetch(swapMode);
+    }
+  }
+
+  async function openSwapFetch(wde: WorkoutDayExercise) {
+    const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
+    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${allExcludeIds}`);
+    setAlternatives(data);
+  }
 
   async function openSwap(wde: WorkoutDayExercise) {
-    const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
-    const allIds = exercises.map((e) => e.exercise_id).join(",");
-    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${allIds}`);
-    setAlternatives(data);
     setSwapSearch("");
     setAiSuggestions([]);
     setSwapMode(wde);
     setAddMode(false);
+    await openSwapFetch(wde);
   }
 
   async function handleAiPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -561,6 +630,7 @@ function OverviewScreen({
   }
 
   return (
+  <>
     <div className="flex min-h-screen flex-col px-4 py-6">
       <button onClick={onBack} className="mb-4 text-sm text-gray-500">← Escolher outro</button>
       <h1 className="text-2xl font-bold text-gray-900">{day.name}</h1>
@@ -597,6 +667,22 @@ function OverviewScreen({
                 </div>
                 <button onClick={() => openSwap(ex)} className="text-xs text-blue-500 hover:underline">Trocar</button>
               </div>
+              <div className="mt-2 flex gap-2">
+                {(ex.gif_url || ex.image_url) && (
+                  <button
+                    onClick={() => setGifModal(ex)}
+                    className="flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-600"
+                  >
+                    ▶ Ver vídeo
+                  </button>
+                )}
+                <button
+                  onClick={() => setInfoModal(ex)}
+                  className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600"
+                >
+                  ℹ Info
+                </button>
+              </div>
               <div className="mt-3">
                 <label className="block text-xs font-medium text-gray-500">
                   Peso (kg)
@@ -613,7 +699,7 @@ function OverviewScreen({
                       });
                     }}
                     placeholder="kg"
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+                    className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
                   />
                 </label>
               </div>
@@ -658,19 +744,17 @@ function OverviewScreen({
               type="text"
               placeholder="Buscar por nome..."
               value={swapSearch}
-              onChange={(e) => setSwapSearch(e.target.value)}
+              onChange={(e) => handleSwapSearchChange(e.target.value)}
               className="mb-3 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
             />
 
-            {/* Lista de alternativas filtrada */}
-            {(() => {
-              const filtered = alternatives.filter((alt) =>
-                alt.name.toLowerCase().includes(swapSearch.toLowerCase())
-              );
-              if (filtered.length === 0) {
-                return <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa encontrada.</p>;
-              }
-              return filtered.map((alt) => (
+            {/* Lista de alternativas */}
+            {searchLoading ? (
+              <p className="rounded-lg bg-gray-50 p-3 text-center text-sm text-gray-400">Buscando...</p>
+            ) : alternatives.length === 0 ? (
+              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa encontrada.</p>
+            ) : (
+              alternatives.map((alt) => (
                 <button key={alt.id} onClick={() => swapMode ? doSwap(swapMode.workout_day_exercise_id, alt.id) : doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
                   <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
                   <div>
@@ -678,14 +762,45 @@ function OverviewScreen({
                     <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
                   </div>
                 </button>
-              ));
-            })()}
+              ))
+            )}
           </div>
         </div>
       )}
 
       <button onClick={onStart} className="mt-auto w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">Iniciar treino</button>
     </div>
+    {infoModal && (
+      <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setInfoModal(null)}>
+        <div className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5" onClick={(e) => e.stopPropagation()}>
+          <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
+          <h3 className="mt-4 text-xl font-bold text-gray-900">{infoModal.name}</h3>
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">{infoModal.description}</p>
+          {infoModal.instructions && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Como executar</p>
+              <ol className="space-y-2">
+                {infoModal.instructions.split("\n").filter(Boolean).map((step, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-gray-700">
+                    <span className="flex-shrink-0 font-semibold text-primary-500">{i + 1}.</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {gifModal && (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90" onClick={() => setGifModal(null)}>
+        <p className="mb-4 text-sm font-medium text-white/70">{gifModal.name}</p>
+        <img src={gifModal.gif_url ?? gifModal.image_url} alt={gifModal.name} className="max-h-[70vh] max-w-full rounded-xl object-contain" />
+        <p className="mt-4 text-xs text-white/50">Toque para fechar</p>
+      </div>
+    )}
+  </>
   );
 }
 
