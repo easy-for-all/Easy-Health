@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
 import { api } from "@/shared/lib/api";
+import { compressImage } from "@/shared/lib/image";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { setLocale } from "@/app/actions";
 import type { HealthProfile, Goal, FitnessLevel } from "@/shared/types/health-profile";
@@ -19,6 +20,9 @@ type UserMedia = {
   notes: string | null;
   captured_at: string;
   file_url: string;
+  file_name?: string;
+  file_size?: number;
+  mime_type?: string;
 };
 
 export default function ProfilePage() {
@@ -38,6 +42,7 @@ export default function ProfilePage() {
 
   const [mediaTab, setMediaTab] = useState<MediaCategory>("body_photo");
   const [mediaItems, setMediaItems] = useState<UserMedia[]>([]);
+  const [mediaViewMode, setMediaViewMode] = useState<"grid" | "list">("grid");
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState("");
@@ -94,8 +99,9 @@ export default function ProfilePage() {
     setUploadingAvatar(true);
     setAvatarError("");
     try {
+      const compressed = await compressImage(file, 1200, 0.85);
       const formData = new FormData();
-      formData.append("avatar", file);
+      formData.append("avatar", compressed);
       const result = await api.upload<{ avatar_url: string }>("/api/v1/profile/avatar", formData);
       updateUser({ avatar_url: result.avatar_url });
     } catch (err) {
@@ -111,8 +117,9 @@ export default function ProfilePage() {
     if (!file) return;
     setUploadingMedia(true);
     try {
+      const processed = file.type.startsWith("image/") ? await compressImage(file, 1920, 0.85) : file;
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", processed);
       formData.append("category", mediaTab);
       formData.append("captured_at", new Date().toISOString());
 
@@ -164,7 +171,7 @@ export default function ProfilePage() {
       <header className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">{t("title")}</h1>
         <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-red-500">
-          Sair
+          {t("signOut")}
         </button>
       </header>
 
@@ -188,7 +195,7 @@ export default function ProfilePage() {
           <div className="min-w-0">
             <p className="text-2xl font-bold">{user?.name}</p>
             <p className="mt-1 text-sm text-primary-100">{user?.email}</p>
-            <p className="mt-1 text-xs text-primary-200">Toque no avatar para alterar</p>
+            <p className="mt-1 text-xs text-primary-200">{t("tapAvatarHint")}</p>
           </div>
         </div>
       </div>
@@ -202,11 +209,11 @@ export default function ProfilePage() {
         <div className="mb-4 flex gap-3">
           <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
             <p className="text-2xl font-bold text-gray-900">{stats.total_sessions}</p>
-            <p className="text-xs text-gray-500">treinos</p>
+            <p className="text-xs text-gray-500">{t("workouts")}</p>
           </div>
           <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
             <p className="text-2xl font-bold text-orange-500">🔥 {stats.streak}</p>
-            <p className="text-xs text-gray-500">dias seguidos</p>
+            <p className="text-xs text-gray-500">{t("streak")}</p>
           </div>
         </div>
       )}
@@ -214,7 +221,7 @@ export default function ProfilePage() {
       {/* Dados físicos */}
       <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Dados físicos</h2>
+          <h2 className="font-semibold text-gray-900">{t("physicalData")}</h2>
           {!editing && (
             <button onClick={() => setEditing(true)} className="text-sm text-primary-600 hover:underline">
               {t("edit")}
@@ -223,7 +230,7 @@ export default function ProfilePage() {
         </div>
 
         {!profile ? (
-          <p className="text-sm text-gray-400">Perfil não encontrado.</p>
+          <p className="text-sm text-gray-400">{t("noProfile")}</p>
         ) : editing ? (
           <EditForm
             form={form}
@@ -250,13 +257,13 @@ export default function ProfilePage() {
       {/* Fotos e Exames */}
       <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Fotos e Exames</h2>
+          <h2 className="font-semibold text-gray-900">{t("photosAndExams")}</h2>
           <button
             onClick={() => mediaInputRef.current?.click()}
             disabled={uploadingMedia}
             className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
           >
-            {uploadingMedia ? "Enviando..." : "+ Adicionar"}
+            {uploadingMedia ? t("sending") : t("addMedia")}
           </button>
         </div>
         <input
@@ -280,7 +287,7 @@ export default function ProfilePage() {
                   : "border-gray-200 text-gray-500"
               }`}
             >
-              {tab === "body_photo" ? "Evolução Corporal" : "Exames"}
+              {tab === "body_photo" ? t("bodyEvolution") : t("exams")}
             </button>
           ))}
         </div>
@@ -288,7 +295,7 @@ export default function ProfilePage() {
         {/* Before/After card — only for body_photo with 2+ photos */}
         {mediaTab === "body_photo" && bodyPhotos.length >= 2 && (
           <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">
-            <p className="mb-2 text-xs font-semibold text-primary-600">Antes vs Agora</p>
+            <p className="mb-2 text-xs font-semibold text-primary-600">{t("beforeVsNow")}</p>
             <div className="grid grid-cols-2 gap-2">
               {[bodyPhotos[bodyPhotos.length - 1], bodyPhotos[0]].map((photo, idx) => (
                 <div key={photo.id} className="text-center">
@@ -297,7 +304,7 @@ export default function ProfilePage() {
                     alt={idx === 0 ? "Antes" : "Agora"}
                     className="h-32 w-full rounded-lg object-cover"
                   />
-                  <p className="mt-1 text-xs text-gray-500">{idx === 0 ? "Antes" : "Agora"}</p>
+                  <p className="mt-1 text-xs text-gray-500">{idx === 0 ? t("before") : t("now")}</p>
                   <p className="text-xs text-gray-400">
                     {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
@@ -307,30 +314,66 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Grid de fotos */}
+        {/* Toggle lista/grade — somente para exames */}
+        {mediaTab === "exam" && currentTabItems.length > 0 && (
+          <div className="mb-3 flex justify-end gap-1">
+            <button
+              onClick={() => setMediaViewMode("grid")}
+              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${mediaViewMode === "grid" ? "border-primary-500 bg-primary-50 text-primary-700" : "border-gray-200 text-gray-500"}`}
+            >
+              {t("gridView")}
+            </button>
+            <button
+              onClick={() => setMediaViewMode("list")}
+              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${mediaViewMode === "list" ? "border-primary-500 bg-primary-50 text-primary-700" : "border-gray-200 text-gray-500"}`}
+            >
+              {t("listView")}
+            </button>
+          </div>
+        )}
+
+        {/* Fotos e exames */}
         {currentTabItems.length === 0 ? (
           <p className="text-center text-sm text-gray-400">
-            {mediaTab === "body_photo" ? "Nenhuma foto ainda." : "Nenhum exame ainda."}
+            {mediaTab === "body_photo" ? t("noPhotos") : t("noExams")}
           </p>
+        ) : mediaTab === "exam" && mediaViewMode === "list" ? (
+          <div className="space-y-2">
+            {currentTabItems.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
+                {item.mime_type === "application/pdf" ? (
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-red-50 text-xl">📄</div>
+                ) : (
+                  <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-900">{item.file_name ?? "Arquivo"}</p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                    {item.file_size ? ` · ${(item.file_size / 1024).toFixed(0)} KB` : ""}
+                  </p>
+                </div>
+                <button onClick={() => handleDeleteMedia(item.id)} className="flex-shrink-0 text-xs text-red-400 hover:text-red-600">{t("removeMedia")}</button>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
             {currentTabItems.map((item) => (
               <div key={item.id} className="relative">
-                <img
-                  src={`${API_URL}${item.file_url}`}
-                  alt="Foto"
-                  className="h-32 w-full rounded-lg object-cover"
-                />
+                {item.mime_type === "application/pdf" ? (
+                  <div className="flex h-32 w-full items-center justify-center rounded-lg bg-gray-100 text-3xl">📄</div>
+                ) : (
+                  <img src={`${API_URL}${item.file_url}`} alt="Foto" className="h-32 w-full rounded-lg object-cover" />
+                )}
                 <div className="mt-1 flex items-center justify-between">
-                  <p className="text-xs text-gray-500">
-                    {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
-                  </p>
-                  <button
-                    onClick={() => handleDeleteMedia(item.id)}
-                    className="text-xs text-red-400 hover:text-red-600"
-                  >
-                    remover
-                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs text-gray-500">
+                      {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                    </p>
+                    {item.file_name && <p className="truncate text-xs text-gray-400">{item.file_name}</p>}
+                  </div>
+                  <button onClick={() => handleDeleteMedia(item.id)} className="ml-1 flex-shrink-0 text-xs text-red-400 hover:text-red-600">✕</button>
                 </div>
               </div>
             ))}
@@ -431,7 +474,7 @@ function EditForm({
 
       <div className="flex gap-2 pt-2">
         <button onClick={onCancel} className="flex-1 rounded-lg border border-gray-200 py-2 text-sm text-gray-600">
-          Cancelar
+          {t("cancel")}
         </button>
         <button onClick={onSave} disabled={saving} className="flex-1 rounded-lg bg-primary-500 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {saving ? t("saving") : t("save")}

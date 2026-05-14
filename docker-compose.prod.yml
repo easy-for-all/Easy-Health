@@ -21,6 +21,8 @@ services:
     command: ["./bin/rails", "server", "-p", "3001", "-b", "0.0.0.0"]
     ports:
       - "3001:3001"
+    volumes:
+      - storage_data:/rails/storage
     environment:
       RAILS_ENV: production
       DB_HOST: db
@@ -53,3 +55,4 @@ services:
 
 volumes:
   pg_data:
+  storage_data:

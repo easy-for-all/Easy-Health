@@ -5,6 +5,7 @@ module Api
         exercises = Exercise.all
         exercises = exercises.where(muscle_group: params[:muscle_group]) if params[:muscle_group].present?
         exercises = exercises.where(exercise_type: params[:exercise_type]) if params[:exercise_type].present?
+        exercises = exercises.where("name ILIKE ?", "%#{params[:name]}%") if params[:name].present?
         exercises = exercises.where.not(id: params[:exclude_ids].to_s.split(",")) if params[:exclude_ids].present?
 
         render json: exercises.map { |e| exercise_json(e) }

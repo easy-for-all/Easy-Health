@@ -52,6 +52,14 @@ const GENERATION_STEPS = [
   "Finalizando planejamento",
 ];
 
+type PlanSummary = {
+  id: number;
+  active: boolean;
+  created_at: string;
+  days_count: number;
+  days: { id: number; name: string; exercise_count: number }[];
+};
+
 type Phase =
   | "loading"
   | "view"
@@ -66,6 +74,8 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 export default function PlanPage() {
   const [phase, setPhase]               = useState<Phase>("loading");
   const [plan, setPlan]                 = useState<WorkoutPlan | null>(null);
+  const [allPlans, setAllPlans]         = useState<PlanSummary[]>([]);
+  const [showHistory, setShowHistory]   = useState(false);
   const [profile, setProfile]           = useState<HealthProfile | null>(null);
   const [daysPerWeek, setDaysPerWeek]   = useState(3);
   const [selectedPrefs, setSelectedPrefs] = useState<ActivityType[]>(["musculacao"]);
@@ -77,9 +87,11 @@ export default function PlanPage() {
     Promise.all([
       api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
       api.get<HealthProfile>("/api/v1/health_profile").catch(() => null),
-    ]).then(([p, hp]) => {
+      api.get<PlanSummary[]>("/api/v1/workout_plans").catch(() => []),
+    ]).then(([p, hp, plans]) => {
       setPlan(p);
       setProfile(hp);
+      setAllPlans(plans ?? []);
       if (hp) {
         setDaysPerWeek(hp.training_days_per_week ?? 3);
         setSelectedPrefs(hp.activity_preferences?.length ? hp.activity_preferences : ["musculacao"]);
@@ -168,6 +180,25 @@ export default function PlanPage() {
           >
             Replanejar
           </button>
+
+          {allPlans.length > 1 && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowHistory((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3"
+              >
+                <span className="text-sm font-semibold text-gray-700">Treinos anteriores</span>
+                <span className="text-xs text-gray-400">{showHistory ? "▲ Ocultar" : "▼ Ver"}</span>
+              </button>
+              {showHistory && (
+                <div className="mt-2 space-y-2">
+                  {allPlans.filter((p) => !p.active).map((p) => (
+                    <PlanHistoryCard key={p.id} plan={p} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -218,6 +249,34 @@ function PlanView({ plan }: { plan: WorkoutPlan }) {
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function PlanHistoryCard({ plan }: { plan: PlanSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-4">
+      <button className="flex w-full items-center justify-between" onClick={() => setExpanded((v) => !v)}>
+        <div className="text-left">
+          <p className="text-sm font-semibold text-gray-700">
+            {new Date(plan.created_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+          </p>
+          <p className="text-xs text-gray-400">{plan.days_count} dias · {plan.days.reduce((s, d) => s + d.exercise_count, 0)} exercícios</p>
+        </div>
+        <span className="text-xs text-gray-400">{expanded ? "▲" : "▼"}</span>
+      </button>
+      {expanded && (
+        <div className="mt-3 space-y-2 border-t border-gray-50 pt-3">
+          {plan.days.map((d, i) => (
+            <div key={d.id} className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">{LETTERS[i] ?? i + 1}</span>
+              <p className="text-sm text-gray-700">{d.name}</p>
+              <span className="ml-auto text-xs text-gray-400">{d.exercise_count} ex.</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
