@@ -3,7 +3,10 @@
     "allow": [
       "Bash(ls /mnt/c/Users/mailm/ 2>&1 | head -10)",
       "Read(//mnt/c/Users/mailm/**)",
-      "Bash(cp /home/marcus/projects/Easy-Health/public/generated-exercise-videos/bench_press_demo.mp4 \"/mnt/c/Users/mailm/Downloads/bench_press_demo.mp4\" && echo \"OK\")"
+      "Bash(cp /home/marcus/projects/Easy-Health/public/generated-exercise-videos/bench_press_demo.mp4 \"/mnt/c/Users/mailm/Downloads/bench_press_demo.mp4\" && echo \"OK\")",
+      "WebSearch",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "/mnt/c/Users/mailm/Downloads"
