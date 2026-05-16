@@ -14,7 +14,9 @@
       "Bash(git -C /home/marcus/projects/Easy-Health log --oneline -10)",
       "Bash(git -C /home/marcus/projects/Easy-Health diff --name-only HEAD)",
       "Bash(git -C /home/marcus/projects/Easy-Health show HEAD:api/app/services/exercise_setup_guide_service.rb)",
-      "Bash(git -C /home/marcus/projects/Easy-Health show HEAD:api/Gemfile)"
+      "Bash(git -C /home/marcus/projects/Easy-Health show HEAD:api/Gemfile)",
+      "Bash(git -C /home/marcus/projects/Easy-Health submodule status)",
+      "Bash(git -C /home/marcus/projects/Easy-Health ls-files --stage)"
     ],
     "additionalDirectories": [
       "/mnt/c/Users/mailm/Downloads"

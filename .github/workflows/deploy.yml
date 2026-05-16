@@ -5,13 +5,19 @@ on:
     branches:
       - main
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Setup SSH
         run: |
@@ -19,16 +25,21 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H 177.7.58.46 >> ~/.ssh/known_hosts || true
+
       - name: Deploy to VPS
         run: |
-          ssh -i ~/.ssh/id_ed25519 easy@177.7.58.46 "
+          ssh -i ~/.ssh/id_ed25519 \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            easy@177.7.58.46 "
             cd /home/easy/Easy-Health &&
             git fetch origin main &&
             git reset --hard origin/main &&
-            docker-compose -f docker-compose.prod.yml down &&
+            docker compose -f docker-compose.prod.yml down &&
             docker builder prune -af &&
-            docker-compose -f docker-compose.prod.yml build --no-cache &&
-            docker-compose -f docker-compose.prod.yml up -d &&
+            docker compose -f docker-compose.prod.yml build --no-cache &&
+            docker compose -f docker-compose.prod.yml up -d &&
             sleep 15 &&
-            docker-compose -f docker-compose.prod.yml exec -T api bin/rails db:migrate
+            docker compose -f docker-compose.prod.yml exec -T api bin/rails db:migrate
           "

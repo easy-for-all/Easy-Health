@@ -17,6 +17,8 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   // Isolates browsing context
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // Obfuscate server identity
+  { key: "Server", value: "" },
   // CSP: unsafe-inline required for Next.js hydration scripts; tighten with nonces later
   {
     key: "Content-Security-Policy",
