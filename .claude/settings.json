@@ -6,7 +6,11 @@
       "Bash(cp /home/marcus/projects/Easy-Health/public/generated-exercise-videos/bench_press_demo.mp4 \"/mnt/c/Users/mailm/Downloads/bench_press_demo.mp4\" && echo \"OK\")",
       "WebSearch",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(bundle install *)",
+      "Bash(grep -E \"\\\\.tsx$|\\\\.ts$\")",
+      "Bash(kill 112148)",
+      "Bash(xargs ls -la)"
     ],
     "additionalDirectories": [
       "/mnt/c/Users/mailm/Downloads"

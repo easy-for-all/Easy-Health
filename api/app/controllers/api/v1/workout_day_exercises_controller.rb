@@ -10,8 +10,12 @@ module Api
         replacement = Exercise.find(params[:replacement_exercise_id])
         current_exercise_ids = wde.workout_day.workout_day_exercises.where.not(id: wde.id).pluck(:exercise_id)
 
-        if current_exercise_ids.include?(replacement.id) || !same_target?(wde.exercise, replacement)
-          return render json: { error: "Replacement must be a different exercise for the same muscle group" }, status: :unprocessable_entity
+        if current_exercise_ids.include?(replacement.id)
+          return render json: { error: "Exercise is already in this workout day" }, status: :unprocessable_entity
+        end
+
+        unless same_target?(wde.exercise, replacement)
+          return render json: { error: "Replacement must target the same muscle group as the original exercise" }, status: :unprocessable_entity
         end
 
         wde.update!(exercise: replacement)

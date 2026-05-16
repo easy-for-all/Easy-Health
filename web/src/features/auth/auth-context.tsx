@@ -20,7 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const publicPaths = ["/login", "/sign-up"];
+    const publicPaths = ["/", "/login", "/sign-up", "/terms", "/privacy"];
 
     api.get<User>("/api/v1/auth/me")
       .then(setUser)
