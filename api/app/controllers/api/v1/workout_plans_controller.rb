@@ -16,6 +16,11 @@ module Api
       def regenerate
         days_per_week        = params[:training_days_per_week]&.to_i
         activity_preferences = Array(params[:activity_preferences]).presence
+        modality             = params[:modality].presence
+        split_type           = params[:split_type].presence
+        cardio_type          = params[:cardio_type].presence
+        cardio_format        = params[:cardio_format].presence
+        custom_splits        = params[:custom_splits].presence
 
         if days_per_week && !days_per_week.between?(2, 6)
           return render_error("training_days_per_week must be between 2 and 6")
@@ -24,12 +29,22 @@ module Api
         profile_attrs = {}
         profile_attrs[:training_days_per_week] = days_per_week if days_per_week
         profile_attrs[:activity_preferences]   = activity_preferences if activity_preferences
+        profile_attrs[:modality]               = modality      if modality
+        profile_attrs[:split_type]             = split_type    if split_type
+        profile_attrs[:cardio_type]            = cardio_type   if cardio_type
+        profile_attrs[:cardio_format]          = cardio_format if cardio_format
+        profile_attrs[:custom_splits]          = custom_splits if custom_splits
         current_user.health_profile&.update!(profile_attrs) if profile_attrs.any?
 
         plan = WorkoutPlanGeneratorService.new(
           current_user,
           days_per_week:        days_per_week,
-          activity_preferences: activity_preferences
+          activity_preferences: activity_preferences,
+          modality:             modality,
+          split_type:           split_type,
+          cardio_type:          cardio_type,
+          cardio_format:        cardio_format,
+          custom_splits:        custom_splits
         ).call
         render json: serialize_plan(plan), status: :ok
       rescue ActiveRecord::RecordInvalid => e
@@ -109,6 +124,7 @@ module Api
               instructions: wde.exercise.instructions,
               image_url: exercise_image_url(wde.exercise),
               gif_url: wde.exercise.gif_url,
+              video_url: wde.exercise.video_url,
               muscle_image_url: muscle_image_url(wde.exercise.muscle_group),
               sets: wde.sets,
               reps: wde.reps,

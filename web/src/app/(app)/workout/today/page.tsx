@@ -2,11 +2,14 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from "@/shared/types/workout";
+import { WARMUP_BY_TYPE, COOLDOWN_BY_TYPE } from "./warmup-data";
+import { SwapModal } from "./swap-modal";
+import { ExerciseInfoModal } from "./exercise-info-modal";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -18,6 +21,7 @@ type ExerciseOption = {
   instructions?: string | null;
   image_url: string;
   gif_url?: string | null;
+  video_url?: string | null;
   muscle_image_url: string;
 };
 type ExerciseRuntime = {
@@ -51,6 +55,7 @@ export default function WorkoutTodayPage() {
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
   const [weightError, setWeightError] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(false);
   const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -180,7 +185,18 @@ export default function WorkoutTodayPage() {
     }
   }
 
+  async function swapDuringExercise(wdeId: number, replacementId: number) {
+    const updated = await api.post<WorkoutDayExercise>(`/api/v1/workout_day_exercises/${wdeId}/swap`, { replacement_exercise_id: replacementId });
+    setDay((prev) =>
+      prev ? { ...prev, exercises: (prev.exercises ?? []).map((e) => e.workout_day_exercise_id === wdeId ? updated : e) } : prev
+    );
+    setExerciseRuntime((prev) => ({ ...prev, [updated.workout_day_exercise_id]: createRuntime(updated) }));
+    setCurrentSet(1);
+    setShowSwapModal(false);
+  }
+
   function finishExercise(feeling: string) {
+    setShowSwapModal(false);
     if (!day?.exercises) return;
     const exercise = day.exercises[currentIndex];
     updateRuntime(exercise.workout_day_exercise_id, { feeling });
@@ -340,6 +356,12 @@ export default function WorkoutTodayPage() {
           >
             ℹ Mais informações
           </button>
+          <button
+            onClick={() => setShowSwapModal(true)}
+            className="flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-600 active:bg-orange-100"
+          >
+            ⇄ Trocar
+          </button>
         </div>
         <div className="mt-4">
           <h2 className="text-3xl font-bold text-gray-900">{exercise.name}</h2>
@@ -398,50 +420,41 @@ export default function WorkoutTodayPage() {
       </button>
     </div>
 
-    {/* Modal de informações do exercício */}
-    {infoModalExercise && (
-      <div
-        className="fixed inset-0 z-50 flex items-end bg-black/50"
-        onClick={() => setInfoModalExercise(null)}
-      >
-        <div
-          className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="mb-1 h-1 w-10 rounded-full bg-gray-200 mx-auto" />
-          <h3 className="mt-4 text-xl font-bold text-gray-900">{infoModalExercise.name}</h3>
-          <p className="mt-3 text-sm leading-relaxed text-gray-600">{infoModalExercise.description}</p>
-          {infoModalExercise.instructions && (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Como executar</p>
-              <ol className="space-y-2">
-                {infoModalExercise.instructions.split("\n").filter(Boolean).map((step, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-gray-700">
-                    <span className="flex-shrink-0 font-semibold text-primary-500">{i + 1}.</span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
+    <ExerciseInfoModal exercise={infoModalExercise} onClose={() => setInfoModalExercise(null)} />
 
-    {/* Modal fullscreen de GIF */}
+    {/* Modal fullscreen de mídia */}
     {gifModalExercise && (
       <div
         className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90"
         onClick={() => setGifModalExercise(null)}
       >
         <p className="mb-4 text-sm font-medium text-white/70">{gifModalExercise.name}</p>
-        <img
-          src={gifModalExercise.gif_url ?? gifModalExercise.image_url}
-          alt={gifModalExercise.name}
-          className="max-h-[70vh] max-w-full rounded-xl object-contain"
-        />
+        {gifModalExercise.video_url ? (
+          <video
+            src={gifModalExercise.video_url}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="max-h-[70vh] max-w-full rounded-xl object-contain"
+          />
+        ) : (
+          <img
+            src={gifModalExercise.gif_url ?? gifModalExercise.image_url}
+            alt={gifModalExercise.name}
+            className="max-h-[70vh] max-w-full rounded-xl object-contain"
+          />
+        )}
         <p className="mt-4 text-xs text-white/50">Toque para fechar</p>
       </div>
+    )}
+
+    {showSwapModal && (
+      <SwapModal
+        exercise={exercise}
+        onSwap={swapDuringExercise}
+        onClose={() => setShowSwapModal(false)}
+      />
     )}
     </>
   );
@@ -540,93 +553,60 @@ function OverviewScreen({
 }) {
   const [swapMode, setSwapMode] = useState<WorkoutDayExercise | null>(null);
   const [addMode, setAddMode] = useState(false);
-  const [alternatives, setAlternatives] = useState<ExerciseOption[]>([]);
-  const [swapSearch, setSwapSearch] = useState("");
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<ExerciseOption[]>([]);
+  const [addAlternatives, setAddAlternatives] = useState<ExerciseOption[]>([]);
+  const [addSearch, setAddSearch] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
   const [infoModal, setInfoModal] = useState<WorkoutDayExercise | null>(null);
   const [gifModal, setGifModal] = useState<WorkoutDayExercise | null>(null);
   const exercises = day.exercises ?? [];
   const [globalRest, setGlobalRest] = useState<number>(exercises[0]?.rest_seconds ?? 90);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const allExcludeIds = exercises.map((e) => e.exercise_id).join(",");
-
-  const fetchByName = useCallback(async (name: string) => {
-    setSearchLoading(true);
-    try {
-      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?name=${encodeURIComponent(name)}&exclude_ids=${allExcludeIds}`);
-      setAlternatives(data);
-    } finally {
-      setSearchLoading(false);
-    }
-  }, [allExcludeIds]);
-
-  function handleSwapSearchChange(value: string) {
-    setSwapSearch(value);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (value.trim().length >= 2) {
-      searchTimerRef.current = setTimeout(() => fetchByName(value.trim()), 300);
-    } else if (value.trim().length === 0 && swapMode) {
-      openSwapFetch(swapMode);
-    }
-  }
-
-  async function openSwapFetch(wde: WorkoutDayExercise) {
-    const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
-    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${allExcludeIds}`);
-    setAlternatives(data);
-  }
-
-  async function openSwap(wde: WorkoutDayExercise) {
-    setSwapSearch("");
-    setAiSuggestions([]);
-    setSwapMode(wde);
-    setAddMode(false);
-    await openSwapFetch(wde);
-  }
-
-  async function handleAiPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !swapMode) return;
-    setAiLoading(true);
-    setAiSuggestions([]);
-    try {
-      const form = new FormData();
-      form.append("image", file);
-      form.append("exercise_id", String(swapMode.exercise_id));
-      const result = await api.uploadPost<{ suggestions: ExerciseOption[] }>("/api/v1/exercises/ai_substitute", form);
-      setAiSuggestions(result.suggestions ?? []);
-    } finally {
-      setAiLoading(false);
-    }
-  }
+  const addSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function openAdd() {
     const groups = new Set(exercises.map((e) => e.muscle_group).filter(Boolean));
     const types = new Set(exercises.map((e) => e.exercise_type));
     const allIds = exercises.map((e) => e.exercise_id).join(",");
     const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?exclude_ids=${allIds}`);
-    setAlternatives(data.filter((exercise) => (
+    setAddAlternatives(data.filter((exercise) => (
       (exercise.muscle_group && groups.has(exercise.muscle_group)) || types.has(exercise.exercise_type)
     )));
     setAddMode(true);
     setSwapMode(null);
   }
 
+  function handleAddSearchChange(value: string) {
+    setAddSearch(value);
+    if (addSearchTimerRef.current) clearTimeout(addSearchTimerRef.current);
+    if (value.trim().length >= 2) {
+      const allIds = exercises.map((e) => e.exercise_id).join(",");
+      addSearchTimerRef.current = setTimeout(async () => {
+        setAddLoading(true);
+        try {
+          const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?name=${encodeURIComponent(value.trim())}&exclude_ids=${allIds}`);
+          setAddAlternatives(data);
+        } finally {
+          setAddLoading(false);
+        }
+      }, 300);
+    }
+  }
+
+  function openSwap(wde: WorkoutDayExercise) {
+    setSwapMode(wde);
+    setAddMode(false);
+  }
+
   async function doSwap(wdeId: number, replacementId: number) {
     const updated = await api.post<WorkoutDayExercise>(`/api/v1/workout_day_exercises/${wdeId}/swap`, { replacement_exercise_id: replacementId });
     onChangeDay({ ...day, exercises: exercises.map((e) => e.workout_day_exercise_id === wdeId ? updated : e) });
     setSwapMode(null);
-    setSwapSearch("");
   }
 
   async function doAdd(exerciseId: number) {
     const created = await api.post<WorkoutDayExercise>(`/api/v1/workout_days/${day.id}/exercises`, { exercise_id: exerciseId });
     onChangeDay({ ...day, exercises: [...exercises, created] });
     setAddMode(false);
-    setSwapSearch("");
+    setAddSearch("");
   }
 
   return (
@@ -710,52 +690,37 @@ function OverviewScreen({
 
       <button onClick={openAdd} className="mt-4 w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-semibold text-primary-600">Adicionar exercício</button>
 
-      {(swapMode || addMode) && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => { setSwapMode(null); setAddMode(false); setSwapSearch(""); }}>
-          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-3 text-base font-bold text-gray-900">{swapMode ? "Escolha um substituto" : "Adicionar exercício"}</h3>
+      {swapMode && (
+        <SwapModal
+          exercise={swapMode}
+          onSwap={doSwap}
+          onClose={() => setSwapMode(null)}
+        />
+      )}
 
-            {/* Upload IA — posicionado no topo do modal */}
-            {swapMode && (
-              <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-primary-400">Tem um aparelho diferente?</p>
-                {aiLoading ? (
-                  <p className="py-1 text-center text-sm text-gray-400">Analisando foto...</p>
-                ) : (
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-primary-600">
-                    📷 Enviar foto para IA sugerir substituto
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAiPhoto} />
-                  </label>
-                )}
-                {aiSuggestions.map((alt) => (
-                  <button key={`ai-${alt.id}`} onClick={() => doSwap(swapMode.workout_day_exercise_id, alt.id)} className="mb-2 mt-2 flex w-full gap-3 rounded-lg border border-primary-200 bg-white p-3 text-left hover:bg-primary-100">
-                    <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
-                    <div>
-                      <p className="font-medium text-gray-900">{alt.name}</p>
-                      <p className="text-xs text-primary-500">{muscleLabel(alt.muscle_group, alt.exercise_type)} · sugerido por IA</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+      {addMode && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => { setAddMode(false); setAddSearch(""); }}>
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
+            <h3 className="mb-3 mt-2 text-base font-bold text-gray-900">Adicionar exercício</h3>
 
             {/* Campo de busca */}
             <input
               type="text"
               placeholder="Buscar por nome..."
-              value={swapSearch}
-              onChange={(e) => handleSwapSearchChange(e.target.value)}
+              value={addSearch}
+              onChange={(e) => handleAddSearchChange(e.target.value)}
               className="mb-3 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
             />
 
             {/* Lista de alternativas */}
-            {searchLoading ? (
+            {addLoading ? (
               <p className="rounded-lg bg-gray-50 p-3 text-center text-sm text-gray-400">Buscando...</p>
-            ) : alternatives.length === 0 ? (
+            ) : addAlternatives.length === 0 ? (
               <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa encontrada.</p>
             ) : (
-              alternatives.map((alt) => (
-                <button key={alt.id} onClick={() => swapMode ? doSwap(swapMode.workout_day_exercise_id, alt.id) : doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
+              addAlternatives.map((alt) => (
+                <button key={alt.id} onClick={() => doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
                   <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
                   <div>
                     <p className="font-medium text-gray-900">{alt.name}</p>
@@ -770,33 +735,16 @@ function OverviewScreen({
 
       <button onClick={onStart} className="mt-auto w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">Iniciar treino</button>
     </div>
-    {infoModal && (
-      <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setInfoModal(null)}>
-        <div className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5" onClick={(e) => e.stopPropagation()}>
-          <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
-          <h3 className="mt-4 text-xl font-bold text-gray-900">{infoModal.name}</h3>
-          <p className="mt-3 text-sm leading-relaxed text-gray-600">{infoModal.description}</p>
-          {infoModal.instructions && (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Como executar</p>
-              <ol className="space-y-2">
-                {infoModal.instructions.split("\n").filter(Boolean).map((step, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-gray-700">
-                    <span className="flex-shrink-0 font-semibold text-primary-500">{i + 1}.</span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
+    <ExerciseInfoModal exercise={infoModal} onClose={() => setInfoModal(null)} />
 
     {gifModal && (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90" onClick={() => setGifModal(null)}>
         <p className="mb-4 text-sm font-medium text-white/70">{gifModal.name}</p>
-        <img src={gifModal.gif_url ?? gifModal.image_url} alt={gifModal.name} className="max-h-[70vh] max-w-full rounded-xl object-contain" />
+        {gifModal.video_url ? (
+          <video src={gifModal.video_url} autoPlay loop muted playsInline className="max-h-[70vh] max-w-full rounded-xl object-contain" />
+        ) : (
+          <img src={gifModal.gif_url ?? gifModal.image_url} alt={gifModal.name} className="max-h-[70vh] max-w-full rounded-xl object-contain" />
+        )}
         <p className="mt-4 text-xs text-white/50">Toque para fechar</p>
       </div>
     )}
@@ -899,61 +847,6 @@ function DoneScreen({
   );
 }
 
-const WARMUP_BY_TYPE: Record<string, { label: string; duration: string }[]> = {
-  musculacao: [
-    { label: "Rotação de pescoço", duration: "30s cada lado" },
-    { label: "Circundução de ombros", duration: "10 círculos" },
-    { label: "Rotação de quadril", duration: "10 círculos" },
-    { label: "Agachamento livre (sem peso)", duration: "15 reps" },
-    { label: "Polichinelo", duration: "30s" },
-  ],
-  cardio: [
-    { label: "Caminhada lenta", duration: "2 min" },
-    { label: "Elevação de joelhos no lugar", duration: "30s" },
-    { label: "Chute para trás (calcanhar ao glúteo)", duration: "30s" },
-    { label: "Rotação de tornozelos", duration: "10 cada" },
-  ],
-  corrida: [
-    { label: "Caminhada progressiva", duration: "3 min" },
-    { label: "Elevação de joelhos", duration: "30s" },
-    { label: "Skipping leve", duration: "30s" },
-    { label: "Alongamento de panturrilha", duration: "20s cada lado" },
-  ],
-  default: [
-    { label: "Polichinelo", duration: "30s" },
-    { label: "Rotação de tronco", duration: "10 cada lado" },
-    { label: "Agachamento livre", duration: "10 reps" },
-    { label: "Rotação de braços", duration: "10 círculos" },
-  ],
-};
-
-const COOLDOWN_BY_TYPE: Record<string, { label: string; duration: string }[]> = {
-  musculacao: [
-    { label: "Alongamento de peito (mãos entrelaçadas atrás)", duration: "30s" },
-    { label: "Alongamento de costas (abraço de joelhos)", duration: "30s" },
-    { label: "Alongamento de quadríceps", duration: "30s cada lado" },
-    { label: "Alongamento de panturrilha", duration: "30s cada lado" },
-    { label: "Respiração profunda diafragmática", duration: "1 min" },
-  ],
-  cardio: [
-    { label: "Caminhada lenta para desacelerar", duration: "3 min" },
-    { label: "Alongamento de quadríceps", duration: "30s cada lado" },
-    { label: "Alongamento de panturrilha", duration: "30s cada lado" },
-    { label: "Respiração profunda", duration: "1 min" },
-  ],
-  corrida: [
-    { label: "Caminhada para desacelerar", duration: "3 min" },
-    { label: "Alongamento de IT Band", duration: "30s cada lado" },
-    { label: "Alongamento de isquiotibiais", duration: "30s" },
-    { label: "Alongamento de panturrilha", duration: "30s cada lado" },
-  ],
-  default: [
-    { label: "Respiração profunda", duration: "1 min" },
-    { label: "Alongamento de pescoço", duration: "20s cada lado" },
-    { label: "Alongamento de tronco", duration: "30s" },
-    { label: "Caminhada leve", duration: "2 min" },
-  ],
-};
 
 function detectWorkoutType(day: WorkoutDay): string {
   const exercises = day.exercises ?? [];
@@ -977,11 +870,19 @@ function WarmupScreen({ day, onStart }: { day: WorkoutDay; onStart: () => void }
 
         <div className="mt-6 space-y-3">
           {items.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-50 text-sm font-bold text-primary-600">{idx + 1}</span>
-              <div>
-                <p className="font-medium text-gray-900">{item.label}</p>
-                <p className="text-xs text-gray-400">{item.duration}</p>
+            <div key={idx} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white overflow-hidden shadow-sm">
+              <img
+                src={item.thumbnail}
+                alt={item.label}
+                className="h-20 w-24 flex-shrink-0 object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+              <div className="flex items-center gap-3 py-3 pr-4">
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary-50 text-xs font-bold text-primary-600">{idx + 1}</span>
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">{item.label}</p>
+                  <p className="text-xs text-primary-400 mt-0.5">{item.duration}</p>
+                </div>
               </div>
             </div>
           ))}
@@ -1008,11 +909,19 @@ function CooldownScreen({ day, onFinish }: { day: WorkoutDay; onFinish: () => vo
 
         <div className="mt-6 space-y-3">
           {items.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-50 text-sm font-bold text-green-600">{idx + 1}</span>
-              <div>
-                <p className="font-medium text-gray-900">{item.label}</p>
-                <p className="text-xs text-gray-400">{item.duration}</p>
+            <div key={idx} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white overflow-hidden shadow-sm">
+              <img
+                src={item.thumbnail}
+                alt={item.label}
+                className="h-20 w-24 flex-shrink-0 object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+              <div className="flex items-center gap-3 py-3 pr-4">
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-50 text-xs font-bold text-green-600">{idx + 1}</span>
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">{item.label}</p>
+                  <p className="text-xs text-green-400 mt-0.5">{item.duration}</p>
+                </div>
               </div>
             </div>
           ))}

@@ -1,0 +1,108 @@
+"use client";
+
+import { useState } from "react";
+import { api } from "@/shared/lib/api";
+import type { WorkoutDayExercise } from "@/shared/types/workout";
+
+export function ExerciseInfoModal({
+  exercise,
+  onClose,
+}: {
+  exercise: WorkoutDayExercise | null;
+  onClose: () => void;
+}) {
+  const [setupGuide, setSetupGuide] = useState<string | null>(null);
+  const [setupGuideLoading, setSetupGuideLoading] = useState(false);
+  const [setupGuideOpen, setSetupGuideOpen] = useState(false);
+
+  if (!exercise) return null;
+
+  async function handleSetupGuide() {
+    if (setupGuide !== null) {
+      setSetupGuideOpen((prev) => !prev);
+      return;
+    }
+    setSetupGuideLoading(true);
+    setSetupGuideOpen(true);
+    try {
+      const data = await api.get<{ setup_guide: string }>(`/api/v1/exercises/${exercise!.exercise_id}/setup_guide`);
+      setSetupGuide(data.setup_guide ?? null);
+    } catch {
+      setSetupGuide("");
+    } finally {
+      setSetupGuideLoading(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/50"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
+        <h3 className="mt-4 text-xl font-bold text-gray-900">{exercise.name}</h3>
+        <p className="mt-3 text-sm leading-relaxed text-gray-600">{exercise.description}</p>
+
+        {exercise.instructions && (
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Como executar</p>
+            <ol className="space-y-2">
+              {exercise.instructions.split("\n").filter(Boolean).map((step, i) => (
+                <li key={i} className="flex gap-2 text-sm text-gray-700">
+                  <span className="flex-shrink-0 font-semibold text-primary-500">{i + 1}.</span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {exercise.exercise_type === "musculacao" && (
+          <div className="mt-6">
+            <button
+              onClick={handleSetupGuide}
+              className="flex w-full items-center justify-between rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 active:bg-blue-100"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+                ⚙ Configuração para iniciantes
+              </span>
+              <span className="text-xl font-light text-blue-400">
+                {setupGuideOpen ? "−" : "+"}
+              </span>
+            </button>
+
+            {setupGuideOpen && (
+              <div className="mt-3 rounded-xl border border-blue-50 bg-white px-1">
+                {setupGuideLoading ? (
+                  <p className="py-6 text-center text-sm text-gray-400">Gerando guia...</p>
+                ) : setupGuide ? (
+                  <div className="space-y-1 py-2">
+                    {setupGuide.split("\n").filter(Boolean).map((line, i) => {
+                      const isHeader = /^\d+\./.test(line.trim());
+                      return (
+                        <p
+                          key={i}
+                          className={`text-sm leading-relaxed ${isHeader ? "mt-3 font-semibold text-gray-800" : "text-gray-600"}`}
+                        >
+                          {line}
+                        </p>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="py-4 text-center text-sm text-red-400">
+                    Não foi possível gerar o guia. Tente novamente.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

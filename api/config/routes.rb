@@ -25,6 +25,7 @@ Rails.application.routes.draw do
 
       resources :exercises, only: [:index] do
         collection { post :ai_substitute }
+        member     { get  :setup_guide  }
       end
 
       post "workout_day_exercises/:id/swap", to: "workout_day_exercises#swap"

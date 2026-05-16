@@ -49,3 +49,10 @@ docker-data/
 # =========================
 .vscode
 .idea
+
+external/free-exercise-db/
+data/exercises_selected/
+public/generated-exercise-videos/
+data/exercises_selected/
+data/all_exercises.txt
+data/common_exercises.txt

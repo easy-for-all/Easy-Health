@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_10_000004) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_15_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -51,17 +51,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_10_000004) do
     t.text "instructions"
     t.string "muscle_group"
     t.string "name"
+    t.text "setup_guide"
     t.datetime "updated_at", null: false
+    t.string "video_url"
     t.index ["exercise_type"], name: "index_exercises_on_exercise_type"
   end
 
   create_table "health_profiles", force: :cascade do |t|
     t.text "activity_preferences", default: [], array: true
     t.integer "age"
+    t.string "cardio_format"
+    t.string "cardio_type"
     t.datetime "created_at", null: false
+    t.jsonb "custom_splits", default: []
     t.string "fitness_level"
     t.string "goal"
     t.decimal "height_cm"
+    t.string "modality", default: "ai_choice"
+    t.string "split_type", default: "ai_choice"
     t.integer "training_days_per_week", default: 3
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false

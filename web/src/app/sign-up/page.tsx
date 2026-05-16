@@ -12,6 +12,7 @@ export default function SignUpPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -84,9 +85,28 @@ export default function SignUpPage() {
             />
           </div>
 
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+            />
+            <span className="text-sm text-gray-600">
+              Li e concordo com os{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-600 hover:underline">
+                Termos de Uso
+              </a>{" "}
+              e a{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-600 hover:underline">
+                Política de Privacidade
+              </a>
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !acceptedTerms}
             className="w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
           >
             {loading ? "Criando conta..." : "Criar conta"}

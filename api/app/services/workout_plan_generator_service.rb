@@ -1,5 +1,4 @@
 class WorkoutPlanGeneratorService
-  # Internal weekday assignments by total days (0=Sun, 1=Mon ... 6=Sat)
   DAY_SCHEDULE = {
     2 => [1, 4],
     3 => [1, 3, 5],
@@ -8,7 +7,7 @@ class WorkoutPlanGeneratorService
     6 => [1, 2, 3, 4, 5, 6]
   }.freeze
 
-  # Strength splits indexed by number of strength days
+  # Used by ai_choice mode (based on number of strength days)
   STRENGTH_TEMPLATES = {
     1 => [
       { name: "Full Body",  muscle_groups: %w[chest back legs core] }
@@ -45,13 +44,42 @@ class WorkoutPlanGeneratorService
     ]
   }.freeze
 
+  # Explicit split base templates (cycled to fill training days)
+  EXPLICIT_SPLITS = {
+    "full_body"   => [
+      { name: "Full Body", muscle_groups: %w[chest back legs core] }
+    ],
+    "upper_lower" => [
+      { name: "Superior", muscle_groups: %w[chest back shoulders biceps triceps] },
+      { name: "Inferior", muscle_groups: %w[legs core] }
+    ],
+    "ab"          => [
+      { name: "Treino A", muscle_groups: %w[chest shoulders triceps] },
+      { name: "Treino B", muscle_groups: %w[back biceps legs core] }
+    ],
+    "abc"         => [
+      { name: "Treino A", muscle_groups: %w[chest shoulders triceps] },
+      { name: "Treino B", muscle_groups: %w[back biceps] },
+      { name: "Treino C", muscle_groups: %w[legs core] }
+    ],
+    "ppl"         => [
+      { name: "Push",  muscle_groups: %w[chest shoulders triceps] },
+      { name: "Pull",  muscle_groups: %w[back biceps] },
+      { name: "Legs",  muscle_groups: %w[legs core] }
+    ]
+  }.freeze
+
   ACTIVITY_NAMES = {
     "cardio"    => "Cardio",
     "hiit"      => "HIIT",
     "funcional" => "Funcional",
     "corrida"   => "Corrida",
     "natacao"   => "Natação",
-    "caminhada" => "Caminhada"
+    "caminhada" => "Caminhada",
+    "bicicleta" => "Bike",
+    "eliptico"  => "Elíptico",
+    "escada"    => "Escada",
+    "remo"      => "Remo"
   }.freeze
 
   SETS_REPS = {
@@ -62,11 +90,18 @@ class WorkoutPlanGeneratorService
 
   EXERCISES_PER_GROUP = 2
 
-  def initialize(user, days_per_week: nil, activity_preferences: nil)
+  def initialize(user, days_per_week: nil, activity_preferences: nil,
+                 modality: nil, split_type: nil, cardio_type: nil,
+                 cardio_format: nil, custom_splits: nil)
     @user    = user
     @profile = user.health_profile
     @fitness_level = @profile&.fitness_level || "beginner"
     @days_per_week = (days_per_week || @profile&.training_days_per_week || 3).clamp(2, 6)
+    @modality      = modality      || @profile&.modality      || "ai_choice"
+    @split_type    = split_type    || @profile&.split_type    || "ai_choice"
+    @cardio_type   = cardio_type   || @profile&.cardio_type   || "cardio"
+    @cardio_format = cardio_format || @profile&.cardio_format
+    @custom_splits = custom_splits || @profile&.custom_splits || []
     raw_prefs = Array(activity_preferences || @profile&.activity_preferences || [])
     @activity_preferences = raw_prefs.presence || ["musculacao"]
   end
@@ -94,7 +129,6 @@ class WorkoutPlanGeneratorService
         idx_exercise = 0
 
         if day_tmpl[:exercise_type]
-          # Non-strength day: pick exercises by type
           exercises = Exercise.where(exercise_type: day_tmpl[:exercise_type]).limit(EXERCISES_PER_GROUP * 2)
           exercises.each do |ex|
             day.workout_day_exercises.create!(
@@ -104,7 +138,6 @@ class WorkoutPlanGeneratorService
             idx_exercise += 1
           end
         else
-          # Strength day: pick exercises by muscle group
           day_tmpl[:muscle_groups].each do |group|
             Exercise.where(exercise_type: "musculacao", muscle_group: group)
                     .limit(EXERCISES_PER_GROUP).each do |ex|
@@ -129,6 +162,33 @@ class WorkoutPlanGeneratorService
   private
 
   def build_template
+    return build_custom_template   if @split_type == "custom"
+    return build_explicit_template if EXPLICIT_SPLITS.key?(@split_type)
+    build_ai_template
+  end
+
+  def build_explicit_template
+    base = EXPLICIT_SPLITS[@split_type]
+
+    case @modality
+    when "cardio"
+      @days_per_week.times.map do |i|
+        { name: "#{ACTIVITY_NAMES.fetch(@cardio_type, "Cardio")} #{i + 1}", exercise_type: resolved_cardio_type }
+      end
+    when "misto"
+      strength_count = [(@days_per_week * 2 / 3.0).ceil, @days_per_week - 1].min
+      cardio_count   = @days_per_week - strength_count
+      strength_days  = base.cycle.take(strength_count)
+      cardio_days    = cardio_count.times.map do |i|
+        { name: "#{ACTIVITY_NAMES.fetch(@cardio_type, "Cardio")} #{i + 1}", exercise_type: resolved_cardio_type }
+      end
+      strength_days + cardio_days
+    else
+      base.cycle.take(@days_per_week)
+    end
+  end
+
+  def build_ai_template
     other_types    = (@activity_preferences - ["musculacao"]).uniq
     strength_count = [[@days_per_week - other_types.size, 1].max, 6].min
 
@@ -136,5 +196,28 @@ class WorkoutPlanGeneratorService
     other_days    = other_types.map { |t| { name: ACTIVITY_NAMES.fetch(t, t.capitalize), exercise_type: t } }
 
     (strength_days + other_days).first(@days_per_week)
+  end
+
+  def build_custom_template
+    return build_ai_template if @custom_splits.blank?
+
+    @custom_splits.first(@days_per_week).map do |split|
+      {
+        name:          split["name"] || "Treino",
+        muscle_groups: Array(split["muscle_groups"])
+      }
+    end
+  end
+
+  # Resolve cardio_type to an exercise_type that exists in the DB
+  def resolved_cardio_type
+    case @cardio_type
+    when "bicicleta", "eliptico", "escada", "remo" then "cardio"
+    when "corrida"                                  then "corrida"
+    when "caminhada"                                then "caminhada"
+    when "natacao"                                  then "natacao"
+    when "hiit"                                     then "hiit"
+    else "cardio"
+    end
   end
 end
