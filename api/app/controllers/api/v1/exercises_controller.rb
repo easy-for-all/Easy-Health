@@ -5,10 +5,25 @@ module Api
         exercises = Exercise.all
         exercises = exercises.where(muscle_group: params[:muscle_group]) if params[:muscle_group].present?
         exercises = exercises.where(exercise_type: params[:exercise_type]) if params[:exercise_type].present?
-        exercises = exercises.where("name ILIKE ?", "%#{params[:name]}%") if params[:name].present?
+        if params[:name].present?
+          term = "%#{params[:name]}%"
+          exercises = exercises.where("name ILIKE ? OR description ILIKE ?", term, term)
+        end
         exercises = exercises.where.not(id: params[:exclude_ids].to_s.split(",")) if params[:exclude_ids].present?
 
         render json: exercises.map { |e| exercise_json(e) }
+      end
+
+      def setup_guide
+        exercise = Exercise.find(params[:id])
+        guide = exercise.setup_guide.presence || ExerciseSetupGuideService.new(exercise).call
+        if guide
+          render json: { setup_guide: guide }
+        else
+          render json: { error: "Não foi possível gerar o guia" }, status: :unprocessable_entity
+        end
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Exercise not found" }, status: :not_found
       end
 
       def ai_substitute
@@ -49,6 +64,7 @@ module Api
           instructions: exercise.instructions,
           image_url: exercise_image_url(exercise),
           gif_url: exercise.gif_url,
+          video_url: exercise.video_url,
           muscle_image_url: muscle_image_url(exercise.muscle_group)
         }
       end
