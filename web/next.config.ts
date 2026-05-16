@@ -4,7 +4,42 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const internalApiUrl = process.env.NEXT_INTERNAL_API_URL;
 
+const securityHeaders = [
+  // Prevents HTTPS downgrade attacks
+  { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+  // Blocks MIME-type sniffing
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  // Prevents clickjacking
+  { key: "X-Frame-Options", value: "DENY" },
+  // Controls referrer information sent with requests
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Restricts browser features
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // Isolates browsing context
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // CSP: unsafe-inline required for Next.js hydration scripts; tighten with nonces later
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "connect-src 'self' https:",
+      "font-src 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+    ].join("; "),
+  },
+];
+
 export default withNextIntl({
+  poweredByHeader: false,
+
+  async headers() {
+    return [{ source: "/(.*)", headers: securityHeaders }];
+  },
+
   async rewrites() {
     if (!internalApiUrl) return [];
     return [
