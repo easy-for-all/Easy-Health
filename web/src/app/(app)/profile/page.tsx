@@ -407,6 +407,31 @@ export default function ProfilePage() {
           </button>
         </div>
       </div>
+
+      {/* Legal */}
+      <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5">
+        <h2 className="mb-4 font-semibold text-gray-900">Legal</h2>
+        <div className="flex flex-col gap-2">
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            <span>Termos de Uso</span>
+            <span className="text-gray-300">›</span>
+          </a>
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            <span>Política de Privacidade</span>
+            <span className="text-gray-300">›</span>
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

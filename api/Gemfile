@@ -9,6 +9,7 @@ gem "tzinfo-data", platforms: %i[ windows jruby ]
 gem "bcrypt", "~> 3.1.7"
 gem "devise"
 gem "rack-cors"
+gem "image_processing", "~> 1.2"
 
 gem "sentry-ruby"
 gem "sentry-rails"

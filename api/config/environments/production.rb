@@ -22,4 +22,5 @@ Rails.application.configure do
   config.active_record.attributes_for_inspect = [ :id ]
 
   config.active_storage.service = :local
+  config.active_storage.variant_processor = :vips
 end

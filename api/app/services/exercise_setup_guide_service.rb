@@ -33,7 +33,7 @@ class ExerciseSetupGuideService
     @exercise.update_column(:setup_guide, guide) if guide.present?
     guide
   rescue => e
-    Rails.logger.error("ExerciseSetupGuideService: #{e.message}")
+    Rails.logger.error("ExerciseSetupGuideService [#{e.class}]: #{e.message}")
     nil
   end
 end

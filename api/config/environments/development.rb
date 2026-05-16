@@ -18,4 +18,5 @@ Rails.application.configure do
   config.hosts << "api"
 
   config.active_storage.service = :local
+  config.active_storage.variant_processor = :vips
 end

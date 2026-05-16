@@ -78,14 +78,24 @@ export function SwapModal({
   const fetchByName = useCallback(async (name: string) => {
     setSearchLoading(true);
     try {
-      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?name=${encodeURIComponent(name)}&exclude_ids=${exercise.exercise_id}`);
+      const params = new URLSearchParams({ name, exclude_ids: String(exercise.exercise_id) });
+      if (exercise.muscle_group) params.set("muscle_group", exercise.muscle_group);
+      else params.set("exercise_type", exercise.exercise_type);
+      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${params.toString()}`);
       setAlternatives(data);
     } finally {
       setSearchLoading(false);
     }
-  }, [exercise.exercise_id]);
+  }, [exercise.exercise_id, exercise.muscle_group, exercise.exercise_type]);
 
   async function fetchByFilter(filter: { muscle_group?: string; exercise_type?: string }) {
+    const compatibleGroup = exercise.muscle_group ?? null;
+    const compatibleType = exercise.exercise_type;
+    const isCompatible = compatibleGroup
+      ? filter.muscle_group === compatibleGroup
+      : filter.exercise_type === compatibleType;
+    if (!isCompatible) return;
+
     setSearchLoading(true);
     setSwapFilter(filter);
     try {
@@ -172,24 +182,44 @@ export function SwapModal({
 
         {/* Chips de filtro por músculo/tipo */}
         <div className="mb-3 flex flex-wrap gap-1.5">
-          {Object.entries(MUSCLE_LABELS).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => fetchByFilter({ muscle_group: key })}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${swapFilter?.muscle_group === key ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-primary-100"}`}
-            >
-              {label}
-            </button>
-          ))}
-          {Object.entries(TYPE_LABELS).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => fetchByFilter({ exercise_type: key })}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${swapFilter?.exercise_type === key ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-primary-100"}`}
-            >
-              {label}
-            </button>
-          ))}
+          {Object.entries(MUSCLE_LABELS).map(([key, label]) => {
+            const isCompatible = exercise.muscle_group === key;
+            return (
+              <button
+                key={key}
+                onClick={() => fetchByFilter({ muscle_group: key })}
+                disabled={!isCompatible}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  swapFilter?.muscle_group === key
+                    ? "bg-primary-500 text-white"
+                    : isCompatible
+                    ? "bg-gray-100 text-gray-600 hover:bg-primary-100"
+                    : "cursor-not-allowed bg-gray-50 text-gray-300"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+          {Object.entries(TYPE_LABELS).map(([key, label]) => {
+            const isCompatible = !exercise.muscle_group && exercise.exercise_type === key;
+            return (
+              <button
+                key={key}
+                onClick={() => fetchByFilter({ exercise_type: key })}
+                disabled={!isCompatible}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  swapFilter?.exercise_type === key
+                    ? "bg-primary-500 text-white"
+                    : isCompatible
+                    ? "bg-gray-100 text-gray-600 hover:bg-primary-100"
+                    : "cursor-not-allowed bg-gray-50 text-gray-300"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Lista de alternativas */}
