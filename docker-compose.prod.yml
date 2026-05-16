@@ -32,6 +32,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       RAILS_MASTER_KEY: ${RAILS_MASTER_KEY}
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     depends_on:
       db:
         condition: service_healthy

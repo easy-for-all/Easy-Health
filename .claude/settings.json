@@ -10,7 +10,11 @@
       "Bash(bundle install *)",
       "Bash(grep -E \"\\\\.tsx$|\\\\.ts$\")",
       "Bash(kill 112148)",
-      "Bash(xargs ls -la)"
+      "Bash(xargs ls -la)",
+      "Bash(git -C /home/marcus/projects/Easy-Health log --oneline -10)",
+      "Bash(git -C /home/marcus/projects/Easy-Health diff --name-only HEAD)",
+      "Bash(git -C /home/marcus/projects/Easy-Health show HEAD:api/app/services/exercise_setup_guide_service.rb)",
+      "Bash(git -C /home/marcus/projects/Easy-Health show HEAD:api/Gemfile)"
     ],
     "additionalDirectories": [
       "/mnt/c/Users/mailm/Downloads"
