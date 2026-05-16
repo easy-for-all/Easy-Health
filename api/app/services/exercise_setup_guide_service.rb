@@ -32,6 +32,9 @@ class ExerciseSetupGuideService
     guide = response.dig("content", 0, "text").to_s.strip
     @exercise.update_column(:setup_guide, guide) if guide.present?
     guide
+  rescue KeyError => e
+    Rails.logger.error("ExerciseSetupGuideService: ANTHROPIC_API_KEY not set — #{e.message}")
+    nil
   rescue => e
     Rails.logger.error("ExerciseSetupGuideService [#{e.class}]: #{e.message}")
     nil
