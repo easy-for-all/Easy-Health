@@ -20,9 +20,10 @@ class ExerciseSubstituteService
       #{list}
     PROMPT
 
+    cfg = AiConfig.for(:exercise_substitute)
     response = client.messages(parameters: {
-      model: "claude-opus-4-7",
-      max_tokens: 128,
+      model:      cfg[:model],
+      max_tokens: cfg[:max_tokens],
       messages: [{
         role: "user",
         content: [

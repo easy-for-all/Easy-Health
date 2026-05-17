@@ -7,6 +7,13 @@ import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+function resolveImageSrc(src: string): string {
+  if (src?.startsWith("/")) return `${API_URL}${src}`;
+  return src;
+}
+
 const GOAL_LABELS: Record<string, string> = {
   lose_weight: "Perder peso",
   gain_muscle: "Ganhar músculo",
@@ -935,7 +942,7 @@ function PlanDayDetailDrawer({
                 <div className="flex gap-3 mb-3">
                   {/* Exercise image */}
                   <img
-                    src={ex.image_url}
+                    src={resolveImageSrc(ex.image_url)}
                     alt={ex.name}
                     className="h-16 w-20 rounded-lg object-cover flex-shrink-0"
                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `/exercise-images/${ex.exercise_type || "treino"}.svg`; }}
@@ -1052,7 +1059,7 @@ function PlanDayDetailDrawer({
                   className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
                 >
                   <img
-                    src={opt.image_url}
+                    src={resolveImageSrc(opt.image_url)}
                     alt={opt.name}
                     className="h-12 w-16 rounded-md object-cover flex-shrink-0"
                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `/exercise-images/${opt.exercise_type || "treino"}.svg`; }}

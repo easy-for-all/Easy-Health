@@ -1,6 +1,8 @@
 module Api
   module V1
     class WorkoutDayExercisesController < BaseController
+      before_action(only: [:swap, :update]) { check_rate_limit!(:update_workout) }
+
       def swap
         wde = WorkoutDayExercise
           .joins(workout_day: { workout_plan: :user })

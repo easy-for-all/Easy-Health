@@ -25,9 +25,11 @@ module Api
 
         case category
         when "body_photo"
+          check_rate_limit!(:image_analysis); return if performed?
           result, file_data = validate_and_process_body_photo(file_data, file.content_type)
           return render json: { error: result[:error] }, status: :unprocessable_entity if result[:error]
         when "exam"
+          check_rate_limit!(:exam_analysis); return if performed?
           result = validate_exam(file_data, file.content_type)
           return render json: { error: result[:error] }, status: :unprocessable_entity if result[:error]
         end
@@ -44,7 +46,40 @@ module Api
         )
 
         if media.save
-          render json: media_json(media).merge(face_blurred: result&.dig(:face_blurred) || false), status: :created
+          extra = { face_blurred: result&.dig(:face_blurred) || false }
+
+          if category == "exam"
+            cfg = AiConfig.for(:exam_extraction)
+            extraction = ExamDataExtractionService.new(
+              file_data:    file_data,
+              content_type: file.content_type,
+              user:         current_user,
+              user_media:   media
+            ).call
+            log_ai_usage(user: current_user, task_type: :exam_analysis, model: cfg[:model])
+            extra[:extracted_data] = extraction.data_points.map { |dp|
+              { id: dp.id, field_name: dp.field_name, value: dp.value, unit: dp.unit,
+                confidence: dp.confidence, ai_notes: dp.ai_notes }
+            }
+          elsif category == "body_photo"
+            cfg      = AiConfig.for(:image_analysis)
+            analysis = BodyAnalysisService.new(
+              image_data:   file_data,
+              content_type: file.content_type,
+              user:         current_user,
+              user_media:   media
+            ).call
+            log_ai_usage(user: current_user, task_type: :image_analysis, model: cfg[:model])
+            if analysis.data_point
+              extra[:body_analysis] = {
+                id:          analysis.data_point.id,
+                observation: analysis.observation,
+                confidence:  analysis.data_point.confidence
+              }
+            end
+          end
+
+          render json: media_json(media).merge(extra), status: :created
         else
           render json: { errors: media.errors.full_messages }, status: :unprocessable_entity
         end
@@ -62,10 +97,12 @@ module Api
       private
 
       def validate_and_process_body_photo(file_data, content_type)
+        cfg = AiConfig.for(:image_validation)
         validation = BodyPhotoValidationService.new(
           image_data:   file_data,
           content_type: content_type
         ).call
+        log_ai_usage(user: current_user, task_type: :image_analysis, model: cfg[:model])
 
         unless validation.has_human_body
           reason = validation.rejection_reason.presence ||
@@ -88,10 +125,12 @@ module Api
       end
 
       def validate_exam(file_data, content_type)
+        cfg = AiConfig.for(:exam_validation)
         validation = ExamValidationService.new(
           file_data:    file_data,
           content_type: content_type
         ).call
+        log_ai_usage(user: current_user, task_type: :exam_analysis, model: cfg[:model])
 
         unless validation.valid
           reason = validation.rejection_reason.presence ||

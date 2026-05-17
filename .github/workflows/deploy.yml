@@ -37,10 +37,27 @@ jobs:
             cd /home/easy/Easy-Health &&
             git fetch origin main &&
             git reset --hard origin/main &&
+            git submodule update --init --recursive || true &&
+            bash -c '
+              set -e
+              dest=api/public/exercise-images/db
+              src=external/free-exercise-db/exercises
+              if [ -d \"\$src\" ]; then
+                for slug in \$(ls \"\$src\"); do
+                  [ -f \"\$src/\$slug/0.jpg\" ] || continue
+                  mkdir -p \"\$dest/\$slug\"
+                  cp -u \"\$src/\$slug/0.jpg\" \"\$dest/\$slug/0.jpg\"
+                done
+                echo \"Exercise images copied to \$dest\"
+              else
+                echo \"external/free-exercise-db not found, skipping image copy\"
+              fi
+            ' &&
             docker compose -f docker-compose.prod.yml down &&
             docker builder prune -af &&
             docker compose -f docker-compose.prod.yml build --no-cache &&
             docker compose -f docker-compose.prod.yml up -d &&
             sleep 15 &&
-            docker compose -f docker-compose.prod.yml exec -T api bin/rails db:migrate
+            docker compose -f docker-compose.prod.yml exec -T api bin/rails db:migrate &&
+            docker compose -f docker-compose.prod.yml exec -T api bin/rails exercises:import_local_images
           "

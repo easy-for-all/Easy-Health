@@ -28,9 +28,10 @@ class BodyPhotoValidationService
       If has_face is true, face_bbox must be: {"x": 0.1, "y": 0.0, "w": 0.25, "h": 0.3}
     PROMPT
 
+    cfg = AiConfig.for(:image_validation)
     response = client.messages(parameters: {
-      model: "claude-opus-4-7",
-      max_tokens: 256,
+      model:      cfg[:model],
+      max_tokens: cfg[:max_tokens],
       messages: [{
         role: "user",
         content: [

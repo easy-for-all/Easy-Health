@@ -1,6 +1,9 @@
 module Api
   module V1
     class BaseController < ApplicationController
+      include AiLogging
+      include RateLimiter
+
       before_action :authenticate_user!
 
       private

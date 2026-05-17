@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_17_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_17_200003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -42,12 +42,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200000) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "ai_usage_logs", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "error_summary"
+    t.integer "input_tokens"
+    t.string "model", null: false
+    t.integer "output_tokens"
+    t.string "status", default: "success", null: false
+    t.string "task_type", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "task_type", "created_at"], name: "index_ai_usage_logs_on_user_id_and_task_type_and_created_at"
+    t.index ["user_id"], name: "index_ai_usage_logs_on_user_id"
+  end
+
   create_table "exercises", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
+    t.string "difficulty", default: "intermediate"
     t.string "equipment_type", default: "gym", null: false
     t.string "exercise_type", default: "musculacao", null: false
     t.string "gif_url"
+    t.boolean "home_compatible", default: false, null: false
     t.string "image_url"
     t.text "instructions"
     t.string "muscle_group"
@@ -57,6 +73,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200000) do
     t.string "video_url"
     t.index ["equipment_type"], name: "index_exercises_on_equipment_type"
     t.index ["exercise_type"], name: "index_exercises_on_exercise_type"
+  end
+
+  create_table "health_data_points", force: :cascade do |t|
+    t.text "ai_notes"
+    t.datetime "collected_at"
+    t.float "confidence"
+    t.datetime "created_at", null: false
+    t.string "field_name", null: false
+    t.text "raw_text"
+    t.string "source_type", null: false
+    t.string "status", default: "pending_review", null: false
+    t.string "unit"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.bigint "user_media_id"
+    t.decimal "value", precision: 10, scale: 3
+    t.index ["user_id", "field_name", "status"], name: "index_health_data_points_on_user_id_and_field_name_and_status"
+    t.index ["user_id"], name: "index_health_data_points_on_user_id"
+    t.index ["user_media_id"], name: "index_health_data_points_on_user_media_id"
   end
 
   create_table "health_profiles", force: :cascade do |t|
@@ -180,6 +215,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "ai_usage_logs", "users"
+  add_foreign_key "health_data_points", "user_media", column: "user_media_id"
+  add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
   add_foreign_key "subscriptions", "users"
   add_foreign_key "user_media", "users"

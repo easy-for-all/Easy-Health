@@ -45,7 +45,12 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Jogging_Treadmill/0.jpg\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Mountain_Climbers/0.jpg\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Front_Box_Jump/0.jpg\")",
-      "Bash(ssh -i ~/.ssh/easyhealth_github_actions -o ConnectTimeout=10 -o StrictHostKeyChecking=no easy@177.7.58.46 \"cd /home/easy/Easy-Health && docker compose -f docker-compose.prod.yml exec -T api bundle exec rails 'admin:create[mail.marcus.reis@gmail.com,8ANt5edvxFpak4MS]'\")"
+      "Bash(ssh -i ~/.ssh/easyhealth_github_actions -o ConnectTimeout=10 -o StrictHostKeyChecking=no easy@177.7.58.46 \"cd /home/easy/Easy-Health && docker compose -f docker-compose.prod.yml exec -T api bundle exec rails 'admin:create[mail.marcus.reis@gmail.com,8ANt5edvxFpak4MS]'\")",
+      "Bash(ssh -i ~/.ssh/easyhealth_github_actions -o ConnectTimeout=10 -o StrictHostKeyChecking=no easy@177.7.58.46 ' *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(xargs -I {} ls -la \"{}\")",
+      "Bash(grep -v \"\\\\.json$\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/exercise-images/db/Pushups/0.jpg)"
     ],
     "additionalDirectories": [
       "/mnt/c/Users/mailm/Downloads",

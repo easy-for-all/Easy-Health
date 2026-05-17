@@ -23,9 +23,10 @@ class ExerciseSetupGuideService
       Escreva em português brasileiro, de forma clara e direta, usando linguagem simples. Seja muito específico — imagine que a pessoa está sentada no aparelho agora e nunca fez isso antes.
     PROMPT
 
+    cfg = AiConfig.for(:setup_guide)
     response = client.messages(parameters: {
-      model: "claude-opus-4-7",
-      max_tokens: 900,
+      model:      cfg[:model],
+      max_tokens: cfg[:max_tokens],
       messages: [{ role: "user", content: prompt }]
     })
 

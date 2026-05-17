@@ -46,6 +46,8 @@ Rails.application.routes.draw do
 
       resources :user_media, only: [:index, :create, :destroy]
 
+      resources :health_data_points, only: [:index, :update]
+
       namespace :billing do
         post :checkout
         post :portal
