@@ -58,7 +58,7 @@ class BodyAnalysisService
 
     dp = @user.health_data_points.create!(
       user_media:   @user_media,
-      field_name:   "visual_observation",
+      field_name:   "body_analysis",
       value:        nil,
       unit:         nil,
       source_type:  "body_photo",

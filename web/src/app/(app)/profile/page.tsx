@@ -330,7 +330,7 @@ export default function ProfilePage() {
       >
         <div>
           <p className="font-semibold text-primary-700">Ver perfil detalhado</p>
-          <p className="text-xs text-primary-500">Análises, exames e histórico completo</p>
+          <p className="text-xs text-primary-500">Análises, exames e evolução corporal</p>
         </div>
         <span className="text-primary-400 text-lg">→</span>
       </Link>
