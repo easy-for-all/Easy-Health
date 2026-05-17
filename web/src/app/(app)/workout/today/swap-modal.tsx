@@ -150,12 +150,12 @@ export function SwapModal({
 
         {/* Upload IA */}
         <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-primary-400">Tem um aparelho diferente?</p>
+          <p className="mb-2 text-sm text-gray-700">Está com dúvida em algum aparelho? Tire uma foto dele e a gente explica qual é e se serve pra troca.</p>
           {aiLoading ? (
             <p className="py-1 text-center text-sm text-gray-400">Analisando foto...</p>
           ) : (
             <label className="flex cursor-pointer items-center gap-2 text-sm text-primary-600">
-              📷 Enviar foto para IA sugerir substituto
+              📷 Tirar foto do aparelho
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAiPhoto} />
             </label>
           )}
