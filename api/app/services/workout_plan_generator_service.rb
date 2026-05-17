@@ -92,16 +92,17 @@ class WorkoutPlanGeneratorService
 
   def initialize(user, days_per_week: nil, activity_preferences: nil,
                  modality: nil, split_type: nil, cardio_type: nil,
-                 cardio_format: nil, custom_splits: nil)
+                 cardio_format: nil, custom_splits: nil, training_location: nil)
     @user    = user
     @profile = user.health_profile
-    @fitness_level = @profile&.fitness_level || "beginner"
-    @days_per_week = (days_per_week || @profile&.training_days_per_week || 3).clamp(2, 6)
-    @modality      = modality      || @profile&.modality      || "ai_choice"
-    @split_type    = split_type    || @profile&.split_type    || "ai_choice"
-    @cardio_type   = cardio_type   || @profile&.cardio_type   || "cardio"
-    @cardio_format = cardio_format || @profile&.cardio_format
-    @custom_splits = custom_splits || @profile&.custom_splits || []
+    @fitness_level     = @profile&.fitness_level || "beginner"
+    @days_per_week     = (days_per_week || @profile&.training_days_per_week || 3).clamp(2, 6)
+    @modality          = modality          || @profile&.modality          || "ai_choice"
+    @split_type        = split_type        || @profile&.split_type        || "ai_choice"
+    @cardio_type       = cardio_type       || @profile&.cardio_type       || "cardio"
+    @cardio_format     = cardio_format     || @profile&.cardio_format
+    @custom_splits     = custom_splits     || @profile&.custom_splits     || []
+    @training_location = training_location || @profile&.training_location || "gym"
     raw_prefs = Array(activity_preferences || @profile&.activity_preferences || [])
     @activity_preferences = raw_prefs.presence || ["musculacao"]
   end
@@ -129,7 +130,7 @@ class WorkoutPlanGeneratorService
         idx_exercise = 0
 
         if day_tmpl[:exercise_type]
-          exercises = Exercise.where(exercise_type: day_tmpl[:exercise_type]).limit(EXERCISES_PER_GROUP * 2)
+          exercises = exercise_scope(Exercise.where(exercise_type: day_tmpl[:exercise_type])).limit(EXERCISES_PER_GROUP * 2)
           exercises.each do |ex|
             day.workout_day_exercises.create!(
               exercise: ex, sets: params[:sets], reps: params[:reps],
@@ -139,7 +140,7 @@ class WorkoutPlanGeneratorService
           end
         else
           day_tmpl[:muscle_groups].each do |group|
-            Exercise.where(exercise_type: "musculacao", muscle_group: group)
+            exercise_scope(Exercise.where(exercise_type: "musculacao", muscle_group: group))
                     .limit(EXERCISES_PER_GROUP).each do |ex|
               day.workout_day_exercises.create!(
                 exercise: ex, sets: params[:sets], reps: params[:reps],
@@ -207,6 +208,11 @@ class WorkoutPlanGeneratorService
         muscle_groups: Array(split["muscle_groups"])
       }
     end
+  end
+
+  def exercise_scope(relation)
+    return relation.where(equipment_type: "bodyweight") if @training_location == "home"
+    relation
   end
 
   # Resolve cardio_type to an exercise_type that exists in the DB

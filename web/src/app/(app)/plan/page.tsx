@@ -41,9 +41,11 @@ type SplitType = "ai_choice" | "full_body" | "upper_lower" | "ab" | "abc" | "ppl
 type CardioType   = "corrida" | "caminhada" | "bicicleta" | "eliptico" | "escada" | "remo" | "hiit" | "natacao" | "ai_choice";
 type CardioFormat = "continuo_leve" | "continuo_moderado" | "intervalado" | "hiit" | "progressivo" | "recuperacao" | "ai_choice";
 
+type TrainingLocation = "gym" | "home" | "outdoor" | "any";
+
 type Phase =
   | "loading" | "view"
-  | "wizard_profile" | "wizard_days" | "wizard_modality"
+  | "wizard_profile" | "wizard_days" | "wizard_location" | "wizard_modality"
   | "wizard_split"   | "wizard_cardio_type" | "wizard_cardio_format"
   | "wizard_custom"  | "wizard_generating";
 
@@ -66,6 +68,7 @@ export default function PlanPage() {
   const [cardioType,  setCardioType]  = useState<CardioType>("corrida");
   const [cardioFormat, setCardioFormat] = useState<CardioFormat>("ai_choice");
   const [customSplits, setCustomSplits] = useState<{ name: string; muscle_groups: string[] }[]>([]);
+  const [trainingLocation, setTrainingLocation] = useState<TrainingLocation>("gym");
 
   useEffect(() => {
     Promise.all([
@@ -145,9 +148,10 @@ export default function PlanPage() {
       modality: mod,
       split_type: split,
     };
-    if (cType)   body.cardio_type   = cType;
-    if (cFormat) body.cardio_format = cFormat;
-    if (cSplits) body.custom_splits = cSplits;
+    if (cType)   body.cardio_type      = cType;
+    if (cFormat) body.cardio_format    = cFormat;
+    if (cSplits) body.custom_splits    = cSplits;
+    body.training_location = trainingLocation;
     if (mod === "funcional") body.activity_preferences = ["funcional"];
     if (mod === "ai_choice") delete body.split_type;
 
@@ -173,7 +177,7 @@ export default function PlanPage() {
   if (phase === "loading") return <LoadingScreen />;
 
   const WIZARD_ORDERED: Phase[] = [
-    "wizard_profile", "wizard_days", "wizard_modality",
+    "wizard_profile", "wizard_days", "wizard_location", "wizard_modality",
     "wizard_split", "wizard_cardio_type", "wizard_cardio_format", "wizard_custom",
   ];
   const wizardStep = WIZARD_ORDERED.indexOf(phase);
@@ -235,15 +239,24 @@ export default function PlanPage() {
         <WizardDays
           selected={daysPerWeek}
           onSelect={setDaysPerWeek}
-          onNext={() => setPhase("wizard_modality")}
+          onNext={() => setPhase("wizard_location")}
           onBack={() => setPhase(profile ? "wizard_profile" : "view")}
+        />
+      )}
+
+      {phase === "wizard_location" && (
+        <WizardLocation
+          selected={trainingLocation}
+          onSelect={setTrainingLocation}
+          onNext={() => setPhase("wizard_modality")}
+          onBack={() => setPhase("wizard_days")}
         />
       )}
 
       {phase === "wizard_modality" && (
         <WizardModality
           onSelect={afterModality}
-          onBack={() => setPhase("wizard_days")}
+          onBack={() => setPhase("wizard_location")}
         />
       )}
 
@@ -675,6 +688,49 @@ function WizardDays({
         ))}
       </div>
       <p className="mt-3 text-center text-xs text-gray-400">dias por semana</p>
+      <button onClick={onNext} className="mt-8 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600">
+        Continuar →
+      </button>
+    </div>
+  );
+}
+
+const LOCATION_OPTIONS: { value: TrainingLocation; label: string; description: string; icon: string }[] = [
+  { value: "gym",     label: "Academia",       description: "Aparelhos, barras e halteres",    icon: "🏋️" },
+  { value: "home",    label: "Em casa",        description: "Peso corporal, sem equipamentos", icon: "🏠" },
+  { value: "outdoor", label: "Ao ar livre",    description: "Parques, ruas e quadras",         icon: "🌳" },
+  { value: "any",     label: "Varia",          description: "Depende do dia",                  icon: "🔄" },
+];
+
+function WizardLocation({
+  selected, onSelect, onNext, onBack,
+}: { selected: TrainingLocation; onSelect: (v: TrainingLocation) => void; onNext: () => void; onBack: () => void }) {
+  return (
+    <div>
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">← Voltar</button>
+      <h2 className="mb-2 text-lg font-bold text-gray-900">Onde você vai treinar?</h2>
+      <p className="mb-6 text-sm text-gray-500">Isso adapta os exercícios disponíveis no seu plano.</p>
+      <div className="space-y-3">
+        {LOCATION_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onSelect(opt.value)}
+            className={`w-full rounded-2xl border-2 p-4 text-left transition ${
+              selected === opt.value
+                ? "border-primary-500 bg-primary-50 shadow-sm"
+                : "border-gray-200 bg-white hover:border-primary-200 hover:bg-gray-50"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl leading-none">{opt.icon}</span>
+              <div>
+                <p className="font-semibold text-gray-900">{opt.label}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{opt.description}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
       <button onClick={onNext} className="mt-8 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600">
         Continuar →
       </button>

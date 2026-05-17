@@ -10,14 +10,14 @@ export default function BillingCancelPage() {
           </svg>
         </div>
 
-        <h1 className="text-xl font-bold text-gray-900 mb-2">Pagamento cancelado</h1>
+        <h1 className="text-xl font-bold text-gray-900 mb-2">Assinatura não concluída</h1>
         <p className="text-gray-500 text-sm mb-6">
-          Nenhuma cobrança foi feita. Você pode assinar a qualquer momento.
+          Você pode voltar e escolher um plano quando quiser.
         </p>
 
         <Link
-          href="/billing"
-          className="block w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-medium text-center"
+          href="/pricing"
+          className="block w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-medium text-center hover:bg-gray-700 transition"
         >
           Ver planos
         </Link>

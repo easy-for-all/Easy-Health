@@ -1,5 +1,6 @@
-export type PlanName = "pro_monthly" | "pro_yearly";
+export type PlanName = "none" | "pro_monthly" | "pro_yearly";
 export type SubscriptionStatus =
+  | "none"
   | "trialing"
   | "active"
   | "past_due"

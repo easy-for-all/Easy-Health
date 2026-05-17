@@ -10,26 +10,26 @@ export default function BillingSuccessPage() {
           </svg>
         </div>
 
-        <h1 className="text-xl font-bold text-gray-900 mb-2">Assinatura iniciada!</h1>
+        <h1 className="text-xl font-bold text-gray-900 mb-2">Assinatura iniciada com sucesso</h1>
         <p className="text-gray-500 text-sm mb-1">
-          Seu pagamento foi processado com sucesso.
+          Seu teste grátis de 7 dias foi iniciado.
         </p>
         <p className="text-gray-400 text-xs mb-6">
-          O status do plano pode levar alguns segundos para atualizar.
+          Pode levar alguns segundos para o plano aparecer atualizado.
         </p>
 
         <Link
           href="/billing"
-          className="block w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-medium text-center"
+          className="block w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-medium text-center mb-3 hover:bg-gray-700 transition"
         >
-          Ver minha assinatura
+          Ir para meu plano
         </Link>
 
         <Link
-          href="/dashboard"
-          className="block mt-3 text-sm text-gray-500 underline underline-offset-2"
+          href="/workout/today"
+          className="block text-sm text-gray-500 hover:underline"
         >
-          Ir para o dashboard
+          Ir para meus treinos
         </Link>
       </div>
     </div>

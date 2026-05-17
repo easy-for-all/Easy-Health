@@ -21,19 +21,21 @@ module Api
         cardio_type          = params[:cardio_type].presence
         cardio_format        = params[:cardio_format].presence
         custom_splits        = params[:custom_splits].presence
+        training_location    = params[:training_location].presence
 
         if days_per_week && !days_per_week.between?(2, 6)
           return render_error("training_days_per_week must be between 2 and 6")
         end
 
         profile_attrs = {}
-        profile_attrs[:training_days_per_week] = days_per_week if days_per_week
+        profile_attrs[:training_days_per_week] = days_per_week        if days_per_week
         profile_attrs[:activity_preferences]   = activity_preferences if activity_preferences
-        profile_attrs[:modality]               = modality      if modality
-        profile_attrs[:split_type]             = split_type    if split_type
-        profile_attrs[:cardio_type]            = cardio_type   if cardio_type
-        profile_attrs[:cardio_format]          = cardio_format if cardio_format
-        profile_attrs[:custom_splits]          = custom_splits if custom_splits
+        profile_attrs[:modality]               = modality             if modality
+        profile_attrs[:split_type]             = split_type           if split_type
+        profile_attrs[:cardio_type]            = cardio_type          if cardio_type
+        profile_attrs[:cardio_format]          = cardio_format        if cardio_format
+        profile_attrs[:custom_splits]          = custom_splits        if custom_splits
+        profile_attrs[:training_location]      = training_location    if training_location
         current_user.health_profile&.update!(profile_attrs) if profile_attrs.any?
 
         plan = WorkoutPlanGeneratorService.new(
@@ -44,7 +46,8 @@ module Api
           split_type:           split_type,
           cardio_type:          cardio_type,
           cardio_format:        cardio_format,
-          custom_splits:        custom_splits
+          custom_splits:        custom_splits,
+          training_location:    training_location
         ).call
         render json: serialize_plan(plan), status: :ok
       rescue ActiveRecord::RecordInvalid => e

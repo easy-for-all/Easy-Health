@@ -5,6 +5,7 @@ module Api
         exercises = Exercise.all
         exercises = exercises.where(muscle_group: params[:muscle_group]) if params[:muscle_group].present?
         exercises = exercises.where(exercise_type: params[:exercise_type]) if params[:exercise_type].present?
+        exercises = exercises.where(equipment_type: params[:equipment_type]) if params[:equipment_type].present?
         if params[:name].present?
           term = "%#{params[:name]}%"
           exercises = exercises.where("name ILIKE ? OR description ILIKE ?", term, term)
@@ -60,6 +61,7 @@ module Api
           name: exercise.name,
           muscle_group: exercise.muscle_group,
           exercise_type: exercise.exercise_type,
+          equipment_type: exercise.equipment_type,
           description: exercise.description,
           instructions: exercise.instructions,
           image_url: exercise_image_url(exercise),

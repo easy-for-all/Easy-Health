@@ -10,6 +10,7 @@ import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from
 import { WARMUP_BY_TYPE, COOLDOWN_BY_TYPE } from "./warmup-data";
 import { SwapModal } from "./swap-modal";
 import { ExerciseInfoModal } from "./exercise-info-modal";
+import { UpgradeGate } from "@/shared/components/upgrade-gate";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -42,6 +43,10 @@ const FEELINGS = [
 ];
 
 export default function WorkoutTodayPage() {
+  return <UpgradeGate><WorkoutTodayContent /></UpgradeGate>;
+}
+
+function WorkoutTodayContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);

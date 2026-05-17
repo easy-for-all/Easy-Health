@@ -2,6 +2,7 @@
   "nav": {
     "workout": "Today's Workout",
     "workouts": "Workouts",
+    "subscription": "Subscription",
     "profile": "Profile"
   },
   "auth": {

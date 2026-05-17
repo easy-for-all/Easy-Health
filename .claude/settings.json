@@ -30,7 +30,9 @@
       "Bash(netstat -tlnp)",
       "Bash(curl -s -X POST http://localhost:3001/api/v1/auth/registrations -H \"Content-Type: application/json\" -d '{\"user\":{\"name\":\"test\",\"email\":\"test@test.com\",\"password\":\"12345678\"}}')",
       "Bash(curl -s -X POST http://localhost:3001/api/v1/auth/sign_up -H \"Content-Type: application/json\" -d '{\"user\":{\"name\":\"test\",\"email\":\"test@test.com\",\"password\":\"12345678\"}}')",
-      "Bash(curl -s -I -X OPTIONS http://localhost:3001/api/v1/auth/sign_up -H 'Origin: http://localhost:3002' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: Content-Type')"
+      "Bash(curl -s -I -X OPTIONS http://localhost:3001/api/v1/auth/sign_up -H 'Origin: http://localhost:3002' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: Content-Type')",
+      "Bash(bundle --version)",
+      "Bash(grep -E \"\\\\.\\(jsx?|tsx?|rb\\)$\")"
     ],
     "additionalDirectories": [
       "/mnt/c/Users/mailm/Downloads",

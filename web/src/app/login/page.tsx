@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
-import { ApiError } from "@/shared/lib/api";
+import { api, ApiError } from "@/shared/lib/api";
+import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -22,7 +23,17 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signIn(email, password);
-      router.push("/profile");
+      const pending = getPendingPlan();
+      if (pending) {
+        clearPendingPlan();
+        const { checkout_url } = await api.post<{ checkout_url: string }>(
+          "/api/v1/billing/checkout",
+          { plan: pending }
+        );
+        window.location.href = checkout_url;
+      } else {
+        router.push("/profile");
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

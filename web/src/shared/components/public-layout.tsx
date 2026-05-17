@@ -11,6 +11,9 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             <span className="text-xl font-bold text-primary-600">Easy Health</span>
           </Link>
           <nav className="flex items-center gap-3">
+            <Link href="/pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900">
+              Preços
+            </Link>
             <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900">
               Entrar
             </Link>

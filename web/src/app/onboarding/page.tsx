@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import type { Goal, FitnessLevel, ActivityType } from "@/shared/types/health-profile";
 
+type TrainingLocation = "gym" | "home" | "outdoor" | "any";
+
 interface FormData {
   goal: Goal | "";
   fitness_level: FitnessLevel | "";
@@ -12,6 +14,7 @@ interface FormData {
   weight_kg: string;
   height_cm: string;
   activity_preferences: ActivityType[];
+  training_location: TrainingLocation | "";
 }
 
 const GOALS: { value: Goal; label: string; desc: string }[] = [
@@ -37,6 +40,13 @@ const ACTIVITIES: { value: ActivityType; label: string; icon: string }[] = [
   { value: "hiit",       label: "HIIT",       icon: "🔥" },
 ];
 
+const LOCATIONS: { value: TrainingLocation; label: string; desc: string; icon: string }[] = [
+  { value: "gym",     label: "Academia",            desc: "Aparelhos, barras e halteres",    icon: "🏋️" },
+  { value: "home",    label: "Em casa",             desc: "Sem equipamentos, peso corporal", icon: "🏠" },
+  { value: "outdoor", label: "Ao ar livre",         desc: "Parques, ruas e quadras",         icon: "🌳" },
+  { value: "any",     label: "Varia",               desc: "Depende do dia",                   icon: "🔄" },
+];
+
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -49,6 +59,7 @@ export default function OnboardingPage() {
     weight_kg: "",
     height_cm: "",
     activity_preferences: [],
+    training_location: "",
   });
 
   function set<K extends keyof FormData>(key: K, value: FormData[K]) {
@@ -74,6 +85,7 @@ export default function OnboardingPage() {
         weight_kg: Number(form.weight_kg),
         height_cm: Number(form.height_cm),
         activity_preferences: form.activity_preferences,
+        training_location: form.training_location || "gym",
       });
       router.push("/plan");
     } catch (err) {
@@ -83,10 +95,12 @@ export default function OnboardingPage() {
     }
   }
 
+  const TOTAL_STEPS = 5;
+
   return (
     <div className="flex min-h-screen flex-col px-4 py-8">
       <div className="mb-8 flex gap-1">
-        {[1, 2, 3, 4].map((n) => (
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
           <div
             key={n}
             className={`h-1 flex-1 rounded-full transition-colors ${
@@ -124,10 +138,19 @@ export default function OnboardingPage() {
         <StepActivities
           selected={form.activity_preferences}
           onToggle={toggleActivity}
+          onNext={() => setStep(5)}
+          onBack={() => setStep(3)}
+        />
+      )}
+
+      {step === 5 && (
+        <StepLocation
+          selected={form.training_location}
+          onSelect={(v) => set("training_location", v)}
           error={error}
           loading={loading}
           onFinish={handleFinish}
-          onBack={() => setStep(3)}
+          onBack={() => setStep(4)}
         />
       )}
     </div>
@@ -256,16 +279,12 @@ function StepBody({
 function StepActivities({
   selected,
   onToggle,
-  error,
-  loading,
-  onFinish,
+  onNext,
   onBack,
 }: {
   selected: ActivityType[];
   onToggle: (v: ActivityType) => void;
-  error: string;
-  loading: boolean;
-  onFinish: () => void;
+  onNext: () => void;
   onBack: () => void;
 }) {
   return (
@@ -275,10 +294,6 @@ function StepActivities({
       </button>
       <h2 className="mb-2 text-xl font-bold text-gray-900">O que você gosta de fazer?</h2>
       <p className="mb-6 text-sm text-gray-500">Selecione pelo menos uma atividade.</p>
-
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
-      )}
 
       <div className="grid grid-cols-2 gap-3">
         {ACTIVITIES.map((a) => {
@@ -301,8 +316,68 @@ function StepActivities({
       </div>
 
       <button
+        onClick={onNext}
+        disabled={selected.length === 0}
+        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+      >
+        Continuar →
+      </button>
+    </div>
+  );
+}
+
+function StepLocation({
+  selected,
+  onSelect,
+  error,
+  loading,
+  onFinish,
+  onBack,
+}: {
+  selected: TrainingLocation | "";
+  onSelect: (v: TrainingLocation) => void;
+  error: string;
+  loading: boolean;
+  onFinish: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">
+        ← Voltar
+      </button>
+      <h2 className="mb-2 text-xl font-bold text-gray-900">Onde você costuma treinar?</h2>
+      <p className="mb-6 text-sm text-gray-500">Isso adapta os exercícios do seu plano.</p>
+
+      {error && (
+        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      )}
+
+      <div className="space-y-3">
+        {LOCATIONS.map((l) => (
+          <button
+            key={l.value}
+            onClick={() => onSelect(l.value)}
+            className={`w-full rounded-xl border-2 p-4 text-left transition ${
+              selected === l.value
+                ? "border-primary-500 bg-primary-50"
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl leading-none">{l.icon}</span>
+              <div>
+                <p className="font-semibold text-gray-900">{l.label}</p>
+                <p className="text-sm text-gray-500">{l.desc}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <button
         onClick={onFinish}
-        disabled={selected.length === 0 || loading}
+        disabled={!selected || loading}
         className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
       >
         {loading ? "Criando plano..." : "Criar meu plano →"}
