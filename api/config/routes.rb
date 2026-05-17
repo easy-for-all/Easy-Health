@@ -12,6 +12,11 @@ Rails.application.routes.draw do
         post   "sign_in",  to: "sessions#create"
         delete "sign_out", to: "sessions#destroy"
         get    "me",       to: "sessions#show"
+
+        namespace :password do
+          post "forgot", to: "passwords#forgot"
+          post "reset",  to: "passwords#reset"
+        end
       end
 
       resource  :health_profile, only: [:show, :create, :update]

@@ -81,6 +81,12 @@ export default function LoginPage() {
           >
             {loading ? t("signingIn") : t("signIn")}
           </button>
+
+          <p className="text-center">
+            <Link href="/forgot-password" className="text-sm text-primary-600 hover:underline">
+              {t("forgotPassword")}
+            </Link>
+          </p>
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500">
