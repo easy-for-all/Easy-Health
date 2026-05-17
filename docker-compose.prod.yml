@@ -25,6 +25,7 @@ services:
       - storage_data:/rails/storage
     environment:
       RAILS_ENV: production
+      RAILS_SERVE_STATIC_FILES: "true"
       DB_HOST: db
       DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-postgres}

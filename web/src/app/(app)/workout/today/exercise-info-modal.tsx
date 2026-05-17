@@ -4,6 +4,67 @@ import { useState } from "react";
 import { api } from "@/shared/lib/api";
 import type { WorkoutDayExercise } from "@/shared/types/workout";
 
+const SECTION_HEADERS = ["COMO FAZER", "CONFIGURAÇÃO INICIAL", "ERROS COMUNS", "DICA PARA INICIANTE"];
+
+function GuideRenderer({ text }: { text: string }) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const sections: { header: string; items: string[] }[] = [];
+  let current: { header: string; items: string[] } | null = null;
+
+  for (const line of lines) {
+    const isHeader = SECTION_HEADERS.some((h) => line.toUpperCase().startsWith(h));
+    if (isHeader) {
+      if (current) sections.push(current);
+      current = { header: line.replace(/[*#]/g, "").trim(), items: [] };
+    } else if (current) {
+      const clean = line.replace(/^[-*•]\s*/, "").replace(/\*\*/g, "").replace(/^#+\s*/, "");
+      if (clean) current.items.push(clean);
+    }
+  }
+  if (current) sections.push(current);
+
+  if (sections.length === 0) {
+    return (
+      <div className="space-y-1 py-1">
+        {lines.map((line, i) => {
+          const clean = line.replace(/[*#]/g, "").replace(/^[-•]\s*/, "");
+          return <p key={i} className="text-sm leading-relaxed text-gray-600">{clean}</p>;
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-1">
+      {sections.map((section) => (
+        <div key={section.header}>
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-blue-600">{section.header}</p>
+          <div className="space-y-1">
+            {section.items.map((item, i) => {
+              const isNumbered = /^\d+\./.test(item);
+              return (
+                <div key={i} className="flex gap-2 text-sm text-gray-700">
+                  {isNumbered ? (
+                    <>
+                      <span className="shrink-0 font-semibold text-blue-400">{item.match(/^\d+/)?.[0]}.</span>
+                      <span>{item.replace(/^\d+\.\s*/, "")}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300" />
+                      <span>{item}</span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ExerciseInfoModal({
   exercise,
   onClose,
@@ -76,23 +137,11 @@ export function ExerciseInfoModal({
             </button>
 
             {setupGuideOpen && (
-              <div className="mt-3 rounded-xl border border-blue-50 bg-white px-1">
+              <div className="mt-3 rounded-xl border border-blue-50 bg-white px-3 py-2">
                 {setupGuideLoading ? (
-                  <p className="py-6 text-center text-sm text-gray-400">Gerando guia...</p>
+                  <p className="py-6 text-center text-sm text-gray-400">Gerando guia pela primeira vez...</p>
                 ) : setupGuide ? (
-                  <div className="space-y-1 py-2">
-                    {setupGuide.split("\n").filter(Boolean).map((line, i) => {
-                      const isHeader = /^\d+\./.test(line.trim());
-                      return (
-                        <p
-                          key={i}
-                          className={`text-sm leading-relaxed ${isHeader ? "mt-3 font-semibold text-gray-800" : "text-gray-600"}`}
-                        >
-                          {line}
-                        </p>
-                      );
-                    })}
-                  </div>
+                  <GuideRenderer text={setupGuide} />
                 ) : (
                   <p className="py-4 text-center text-sm text-red-400">
                     Não foi possível gerar o guia. Tente novamente.

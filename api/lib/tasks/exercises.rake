@@ -165,4 +165,175 @@ namespace :exercises do
 
     puts "\nDone. Updated: #{updated}, Skipped: #{skipped}"
   end
+
+  desc "Import ALL exercises and images from local free-exercise-db"
+  task import_all: :environment do
+    local_db = [
+      Rails.root.join("..", "external", "free-exercise-db", "exercises"),
+      Pathname.new("/external/free-exercise-db/exercises"),
+    ].find { |p| p.directory? }
+
+    unless local_db
+      abort "ERROR: free-exercise-db not found. Expected at ../external/free-exercise-db/exercises"
+    end
+
+    dest_root = Rails.root.join("public", "exercise-images", "db")
+    FileUtils.mkdir_p(dest_root)
+
+    map_muscle = lambda do |primary|
+      case primary.to_s.downcase
+      when /chest/                                             then "chest"
+      when /lats|middle back|lower back|traps|rhomboid|neck/  then "back"
+      when /shoulder|delt/                                     then "shoulders"
+      when /bicep|forearm/                                     then "biceps"
+      when /tricep/                                            then "triceps"
+      when /quad|hamstring|glute|calf|calves|abductor|adductor|hip|thigh/ then "legs"
+      when /abdominal|oblique|core/                            then "core"
+      end
+    end
+
+    map_equipment = lambda do |equip|
+      e = equip.to_s.downcase
+      if e.include?("body only") || e.match?(/\bbands?\b/) || e.blank?
+        "bodyweight"
+      elsif e.include?("dumbbell")
+        "dumbbell"
+      elsif e.include?("barbell") || e.include?("e-z curl")
+        "barbell"
+      elsif e.include?("cable")
+        "cable"
+      elsif e.include?("machine")
+        "machine"
+      elsif e.include?("cardio") || e.include?("treadmill") || e.include?("elliptic")
+        "cardio"
+      else
+        "gym"
+      end
+    end
+
+    map_category = lambda do |cat, muscle_group|
+      c = cat.to_s.downcase
+      if c.match?(/strength|powerlifting|strongman|olympic/)
+        "musculacao"
+      elsif c.include?("cardio")
+        "cardio"
+      elsif c.include?("plyometric")
+        "hiit"
+      elsif c.include?("stretching")
+        "funcional"
+      else
+        muscle_group ? "musculacao" : "funcional"
+      end
+    end
+
+    json_files = Dir.glob("#{local_db}/*.json").sort
+    puts "Found #{json_files.size} exercise JSONs in #{local_db}"
+    puts "Existing exercises in DB: #{Exercise.count}"
+
+    imported      = 0
+    images_copied = 0
+    errors        = 0
+
+    json_files.each do |json_path|
+      data = JSON.parse(File.read(json_path)) rescue next
+
+      name = data["name"].to_s.strip
+      next if name.blank?
+      next if Exercise.exists?(name: name)
+
+      muscle_group   = map_muscle.call(Array(data["primaryMuscles"]).first.to_s)
+      equipment_type = map_equipment.call(data["equipment"].to_s)
+      exercise_type  = map_category.call(data["category"].to_s, muscle_group)
+      difficulty     = data["level"] == "expert" ? "advanced" : (data["level"].presence || "intermediate")
+      home_compat    = data["equipment"].to_s.downcase.match?(/body only|bands?/)
+      instructions_text = Array(data["instructions"]).join("\n")
+      description       = Array(data["instructions"]).first.to_s[0..249].presence || name
+
+      first_img = Array(data["images"]).first
+      image_url = nil
+      if first_img.present?
+        src = local_db.join(first_img)
+        dst = dest_root.join(first_img)
+        if File.exist?(src)
+          FileUtils.mkdir_p(File.dirname(dst))
+          FileUtils.cp(src, dst) unless File.exist?(dst)
+          images_copied += 1
+          image_url = "/exercise-images/db/#{first_img}"
+        end
+      end
+
+      exercise = Exercise.new(
+        name:            name,
+        exercise_type:   exercise_type,
+        equipment_type:  equipment_type,
+        difficulty:      difficulty,
+        home_compatible: home_compat,
+        instructions:    instructions_text.presence,
+        description:     description,
+      )
+      exercise.muscle_group = muscle_group if muscle_group
+      exercise.image_url    = image_url    if image_url
+
+      if exercise.save
+        imported += 1
+        print "." if (imported % 50).zero?
+      else
+        puts "\n  SKIP '#{name}': #{exercise.errors.full_messages.join(', ')}"
+        errors += 1
+      end
+    end
+
+    puts "\n\nDone!"
+    puts "  New exercises imported: #{imported}"
+    puts "  Images copied:          #{images_copied}"
+    puts "  Validation errors:      #{errors}"
+    puts "  Total exercises in DB:  #{Exercise.count}"
+    puts ""
+    puts "Chest exercises:     #{Exercise.where(muscle_group: 'chest').count}"
+    puts "Back exercises:      #{Exercise.where(muscle_group: 'back').count}"
+    puts "Shoulder exercises:  #{Exercise.where(muscle_group: 'shoulders').count}"
+    puts "Biceps exercises:    #{Exercise.where(muscle_group: 'biceps').count}"
+    puts "Triceps exercises:   #{Exercise.where(muscle_group: 'triceps').count}"
+    puts "Legs exercises:      #{Exercise.where(muscle_group: 'legs').count}"
+    puts "Core exercises:      #{Exercise.where(muscle_group: 'core').count}"
+    puts "Cardio exercises:    #{Exercise.where(exercise_type: 'cardio').count}"
+    puts "HIIT exercises:      #{Exercise.where(exercise_type: 'hiit').count}"
+  end
+
+  desc "Fix image_url for existing seeded exercises and copy missing images"
+  task fix_seed_images: :environment do
+    local_db = [
+      Rails.root.join("..", "external", "free-exercise-db", "exercises"),
+      Pathname.new("/external/free-exercise-db/exercises"),
+    ].find { |p| p.directory? }
+
+    dest_root = Rails.root.join("public", "exercise-images", "db")
+    copied    = 0
+    updated   = 0
+
+    SLUG_MAP.each do |exercise_name, slug|
+      exercise = Exercise.find_by(name: exercise_name)
+      next unless exercise
+
+      expected_url = "/exercise-images/db/#{slug}/0.jpg"
+
+      if local_db
+        src = local_db.join(slug, "0.jpg")
+        dst = dest_root.join(slug, "0.jpg")
+        if File.exist?(src) && !File.exist?(dst)
+          FileUtils.mkdir_p(dest_root.join(slug))
+          FileUtils.cp(src, dst)
+          copied += 1
+        end
+      end
+
+      if exercise.image_url != expected_url
+        exercise.update_column(:image_url, expected_url)
+        updated += 1
+        puts "  Fixed: #{exercise_name} → #{expected_url}"
+      end
+    end
+
+    puts "\nDone. Images copied: #{copied}, image_url updated: #{updated}."
+  end
 end

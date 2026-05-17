@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
 import { api } from "@/shared/lib/api";
@@ -321,6 +322,18 @@ export default function ProfilePage() {
           </dl>
         )}
       </div>
+
+      {/* CTA Perfil Detalhado */}
+      <Link
+        href="/profile/detailed"
+        className="mb-4 flex items-center justify-between rounded-2xl border border-primary-100 bg-primary-50 px-5 py-4 transition hover:bg-primary-100"
+      >
+        <div>
+          <p className="font-semibold text-primary-700">Ver perfil detalhado</p>
+          <p className="text-xs text-primary-500">Análises, exames e histórico completo</p>
+        </div>
+        <span className="text-primary-400 text-lg">→</span>
+      </Link>
 
       {/* Fotos e Exames */}
       <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5">
