@@ -37,7 +37,8 @@ module Api
             name: user.name,
             email: user.email,
             created_at: user.created_at,
-            avatar_url: avatar_url
+            avatar_url: avatar_url,
+            billing_status: user.billing_status
           }
         end
       end

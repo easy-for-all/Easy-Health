@@ -19,12 +19,12 @@ const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   // Obfuscate server identity
   { key: "Server", value: "" },
-  // CSP: unsafe-inline required for Next.js hydration scripts; tighten with nonces later
+  // CSP: unsafe-inline required for Next.js hydration; unsafe-eval only in dev (React Turbopack debug)
   {
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "connect-src 'self' https:",

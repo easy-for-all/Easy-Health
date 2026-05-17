@@ -15,6 +15,7 @@ gem "sentry-ruby"
 gem "sentry-rails"
 
 gem "anthropic", "~> 0.3"
+gem "stripe", "~> 13.0"
 
 group :development, :test do
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
