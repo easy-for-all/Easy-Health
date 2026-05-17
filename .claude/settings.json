@@ -16,10 +16,14 @@
       "Bash(git -C /home/marcus/projects/Easy-Health show HEAD:api/app/services/exercise_setup_guide_service.rb)",
       "Bash(git -C /home/marcus/projects/Easy-Health show HEAD:api/Gemfile)",
       "Bash(git -C /home/marcus/projects/Easy-Health submodule status)",
-      "Bash(git -C /home/marcus/projects/Easy-Health ls-files --stage)"
+      "Bash(git -C /home/marcus/projects/Easy-Health ls-files --stage)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('auth', {}\\), indent=2, ensure_ascii=False\\)\\)\")",
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/forgot-password)",
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/reset-password)"
     ],
     "additionalDirectories": [
-      "/mnt/c/Users/mailm/Downloads"
+      "/mnt/c/Users/mailm/Downloads",
+      "/home/marcus/projects/Easy-Health/web/src/app"
     ]
   }
 }
