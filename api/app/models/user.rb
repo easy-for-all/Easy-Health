@@ -9,8 +9,7 @@ class User < ApplicationRecord
   has_one_attached :avatar
   has_one :subscription, dependent: :destroy
 
-  delegate :pro_monthly?, :pro_yearly?, :pro?, :paid_plan?,
-           :subscription_active?, :billing_required?,
+  delegate :pro_monthly?, :pro_yearly?, :pro?, :subscription_active?,
            to: :subscription, allow_nil: true
 
   validates :name, presence: true, length: { minimum: 2, maximum: 100 }
@@ -20,11 +19,33 @@ class User < ApplicationRecord
     workout_plans.active.first
   end
 
+  def paid_plan?
+    return true if admin?
+    subscription&.paid_plan? || false
+  end
+
+  def billing_required?
+    return false if admin?
+    subscription.nil? || subscription.billing_required?
+  end
+
   def no_plan?
+    return false if admin?
     subscription.nil? || subscription.billing_required?
   end
 
   def billing_status
+    if admin?
+      return {
+        plan: "admin",
+        status: "active",
+        paid: true,
+        trial_end: nil,
+        current_period_end: nil,
+        cancel_at_period_end: false,
+        stripe_customer_id: nil
+      }
+    end
     subscription&.billing_status || {
       plan: "none",
       status: "none",

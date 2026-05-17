@@ -27,6 +27,36 @@ module Api
         render json: { error: "Not found" }, status: :not_found
       end
 
+      def update
+        wde = WorkoutDayExercise
+          .joins(workout_day: { workout_plan: :user })
+          .where(workout_plans: { user_id: current_user.id })
+          .find(params[:id])
+
+        wde.update!(update_params)
+        render json: workout_day_exercise_json(wde.reload)
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Not found" }, status: :not_found
+      end
+
+      def destroy
+        wde = WorkoutDayExercise
+          .joins(workout_day: { workout_plan: :user })
+          .where(workout_plans: { user_id: current_user.id })
+          .find(params[:id])
+
+        if wde.workout_day.workout_day_exercises.count <= 1
+          return render json: { error: "Cannot remove the last exercise from a workout day" }, status: :unprocessable_entity
+        end
+
+        wde.destroy!
+        head :no_content
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Not found" }, status: :not_found
+      end
+
       def create
         day = WorkoutDay
           .joins(workout_plan: :user)
@@ -59,6 +89,10 @@ module Api
       end
 
       private
+
+      def update_params
+        params.permit(:sets, :reps, :rest_seconds)
+      end
 
       def same_target?(current, replacement)
         current.muscle_group.present? ? current.muscle_group == replacement.muscle_group : current.exercise_type == replacement.exercise_type

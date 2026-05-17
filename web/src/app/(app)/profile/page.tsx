@@ -46,6 +46,8 @@ export default function ProfilePage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState("");
+  const [mediaUploadError, setMediaUploadError] = useState("");
+  const [faceBlurredNotice, setFaceBlurredNotice] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -116,6 +118,8 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingMedia(true);
+    setMediaUploadError("");
+    setFaceBlurredNotice(false);
     try {
       const processed = file.type.startsWith("image/") ? await compressImage(file, 1920, 0.85) : file;
       const formData = new FormData();
@@ -123,15 +127,26 @@ export default function ProfilePage() {
       formData.append("category", mediaTab);
       formData.append("captured_at", new Date().toISOString());
 
-      const created = await fetch(`${API_URL}/api/v1/user_media`, {
+      const res = await fetch(`${API_URL}/api/v1/user_media`, {
         method: "POST",
         credentials: "include",
         body: formData,
-      }).then((r) => r.json()) as UserMedia;
+      });
+      const body = await res.json();
 
-      setMediaItems((prev) => [created, ...prev]);
+      if (!res.ok) {
+        const msg = body?.error || body?.errors?.[0] || "Erro ao enviar arquivo.";
+        setMediaUploadError(msg);
+        return;
+      }
+
+      if (body?.face_blurred) {
+        setFaceBlurredNotice(true);
+      }
+
+      setMediaItems((prev) => [body as UserMedia, ...prev]);
     } catch {
-      // silently ignore
+      setMediaUploadError("Erro ao enviar arquivo. Tente novamente.");
     } finally {
       setUploadingMedia(false);
       if (mediaInputRef.current) mediaInputRef.current.value = "";
@@ -274,6 +289,19 @@ export default function ProfilePage() {
           className="hidden"
           onChange={handleMediaUpload}
         />
+
+        {mediaUploadError && (
+          <div className="mb-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+            {mediaUploadError}
+          </div>
+        )}
+
+        {faceBlurredNotice && (
+          <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700 flex items-start gap-2">
+            <span className="mt-0.5">🔒</span>
+            <span>Rosto ofuscado por privacidade. A foto foi salva com o rosto pixelado.</span>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="mb-4 flex gap-2">

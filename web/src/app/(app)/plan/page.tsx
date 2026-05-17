@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
-import type { WorkoutPlan } from "@/shared/types/workout";
+import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
 import type { HealthProfile } from "@/shared/types/health-profile";
+import { SwapModal } from "../workout/today/swap-modal";
 
 const GOAL_LABELS: Record<string, string> = {
   lose_weight: "Perder peso",
@@ -52,12 +53,13 @@ type Phase =
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export default function PlanPage() {
-  const [phase, setPhase]       = useState<Phase>("loading");
-  const [plan, setPlan]         = useState<WorkoutPlan | null>(null);
-  const [allPlans, setAllPlans] = useState<PlanSummary[]>([]);
+  const [phase, setPhase]          = useState<Phase>("loading");
+  const [plan, setPlan]            = useState<WorkoutPlan | null>(null);
+  const [allPlans, setAllPlans]    = useState<PlanSummary[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [profile, setProfile]   = useState<HealthProfile | null>(null);
-  const [error, setError]       = useState("");
+  const [profile, setProfile]      = useState<HealthProfile | null>(null);
+  const [error, setError]          = useState("");
+  const [selectedDayId, setSelectedDayId] = useState<number | null>(null);
   const [genStep, setGenStep]   = useState(0);
   const genStepRef              = useRef(0);
 
@@ -202,7 +204,7 @@ export default function PlanPage() {
 
       {phase === "view" && plan && (
         <>
-          <PlanView plan={plan} />
+          <PlanView plan={plan} onDayClick={setSelectedDayId} />
           <button onClick={startWizard} className="mt-6 w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">
             Replanejar
           </button>
@@ -294,6 +296,20 @@ export default function PlanPage() {
 
       {error && phase === "wizard_modality" && (
         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      )}
+
+      {selectedDayId != null && (
+        <PlanDayDetailDrawer
+          dayId={selectedDayId}
+          onClose={() => setSelectedDayId(null)}
+          onChanged={(updatedDay) => {
+            if (!plan) return;
+            setPlan({
+              ...plan,
+              days: plan.days.map((d) => (d.id === updatedDay.id ? { ...d, exercise_count: updatedDay.exercises?.length ?? d.exercise_count } : d)),
+            });
+          }}
+        />
       )}
     </div>
   );
@@ -591,18 +607,27 @@ function WizardCustomSplit({
 
 // ── Existing components ───────────────────────────────────────────────────────
 
-function PlanView({ plan }: { plan: WorkoutPlan }) {
+function PlanView({ plan, onDayClick }: { plan: WorkoutPlan; onDayClick: (dayId: number) => void }) {
   return (
     <div className="space-y-3">
       {plan.days?.map((day, idx) => (
-        <div key={day.id} className="rounded-xl border border-gray-100 bg-white p-4">
-          <p className="text-xs font-semibold text-gray-400">Treino {LETTERS[idx] ?? idx + 1}</p>
-          <p className="font-semibold text-gray-900">{day.name}</p>
-          <p className="mt-0.5 text-xs text-gray-400">
-            {day.exercise_count} exercícios
-            {day.muscle_groups?.length ? ` · ${day.muscle_groups.join(", ")}` : ""}
-          </p>
-        </div>
+        <button
+          key={day.id}
+          onClick={() => onDayClick(day.id)}
+          className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left transition hover:border-primary-200 hover:bg-primary-50 active:scale-[0.99]"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-400">Treino {LETTERS[idx] ?? idx + 1}</p>
+              <p className="font-semibold text-gray-900">{day.name}</p>
+              <p className="mt-0.5 text-xs text-gray-400">
+                {day.exercise_count} exercícios
+                {day.muscle_groups?.length ? ` · ${day.muscle_groups.join(", ")}` : ""}
+              </p>
+            </div>
+            <span className="text-gray-300 text-lg">›</span>
+          </div>
+        </button>
       ))}
     </div>
   );
@@ -735,6 +760,314 @@ function WizardLocation({
         Continuar →
       </button>
     </div>
+  );
+}
+
+// ── Plan Day Detail Drawer ────────────────────────────────────────────────────
+
+type ExerciseEdits = Record<number, { sets?: number; reps?: number }>;
+
+type AddExerciseOption = {
+  id: number;
+  name: string;
+  muscle_group: string | null;
+  exercise_type: string;
+  image_url: string;
+};
+
+function PlanDayDetailDrawer({
+  dayId,
+  onClose,
+  onChanged,
+}: {
+  dayId: number;
+  onClose: () => void;
+  onChanged: (day: import("@/shared/types/workout").WorkoutDay) => void;
+}) {
+  const [day, setDay] = useState<import("@/shared/types/workout").WorkoutDay | null>(null);
+  const [exercises, setExercises] = useState<WorkoutDayExercise[]>([]);
+  const [edits, setEdits] = useState<ExerciseEdits>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [drawerError, setDrawerError] = useState("");
+  const [swapTarget, setSwapTarget] = useState<WorkoutDayExercise | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+  const [addResults, setAddResults] = useState<AddExerciseOption[]>([]);
+  const [addLoading, setAddLoading] = useState(false);
+  const addTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    api.get<{ day: import("@/shared/types/workout").WorkoutDay }>(`/api/v1/workout_days/${dayId}`)
+      .then(({ day: d }) => {
+        setDay(d);
+        setExercises(d.exercises ?? []);
+      })
+      .catch(() => setDrawerError("Erro ao carregar exercícios."))
+      .finally(() => setLoading(false));
+  }, [dayId]);
+
+  const fetchAddOptions = useCallback(async (name: string) => {
+    setAddLoading(true);
+    try {
+      const params = new URLSearchParams({ name, exclude_ids: exercises.map((e) => e.exercise_id).join(",") });
+      const data = await api.get<AddExerciseOption[]>(`/api/v1/exercises?${params}`);
+      setAddResults(data);
+    } catch {
+      setAddResults([]);
+    } finally {
+      setAddLoading(false);
+    }
+  }, [exercises]);
+
+  function handleAddSearchChange(value: string) {
+    setAddSearch(value);
+    if (addTimerRef.current) clearTimeout(addTimerRef.current);
+    addTimerRef.current = setTimeout(() => fetchAddOptions(value), 300);
+  }
+
+  function openAdd() {
+    setAddSearch("");
+    setAddResults([]);
+    setShowAdd(true);
+    fetchAddOptions("");
+  }
+
+  function setField(id: number, field: "sets" | "reps", raw: string) {
+    const value = Math.max(1, parseInt(raw, 10) || 1);
+    setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+  }
+
+  function currentValue(ex: WorkoutDayExercise, field: "sets" | "reps"): number {
+    return edits[ex.workout_day_exercise_id]?.[field] ?? ex[field];
+  }
+
+  async function handleDelete(id: number) {
+    setDrawerError("");
+    try {
+      await api.delete(`/api/v1/workout_day_exercises/${id}`);
+      const updated = exercises.filter((e) => e.workout_day_exercise_id !== id);
+      setExercises(updated);
+      if (day) onChanged({ ...day, exercises: updated });
+    } catch (e: unknown) {
+      setDrawerError(e instanceof Error ? e.message : "Erro ao excluir exercício.");
+    }
+  }
+
+  async function handleSwap(wdeId: number, replacementId: number) {
+    const updated = await api.post<WorkoutDayExercise>(
+      `/api/v1/workout_day_exercises/${wdeId}/swap`,
+      { replacement_exercise_id: replacementId }
+    );
+    const newList = exercises.map((e) => e.workout_day_exercise_id === wdeId ? updated : e);
+    setExercises(newList);
+    setSwapTarget(null);
+    if (day) onChanged({ ...day, exercises: newList });
+  }
+
+  async function handleAdd(exerciseId: number) {
+    if (!day) return;
+    setDrawerError("");
+    try {
+      const created = await api.post<WorkoutDayExercise>(
+        `/api/v1/workout_days/${day.id}/exercises`,
+        { exercise_id: exerciseId }
+      );
+      const newList = [...exercises, created];
+      setExercises(newList);
+      setShowAdd(false);
+      if (day) onChanged({ ...day, exercises: newList });
+    } catch (e: unknown) {
+      setDrawerError(e instanceof Error ? e.message : "Erro ao adicionar exercício.");
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setDrawerError("");
+    try {
+      await Promise.all(
+        Object.entries(edits).map(([id, vals]) =>
+          api.patch(`/api/v1/workout_day_exercises/${id}`, {
+            sets: vals.sets ?? exercises.find((e) => e.workout_day_exercise_id === Number(id))?.sets,
+            reps: vals.reps ?? exercises.find((e) => e.workout_day_exercise_id === Number(id))?.reps,
+          })
+        )
+      );
+      setEdits({});
+      if (day) onChanged(day);
+      onClose();
+    } catch {
+      setDrawerError("Erro ao salvar. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const hasDirty = Object.keys(edits).length > 0;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
+        <div
+          className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-8 pt-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
+          <div className="flex items-center justify-between mt-2 mb-4">
+            <h3 className="text-base font-bold text-gray-900">{day?.name ?? "Treino"}</h3>
+            <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600">Fechar</button>
+          </div>
+
+          {loading && <p className="py-8 text-center text-sm text-gray-400">Carregando...</p>}
+
+          {!loading && drawerError && (
+            <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{drawerError}</p>
+          )}
+
+          {!loading && exercises.length === 0 && !drawerError && (
+            <p className="py-8 text-center text-sm text-gray-400">Nenhum exercício neste treino.</p>
+          )}
+
+          <div className="space-y-3">
+            {exercises.map((ex) => (
+              <div key={ex.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-3">
+                <div className="flex gap-3 mb-3">
+                  {/* Exercise image */}
+                  <img
+                    src={ex.image_url}
+                    alt={ex.name}
+                    className="h-16 w-20 rounded-lg object-cover flex-shrink-0"
+                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `/exercise-images/${ex.exercise_type || "treino"}.svg`; }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm leading-tight">{ex.name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {currentValue(ex, "sets")} séries · {currentValue(ex, "reps")} reps
+                    </p>
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        onClick={() => setSwapTarget(ex)}
+                        className="text-xs font-medium text-primary-500 hover:text-primary-700"
+                      >
+                        Trocar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(ex.workout_day_exercise_id)}
+                        className="text-xs font-medium text-red-400 hover:text-red-600"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Editable sets / reps */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Séries</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={currentValue(ex, "sets")}
+                      onChange={(e) => setField(ex.workout_day_exercise_id, "sets", e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-center text-sm font-semibold focus:border-primary-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Reps</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={currentValue(ex, "reps")}
+                      onChange={(e) => setField(ex.workout_day_exercise_id, "reps", e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-center text-sm font-semibold focus:border-primary-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {!loading && (
+            <button
+              onClick={openAdd}
+              className="mt-4 w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-semibold text-primary-600 hover:bg-primary-50"
+            >
+              + Adicionar exercício
+            </button>
+          )}
+
+          {!loading && exercises.length > 0 && (
+            <button
+              onClick={handleSave}
+              disabled={saving || !hasDirty}
+              className="mt-3 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-primary-600"
+            >
+              {saving ? "Salvando..." : "Salvar alterações"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Swap modal */}
+      {swapTarget && (
+        <SwapModal
+          exercise={swapTarget}
+          onSwap={handleSwap}
+          onClose={() => setSwapTarget(null)}
+        />
+      )}
+
+      {/* Add exercise sheet */}
+      {showAdd && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end bg-black/40"
+          onClick={() => { setShowAdd(false); setAddSearch(""); }}
+        >
+          <div
+            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
+            <h3 className="mb-3 mt-2 text-base font-bold text-gray-900">Adicionar exercício</h3>
+            <input
+              type="text"
+              placeholder="Buscar por nome..."
+              value={addSearch}
+              onChange={(e) => handleAddSearchChange(e.target.value)}
+              className="mb-3 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
+            />
+            {addLoading ? (
+              <p className="rounded-lg bg-gray-50 p-3 text-center text-sm text-gray-400">Buscando...</p>
+            ) : addResults.length === 0 ? (
+              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhum exercício encontrado.</p>
+            ) : (
+              addResults.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => handleAdd(opt.id)}
+                  className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
+                >
+                  <img
+                    src={opt.image_url}
+                    alt={opt.name}
+                    className="h-12 w-16 rounded-md object-cover flex-shrink-0"
+                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `/exercise-images/${opt.exercise_type || "treino"}.svg`; }}
+                  />
+                  <div>
+                    <p className="font-medium text-gray-900">{opt.name}</p>
+                    <p className="text-xs text-gray-400">{opt.muscle_group ?? opt.exercise_type}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
