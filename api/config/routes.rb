@@ -13,7 +13,7 @@ Rails.application.routes.draw do
         delete "sign_out", to: "sessions#destroy"
         get    "me",       to: "sessions#show"
 
-        namespace :password do
+        scope "/password" do
           post "forgot", to: "passwords#forgot"
           post "reset",  to: "passwords#reset"
         end
