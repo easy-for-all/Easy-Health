@@ -32,6 +32,8 @@ jobs:
             -o ConnectTimeout=30 \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=3 \
+            -o PreferredAuthentications=publickey \
+            -o UseDNS=no \
             easy@177.7.58.46 "
             cd /home/easy/Easy-Health &&
             git fetch origin main &&
