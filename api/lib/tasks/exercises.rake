@@ -1,57 +1,106 @@
 require "net/http"
 require "json"
+require "fileutils"
 
-BASE = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises"
-
-IMAGE_MAP = {
-  "Abdominal Bicicleta"      => "#{BASE}/Air_Bike/0.jpg",
-  "Afundo Reverso"           => "#{BASE}/Crossover_Reverse_Lunge/0.jpg",
-  "Agachamento Isométrico"   => "#{BASE}/Barbell_Squat/0.jpg",
-  "Agachamento com Salto"    => "#{BASE}/Freehand_Jump_Squat/0.jpg",
-  "Arremesso de Medicine Ball" => "#{BASE}/Backward_Medicine_Ball_Throw/0.jpg",
-  "Bicicleta"                => "#{BASE}/Air_Bike/0.jpg",
-  "Burpee"                   => "#{BASE}/Freehand_Jump_Squat/0.jpg",
-  "Caminhada Moderada"       => "#{BASE}/Farmers_Walk/0.jpg",
-  "Caminhada em Inclinação"  => "#{BASE}/Bodyweight_Walking_Lunge/0.jpg",
-  "Corda Naval"              => "#{BASE}/Battling_Ropes/0.jpg",
-  "Corrida Estacionária"     => "#{BASE}/Mountain_Climbers/0.jpg",
-  "Corrida Esteira"          => "#{BASE}/Jogging_Treadmill/0.jpg",
-  "Corrida Rua"              => "#{BASE}/Jogging_Treadmill/0.jpg",
-  "Elevação Pélvica"         => "#{BASE}/Barbell_Hip_Thrust/0.jpg",
-  "Elíptico"                 => "#{BASE}/Elliptical_Trainer/0.jpg",
-  "Escalador"                => "#{BASE}/Mountain_Climbers/0.jpg",
-  "Mountain Climber"         => "#{BASE}/Mountain_Climbers/0.jpg",
-  "Nado Livre"               => "#{BASE}/Barbell_Deadlift/0.jpg",
-  "Panturrilha em Pé"        => "#{BASE}/Calf_Raise_On_A_Dumbbell/0.jpg",
-  "Polichinelo"              => "#{BASE}/Arm_Circles/0.jpg",
-  "Ponte Unilateral"         => "#{BASE}/Butt_Lift_Bridge/0.jpg",
-  "Pular Corda"              => "#{BASE}/Battling_Ropes/0.jpg",
-  "Remada no TRX"            => "#{BASE}/Alternating_Renegade_Row/0.jpg",
-  "Remo Ergômetro"           => "#{BASE}/Bent_Over_Barbell_Row/0.jpg",
-  "Salto na Caixa"           => "#{BASE}/Front_Box_Jump/0.jpg",
-  "Swing com Kettlebell"     => "#{BASE}/One-Arm_Kettlebell_Swings/0.jpg",
-  "Tríceps no Banco"         => "#{BASE}/Bench_Dips/0.jpg",
-  "Borboleta"                => "#{BASE}/Barbell_Deadlift/0.jpg",
+SLUG_MAP = {
+  # Musculação — peito
+  "Flexão de Braço"          => "Pushups",
+  "Supino"                   => "Barbell_Bench_Press_-_Medium_Grip",
+  # Musculação — costas
+  "Barra Fixa"               => "Pullups",
+  "Remada Curvada"           => "Bent_Over_Barbell_Row",
+  # Musculação — ombros
+  "Desenvolvimento"          => "Barbell_Shoulder_Press",
+  "Elevação Lateral"         => "Lateral_Raise_-_With_Bands",
+  # Musculação — bíceps
+  "Rosca Direta"             => "Barbell_Curl",
+  "Rosca Martelo"            => "Alternate_Hammer_Curl",
+  # Musculação — tríceps
+  "Mergulho no Banco"        => "Bench_Dips",
+  "Tríceps Francês"          => "Band_Skull_Crusher",
+  "Tríceps no Banco"         => "Bench_Dips",
+  # Musculação — pernas
+  "Agachamento"              => "Barbell_Squat",
+  "Avanço"                   => "Barbell_Lunge",
+  "Levantamento Terra"       => "Barbell_Deadlift",
+  "Panturrilha em Pé"        => "Calf_Raise_On_A_Dumbbell",
+  "Elevação Pélvica"         => "Barbell_Hip_Thrust",
+  "Ponte Unilateral"         => "Butt_Lift_Bridge",
+  "Afundo Reverso"           => "Crossover_Reverse_Lunge",
+  # Musculação — core
+  "Prancha"                  => "Plank",
+  "Abdominal"                => "3_4_Sit-Up",
+  "Abdominal Bicicleta"      => "Air_Bike",
+  # Cardio
+  "Pular Corda"              => "Battling_Ropes",
+  "Remo Ergômetro"           => "Bent_Over_Barbell_Row",
+  "Bicicleta"                => "Air_Bike",
+  "Elíptico"                 => "Elliptical_Trainer",
+  "Corrida Esteira"          => "Jogging_Treadmill",
+  "Corrida Rua"              => "Jogging_Treadmill",
+  "Corrida Estacionária"     => "Mountain_Climbers",
+  # HIIT
+  "Burpee"                   => "Freehand_Jump_Squat",
+  "Salto na Caixa"           => "Front_Box_Jump",
+  "Escalador"                => "Mountain_Climbers",
+  "Agachamento com Salto"    => "Freehand_Jump_Squat",
+  "Polichinelo"              => "Arm_Circles",
+  "Mountain Climber"         => "Mountain_Climbers",
+  "Agachamento Isométrico"   => "Barbell_Squat",
+  # Funcional
+  "Swing com Kettlebell"     => "One-Arm_Kettlebell_Swings",
+  "Remada no TRX"            => "Alternating_Renegade_Row",
+  "Corda Naval"              => "Battling_Ropes",
+  "Arremesso de Medicine Ball" => "Backward_Medicine_Ball_Throw",
+  # Natação (best visual approximation)
+  "Nado Livre"               => "Barbell_Deadlift",
+  "Borboleta"                => "Barbell_Deadlift",
+  # Caminhada
+  "Caminhada Moderada"       => "Farmers_Walk",
+  "Caminhada em Inclinação"  => "Bodyweight_Walking_Lunge",
 }.freeze
 
 namespace :exercises do
-  desc "Fill missing image_url for exercises using free-exercise-db mappings"
-  task fill_images: :environment do
-    updated = 0
-    IMAGE_MAP.each do |name, url|
+  desc "Copy images from local free-exercise-db to public/exercise-images/db and update DB"
+  task import_local_images: :environment do
+    dest_root = Rails.root.join("public", "exercise-images", "db")
+
+    # Try to find the local image source (dev host or prod with mounted volume)
+    local_db = [
+      Rails.root.join("..", "external", "free-exercise-db", "exercises"),
+      Pathname.new("/external/free-exercise-db/exercises"),
+    ].find { |p| p.directory? }
+
+    copied  = 0
+    db_updated = 0
+
+    SLUG_MAP.each do |name, slug|
+      if local_db
+        src_path = local_db.join(slug, "0.jpg")
+        if File.exist?(src_path)
+          dest_dir = dest_root.join(slug)
+          FileUtils.mkdir_p(dest_dir)
+          FileUtils.cp(src_path, dest_dir.join("0.jpg"))
+          copied += 1
+        else
+          puts "  Source not found: #{src_path}"
+        end
+      end
+
       ex = Exercise.find_by(name: name)
       unless ex
-        puts "  Not found: #{name}"
+        puts "  Not in DB: #{name}"
         next
       end
-      next if ex.image_url.present?
-      ex.update_column(:image_url, url)
-      puts "  Updated: #{name}"
-      updated += 1
-    end
-    puts "\nDone. #{updated} exercises updated."
-  end
 
+      local_url = "/exercise-images/db/#{slug}/0.jpg"
+      ex.update_column(:image_url, local_url)
+      puts "  #{name} → #{local_url}"
+      db_updated += 1
+    end
+
+    puts "\nDone. Copied: #{copied}, DB updated: #{db_updated}."
+  end
 
   desc "Sync gif_url and instructions from ExerciseDB, matching by image_url directory name"
   task sync_from_exercisedb: :environment do
@@ -68,8 +117,6 @@ namespace :exercises do
     skipped = 0
 
     Exercise.find_each do |exercise|
-      # Extract English name from image_url path:
-      #   ".../Barbell_Bench_Press_-_Medium_Grip/0.jpg" → "barbell bench press medium grip"
       next unless exercise.image_url.present?
 
       dir_name   = exercise.image_url.split("/")[-2].to_s

@@ -38,9 +38,10 @@ class ExamValidationService
 
     messages_content = build_content(prompt)
 
+    cfg = AiConfig.for(:exam_validation)
     response = client.messages(parameters: {
-      model: "claude-opus-4-7",
-      max_tokens: 256,
+      model:      cfg[:model],
+      max_tokens: cfg[:max_tokens],
       messages: [{ role: "user", content: messages_content }]
     })
 

@@ -211,7 +211,7 @@ class WorkoutPlanGeneratorService
   end
 
   def exercise_scope(relation)
-    return relation.where(equipment_type: "bodyweight") if @training_location == "home"
+    return relation.where(home_compatible: true) if @training_location == "home"
     relation
   end
 

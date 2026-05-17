@@ -37,10 +37,13 @@ function exerciseFallback(exercise: { exercise_type: string }) {
   return `/exercise-images/${exercise.exercise_type || "treino"}.svg`;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
 function SmartImage({ src, fallbackSrc, alt, className }: { src: string; fallbackSrc: string; alt: string; className: string }) {
+  const resolvedSrc = src?.startsWith("/") ? `${API_URL}${src}` : src;
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       className={className}
       onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = fallbackSrc; }}

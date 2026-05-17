@@ -24,6 +24,30 @@ type UserMedia = {
   file_size?: number;
   mime_type?: string;
 };
+type ExtractedDataPoint = {
+  id: number;
+  field_name: string;
+  value: number;
+  unit: string | null;
+  confidence: number | null;
+  ai_notes: string | null;
+};
+const FIELD_LABELS: Record<string, string> = {
+  weight_kg:                  "Peso",
+  height_cm:                  "Altura",
+  bmi:                        "IMC",
+  body_fat_pct:               "% Gordura",
+  muscle_mass_kg:             "Massa Muscular",
+  glucose_mgdl:               "Glicose",
+  cholesterol_mgdl:           "Colesterol Total",
+  hdl_mgdl:                   "HDL",
+  ldl_mgdl:                   "LDL",
+  triglycerides_mgdl:         "Triglicerídeos",
+  blood_pressure_systolic:    "PA Sistólica",
+  blood_pressure_diastolic:   "PA Diastólica",
+  heart_rate_bpm:             "Freq. Cardíaca",
+  visceral_fat:               "Gordura Visceral",
+};
 
 export default function ProfilePage() {
   const { user, signOut, updateUser } = useAuth();
@@ -48,6 +72,9 @@ export default function ProfilePage() {
   const [avatarError, setAvatarError] = useState("");
   const [mediaUploadError, setMediaUploadError] = useState("");
   const [faceBlurredNotice, setFaceBlurredNotice] = useState(false);
+  const [pendingDataPoints, setPendingDataPoints] = useState<ExtractedDataPoint[]>([]);
+  const [confirmingDp, setConfirmingDp] = useState<number | null>(null);
+  const [bodyAnalysis, setBodyAnalysis] = useState<{ id: number; observation: string; confidence: number | null } | null>(null);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -146,6 +173,14 @@ export default function ProfilePage() {
         setFaceBlurredNotice(true);
       }
 
+      if (body?.extracted_data?.length > 0) {
+        setPendingDataPoints(body.extracted_data as ExtractedDataPoint[]);
+      }
+
+      if (body?.body_analysis?.observation) {
+        setBodyAnalysis(body.body_analysis);
+      }
+
       setMediaItems((prev) => [body as UserMedia, ...prev]);
     } catch {
       setMediaUploadError("Erro ao enviar arquivo. Tente novamente.");
@@ -158,6 +193,22 @@ export default function ProfilePage() {
   async function handleDeleteMedia(id: number) {
     await api.delete(`/api/v1/user_media/${id}`).catch(() => null);
     setMediaItems((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  async function handleDataPointAction(dp: ExtractedDataPoint, actionType: "confirm" | "save_advanced" | "ignore") {
+    setConfirmingDp(dp.id);
+    try {
+      await api.patch(`/api/v1/health_data_points/${dp.id}`, { action_type: actionType });
+      if (actionType === "confirm") {
+        const updated = await api.get<HealthProfile>("/api/v1/health_profile").catch(() => null);
+        if (updated) setProfile(updated);
+      }
+      setPendingDataPoints((prev) => prev.filter((p) => p.id !== dp.id));
+    } catch {
+      // keep the card visible on error
+    } finally {
+      setConfirmingDp(null);
+    }
   }
 
   if (loading) return <LoadingScreen />;
@@ -300,8 +351,84 @@ export default function ProfilePage() {
 
         {faceBlurredNotice && (
           <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700 flex items-start gap-2">
-            <span className="mt-0.5">🔒</span>
+            <span className="mt-0.5">&#128274;</span>
             <span>Rosto ofuscado por privacidade. A foto foi salva com o rosto pixelado.</span>
+          </div>
+        )}
+
+        {pendingDataPoints.length > 0 && (
+          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4">
+            <p className="mb-3 text-sm font-semibold text-green-800">
+              Encontramos dados no exame. O que deseja fazer?
+            </p>
+            {pendingDataPoints.map((dp) => (
+              <div key={dp.id} className="mb-3 rounded-lg bg-white border border-green-100 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-800">
+                    {FIELD_LABELS[dp.field_name] ?? dp.field_name}:{" "}
+                    <strong>{dp.value}{dp.unit ? ` ${dp.unit}` : ""}</strong>
+                  </span>
+                  {dp.confidence != null && (
+                    <span className="text-xs text-gray-400">
+                      {Math.round(dp.confidence * 100)}% confiança
+                    </span>
+                  )}
+                </div>
+                {dp.ai_notes && (
+                  <p className="mb-2 text-xs text-gray-500">{dp.ai_notes}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDataPointAction(dp, "confirm")}
+                    disabled={confirmingDp === dp.id}
+                    className="flex-1 rounded-lg bg-primary-500 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Atualizar perfil
+                  </button>
+                  <button
+                    onClick={() => handleDataPointAction(dp, "save_advanced")}
+                    disabled={confirmingDp === dp.id}
+                    className="flex-1 rounded-lg border border-gray-200 py-1.5 text-xs font-medium text-gray-600 disabled:opacity-50"
+                  >
+                    Salvar no histórico
+                  </button>
+                  <button
+                    onClick={() => handleDataPointAction(dp, "ignore")}
+                    disabled={confirmingDp === dp.id}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-400 disabled:opacity-50"
+                  >
+                    Ignorar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {bodyAnalysis && (
+          <div className="mb-4 rounded-xl border border-purple-200 bg-purple-50 p-4">
+            <p className="mb-2 text-sm font-semibold text-purple-800">Observação da foto</p>
+            <p className="mb-3 text-sm text-gray-700">{bodyAnalysis.observation}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  await api.patch(`/api/v1/health_data_points/${bodyAnalysis.id}`, { action_type: "save_advanced" }).catch(() => null);
+                  setBodyAnalysis(null);
+                }}
+                className="flex-1 rounded-lg bg-purple-500 py-1.5 text-xs font-semibold text-white"
+              >
+                Salvar observação
+              </button>
+              <button
+                onClick={async () => {
+                  await api.patch(`/api/v1/health_data_points/${bodyAnalysis.id}`, { action_type: "ignore" }).catch(() => null);
+                  setBodyAnalysis(null);
+                }}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-400"
+              >
+                Ignorar
+              </button>
+            </div>
           </div>
         )}
 

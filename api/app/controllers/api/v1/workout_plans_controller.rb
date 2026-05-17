@@ -1,6 +1,8 @@
 module Api
   module V1
     class WorkoutPlansController < BaseController
+      before_action(only: [:regenerate]) { check_rate_limit!(:generate_workout) }
+
       def index
         plans = current_user.workout_plans.order(created_at: :desc)
         render json: plans.map { |p| serialize_plan_summary(p) }
