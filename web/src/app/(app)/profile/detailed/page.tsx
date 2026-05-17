@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
@@ -7,17 +9,7 @@ import { LoadingScreen } from "@/shared/components/loading-screen";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-type PhysicalData = {
-  age: number | null;
-  weight_kg: number | null;
-  height_cm: number | null;
-  fitness_level: string | null;
-  goal: string | null;
-  training_days_per_week: number | null;
-  training_location: string | null;
-  modality: string | null;
-  bmi: number | null;
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type DataPoint = {
   id: number;
@@ -31,6 +23,7 @@ type DataPoint = {
   raw_text: string | null;
   collected_at: string;
   created_at: string;
+  user_media_id?: number | null;
 };
 
 type MediaItem = {
@@ -39,99 +32,113 @@ type MediaItem = {
   notes: string | null;
   captured_at: string;
   file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
   mime_type: string | null;
 };
 
 type DetailedProfile = {
-  physical: PhysicalData | null;
+  physical: {
+    age: number | null;
+    weight_kg: number | null;
+    height_cm: number | null;
+    fitness_level: string | null;
+    goal: string | null;
+    training_days_per_week: number | null;
+    training_location: string | null;
+    modality: string | null;
+    bmi: number | null;
+  } | null;
   data_points: DataPoint[];
   media: MediaItem[];
 };
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const FIELD_LABELS: Record<string, string> = {
-  weight_kg:               "Peso",
-  height_cm:               "Altura",
-  bmi:                     "IMC",
-  body_fat_pct:            "% Gordura",
-  muscle_mass_kg:          "Massa Muscular",
-  glucose_mgdl:            "Glicose",
-  cholesterol_mgdl:        "Colesterol Total",
-  hdl_mgdl:                "HDL",
-  ldl_mgdl:                "LDL",
-  triglycerides_mgdl:      "Triglicerídeos",
-  blood_pressure_systolic: "PA Sistólica",
-  blood_pressure_diastolic:"PA Diastólica",
-  heart_rate_bpm:          "Freq. Cardíaca",
-  visceral_fat:            "Gordura Visceral",
-  body_analysis:           "Análise Corporal",
+  weight_kg:                "Peso",
+  height_cm:                "Altura",
+  bmi:                      "IMC",
+  body_fat_pct:             "% Gordura",
+  muscle_mass_kg:           "Massa Muscular",
+  glucose_mgdl:             "Glicose",
+  cholesterol_mgdl:         "Colesterol Total",
+  hdl_mgdl:                 "HDL",
+  ldl_mgdl:                 "LDL",
+  triglycerides_mgdl:       "Triglicerídeos",
+  blood_pressure_systolic:  "PA Sistólica",
+  blood_pressure_diastolic: "PA Diastólica",
+  heart_rate_bpm:           "Freq. Cardíaca",
+  visceral_fat:             "Gordura Visceral",
+  body_analysis:            "Análise Corporal",
+  visual_observation:       "Análise Corporal",
 };
 
-const GOAL_LABELS: Record<string, string> = {
-  lose_weight:  "Perder peso",
-  gain_muscle:  "Ganhar músculo",
-  maintain:     "Manter peso",
-  health:       "Saúde geral",
+const COMPOSITION_FIELDS = ["body_fat_pct", "muscle_mass_kg", "bmi", "visceral_fat"];
+
+const RISK_RANGES: Record<string, [number, number]> = {
+  glucose_mgdl:             [70, 99],
+  cholesterol_mgdl:         [0, 200],
+  hdl_mgdl:                 [40, 999],
+  ldl_mgdl:                 [0, 130],
+  triglycerides_mgdl:       [0, 150],
+  blood_pressure_systolic:  [90, 129],
+  blood_pressure_diastolic: [60, 84],
+  body_fat_pct:             [5, 25],
+  bmi:                      [18.5, 24.9],
 };
 
-const LEVEL_LABELS: Record<string, string> = {
-  beginner:     "Iniciante",
-  intermediate: "Intermediário",
-  advanced:     "Avançado",
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const LOCATION_LABELS: Record<string, string> = {
-  gym:     "Academia",
-  home:    "Casa",
-  outdoor: "Ao ar livre",
-  any:     "Qualquer lugar",
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  exam:        "Exame",
-  body_photo:  "Foto corporal",
-  manual:      "Manual",
-};
-
-function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value) return null;
-  return (
-    <div className="flex items-start justify-between gap-4 py-2 border-b border-gray-50 last:border-0">
-      <span className="text-sm text-gray-500 shrink-0">{label}</span>
-      <span className="text-sm font-medium text-gray-900 text-right">{value}</span>
-    </div>
-  );
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleDateString("pt-BR", {
+    day: "numeric", month: "short", year: "numeric",
+  });
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function riskColor(fieldName: string, value: number) {
+  const range = RISK_RANGES[fieldName];
+  if (!range) return { text: "text-gray-700", bg: "bg-gray-50 border-gray-100" };
+  const ok = value >= range[0] && value <= range[1];
+  return ok
+    ? { text: "text-green-700", bg: "bg-green-50 border-green-200" }
+    : { text: "text-amber-600", bg: "bg-amber-50 border-amber-200" };
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5">
-      <h2 className="mb-3 font-semibold text-gray-900">{title}</h2>
+      <div className="mb-3">
+        <h2 className="font-semibold text-gray-900">{title}</h2>
+        {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+      </div>
       {children}
     </div>
   );
 }
 
-function riskColor(fieldName: string, value: number): string {
-  const ranges: Record<string, { ok: [number, number] }> = {
-    glucose_mgdl:            { ok: [70, 99] },
-    cholesterol_mgdl:        { ok: [0, 200] },
-    hdl_mgdl:                { ok: [40, 999] },
-    ldl_mgdl:                { ok: [0, 130] },
-    triglycerides_mgdl:      { ok: [0, 150] },
-    blood_pressure_systolic: { ok: [90, 129] },
-    blood_pressure_diastolic:{ ok: [60, 84] },
-    body_fat_pct:            { ok: [5, 25] },
-    bmi:                     { ok: [18.5, 24.9] },
-  };
-  const r = ranges[fieldName];
-  if (!r) return "text-gray-700";
-  return value >= r.ok[0] && value <= r.ok[1] ? "text-green-700" : "text-amber-600";
+function DocIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-red-400">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="12" y2="17" />
+    </svg>
+  );
 }
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DetailedProfilePage() {
   const router = useRouter();
-  const [data, setData]     = useState<DetailedProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData]               = useState<DetailedProfile | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [photoHistoryOpen, setPhotoHistoryOpen] = useState(false);
+  const [lightboxItem, setLightboxItem]         = useState<MediaItem | null>(null);
 
   useEffect(() => {
     api
@@ -152,22 +159,43 @@ export default function DetailedProfilePage() {
     );
   }
 
-  const { physical, data_points, media } = data;
+  const { data_points, media } = data;
 
-  const bodyPhotos  = media.filter((m) => m.category === "body_photo");
-  const exams       = media.filter((m) => m.category === "exam");
-  const bodyAnalyses = data_points.filter((dp) => dp.source_type === "body_photo" && dp.field_name === "body_analysis");
-  const examPoints   = data_points.filter((dp) => dp.source_type === "exam");
-  const photoPoints  = data_points.filter((dp) => dp.source_type === "body_photo" && dp.field_name !== "body_analysis");
-  const riskPoints   = examPoints.filter((dp) => {
-    const r = { glucose_mgdl: [70, 99], cholesterol_mgdl: [0, 200], ldl_mgdl: [0, 130],
-                triglycerides_mgdl: [0, 150], blood_pressure_systolic: [90, 129] };
-    const range = r[dp.field_name as keyof typeof r];
+  const bodyPhotos = media.filter((m) => m.category === "body_photo");
+  const exams      = media.filter((m) => m.category === "exam");
+
+  // Bug fix: cobrir field_name legado ("visual_observation") e novo ("body_analysis")
+  const bodyAnalyses = data_points.filter(
+    (dp) => dp.source_type === "body_photo" &&
+            (dp.field_name === "body_analysis" || dp.field_name === "visual_observation")
+  );
+
+  const examPoints = data_points.filter((dp) => dp.source_type === "exam");
+
+  const riskPoints = examPoints.filter((dp) => {
+    const range = RISK_RANGES[dp.field_name];
     return range && (dp.value < range[0] || dp.value > range[1]);
   });
 
+  // Composição: pegar o data_point mais recente de cada campo de composição corporal
+  const compositionPoints: DataPoint[] = COMPOSITION_FIELDS.flatMap((field) => {
+    const candidates = data_points.filter((dp) => dp.field_name === field);
+    if (candidates.length === 0) return [];
+    // Priorizar exame sobre foto; ambos já vêm ordenados por collected_at desc
+    const fromExam  = candidates.find((dp) => dp.source_type === "exam");
+    const fromPhoto = candidates.find((dp) => dp.source_type === "body_photo");
+    return [fromExam ?? fromPhoto!];
+  });
+
+  const hasExamAnalysis = (mediaId: number | null | undefined) =>
+    mediaId != null && examPoints.some((dp) => dp.user_media_id === mediaId);
+
+  const isEmpty = !data.physical && data_points.length === 0 && media.length === 0;
+
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 pb-28">
+
+      {/* Header */}
       <header className="mb-5 flex items-center gap-3">
         <button
           onClick={() => router.back()}
@@ -175,92 +203,119 @@ export default function DetailedProfilePage() {
         >
           ←
         </button>
-        <h1 className="text-xl font-bold text-gray-900">Perfil Detalhado</h1>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Perfil Detalhado</h1>
+          <p className="text-xs text-gray-400">Evolução, composição e análises</p>
+        </div>
       </header>
 
-      {/* Dados físicos */}
-      {physical && (
-        <Section title="Dados Físicos">
-          <InfoRow label="Objetivo"        value={physical.goal ? GOAL_LABELS[physical.goal] ?? physical.goal : null} />
-          <InfoRow label="Nível"           value={physical.fitness_level ? LEVEL_LABELS[physical.fitness_level] ?? physical.fitness_level : null} />
-          <InfoRow label="Idade"           value={physical.age ? `${physical.age} anos` : null} />
-          <InfoRow label="Peso"            value={physical.weight_kg ? `${physical.weight_kg} kg` : null} />
-          <InfoRow label="Altura"          value={physical.height_cm ? `${physical.height_cm} cm` : null} />
-          <InfoRow label="IMC"             value={physical.bmi ? `${physical.bmi}` : null} />
-          <InfoRow label="Local de treino" value={physical.training_location ? LOCATION_LABELS[physical.training_location] ?? physical.training_location : null} />
-          <InfoRow label="Dias/semana"     value={physical.training_days_per_week ? `${physical.training_days_per_week}x por semana` : null} />
-        </Section>
+      {isEmpty && (
+        <div className="mt-12 text-center">
+          <p className="text-4xl mb-3">📋</p>
+          <p className="text-sm text-gray-500">Nenhum dado registrado ainda.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Complete seu perfil, adicione fotos e exames para ver o histórico aqui.
+          </p>
+        </div>
       )}
 
-      {/* Comparação de fotos */}
-      {bodyPhotos.length > 0 && (
-        <Section title="Evolução Corporal">
-          {bodyPhotos.length >= 2 ? (
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              {[bodyPhotos[bodyPhotos.length - 1], bodyPhotos[0]].map((photo, idx) => (
-                <div key={photo.id} className="text-center">
-                  <img
-                    src={`${API_URL}${photo.file_url}`}
-                    alt={idx === 0 ? "Antes" : "Agora"}
-                    className="h-36 w-full rounded-xl object-cover"
-                  />
-                  <p className="mt-1 text-xs font-medium text-gray-600">{idx === 0 ? "Antes" : "Agora"}</p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+      {/* 1. Composição Corporal Estimada */}
+      {compositionPoints.length > 0 && (
+        <Section
+          title="Composição Corporal"
+          subtitle="Estimativa baseada em foto ou exame"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            {compositionPoints.map((dp) => {
+              const { text, bg } = riskColor(dp.field_name, dp.value);
+              const isFromExam   = dp.source_type === "exam";
+              return (
+                <div key={dp.id} className={`rounded-xl border p-3 ${bg}`}>
+                  <p className="text-xs text-gray-500 mb-1">
+                    {FIELD_LABELS[dp.field_name] ?? dp.field_name}
+                  </p>
+                  <p className={`text-xl font-bold leading-none ${text}`}>
+                    {dp.value}
+                    {dp.unit && <span className="text-xs font-normal ml-1">{dp.unit}</span>}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {isFromExam ? "por exame" : "por foto"}
+                    {dp.confidence != null && ` · ${Math.round(dp.confidence * 100)}% conf.`}
                   </p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <img
-              src={`${API_URL}${bodyPhotos[0].file_url}`}
-              alt="Foto corporal"
-              className="mb-3 h-40 w-full rounded-xl object-cover"
-            />
-          )}
-          <p className="text-xs text-gray-400">{bodyPhotos.length} foto{bodyPhotos.length !== 1 ? "s" : ""} registrada{bodyPhotos.length !== 1 ? "s" : ""}</p>
-        </Section>
-      )}
-
-      {/* Análise corporal */}
-      {bodyAnalyses.length > 0 && (
-        <Section title="Análise das Fotos">
-          {bodyAnalyses.map((dp, i) => (
-            <div key={dp.id} className={`${i > 0 ? "mt-4 border-t border-gray-100 pt-4" : ""}`}>
-              <p className="text-sm leading-relaxed text-gray-700">{dp.ai_notes || dp.raw_text}</p>
-              <p className="mt-1 text-xs text-gray-400">
-                {new Date(dp.collected_at || dp.created_at).toLocaleDateString("pt-BR", {
-                  day: "numeric", month: "short", year: "numeric",
-                })}
-              </p>
-            </div>
-          ))}
+              );
+            })}
+          </div>
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-            Estas observações são orientações gerais. Consulte um profissional de saúde para avaliação precisa.
+            Use como acompanhamento de evolução, não como diagnóstico médico.
           </p>
         </Section>
       )}
 
-      {/* Dados de composição corporal */}
-      {photoPoints.length > 0 && (
-        <Section title="Composição Corporal Estimada">
-          {photoPoints.map((dp) => (
-            <div key={dp.id} className="flex items-start justify-between py-2 border-b border-gray-50 last:border-0">
-              <span className="text-sm text-gray-500">{FIELD_LABELS[dp.field_name] ?? dp.field_name}</span>
-              <div className="text-right">
-                <span className={`text-sm font-semibold ${riskColor(dp.field_name, dp.value)}`}>
-                  {dp.value}{dp.unit ? ` ${dp.unit}` : ""}
-                </span>
-                {dp.confidence != null && (
-                  <p className="text-xs text-gray-400">{Math.round(dp.confidence * 100)}% confiança</p>
-                )}
+      {/* 2. Evolução Corporal */}
+      {bodyPhotos.length > 0 && (
+        <Section title="Evolução Corporal">
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* Antes — foto mais antiga (último índice) */}
+            {bodyPhotos.length >= 2 ? (
+              <button
+                onClick={() => setLightboxItem(bodyPhotos[bodyPhotos.length - 1])}
+                className="text-center"
+              >
+                <img
+                  src={`${API_URL}${bodyPhotos[bodyPhotos.length - 1].file_url}`}
+                  alt="Antes"
+                  className="h-36 w-full rounded-xl object-cover"
+                />
+                <p className="mt-1 text-xs font-semibold text-gray-600">Antes</p>
+                <p className="text-xs text-gray-400">{formatDate(bodyPhotos[bodyPhotos.length - 1].captured_at)}</p>
+              </button>
+            ) : (
+              <div className="flex h-36 items-center justify-center rounded-xl bg-gray-100 text-center">
+                <p className="text-xs text-gray-400 px-3">Adicione mais fotos para comparar</p>
               </div>
-            </div>
-          ))}
+            )}
+
+            {/* Agora — foto mais recente (índice 0) */}
+            <button
+              onClick={() => setLightboxItem(bodyPhotos[0])}
+              className="text-center"
+            >
+              <img
+                src={`${API_URL}${bodyPhotos[0].file_url}`}
+                alt="Agora"
+                className="h-36 w-full rounded-xl object-cover"
+              />
+              <p className="mt-1 text-xs font-semibold text-gray-600">Agora</p>
+              <p className="text-xs text-gray-400">{formatDate(bodyPhotos[0].captured_at)}</p>
+            </button>
+          </div>
+
+          <button
+            onClick={() => setPhotoHistoryOpen(true)}
+            className="w-full rounded-xl border border-primary-100 bg-primary-50 py-2.5 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
+          >
+            Histórico de fotos ({bodyPhotos.length})
+          </button>
         </Section>
       )}
 
-      {/* Marcadores de exame */}
+      {/* 3. Análise da última foto */}
+      {bodyAnalyses.length > 0 && (
+        <Section title="Análise da última foto">
+          <p className="text-sm leading-relaxed text-gray-700">
+            {bodyAnalyses[0].ai_notes || bodyAnalyses[0].raw_text}
+          </p>
+          <p className="mt-2 text-xs text-gray-400">
+            {formatDate(bodyAnalyses[0].collected_at || bodyAnalyses[0].created_at)}
+          </p>
+          <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+            Observação geral. Consulte um profissional de saúde para avaliação precisa.
+          </p>
+        </Section>
+      )}
+
+      {/* 4. Marcadores de Exames */}
       {examPoints.length > 0 && (
         <Section title="Marcadores de Exames">
           {riskPoints.length > 0 && (
@@ -273,55 +328,157 @@ export default function DetailedProfilePage() {
               ))}
             </div>
           )}
-          {examPoints.map((dp) => (
-            <div key={dp.id} className="flex items-start justify-between py-2 border-b border-gray-50 last:border-0">
-              <div>
-                <span className="text-sm text-gray-600">{FIELD_LABELS[dp.field_name] ?? dp.field_name}</span>
-                {dp.ai_notes && <p className="text-xs text-gray-400 mt-0.5">{dp.ai_notes}</p>}
+          {examPoints.map((dp) => {
+            const { text } = riskColor(dp.field_name, dp.value);
+            return (
+              <div key={dp.id} className="flex items-start justify-between py-2 border-b border-gray-50 last:border-0">
+                <div>
+                  <span className="text-sm text-gray-600">{FIELD_LABELS[dp.field_name] ?? dp.field_name}</span>
+                  {dp.ai_notes && <p className="text-xs text-gray-400 mt-0.5">{dp.ai_notes}</p>}
+                </div>
+                <span className={`text-sm font-semibold shrink-0 ml-2 ${text}`}>
+                  {dp.value}{dp.unit ? ` ${dp.unit}` : ""}
+                </span>
               </div>
-              <span className={`text-sm font-semibold shrink-0 ml-2 ${riskColor(dp.field_name, dp.value)}`}>
-                {dp.value}{dp.unit ? ` ${dp.unit}` : ""}
-              </span>
-            </div>
-          ))}
+            );
+          })}
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-            Sugestão: valide os valores com seu médico ou nutricionista.
+            Valide os valores com seu médico ou nutricionista.
           </p>
         </Section>
       )}
 
-      {/* Exames salvos */}
+      {/* 5. Exames */}
       {exams.length > 0 && (
         <Section title={`Exames (${exams.length})`}>
-          {exams.map((exam) => (
-            <div key={exam.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-              {exam.mime_type === "application/pdf" ? (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-lg">📄</div>
-              ) : (
-                <img
-                  src={`${API_URL}${exam.file_url}`}
-                  alt="Exame"
-                  className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                />
-              )}
-              <p className="text-xs text-gray-500">
-                {new Date(exam.captured_at).toLocaleDateString("pt-BR", {
-                  day: "numeric", month: "short", year: "numeric",
-                })}
-              </p>
-            </div>
-          ))}
+          {exams.map((exam) => {
+            const isPdf      = exam.mime_type === "application/pdf";
+            const isAnalyzed = hasExamAnalysis(exam.id);
+            return (
+              <button
+                key={exam.id}
+                onClick={() => {
+                  if (isPdf) {
+                    window.open(`${API_URL}${exam.file_url}`, "_blank");
+                  } else {
+                    setLightboxItem(exam);
+                  }
+                }}
+                className="flex w-full items-center gap-3 py-2.5 border-b border-gray-50 last:border-0 text-left"
+              >
+                {isPdf ? (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 border border-red-100">
+                    <DocIcon />
+                  </div>
+                ) : (
+                  <img
+                    src={`${API_URL}${exam.file_url}`}
+                    alt="Exame"
+                    className="h-12 w-12 shrink-0 rounded-xl object-cover"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">
+                    {exam.file_name || "Exame"}
+                  </p>
+                  <p className="text-xs text-gray-400">{formatDate(exam.captured_at)}</p>
+                </div>
+                {isAnalyzed && (
+                  <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                    Analisado
+                  </span>
+                )}
+                <span className="shrink-0 text-gray-300 text-base">›</span>
+              </button>
+            );
+          })}
         </Section>
       )}
 
-      {/* Estado vazio */}
-      {!physical && data_points.length === 0 && media.length === 0 && (
-        <div className="mt-12 text-center">
-          <p className="text-3xl mb-3">📋</p>
-          <p className="text-sm text-gray-500">Nenhum dado registrado ainda.</p>
-          <p className="mt-1 text-xs text-gray-400">
-            Complete seu perfil, adicione fotos e exames para ver o histórico aqui.
+      {/* 6. Recomendações */}
+      <Section title="Recomendações">
+        {examPoints.length > 0 || compositionPoints.length > 0 ? (
+          <p className="text-sm leading-relaxed text-gray-600">
+            Com base no seu histórico, mantenha consistência nos treinos e acompanhe sua
+            evolução regularmente. Consulte um profissional de saúde para orientações
+            personalizadas sobre dieta e exercício.
           </p>
+        ) : (
+          <p className="text-sm text-gray-400">
+            Adicione fotos e exames para receber recomendações personalizadas.
+          </p>
+        )}
+      </Section>
+
+      {/* ─── Bottom Sheet: Histórico de fotos ───────────────────────────── */}
+      {photoHistoryOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/40"
+          onClick={() => setPhotoHistoryOpen(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
+            <div className="mb-4 flex items-center justify-between mt-3">
+              <h3 className="text-base font-bold text-gray-900">
+                Histórico de fotos ({bodyPhotos.length})
+              </h3>
+              <button
+                onClick={() => setPhotoHistoryOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {bodyPhotos.map((photo) => (
+                <button
+                  key={photo.id}
+                  onClick={() => {
+                    setPhotoHistoryOpen(false);
+                    setLightboxItem(photo);
+                  }}
+                  className="text-center"
+                >
+                  <img
+                    src={`${API_URL}${photo.file_url}`}
+                    alt="Foto corporal"
+                    className="h-28 w-full rounded-xl object-cover"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">{formatDate(photo.captured_at)}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Lightbox ────────────────────────────────────────────────────── */}
+      {lightboxItem && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90"
+          onClick={() => setLightboxItem(null)}
+        >
+          <button
+            onClick={() => setLightboxItem(null)}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white text-xl"
+          >
+            ✕
+          </button>
+          <img
+            src={`${API_URL}${lightboxItem.file_url}`}
+            alt="Visualização"
+            className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          {lightboxItem.captured_at && (
+            <p className="absolute bottom-6 text-sm text-white/70">
+              {formatDate(lightboxItem.captured_at)}
+            </p>
+          )}
         </div>
       )}
     </div>

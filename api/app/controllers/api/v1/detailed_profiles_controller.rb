@@ -54,13 +54,16 @@ module Api
       end
 
       def media_json(m)
+        blob = m.file.attached? ? m.file.blob : nil
         {
           id:          m.id,
           category:    m.category,
           notes:       m.notes,
           captured_at: m.captured_at,
           file_url:    blob_path(m.file),
-          mime_type:   m.file.attached? ? m.file.blob.content_type : nil,
+          file_name:   blob&.filename.to_s,
+          file_size:   blob&.byte_size,
+          mime_type:   blob&.content_type,
         }
       end
     end
