@@ -43,6 +43,16 @@ Rails.application.routes.draw do
       patch "profile/avatar", to: "profile#update_avatar"
 
       resources :user_media, only: [:index, :create, :destroy]
+
+      namespace :billing do
+        post :checkout
+        post :portal
+        get  :status
+      end
+
+      namespace :webhooks do
+        post :stripe
+      end
     end
   end
 end

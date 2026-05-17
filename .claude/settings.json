@@ -19,11 +19,23 @@
       "Bash(git -C /home/marcus/projects/Easy-Health ls-files --stage)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('auth', {}\\), indent=2, ensure_ascii=False\\)\\)\")",
       "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/forgot-password)",
-      "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/reset-password)"
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/reset-password)",
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/api/app/controllers/api/v1/billing)",
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/api/app/controllers/api/v1/webhooks)",
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/\\\\\\(app\\\\\\)/billing)",
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/billing/success)",
+      "Bash(mkdir -p /home/marcus/projects/Easy-Health/web/src/app/billing/cancel)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/api/v1/auth/sign_up)",
+      "Bash(netstat -tlnp)",
+      "Bash(curl -s -X POST http://localhost:3001/api/v1/auth/registrations -H \"Content-Type: application/json\" -d '{\"user\":{\"name\":\"test\",\"email\":\"test@test.com\",\"password\":\"12345678\"}}')",
+      "Bash(curl -s -X POST http://localhost:3001/api/v1/auth/sign_up -H \"Content-Type: application/json\" -d '{\"user\":{\"name\":\"test\",\"email\":\"test@test.com\",\"password\":\"12345678\"}}')",
+      "Bash(curl -s -I -X OPTIONS http://localhost:3001/api/v1/auth/sign_up -H 'Origin: http://localhost:3002' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: Content-Type')"
     ],
     "additionalDirectories": [
       "/mnt/c/Users/mailm/Downloads",
-      "/home/marcus/projects/Easy-Health/web/src/app"
+      "/home/marcus/projects/Easy-Health/web/src/app",
+      "/home/marcus/projects/Easy-Health/web/src/app/(app)"
     ]
   }
 }
