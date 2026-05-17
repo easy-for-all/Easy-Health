@@ -33,8 +33,10 @@ Rails.application.routes.draw do
         member     { get  :setup_guide  }
       end
 
-      post "workout_day_exercises/:id/swap", to: "workout_day_exercises#swap"
-      post "workout_days/:workout_day_id/exercises", to: "workout_day_exercises#create"
+      post   "workout_day_exercises/:id/swap", to: "workout_day_exercises#swap"
+      patch  "workout_day_exercises/:id",      to: "workout_day_exercises#update"
+      delete "workout_day_exercises/:id",      to: "workout_day_exercises#destroy"
+      post   "workout_days/:workout_day_id/exercises", to: "workout_day_exercises#create"
 
       resources :workout_sessions, only: [:index, :create] do
         collection { get :stats }
