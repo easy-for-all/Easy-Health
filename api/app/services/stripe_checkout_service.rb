@@ -16,6 +16,7 @@ class StripeCheckoutService
     session = Stripe::Checkout::Session.create(
       customer: customer_id,
       mode: "subscription",
+      allow_promotion_codes: true,
       line_items: [{
         price: price_id,
         quantity: 1
