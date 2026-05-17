@@ -20,10 +20,14 @@ class User < ApplicationRecord
     workout_plans.active.first
   end
 
+  def no_plan?
+    subscription.nil? || subscription.billing_required?
+  end
+
   def billing_status
     subscription&.billing_status || {
-      plan: nil,
-      status: nil,
+      plan: "none",
+      status: "none",
       paid: false,
       trial_end: nil,
       current_period_end: nil,

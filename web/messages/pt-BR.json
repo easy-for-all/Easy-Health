@@ -2,6 +2,7 @@
   "nav": {
     "workout": "Treino do Dia",
     "workouts": "Treinos",
+    "subscription": "Assinatura",
     "profile": "Perfil"
   },
   "auth": {

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_15_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_17_134551) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -45,6 +45,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_000003) do
   create_table "exercises", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
+    t.string "equipment_type", default: "gym", null: false
     t.string "exercise_type", default: "musculacao", null: false
     t.string "gif_url"
     t.string "image_url"
@@ -54,6 +55,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_000003) do
     t.text "setup_guide"
     t.datetime "updated_at", null: false
     t.string "video_url"
+    t.index ["equipment_type"], name: "index_exercises_on_equipment_type"
     t.index ["exercise_type"], name: "index_exercises_on_exercise_type"
   end
 
@@ -70,10 +72,39 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_000003) do
     t.string "modality", default: "ai_choice"
     t.string "split_type", default: "ai_choice"
     t.integer "training_days_per_week", default: 3
+    t.string "training_location", default: "gym", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.decimal "weight_kg"
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
+  end
+
+  create_table "stripe_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_type"
+    t.datetime "processed_at", null: false
+    t.string "stripe_event_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["stripe_event_id"], name: "index_stripe_events_on_stripe_event_id", unique: true
+  end
+
+  create_table "subscriptions", force: :cascade do |t|
+    t.boolean "cancel_at_period_end", default: false, null: false
+    t.datetime "canceled_at"
+    t.datetime "created_at", null: false
+    t.datetime "current_period_end"
+    t.datetime "current_period_start"
+    t.string "plan_name", default: "pro_monthly", null: false
+    t.string "status", default: "incomplete", null: false
+    t.string "stripe_customer_id"
+    t.string "stripe_price_id"
+    t.string "stripe_subscription_id"
+    t.datetime "trial_end"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["stripe_customer_id"], name: "index_subscriptions_on_stripe_customer_id"
+    t.index ["stripe_subscription_id"], name: "index_subscriptions_on_stripe_subscription_id", unique: true
+    t.index ["user_id"], name: "index_subscriptions_on_user_id", unique: true
   end
 
   create_table "user_media", force: :cascade do |t|
@@ -95,6 +126,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_000003) do
     t.datetime "remember_created_at"
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
+    t.string "reset_password_token_digest"
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
@@ -148,6 +180,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_000003) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "health_profiles", "users"
+  add_foreign_key "subscriptions", "users"
   add_foreign_key "user_media", "users"
   add_foreign_key "workout_day_exercises", "exercises"
   add_foreign_key "workout_day_exercises", "workout_days"

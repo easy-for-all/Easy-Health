@@ -9,9 +9,10 @@ export function BottomNav() {
   const t = useTranslations("nav");
 
   const ITEMS = [
-    { href: "/workout/today", label: t("workout"), icon: "🏋️" },
-    { href: "/plan",          label: t("workouts"), icon: "📋" },
-    { href: "/profile",       label: t("profile"),  icon: "👤" },
+    { href: "/workout/today", label: t("workout"),       icon: "🏋️" },
+    { href: "/plan",          label: t("workouts"),      icon: "📋" },
+    { href: "/billing",       label: t("subscription"),  icon: "💳" },
+    { href: "/profile",       label: t("profile"),       icon: "👤" },
   ];
 
   return (

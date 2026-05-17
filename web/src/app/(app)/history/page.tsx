@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
+import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import type { WorkoutSession } from "@/shared/types/workout";
 
 export default function HistoryPage() {
+  return <UpgradeGate><HistoryContent /></UpgradeGate>;
+}
+
+function HistoryContent() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
