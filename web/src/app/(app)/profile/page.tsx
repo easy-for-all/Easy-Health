@@ -69,7 +69,9 @@ export default function ProfilePage() {
     setError("");
     setSaving(true);
     try {
-      const updated = await api.patch<HealthProfile>("/api/v1/health_profile", form);
+      const updated = profile
+        ? await api.patch<HealthProfile>("/api/v1/health_profile", form)
+        : await api.post<HealthProfile>("/api/v1/health_profile", form);
       setProfile(updated);
       setEditing(false);
     } catch (err) {
