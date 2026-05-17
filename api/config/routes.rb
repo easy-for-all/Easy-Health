@@ -48,6 +48,8 @@ Rails.application.routes.draw do
 
       resources :health_data_points, only: [:index, :update]
 
+      resource :detailed_profile, only: [:show]
+
       namespace :billing do
         post :checkout
         post :portal

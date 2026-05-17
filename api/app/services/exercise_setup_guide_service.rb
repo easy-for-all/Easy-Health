@@ -7,20 +7,35 @@ class ExerciseSetupGuideService
     client = Anthropic::Client.new(access_token: ENV.fetch("ANTHROPIC_API_KEY"))
 
     prompt = <<~PROMPT
-      Você é um personal trainer certificado com experiência em ensinar iniciantes.
+      Você é personal trainer. Responda em português brasileiro, de forma curta e direta.
 
-      Para o exercício "#{@exercise.name}" (grupo muscular: #{@exercise.muscle_group || "não especificado"}), escreva um guia de configuração completo para alguém que nunca usou esse equipamento.
+      Exercício: "#{@exercise.name}"
+      Músculo principal: #{@exercise.muscle_group || "geral"}
 
-      O guia deve conter exatamente estas seções numeradas:
-      1. Equipamento necessário
-      2. Ajuste do banco ou assento (altura, distância, inclinação — seja específico com detalhes práticos)
-      3. Posição dos pés e pernas (onde apoiar, ângulo dos joelhos, largura)
-      4. Posição das mãos e pegada (largura, tipo de pegada, pressão dos dedos)
-      5. Postura do corpo (coluna, ombros, cabeça, contração do abdômen)
-      6. Como se posicionar antes do primeiro movimento
-      7. Erros comuns de iniciantes e como evitá-los
+      Gere um guia prático no formato abaixo. Sem Markdown (sem #, **, *). Apenas texto limpo com as seções exatas:
 
-      Escreva em português brasileiro, de forma clara e direta, usando linguagem simples. Seja muito específico — imagine que a pessoa está sentada no aparelho agora e nunca fez isso antes.
+      COMO FAZER
+      1. [passo curto]
+      2. [passo curto]
+      3. [passo curto]
+      4. [passo curto]
+      5. [passo curto]
+
+      CONFIGURAÇÃO INICIAL
+      - [posição corpo/banco]
+      - [posição mãos/pés]
+      - [pegada/apoio]
+      - [carga sugerida para iniciante]
+
+      ERROS COMUNS
+      - [erro 1]
+      - [erro 2]
+      - [erro 3]
+
+      DICA PARA INICIANTE
+      [uma frase curta e prática]
+
+      Máximo de 2 linhas por item. Sem introdução. Sem conclusão.
     PROMPT
 
     cfg = AiConfig.for(:setup_guide)
