@@ -59,5 +59,8 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d &&
             sleep 15 &&
             docker compose -f docker-compose.prod.yml exec -T api bin/rails db:migrate &&
-            docker compose -f docker-compose.prod.yml exec -T api bin/rails exercises:import_local_images
+            docker compose -f docker-compose.prod.yml exec -T api bin/rails exercises:import_local_images &&
+            docker compose -f docker-compose.prod.yml run --rm \
+              -v /home/easy/Easy-Health/external/free-exercise-db/exercises:/external/free-exercise-db/exercises \
+              api bin/rails exercises:import_all || true
           "
