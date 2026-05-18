@@ -7,10 +7,7 @@ import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
 function resolveImageSrc(src: string): string {
-  if (src?.startsWith("/")) return `${API_URL}${src}`;
   return src;
 }
 

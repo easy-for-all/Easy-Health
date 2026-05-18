@@ -49,6 +49,10 @@ export default withNextIntl({
         source: "/rails/:path*",
         destination: `${internalApiUrl}/rails/:path*`,
       },
+      {
+        source: "/exercise-images/:path*",
+        destination: `${internalApiUrl}/exercise-images/:path*`,
+      },
     ];
   },
 });
