@@ -76,6 +76,8 @@ export default function ProfilePage() {
   const [pendingDataPoints, setPendingDataPoints] = useState<ExtractedDataPoint[]>([]);
   const [confirmingDp, setConfirmingDp] = useState<number | null>(null);
   const [bodyAnalysis, setBodyAnalysis] = useState<{ id: number; observation: string; confidence: number | null } | null>(null);
+  const [photoHistoryOpen, setPhotoHistoryOpen] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState<UserMedia | null>(null);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -229,7 +231,6 @@ export default function ProfilePage() {
 
   const bodyPhotos = mediaItems.filter((m) => m.category === "body_photo");
   const exams      = mediaItems.filter((m) => m.category === "exam");
-  const currentTabItems = mediaTab === "body_photo" ? bodyPhotos : exams;
 
   const initials = user?.name
     ? user.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()
@@ -462,30 +463,57 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* Before/After card — only for body_photo with 2+ photos */}
-        {mediaTab === "body_photo" && bodyPhotos.length >= 2 && (
-          <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">
-            <p className="mb-2 text-xs font-semibold text-primary-600">{t("beforeVsNow")}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[bodyPhotos[bodyPhotos.length - 1], bodyPhotos[0]].map((photo, idx) => (
-                <div key={photo.id} className="text-center">
-                  <img
-                    src={`${API_URL}${photo.file_url}`}
-                    alt={idx === 0 ? "Antes" : "Agora"}
-                    className="h-32 w-full rounded-lg object-cover"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">{idx === 0 ? t("before") : t("now")}</p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
-                  </p>
+        {/* Body photos: before/after + history button */}
+        {mediaTab === "body_photo" && (
+          bodyPhotos.length === 0 ? (
+            <p className="text-center text-sm text-gray-400">{t("noPhotos")}</p>
+          ) : (
+            <>
+              <div className="mb-3 rounded-xl border border-primary-100 bg-primary-50 p-3">
+                <p className="mb-2 text-xs font-semibold text-primary-600">{t("beforeVsNow")}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {bodyPhotos.length >= 2 ? (
+                    <button onClick={() => setLightboxPhoto(bodyPhotos[bodyPhotos.length - 1])} className="text-center">
+                      <img
+                        src={`${API_URL}${bodyPhotos[bodyPhotos.length - 1].file_url}`}
+                        alt="Antes"
+                        className="h-32 w-full rounded-lg object-cover"
+                      />
+                      <p className="mt-1 text-xs font-semibold text-gray-600">{t("before")}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(bodyPhotos[bodyPhotos.length - 1].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    </button>
+                  ) : (
+                    <div className="flex h-32 items-center justify-center rounded-lg bg-gray-100">
+                      <p className="px-2 text-center text-xs text-gray-400">Adicione mais fotos para comparar</p>
+                    </div>
+                  )}
+                  <button onClick={() => setLightboxPhoto(bodyPhotos[0])} className="text-center">
+                    <img
+                      src={`${API_URL}${bodyPhotos[0].file_url}`}
+                      alt="Agora"
+                      className="h-32 w-full rounded-lg object-cover"
+                    />
+                    <p className="mt-1 text-xs font-semibold text-gray-600">{t("now")}</p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(bodyPhotos[0].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  </button>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+              <button
+                onClick={() => setPhotoHistoryOpen(true)}
+                className="w-full rounded-xl border border-primary-100 bg-primary-50 py-2.5 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
+              >
+                Histórico de fotos ({bodyPhotos.length})
+              </button>
+            </>
+          )
         )}
 
         {/* Toggle lista/grade — somente para exames */}
-        {mediaTab === "exam" && currentTabItems.length > 0 && (
+        {mediaTab === "exam" && exams.length > 0 && (
           <div className="mb-3 flex justify-end gap-1">
             <button
               onClick={() => setMediaViewMode("grid")}
@@ -502,52 +530,52 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Fotos e exames */}
-        {currentTabItems.length === 0 ? (
-          <p className="text-center text-sm text-gray-400">
-            {mediaTab === "body_photo" ? t("noPhotos") : t("noExams")}
-          </p>
-        ) : mediaTab === "exam" && mediaViewMode === "list" ? (
-          <div className="space-y-2">
-            {currentTabItems.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
-                {item.mime_type === "application/pdf" ? (
-                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-red-50 text-xl">📄</div>
-                ) : (
-                  <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-900">{item.file_name ?? "Arquivo"}</p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
-                    {item.file_size ? ` · ${(item.file_size / 1024).toFixed(0)} KB` : ""}
-                  </p>
-                </div>
-                <button onClick={() => handleDeleteMedia(item.id)} className="flex-shrink-0 text-xs text-red-400 hover:text-red-600">{t("removeMedia")}</button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {currentTabItems.map((item) => (
-              <div key={item.id} className="relative">
-                {item.mime_type === "application/pdf" ? (
-                  <div className="flex h-32 w-full items-center justify-center rounded-lg bg-gray-100 text-3xl">📄</div>
-                ) : (
-                  <img src={`${API_URL}${item.file_url}`} alt="Foto" className="h-32 w-full rounded-lg object-cover" />
-                )}
-                <div className="mt-1 flex items-center justify-between">
+        {/* Exames */}
+        {mediaTab === "exam" && (
+          exams.length === 0 ? (
+            <p className="text-center text-sm text-gray-400">{t("noExams")}</p>
+          ) : mediaViewMode === "list" ? (
+            <div className="space-y-2">
+              {exams.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
+                  {item.mime_type === "application/pdf" ? (
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-red-50 text-xl">📄</div>
+                  ) : (
+                    <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-gray-500">
-                      {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                    <p className="truncate text-sm font-medium text-gray-900">{item.file_name ?? "Arquivo"}</p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                      {item.file_size ? ` · ${(item.file_size / 1024).toFixed(0)} KB` : ""}
                     </p>
-                    {item.file_name && <p className="truncate text-xs text-gray-400">{item.file_name}</p>}
                   </div>
-                  <button onClick={() => handleDeleteMedia(item.id)} className="ml-1 flex-shrink-0 text-xs text-red-400 hover:text-red-600">✕</button>
+                  <button onClick={() => handleDeleteMedia(item.id)} className="flex-shrink-0 text-xs text-red-400 hover:text-red-600">{t("removeMedia")}</button>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {exams.map((item) => (
+                <div key={item.id} className="relative">
+                  {item.mime_type === "application/pdf" ? (
+                    <div className="flex h-32 w-full items-center justify-center rounded-lg bg-gray-100 text-3xl">📄</div>
+                  ) : (
+                    <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-32 w-full rounded-lg object-cover" />
+                  )}
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs text-gray-500">
+                        {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                      </p>
+                      {item.file_name && <p className="truncate text-xs text-gray-400">{item.file_name}</p>}
+                    </div>
+                    <button onClick={() => handleDeleteMedia(item.id)} className="ml-1 flex-shrink-0 text-xs text-red-400 hover:text-red-600">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
 
@@ -602,6 +630,79 @@ export default function ProfilePage() {
           </a>
         </div>
       </div>
+
+      {/* ─── Photo History Bottom Sheet ──────────────────────────────────────── */}
+      {photoHistoryOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/40"
+          onClick={() => setPhotoHistoryOpen(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-gray-200" />
+            <div className="mb-4 mt-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">
+                Histórico de fotos ({bodyPhotos.length})
+              </h3>
+              <button
+                onClick={() => setPhotoHistoryOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-sm text-gray-500"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {bodyPhotos.map((photo) => (
+                <button
+                  key={photo.id}
+                  onClick={() => {
+                    setPhotoHistoryOpen(false);
+                    setLightboxPhoto(photo);
+                  }}
+                  className="text-center"
+                >
+                  <img
+                    src={`${API_URL}${photo.file_url}`}
+                    alt="Foto corporal"
+                    className="h-28 w-full rounded-xl object-cover"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Lightbox ────────────────────────────────────────────────────────── */}
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <button
+            onClick={() => setLightboxPhoto(null)}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-xl text-white"
+          >
+            ✕
+          </button>
+          <img
+            src={`${API_URL}${lightboxPhoto.file_url}`}
+            alt="Visualização"
+            className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          {lightboxPhoto.captured_at && (
+            <p className="absolute bottom-6 text-sm text-white/70">
+              {new Date(lightboxPhoto.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
