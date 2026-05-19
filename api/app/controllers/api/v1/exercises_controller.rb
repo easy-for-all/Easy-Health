@@ -34,19 +34,19 @@ module Api
 
         file     = params[:image]
         exercise = Exercise.find(params[:exercise_id])
-        candidates = Exercise.where(muscle_group: exercise.muscle_group)
-                             .or(Exercise.where(exercise_type: exercise.exercise_type))
-                             .where.not(id: exercise.id)
-                             .limit(20)
 
-        suggestions = ExerciseSubstituteService.new(
+        result = ExerciseSubstituteService.new(
           image_data:   file.read,
           content_type: file.content_type,
           exercise:     exercise,
-          candidates:   candidates
+          user:         current_user
         ).call
 
-        render json: { suggestions: suggestions.map { |e| exercise_json(e) } }
+        if result.nil?
+          return render json: { error: "Não foi possível identificar o aparelho. Tente com outra foto." }, status: :unprocessable_entity
+        end
+
+        render json: result
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Exercise not found" }, status: :not_found
       end

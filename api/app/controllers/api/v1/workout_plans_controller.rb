@@ -78,6 +78,37 @@ module Api
         render json: { error: "Workout not found" }, status: :not_found
       end
 
+      def duplicate_day
+        source = WorkoutDay
+          .joins(workout_plan: :user)
+          .where(workout_plans: { user_id: current_user.id })
+          .find(params[:id])
+
+        plan = source.workout_plan
+        max_position = plan.workout_days.maximum(:position) || plan.workout_days.count
+        new_day = plan.workout_days.create!(
+          name: "#{source.name} (cópia)",
+          day_of_week: nil,
+          position: max_position + 1
+        )
+
+        source.workout_day_exercises.includes(:exercise).each_with_index do |wde, idx|
+          new_day.workout_day_exercises.create!(
+            exercise: wde.exercise,
+            sets: wde.sets,
+            reps: wde.reps,
+            rest_seconds: wde.rest_seconds,
+            order_index: idx
+          )
+        end
+
+        render json: { day: serialize_day_with_exercises(new_day) }, status: :created
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Not found" }, status: :not_found
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+      end
+
       private
 
       def serialize_plan_summary(plan)

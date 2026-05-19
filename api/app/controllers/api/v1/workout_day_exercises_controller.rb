@@ -1,7 +1,7 @@
 module Api
   module V1
     class WorkoutDayExercisesController < BaseController
-      before_action(only: [:swap, :update]) { check_rate_limit!(:update_workout) }
+      before_action(only: [:swap, :update, :reorder]) { check_rate_limit!(:update_workout) }
 
       def swap
         wde = WorkoutDayExercise
@@ -54,6 +54,30 @@ module Api
         end
 
         wde.destroy!
+        head :no_content
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Not found" }, status: :not_found
+      end
+
+      def reorder
+        day = WorkoutDay
+          .joins(workout_plan: :user)
+          .where(workout_plans: { user_id: current_user.id })
+          .find(params[:workout_day_id])
+
+        ordered_ids = Array(params[:ordered_ids]).map(&:to_i)
+        existing_ids = day.workout_day_exercises.pluck(:id)
+
+        unless (ordered_ids - existing_ids).empty? && (existing_ids - ordered_ids).empty?
+          return render json: { error: "Invalid exercise IDs" }, status: :unprocessable_entity
+        end
+
+        WorkoutDayExercise.transaction do
+          ordered_ids.each_with_index do |id, idx|
+            day.workout_day_exercises.find(id).update!(order_index: idx)
+          end
+        end
+
         head :no_content
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Not found" }, status: :not_found
