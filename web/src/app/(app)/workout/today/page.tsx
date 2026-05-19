@@ -64,6 +64,8 @@ function WorkoutTodayContent() {
   const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const beepFiredRef = useRef(false);
 
   useEffect(() => {
     const dayIdParam = searchParams.get("day");
@@ -114,6 +116,7 @@ function WorkoutTodayContent() {
   }
 
   function startWorkout() {
+    unlockAudio();
     setStartTime(new Date());
     setPhase("warmup");
   }
@@ -145,13 +148,47 @@ function WorkoutTodayContent() {
     setCurrentSet((value) => Math.min(value, plannedSets));
   }
 
+  function unlockAudio() {
+    if (audioCtxRef.current) return;
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    audioCtxRef.current = ctx;
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+  }
+
+  function playBeep() {
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.6);
+  }
+
   function startRest(seconds: number) {
     setRestLeft(seconds);
     setPhase("rest");
+    beepFiredRef.current = false;
     timerRef.current = setInterval(() => {
       setRestLeft((prev) => {
         if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
+          if (!beepFiredRef.current) {
+            beepFiredRef.current = true;
+            playBeep();
+            navigator.vibrate?.(300);
+          }
           setPhase("exercising");
           return 0;
         }
@@ -161,6 +198,7 @@ function WorkoutTodayContent() {
   }
 
   function handleSetDone() {
+    unlockAudio();
     if (!day?.exercises) return;
     const exercise = day.exercises[currentIndex];
     const state = runtimeFor(exerciseRuntime, exercise);
@@ -244,6 +282,7 @@ function WorkoutTodayContent() {
       <OverviewScreen
         day={day!}
         runtime={exerciseRuntime}
+        sessions={sessions}
         onChangeRuntime={updateRuntime}
         onChangeDay={(nextDay) => {
           setDay(nextDay);
@@ -544,6 +583,7 @@ function ChooseScreen({
 function OverviewScreen({
   day,
   runtime,
+  sessions,
   onChangeRuntime,
   onChangeDay,
   onStart,
@@ -551,6 +591,7 @@ function OverviewScreen({
 }: {
   day: WorkoutDay;
   runtime: Record<number, ExerciseRuntime>;
+  sessions: WorkoutSession[];
   onChangeRuntime: (wdeId: number, patch: Partial<ExerciseRuntime>) => void;
   onChangeDay: (day: WorkoutDay) => void;
   onStart: () => void;
@@ -614,6 +655,24 @@ function OverviewScreen({
     setAddSearch("");
   }
 
+  async function handleMove(id: number, direction: "up" | "down") {
+    const idx = exercises.findIndex((e) => e.workout_day_exercise_id === id);
+    if (idx === -1) return;
+    if (direction === "up" && idx === 0) return;
+    if (direction === "down" && idx === exercises.length - 1) return;
+    const newList = [...exercises];
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    [newList[idx], newList[swapIdx]] = [newList[swapIdx], newList[idx]];
+    onChangeDay({ ...day, exercises: newList });
+    try {
+      await api.patch(`/api/v1/workout_days/${day.id}/exercises/reorder`, {
+        ordered_ids: newList.map((e) => e.workout_day_exercise_id),
+      });
+    } catch {
+      onChangeDay({ ...day, exercises: exercises });
+    }
+  }
+
   return (
   <>
     <div className="flex min-h-screen flex-col px-4 py-6">
@@ -649,8 +708,29 @@ function OverviewScreen({
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-gray-900">{ex.name}</p>
                   <p className="text-xs text-gray-400">{state.planned_sets} séries · {ex.reps} reps</p>
+                  {(() => {
+                    const prev = lastExerciseLog(sessions, ex.exercise_id);
+                    if (!prev) return <p className="text-xs text-gray-300">Nunca feito</p>;
+                    const date = new Date(prev.session.completed_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+                    const weight = prev.log.weight_kg ? ` · ${prev.log.weight_kg} kg` : "";
+                    return <p className="text-xs text-gray-300">Última: {date}{weight}</p>;
+                  })()}
                 </div>
-                <button onClick={() => openSwap(ex)} className="text-xs text-blue-500 hover:underline">Trocar</button>
+                <div className="flex flex-col items-end gap-1">
+                  <button onClick={() => openSwap(ex)} className="text-xs text-blue-500 hover:underline">Trocar</button>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleMove(ex.workout_day_exercise_id, "up")}
+                      disabled={exercises.indexOf(ex) === 0}
+                      className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-xs text-gray-400 disabled:opacity-25"
+                    >↑</button>
+                    <button
+                      onClick={() => handleMove(ex.workout_day_exercise_id, "down")}
+                      disabled={exercises.indexOf(ex) === exercises.length - 1}
+                      className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-xs text-gray-400 disabled:opacity-25"
+                    >↓</button>
+                  </div>
+                </div>
               </div>
               <div className="mt-2 flex gap-2">
                 {(ex.gif_url || ex.image_url) && (

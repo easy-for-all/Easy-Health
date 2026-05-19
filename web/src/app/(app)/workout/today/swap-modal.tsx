@@ -6,6 +6,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/shared/lib/api";
 import type { WorkoutDayExercise } from "@/shared/types/workout";
 
+type EquipmentIdentification = {
+  equipment_name: string;
+  localized_name: string;
+  confidence: number;
+  muscle_groups: string[];
+  compatible: boolean;
+  reason: string;
+};
+
 type ExerciseOption = {
   id: number;
   name: string;
@@ -63,6 +72,8 @@ export function SwapModal({
   const [searchLoading, setSearchLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<ExerciseOption[]>([]);
+  const [aiIdentification, setAiIdentification] = useState<EquipmentIdentification | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openSwapFetch = useCallback(async (wde: WorkoutDayExercise) => {
@@ -125,12 +136,17 @@ export function SwapModal({
     if (!file) return;
     setAiLoading(true);
     setAiSuggestions([]);
+    setAiIdentification(null);
+    setAiError(null);
     try {
       const form = new FormData();
       form.append("image", file);
       form.append("exercise_id", String(exercise.exercise_id));
-      const result = await api.uploadPost<{ suggestions: ExerciseOption[] }>("/api/v1/exercises/ai_substitute", form);
+      const result = await api.uploadPost<{ identification: EquipmentIdentification | null; suggestions: ExerciseOption[] }>("/api/v1/exercises/ai_substitute", form);
+      setAiIdentification(result.identification ?? null);
       setAiSuggestions(result.suggestions ?? []);
+    } catch {
+      setAiError("Não foi possível identificar o aparelho. Tente com outra foto.");
     } finally {
       setAiLoading(false);
     }
@@ -156,6 +172,38 @@ export function SwapModal({
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAiPhoto} />
             </label>
           )}
+
+          {aiError && (
+            <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{aiError}</p>
+          )}
+
+          {aiIdentification && (
+            <div className="mt-3 rounded-lg bg-white border border-primary-200 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{aiIdentification.localized_name}</p>
+                  <p className="text-xs text-gray-400">{aiIdentification.equipment_name}</p>
+                </div>
+                <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${aiIdentification.compatible ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                  {aiIdentification.compatible ? "Compatível" : "Incompatível"}
+                </span>
+              </div>
+              {aiIdentification.confidence < 0.5 && (
+                <p className="mt-1 text-xs text-amber-600">Foto pouco clara. Tente de outro ângulo.</p>
+              )}
+              {aiIdentification.reason && (
+                <p className="mt-1 text-xs text-gray-500">{aiIdentification.reason}</p>
+              )}
+              {aiIdentification.muscle_groups.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {aiIdentification.muscle_groups.map((g) => (
+                    <span key={g} className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-600">{g}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {aiSuggestions.map((alt) => (
             <button
               key={`ai-${alt.id}`}

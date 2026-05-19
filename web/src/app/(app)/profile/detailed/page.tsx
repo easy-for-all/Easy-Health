@@ -131,6 +131,44 @@ function DocIcon() {
   );
 }
 
+function BodyFatVisual({ fatPct }: { fatPct: number }) {
+  const getClass = (pct: number) => {
+    if (pct < 10) return { label: "Atlético",   color: "#0ea5e9" };
+    if (pct < 14) return { label: "Fitness",    color: "#22c55e" };
+    if (pct < 18) return { label: "Aceitável",  color: "#84cc16" };
+    if (pct < 25) return { label: "Médio",      color: "#f59e0b" };
+    if (pct < 32) return { label: "Alto",       color: "#f97316" };
+    return               { label: "Muito Alto", color: "#ef4444" };
+  };
+  const { label, color } = getClass(fatPct);
+  const opacity = Math.min(0.15 + fatPct / 60, 0.85);
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg viewBox="0 0 80 160" className="w-20 h-40" xmlns="http://www.w3.org/2000/svg">
+        {/* Head */}
+        <ellipse cx="40" cy="13" rx="11" ry="12" fill={color} fillOpacity={opacity} stroke="#d1d5db" strokeWidth="1.5" />
+        {/* Neck */}
+        <rect x="33" y="24" width="14" height="7" fill={color} fillOpacity={opacity} stroke="#d1d5db" strokeWidth="1.5" />
+        {/* Torso */}
+        <path d="M17 31 Q13 58 15 88 L65 88 Q67 58 63 31 Q52 33 40 33 Q28 33 17 31 Z" fill={color} fillOpacity={opacity} stroke="#d1d5db" strokeWidth="1.5" />
+        {/* Left arm */}
+        <path d="M17 33 Q9 52 11 77 Q15 79 19 77 Q19 58 21 35 Z" fill={color} fillOpacity={opacity} stroke="#d1d5db" strokeWidth="1.5" />
+        {/* Right arm */}
+        <path d="M63 33 Q71 52 69 77 Q65 79 61 77 Q61 58 59 35 Z" fill={color} fillOpacity={opacity} stroke="#d1d5db" strokeWidth="1.5" />
+        {/* Left leg */}
+        <path d="M15 88 Q13 118 15 145 Q23 147 29 145 Q31 118 33 88 Z" fill={color} fillOpacity={opacity} stroke="#d1d5db" strokeWidth="1.5" />
+        {/* Right leg */}
+        <path d="M65 88 Q67 118 65 145 Q57 147 51 145 Q49 118 47 88 Z" fill={color} fillOpacity={opacity} stroke="#d1d5db" strokeWidth="1.5" />
+      </svg>
+      <p className="text-2xl font-bold" style={{ color }}>{fatPct}%</p>
+      <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: color }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DetailedProfilePage() {
@@ -189,6 +227,27 @@ export default function DetailedProfilePage() {
 
   const hasExamAnalysis = (mediaId: number | null | undefined) =>
     mediaId != null && examPoints.some((dp) => dp.user_media_id === mediaId);
+
+  // Estimated analysis calculations
+  const estW   = data.physical?.weight_kg ?? null;
+  const estH   = data.physical?.height_cm ?? null;
+  const estAge = data.physical?.age ?? null;
+  const estFatPct = compositionPoints.find((dp) => dp.field_name === "body_fat_pct")?.value ?? null;
+  const estBmiRaw = data.physical?.bmi ?? (estW && estH ? estW / ((estH / 100) ** 2) : null);
+  const estBmi = estBmiRaw ? Math.round(estBmiRaw * 10) / 10 : null;
+  const estLeanMass = estW && estFatPct != null ? Math.round(estW * (1 - estFatPct / 100) * 10) / 10 : null;
+  const estIdealMin = estH ? Math.round(18.5 * (estH / 100) ** 2 * 10) / 10 : null;
+  const estIdealMax = estH ? Math.round(24.9 * (estH / 100) ** 2 * 10) / 10 : null;
+  const estBmr = estW && estH && estAge ? Math.round(10 * estW + 6.25 * estH - 5 * estAge) : null;
+  const estBodyWater = estLeanMass
+    ? Math.round(estLeanMass * 0.73 * 10) / 10
+    : estW ? Math.round(estW * 0.60 * 10) / 10 : null;
+  const estBmiClass = !estBmi ? null
+    : estBmi < 18.5 ? { label: "Abaixo do peso", color: "text-blue-600" }
+    : estBmi < 25   ? { label: "Peso normal",    color: "text-green-600" }
+    : estBmi < 30   ? { label: "Sobrepeso",      color: "text-amber-600" }
+    :                 { label: "Obesidade",       color: "text-red-600" };
+  const hasEstData = !!(estBmi || estLeanMass || estIdealMin || estBmr);
 
   const isEmpty = !data.physical && data_points.length === 0 && media.length === 0;
 
@@ -249,6 +308,74 @@ export default function DetailedProfilePage() {
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
             Use como acompanhamento de evolução, não como diagnóstico médico.
           </p>
+        </Section>
+      )}
+
+      {/* 1b. Análise Detalhada Estimada */}
+      {hasEstData && (
+        <Section title="Análise Detalhada" subtitle="Estimativas com base nos seus dados físicos">
+          <div className="space-y-3">
+            {estFatPct != null && (
+              <div className="flex items-center gap-4">
+                <div className="flex-1 space-y-2">
+                  {estBmi && estBmiClass && (
+                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                      <p className="text-xs text-gray-500">IMC</p>
+                      <p className={`text-xl font-bold leading-none ${estBmiClass.color}`}>{estBmi}</p>
+                      <p className={`mt-0.5 text-xs ${estBmiClass.color}`}>{estBmiClass.label}</p>
+                    </div>
+                  )}
+                  {estLeanMass && (
+                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                      <p className="text-xs text-gray-500">Massa Magra</p>
+                      <p className="text-xl font-bold leading-none text-gray-800">
+                        {estLeanMass}<span className="ml-1 text-xs font-normal">kg</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <BodyFatVisual fatPct={estFatPct} />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              {estFatPct == null && estBmi && estBmiClass && (
+                <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <p className="text-xs text-gray-500">IMC</p>
+                  <p className={`text-xl font-bold leading-none ${estBmiClass.color}`}>{estBmi}</p>
+                  <p className={`mt-0.5 text-xs ${estBmiClass.color}`}>{estBmiClass.label}</p>
+                </div>
+              )}
+              {estIdealMin && estIdealMax && (
+                <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <p className="text-xs text-gray-500">Peso Ideal</p>
+                  <p className="text-sm font-bold text-gray-800">
+                    {estIdealMin}–{estIdealMax}<span className="ml-1 text-xs font-normal">kg</span>
+                  </p>
+                </div>
+              )}
+              {estBmr && (
+                <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <p className="text-xs text-gray-500">TMB Estimada</p>
+                  <p className="text-sm font-bold text-gray-800">
+                    ~{estBmr}<span className="ml-1 text-xs font-normal">kcal/dia</span>
+                  </p>
+                </div>
+              )}
+              {estBodyWater && (
+                <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <p className="text-xs text-gray-500">Água Corporal</p>
+                  <p className="text-sm font-bold text-gray-800">
+                    ~{estBodyWater}<span className="ml-1 text-xs font-normal">L</span>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+              Valores estimados para acompanhamento. Consulte um profissional para avaliação precisa.
+            </p>
+          </div>
         </Section>
       )}
 

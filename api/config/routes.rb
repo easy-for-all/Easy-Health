@@ -22,11 +22,12 @@ Rails.application.routes.draw do
       resource  :health_profile, only: [:show, :create, :update]
       patch     "health_profile", to: "health_profiles#update"
 
-      get  "workout_plans",            to: "workout_plans#index"
-      get  "workout_plan",            to: "workout_plans#show"
-      get  "workout_plan/today",      to: "workout_plans#today"
-      get  "workout_days/:id",        to: "workout_plans#day"
-      post "workout_plan/regenerate", to: "workout_plans#regenerate"
+      get  "workout_plans",              to: "workout_plans#index"
+      get  "workout_plan",              to: "workout_plans#show"
+      get  "workout_plan/today",        to: "workout_plans#today"
+      get  "workout_days/:id",          to: "workout_plans#day"
+      post "workout_plan/regenerate",   to: "workout_plans#regenerate"
+      post "workout_days/:id/duplicate", to: "workout_plans#duplicate_day"
 
       resources :exercises, only: [:index] do
         collection { post :ai_substitute }
@@ -36,7 +37,8 @@ Rails.application.routes.draw do
       post   "workout_day_exercises/:id/swap", to: "workout_day_exercises#swap"
       patch  "workout_day_exercises/:id",      to: "workout_day_exercises#update"
       delete "workout_day_exercises/:id",      to: "workout_day_exercises#destroy"
-      post   "workout_days/:workout_day_id/exercises", to: "workout_day_exercises#create"
+      post   "workout_days/:workout_day_id/exercises",        to: "workout_day_exercises#create"
+      patch  "workout_days/:workout_day_id/exercises/reorder", to: "workout_day_exercises#reorder"
 
       resources :workout_sessions, only: [:index, :create] do
         collection { get :stats }

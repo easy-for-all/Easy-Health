@@ -92,6 +92,24 @@ export default function PlanPage() {
     });
   }, []);
 
+  async function handleDuplicateDay(dayId: number) {
+    try {
+      const { day: newDay } = await api.post<{ day: import("@/shared/types/workout").WorkoutDay }>(
+        `/api/v1/workout_days/${dayId}/duplicate`,
+        {}
+      );
+      if (plan) {
+        setPlan({
+          ...plan,
+          days: [...plan.days, { ...newDay, exercise_count: newDay.exercises?.length ?? 0 }],
+        });
+      }
+      setSelectedDayId(newDay.id);
+    } catch {
+      setError("Erro ao duplicar treino.");
+    }
+  }
+
   function startWizard() {
     setError("");
     setPhase(profile ? "wizard_profile" : "wizard_days");
@@ -208,7 +226,7 @@ export default function PlanPage() {
 
       {phase === "view" && plan && (
         <>
-          <PlanView plan={plan} onDayClick={setSelectedDayId} />
+          <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} />
           <button onClick={startWizard} className="mt-6 w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">
             Replanejar
           </button>
@@ -611,27 +629,49 @@ function WizardCustomSplit({
 
 // ── Existing components ───────────────────────────────────────────────────────
 
-function PlanView({ plan, onDayClick }: { plan: WorkoutPlan; onDayClick: (dayId: number) => void }) {
+function PlanView({
+  plan,
+  onDayClick,
+  onDuplicate,
+}: {
+  plan: WorkoutPlan;
+  onDayClick: (dayId: number) => void;
+  onDuplicate?: (dayId: number) => void;
+}) {
   return (
     <div className="space-y-3">
       {plan.days?.map((day, idx) => (
-        <button
+        <div
           key={day.id}
-          onClick={() => onDayClick(day.id)}
-          className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left transition hover:border-primary-200 hover:bg-primary-50 active:scale-[0.99]"
+          className="rounded-xl border border-gray-100 bg-white transition hover:border-primary-200 hover:bg-primary-50"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-400">Treino {LETTERS[idx] ?? idx + 1}</p>
-              <p className="font-semibold text-gray-900">{day.name}</p>
-              <p className="mt-0.5 text-xs text-gray-400">
-                {day.exercise_count} exercícios
-                {day.muscle_groups?.length ? ` · ${day.muscle_groups.join(", ")}` : ""}
-              </p>
+          <button
+            onClick={() => onDayClick(day.id)}
+            className="w-full p-4 text-left"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-400">Treino {LETTERS[idx] ?? idx + 1}</p>
+                <p className="font-semibold text-gray-900">{day.name}</p>
+                <p className="mt-0.5 text-xs text-gray-400">
+                  {day.exercise_count} exercícios
+                  {day.muscle_groups?.length ? ` · ${day.muscle_groups.join(", ")}` : ""}
+                </p>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
             </div>
-            <span className="text-gray-300 text-lg">›</span>
-          </div>
-        </button>
+          </button>
+          {onDuplicate && (
+            <div className="border-t border-gray-50 px-4 pb-3 pt-2">
+              <button
+                onClick={() => onDuplicate(day.id)}
+                className="text-xs font-medium text-gray-400 hover:text-primary-600"
+              >
+                + Duplicar treino
+              </button>
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );
@@ -886,6 +926,25 @@ function PlanDayDetailDrawer({
     }
   }
 
+  async function handleMove(id: number, direction: "up" | "down") {
+    if (!day) return;
+    const idx = exercises.findIndex((e) => e.workout_day_exercise_id === id);
+    if (idx === -1) return;
+    if (direction === "up" && idx === 0) return;
+    if (direction === "down" && idx === exercises.length - 1) return;
+    const newList = [...exercises];
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    [newList[idx], newList[swapIdx]] = [newList[swapIdx], newList[idx]];
+    setExercises(newList);
+    try {
+      await api.patch(`/api/v1/workout_days/${day.id}/exercises/reorder`, {
+        ordered_ids: newList.map((e) => e.workout_day_exercise_id),
+      });
+    } catch {
+      setExercises(exercises);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setDrawerError("");
@@ -963,6 +1022,18 @@ function PlanDayDetailDrawer({
                         Excluir
                       </button>
                     </div>
+                  </div>
+                  <div className="flex flex-col gap-1 justify-center">
+                    <button
+                      onClick={() => handleMove(ex.workout_day_exercise_id, "up")}
+                      disabled={exercises.indexOf(ex) === 0}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50"
+                    >↑</button>
+                    <button
+                      onClick={() => handleMove(ex.workout_day_exercise_id, "down")}
+                      disabled={exercises.indexOf(ex) === exercises.length - 1}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50"
+                    >↓</button>
                   </div>
                 </div>
 
