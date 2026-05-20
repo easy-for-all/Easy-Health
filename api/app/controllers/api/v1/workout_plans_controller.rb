@@ -144,12 +144,16 @@ module Api
       end
 
       def serialize_day_with_exercises(day)
+        wdes = day.workout_day_exercises.includes(:exercise).to_a
+        exercise_ids = wdes.map { |wde| wde.exercise.id }
+        last_performed = exercise_last_performed(current_user, exercise_ids)
+
         {
           id: day.id,
           position: day.position,
           day_of_week: day.day_of_week,
           name: day.name,
-          exercises: day.workout_day_exercises.includes(:exercise).map do |wde|
+          exercises: wdes.map do |wde|
             {
               workout_day_exercise_id: wde.id,
               exercise_id: wde.exercise.id,
@@ -165,10 +169,31 @@ module Api
               sets: wde.sets,
               reps: wde.reps,
               rest_seconds: wde.rest_seconds,
-              order_index: wde.order_index
+              order_index: wde.order_index,
+              last_performed_at: last_performed[wde.exercise.id]
             }
           end
         }
+      end
+
+      # Returns hash { exercise_id => completed_at } for the user's most recent session per exercise
+      def exercise_last_performed(user, exercise_ids)
+        return {} if exercise_ids.empty?
+
+        rows = ActiveRecord::Base.connection.execute(<<~SQL.squish)
+          SELECT DISTINCT ON ((elem->>'exercise_id')::integer)
+            (elem->>'exercise_id')::integer AS exercise_id,
+            completed_at
+          FROM workout_sessions,
+            jsonb_array_elements(exercise_logs) AS elem
+          WHERE user_id = #{user.id.to_i}
+            AND (elem->>'exercise_id')::integer = ANY(ARRAY[#{exercise_ids.map(&:to_i).join(',')}])
+          ORDER BY (elem->>'exercise_id')::integer, completed_at DESC
+        SQL
+
+        rows.each_with_object({}) do |row, hash|
+          hash[row["exercise_id"].to_i] = row["completed_at"]
+        end
       end
 
       include ExerciseImageHelper

@@ -14,6 +14,7 @@ export interface WorkoutDayExercise {
   reps: number;
   rest_seconds: number;
   order_index: number;
+  last_performed_at?: string | null;
 }
 
 export interface WorkoutDay {

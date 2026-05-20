@@ -11,6 +11,7 @@ import { WARMUP_BY_TYPE, COOLDOWN_BY_TYPE } from "./warmup-data";
 import { SwapModal } from "./swap-modal";
 import { ExerciseInfoModal } from "./exercise-info-modal";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
+import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -57,7 +58,7 @@ function WorkoutTodayContent() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
   const [restLeft, setRestLeft] = useState(0);
-  const [startTime, setStartTime] = useState<Date | null>(null);
+  const { startTime, elapsedSeconds, beginSession, endSession } = useWorkoutSession();
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
   const [weightError, setWeightError] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
@@ -117,7 +118,7 @@ function WorkoutTodayContent() {
 
   function startWorkout() {
     unlockAudio();
-    setStartTime(new Date());
+    if (day) beginSession(day.id);
     setPhase("warmup");
   }
 
@@ -161,19 +162,30 @@ function WorkoutTodayContent() {
     source.start(0);
   }
 
+  function isSoundEnabled(): boolean {
+    try { return localStorage.getItem("wk_sound_enabled") !== "false"; } catch { return true; }
+  }
+
   function playBeep() {
+    if (!isSoundEnabled()) return;
     const ctx = audioCtxRef.current;
     if (!ctx) return;
     if (ctx.state === "suspended") ctx.resume();
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-    oscillator.connect(gain);
-    gain.connect(ctx.destination);
-    oscillator.frequency.value = 880;
-    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + 0.6);
+
+    const playTone = (startOffset: number, freq: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.4, ctx.currentTime + startOffset);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startOffset + duration);
+      osc.start(ctx.currentTime + startOffset);
+      osc.stop(ctx.currentTime + startOffset + duration);
+    };
+
+    playTone(0, 880, 0.15);
+    playTone(0.2, 1100, 0.25);
   }
 
   function startRest(seconds: number) {
@@ -309,7 +321,7 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "done") {
-    return <DoneScreen day={day!} startTime={startTime ?? new Date()} runtime={exerciseRuntime} onBack={() => router.push("/dashboard")} />;
+    return <DoneScreen day={day!} startTime={startTime ?? new Date()} runtime={exerciseRuntime} onBack={() => router.push("/dashboard")} onSaved={endSession} />;
   }
 
   const exercises = day!.exercises ?? [];
@@ -330,6 +342,9 @@ function WorkoutTodayContent() {
   if (phase === "rest") {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4">
+        <p className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-3 py-1 rounded-full mb-4">
+          Treino: {formatElapsed(elapsedSeconds)}
+        </p>
         <p className="text-sm font-medium uppercase tracking-wide text-gray-400">Descanso</p>
         <p className="mt-4 text-7xl font-bold text-primary-500">{restLeft}s</p>
         <p className="mt-2 text-gray-500">Próximo: {exercise.name}</p>
@@ -372,12 +387,15 @@ function WorkoutTodayContent() {
   return (
     <>
     <div className="flex min-h-screen flex-col px-4 py-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <span className="text-sm text-gray-500">{currentIndex + 1}/{exercises.length}</span>
-        <div className="mx-4 h-1.5 flex-1 rounded-full bg-gray-100">
-          <div className="h-1.5 rounded-full bg-primary-500 transition-all" style={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }} />
-        </div>
+        <span className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+          {formatElapsed(elapsedSeconds)}
+        </span>
         <button onClick={() => setPhase("done")} className="text-sm font-medium text-red-500">Encerrar</button>
+      </div>
+      <div className="mb-4 h-1.5 rounded-full bg-gray-100">
+        <div className="h-1.5 rounded-full bg-primary-500 transition-all" style={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }} />
       </div>
 
       <div className="flex flex-1 flex-col">
@@ -412,14 +430,21 @@ function WorkoutTodayContent() {
         </div>
         {(() => {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
-          if (!prev) return null;
-          const date = new Date(prev.session.completed_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
-          const weight = prev.log.weight_kg ? `${prev.log.weight_kg} kg` : null;
-          return (
-            <p className="mt-1 text-xs text-gray-400">
-              Última vez: {date}{weight ? ` · ${weight}` : ""}
-            </p>
-          );
+          if (prev) {
+            const date = new Date(prev.session.completed_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+            const weight = prev.log.weight_kg ? `${prev.log.weight_kg} kg` : null;
+            return (
+              <p className="mt-1 text-xs text-gray-400">
+                Última vez: {date}{weight ? ` · ${weight}` : ""}
+              </p>
+            );
+          }
+          if (exercise.last_performed_at) {
+            const daysAgo = Math.floor((Date.now() - new Date(exercise.last_performed_at).getTime()) / 86400000);
+            const label = daysAgo === 0 ? "hoje" : daysAgo === 1 ? "ontem" : `há ${daysAgo} dias`;
+            return <p className="mt-1 text-xs text-gray-400">Última vez: {label}</p>;
+          }
+          return null;
         })()}
         <p className="mt-2 text-gray-500">{exercise.description}</p>
 
@@ -842,11 +867,13 @@ function DoneScreen({
   startTime,
   runtime,
   onBack,
+  onSaved,
 }: {
   day: WorkoutDay;
   startTime: Date;
   runtime: Record<number, ExerciseRuntime>;
   onBack: () => void;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [finishedAt] = useState(() => new Date());
@@ -883,6 +910,7 @@ function DoneScreen({
         };
       }),
     });
+    onSaved?.();
     router.push("/dashboard");
     } catch {
       setSaveError("Erro ao salvar o treino. Tente novamente.");

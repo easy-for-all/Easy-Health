@@ -56,10 +56,19 @@ Rails.application.routes.draw do
         post :checkout
         post :portal
         get  :status
+        post :change_plan
+        post :cancel
+        post :reactivate
+        post :sync
       end
 
       namespace :webhooks do
         post :stripe
+      end
+
+      namespace :ai_agents do
+        get :personal_trainer
+        get :conditioning
       end
     end
   end
