@@ -111,6 +111,7 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
     api.get<BillingStatus>("/api/v1/billing/status")
@@ -138,13 +139,66 @@ export default function BillingPage() {
     setActionLoading("portal");
     setError(null);
     try {
-      const { portal_url } = await api.post<{ portal_url: string }>(
-        "/api/v1/billing/portal",
-        {}
-      );
+      const { portal_url } = await api.post<{ portal_url: string }>("/api/v1/billing/portal", {});
       window.location.href = portal_url;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Erro ao abrir portal.");
+      setActionLoading(null);
+    }
+  }, []);
+
+  const handleChangePlan = useCallback(async (plan: "pro_monthly" | "pro_yearly") => {
+    setActionLoading(`change_${plan}`);
+    setError(null);
+    try {
+      await api.post("/api/v1/billing/change_plan", { plan });
+      const updated = await api.get<BillingStatus>("/api/v1/billing/status");
+      setBilling(updated);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Erro ao alterar plano.");
+    } finally {
+      setActionLoading(null);
+    }
+  }, []);
+
+  const handleCancel = useCallback(async () => {
+    setActionLoading("cancel");
+    setError(null);
+    try {
+      await api.post("/api/v1/billing/cancel", {});
+      const updated = await api.get<BillingStatus>("/api/v1/billing/status");
+      setBilling(updated);
+      setConfirmCancel(false);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Erro ao cancelar assinatura.");
+    } finally {
+      setActionLoading(null);
+    }
+  }, []);
+
+  const handleReactivate = useCallback(async () => {
+    setActionLoading("reactivate");
+    setError(null);
+    try {
+      await api.post("/api/v1/billing/reactivate", {});
+      const updated = await api.get<BillingStatus>("/api/v1/billing/status");
+      setBilling(updated);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Erro ao reativar assinatura.");
+    } finally {
+      setActionLoading(null);
+    }
+  }, []);
+
+  const handleSync = useCallback(async () => {
+    setActionLoading("sync");
+    setError(null);
+    try {
+      const result = await api.post<{ message: string; subscription: BillingStatus }>("/api/v1/billing/sync", {});
+      setBilling(result.subscription);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Erro ao sincronizar.");
+    } finally {
       setActionLoading(null);
     }
   }, []);
@@ -200,11 +254,11 @@ export default function BillingPage() {
                     <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700">Plano atual</span>
                   ) : (
                     <button
-                      onClick={handlePortal}
+                      onClick={() => handleChangePlan("pro_monthly")}
                       disabled={actionLoading !== null}
                       className="rounded-xl bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 hover:bg-gray-700 transition"
                     >
-                      {actionLoading === "portal" ? "..." : "Mudar para este"}
+                      {actionLoading === "change_pro_monthly" ? "..." : "Mudar para este"}
                     </button>
                   )}
                 </div>
@@ -224,17 +278,55 @@ export default function BillingPage() {
                     <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700">Plano atual</span>
                   ) : (
                     <button
-                      onClick={handlePortal}
+                      onClick={() => handleChangePlan("pro_yearly")}
                       disabled={actionLoading !== null}
                       className="rounded-xl bg-primary-500 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 hover:bg-primary-600 transition"
                     >
-                      {actionLoading === "portal" ? "..." : "Mudar para este"}
+                      {actionLoading === "change_pro_yearly" ? "..." : "Mudar para este"}
                     </button>
                   )}
                 </div>
               </div>
             </div>
-            <p className="mt-2 text-xs text-gray-400 text-center">A mudança é feita via portal seguro do Stripe</p>
+
+            {/* Cancel / Reactivate */}
+            <div className="mt-4">
+              {billing.cancel_at_period_end ? (
+                <button
+                  onClick={handleReactivate}
+                  disabled={actionLoading !== null}
+                  className="w-full rounded-xl border border-green-300 bg-green-50 py-3 text-sm font-medium text-green-700 disabled:opacity-50"
+                >
+                  {actionLoading === "reactivate" ? "Aguarde..." : "Reativar assinatura"}
+                </button>
+              ) : (
+                <>
+                  {!confirmCancel ? (
+                    <button
+                      onClick={() => setConfirmCancel(true)}
+                      className="w-full text-center text-xs text-gray-400 underline underline-offset-2 py-2"
+                    >
+                      Cancelar assinatura
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                      <p className="text-sm text-red-700 font-medium mb-3">Cancelar assinatura?</p>
+                      <p className="text-xs text-red-600 mb-3">Você manterá o acesso até o final do período pago.</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => setConfirmCancel(false)} className="flex-1 rounded-lg border border-gray-300 py-2 text-xs text-gray-600">Manter plano</button>
+                        <button
+                          onClick={handleCancel}
+                          disabled={actionLoading !== null}
+                          className="flex-1 rounded-lg bg-red-600 py-2 text-xs font-medium text-white disabled:opacity-50"
+                        >
+                          {actionLoading === "cancel" ? "..." : "Confirmar cancelamento"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
 
@@ -308,17 +400,21 @@ export default function BillingPage() {
               disabled={actionLoading !== null}
               className="w-full border border-gray-300 text-gray-700 rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-gray-50 transition"
             >
-              {actionLoading === "portal" ? "Aguarde..." : "Gerenciar assinatura"}
+              {actionLoading === "portal" ? "Aguarde..." : "Gerenciar no Stripe"}
             </button>
-            {isPaid && (
-              <button
-                onClick={handlePortal}
-                disabled={actionLoading !== null}
-                className="w-full border border-gray-200 text-gray-500 rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-gray-50 transition"
-              >
-                Cancelar ou alterar plano
-              </button>
-            )}
+          </div>
+        )}
+
+        {/* Sync — visible if subscription seems off */}
+        {billing && !isPaid && billing.stripe_customer_id && (
+          <div className="mt-4">
+            <button
+              onClick={handleSync}
+              disabled={actionLoading !== null}
+              className="w-full text-center text-xs text-gray-400 underline underline-offset-2 py-2"
+            >
+              {actionLoading === "sync" ? "Sincronizando..." : "Sincronizar status da assinatura"}
+            </button>
           </div>
         )}
       </div>

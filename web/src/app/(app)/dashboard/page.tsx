@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
+import { AiRecommendationsCard } from "@/shared/components/ai-recommendations-card";
 import type { WorkoutPlan, WorkoutDay } from "@/shared/types/workout";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -74,7 +75,11 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <div className="mt-6 flex gap-3">
+      <section className="mt-6">
+        <AiRecommendationsCard />
+      </section>
+
+      <div className="mt-4 flex gap-3">
         <Link href="/history" className="flex-1 rounded-lg border border-gray-200 py-3 text-center text-sm font-medium text-gray-600 hover:bg-gray-50">
           Histórico
         </Link>
@@ -84,30 +89,53 @@ export default function DashboardPage() {
 }
 
 function WorkoutCard({ plan }: { plan: WorkoutPlan | null }) {
+  const today = new Date().toLocaleDateString("pt-BR", { weekday: "long" });
   return (
     <Link href="/workout/today">
-      <div className="rounded-2xl bg-primary-500 p-5 text-white">
-        <p className="text-sm font-medium text-primary-100">Treinar agora</p>
-        <p className="mt-1 text-2xl font-bold">Escolha A, B, C...</p>
-        <p className="mt-1 text-sm text-primary-100">{plan?.days?.length ?? 0} treinos disponíveis</p>
-        <div className="mt-4 inline-block rounded-full bg-white px-4 py-2 text-sm font-semibold text-primary-600">
-          Escolher treino →
+      <div className="rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 p-5 text-white shadow-md">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary-200">{today}</p>
+        <p className="mt-1 text-2xl font-bold">Treinar agora</p>
+        <p className="mt-1 text-sm text-primary-100">{plan?.days?.length ?? 0} treinos no seu plano</p>
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-primary-600">
+          Escolher treino <span aria-hidden>→</span>
         </div>
       </div>
     </Link>
   );
 }
 
+const MUSCLE_COLORS: Record<string, string> = {
+  chest: "bg-red-100 text-red-700",
+  back: "bg-blue-100 text-blue-700",
+  shoulders: "bg-purple-100 text-purple-700",
+  biceps: "bg-yellow-100 text-yellow-700",
+  triceps: "bg-orange-100 text-orange-700",
+  legs: "bg-green-100 text-green-700",
+  core: "bg-teal-100 text-teal-700",
+};
+
 function DayCard({ day, index }: { day: WorkoutDay; index: number }) {
+  const muscles = day.muscle_groups?.slice(0, 2) ?? [];
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4">
+    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold text-primary-600">Treino {LETTERS[index] ?? index + 1}</p>
-          <p className="font-semibold text-gray-900">{day.name}</p>
-          <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600">
+              {LETTERS[index] ?? index + 1}
+            </span>
+            <p className="font-semibold text-gray-900 truncate">{day.name}</p>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-gray-400">{day.exercise_count} exercícios</span>
+            {muscles.map((m) => (
+              <span key={m} className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-gray-100 text-gray-600"}`}>
+                {m}
+              </span>
+            ))}
+          </div>
         </div>
-        <Link href={`/workout/today?day=${day.id}`} className="rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white">
+        <Link href={`/workout/today?day=${day.id}`} className="ml-3 rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white whitespace-nowrap">
           Treinar
         </Link>
       </div>

@@ -1,5 +1,51 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Footer } from "@/shared/components/footer";
+import { FeatureCard } from "@/shared/components/feature-card";
+
+export const metadata: Metadata = {
+  title: "EasyHealth — Treino inteligente com IA",
+  description: "A EasyHealth cria treinos personalizados com IA, acompanha sua evolução e ajuda você a manter uma rotina fitness mais inteligente.",
+};
+
+const FEATURES = [
+  {
+    icon: "🤖",
+    title: "IA para treino",
+    description: "Receba sugestões de treino com base no seu objetivo, rotina e evolução.",
+    href: "/ia-para-treino",
+  },
+  {
+    icon: "📋",
+    title: "Treino personalizado",
+    description: "Planos ajustados ao seu nível, frequência e disponibilidade.",
+    href: "/treino-personalizado",
+  },
+  {
+    icon: "🔥",
+    title: "Emagrecimento",
+    description: "Organize uma rotina de treino focada em perda de gordura e consistência.",
+    href: "/emagrecimento",
+  },
+  {
+    icon: "🏠",
+    title: "Treino em casa",
+    description: "Treinos possíveis mesmo sem academia, com exercícios adaptados ao seu contexto.",
+    href: "/treino-em-casa",
+  },
+  {
+    icon: "🩺",
+    title: "Análise de exames",
+    description: "Use seus dados de saúde para apoiar uma jornada fitness mais personalizada.",
+    href: "/analise-de-exames",
+  },
+  {
+    icon: "💳",
+    title: "Preços",
+    description: "Escolha o plano ideal para começar sua evolução.",
+    href: "/precos",
+  },
+];
 
 export default function LandingPage() {
   return (
@@ -8,10 +54,13 @@ export default function LandingPage() {
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="Easy Health" className="h-10 w-auto" />
-            <span className="text-xl font-bold text-primary-600">Easy Health</span>
+            <img src="/logo.png" alt="EasyHealth" className="h-10 w-auto" />
+            <span className="text-xl font-bold text-primary-600">EasyHealth</span>
           </div>
           <nav className="flex items-center gap-3">
+            <Link href="/precos" className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 sm:block">
+              Preços
+            </Link>
             <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900">
               Entrar
             </Link>
@@ -26,63 +75,74 @@ export default function LandingPage() {
         {/* Hero */}
         <section className="mx-auto max-w-5xl px-6 py-20 text-center">
           <h1 className="text-4xl font-bold leading-tight text-gray-900 sm:text-5xl">
-            Treine com consistência.<br />
-            <span className="text-primary-500">Evolua de verdade.</span>
+            Treino inteligente com IA<br />
+            <span className="text-primary-500">para evoluir com mais constância.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg text-gray-500">
-            Easy Health simplifica seu plano de treino, acompanha sua evolução e te mantém no caminho — sem complicação.
+            A EasyHealth cria treinos personalizados, acompanha sua evolução e ajuda você a manter uma rotina fitness mais inteligente.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link href="/sign-up" className="w-full rounded-xl bg-primary-500 px-8 py-4 text-base font-semibold text-white hover:bg-primary-600 sm:w-auto">
-              Começar gratuitamente
+              Começar agora
             </Link>
-            <Link href="/login" className="w-full rounded-xl border border-gray-200 px-8 py-4 text-base font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto">
-              Já tenho conta
+            <Link href="#como-funciona" className="w-full rounded-xl border border-gray-200 px-8 py-4 text-base font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto">
+              Ver como funciona
             </Link>
           </div>
         </section>
 
-        {/* Quem somos */}
-        <section className="bg-primary-50 py-20">
+        {/* Como funciona — Feature cards */}
+        <section id="como-funciona" className="bg-gray-50 py-20">
           <div className="mx-auto max-w-5xl px-6">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold text-gray-900">Quem somos</h2>
-              <p className="mt-4 text-gray-600 leading-relaxed">
-                Somos um time apaixonado por saúde e tecnologia. Acreditamos que a consistência nos pequenos hábitos é o que transforma a vida das pessoas — e criamos a Easy Health para tornar isso possível no dia a dia de qualquer pessoa.
-              </p>
-              <p className="mt-4 text-gray-600 leading-relaxed">
-                Nossa plataforma foi pensada para atletas amadores, iniciantes e qualquer pessoa que queira se mover mais, dormir melhor e cuidar do próprio corpo com inteligência.
-              </p>
+            <div className="mb-12 text-center">
+              <h2 className="text-3xl font-bold text-gray-900">O que a EasyHealth faz por você</h2>
+              <p className="mt-4 text-gray-500">Ferramentas de IA para tornar sua rotina fitness mais simples e eficaz.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map((f) => (
+                <FeatureCard key={f.href} {...f} />
+              ))}
             </div>
           </div>
         </section>
 
-        {/* Propósito */}
-        <section className="py-20">
+        {/* Sobre */}
+        <section className="bg-primary-50 py-20">
           <div className="mx-auto max-w-5xl px-6">
             <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold text-gray-900">Nosso propósito</h2>
-              <p className="mt-4 text-gray-600 leading-relaxed">
-                Saúde não precisa ser complicada. Queremos eliminar a barreira entre a intenção e a ação — oferecendo ferramentas simples, inteligentes e adaptáveis ao ritmo de cada pessoa.
+              <h2 className="text-3xl font-bold text-gray-900">Feito para quem quer evoluir de verdade</h2>
+              <p className="mt-4 leading-relaxed text-gray-600">
+                Somos um time apaixonado por saúde e tecnologia. A EasyHealth foi criada para tornar a rotina fitness mais simples, inteligente e adaptável — seja você iniciante ou avançado.
               </p>
               <div className="mt-10 grid gap-6 sm:grid-cols-3">
-                <div className="rounded-2xl bg-primary-50 p-6 text-center">
+                <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
                   <p className="text-3xl">🎯</p>
                   <p className="mt-3 font-semibold text-gray-900">Foco no que importa</p>
-                  <p className="mt-2 text-sm text-gray-500">Sem distrações. Só o treino que você precisa fazer hoje.</p>
+                  <p className="mt-2 text-sm text-gray-500">Só o treino que você precisa fazer hoje.</p>
                 </div>
-                <div className="rounded-2xl bg-primary-50 p-6 text-center">
+                <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
                   <p className="text-3xl">📈</p>
                   <p className="mt-3 font-semibold text-gray-900">Evolução visível</p>
-                  <p className="mt-2 text-sm text-gray-500">Registre sua carga e veja sua evolução semana a semana.</p>
+                  <p className="mt-2 text-sm text-gray-500">Registre cargas e acompanhe seu progresso semana a semana.</p>
                 </div>
-                <div className="rounded-2xl bg-primary-50 p-6 text-center">
+                <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
                   <p className="text-3xl">🔄</p>
                   <p className="mt-3 font-semibold text-gray-900">Adaptável ao seu ritmo</p>
                   <p className="mt-2 text-sm text-gray-500">Troque exercícios, ajuste cargas e siga no seu ritmo.</p>
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* CTA final */}
+        <section className="bg-primary-500 py-20">
+          <div className="mx-auto max-w-5xl px-6 text-center">
+            <h2 className="text-3xl font-bold text-white">Comece hoje com 7 dias grátis</h2>
+            <p className="mx-auto mt-4 max-w-xl text-lg text-primary-100">Sem cartão de crédito para começar. Cancele quando quiser.</p>
+            <Link href="/sign-up" className="mt-8 inline-block rounded-xl bg-white px-8 py-4 text-base font-semibold text-primary-600 hover:bg-primary-50">
+              Criar conta grátis
+            </Link>
           </div>
         </section>
       </main>
