@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { getLocale, getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
+import Script from "next/script";
 import { AuthProvider } from "@/features/auth/auth-context";
 import "./globals.css";
+
+const GTAG_ID = "G-FG3BDM75T1";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
@@ -18,6 +21,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang={locale} className={`${geist.variable} h-full antialiased`}>
+      <head>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GTAG_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">{`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', '${GTAG_ID}');
+        `}</Script>
+      </head>
       <body className="min-h-full bg-gray-50 font-sans">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AuthProvider>{children}</AuthProvider>

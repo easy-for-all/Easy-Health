@@ -24,10 +24,10 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com`,
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com https://www.googletagmanager.com`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
-      `connect-src 'self' https:${process.env.NODE_ENV === "development" ? " http://localhost:*" : ""}`,
+      `connect-src 'self' https: https://www.google-analytics.com${process.env.NODE_ENV === "development" ? " http://localhost:*" : ""}`,
       "font-src 'self'",
       "object-src 'none'",
       "frame-ancestors 'none'",

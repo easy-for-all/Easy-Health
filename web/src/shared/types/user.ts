@@ -4,6 +4,7 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  admin?: boolean;
   created_at: string;
   avatar_url?: string | null;
   billing_status?: BillingStatus | null;

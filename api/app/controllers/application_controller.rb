@@ -12,6 +12,12 @@ class ApplicationController < ActionController::API
 
   private
 
+  def require_admin!
+    unless current_user&.admin?
+      render json: { error: "Forbidden" }, status: :forbidden
+    end
+  end
+
   def blob_path(attachment)
     return nil unless attachment.attached?
     Rails.application.routes.url_helpers.rails_blob_path(attachment, only_path: true)

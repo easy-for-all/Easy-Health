@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Footer } from "./footer";
+import { SupportChat } from "./support-chat";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -14,6 +15,9 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             <Link href="/precos" className="text-sm font-medium text-gray-600 hover:text-gray-900">
               Preços
             </Link>
+            <a href="mailto:suporte@easyhealth.com.br" className="text-sm font-medium text-gray-600 hover:text-gray-900">
+              Fale Conosco
+            </a>
             <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900">
               Entrar
             </Link>
@@ -27,6 +31,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1">{children}</main>
 
       <Footer />
+      <SupportChat />
     </div>
   );
 }

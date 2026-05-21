@@ -1,31 +1,32 @@
 class StripeWebhookService
   SETTLED_STATUSES = %w[trialing active past_due].freeze
 
-  def self.call(payload:, sig_header:)
-    event = Stripe::Webhook.construct_event(
-      payload,
-      sig_header,
-      ENV.fetch("STRIPE_WEBHOOK_SECRET")
-    )
+  def self.call(payload:, sig_header:, secret:)
+    event = Stripe::Webhook.construct_event(payload, sig_header, secret)
 
-    return if already_processed?(event.id, event.type)
+    Rails.logger.info("[Stripe] received event=#{event.type} id=#{event.id}")
 
-    Rails.logger.info("[Stripe] processing event=#{event.type} id=#{event.id}")
-    process(event)
+    stripe_event_record = begin
+      StripeEvent.create!(
+        stripe_event_id: event.id,
+        event_type:      event.type,
+        processed_at:    Time.current,
+        status:          "processing"
+      )
+    rescue ActiveRecord::RecordNotUnique
+      Rails.logger.info("[Stripe] duplicate event id=#{event.id}, skipping")
+      return
+    end
 
-    StripeEvent.create!(
-      stripe_event_id: event.id,
-      event_type: event.type,
-      processed_at: Time.current
-    )
-    Rails.logger.info("[Stripe] done event=#{event.type} id=#{event.id}")
-  end
-
-  def self.already_processed?(event_id, event_type)
-    StripeEvent.exists?(stripe_event_id: event_id)
-  rescue => e
-    Rails.logger.error("[Stripe] already_processed? error: #{e.message}")
-    false
+    begin
+      process(event)
+      stripe_event_record.update_columns(status: "processed")
+      Rails.logger.info("[Stripe] done event=#{event.type} id=#{event.id}")
+    rescue => e
+      stripe_event_record.update_columns(status: "failed", error_message: e.message)
+      Rails.logger.error("[Stripe] processing failed event=#{event.type} id=#{event.id}: #{e.class}: #{e.message}")
+      raise
+    end
   end
 
   def self.process(event)
