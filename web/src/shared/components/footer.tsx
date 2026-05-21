@@ -70,6 +70,9 @@ export function Footer() {
               <Link href="/terms" className="hover:text-primary-500 transition">
                 Termos de Uso
               </Link>
+              <a href="mailto:suporte@easyhealth.com.br" className="hover:text-primary-500 transition">
+                Fale Conosco
+              </a>
             </div>
             <p>© {new Date().getFullYear()} Easy Health</p>
           </div>

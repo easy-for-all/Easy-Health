@@ -12,6 +12,7 @@ Rails.application.routes.draw do
         post   "sign_in",  to: "sessions#create"
         delete "sign_out", to: "sessions#destroy"
         get    "me",       to: "sessions#show"
+        delete "account",  to: "registrations#destroy"
 
         scope "/password" do
           post "forgot", to: "passwords#forgot"
@@ -44,7 +45,8 @@ Rails.application.routes.draw do
         collection { get :stats }
       end
 
-      patch "profile/avatar", to: "profile#update_avatar"
+      patch  "profile/avatar", to: "profile#update_avatar"
+      delete "profile/data",  to: "profile#destroy_data"
 
       resources :user_media, only: [:index, :create, :destroy]
 
@@ -69,6 +71,10 @@ Rails.application.routes.draw do
       namespace :ai_agents do
         get :personal_trainer
         get :conditioning
+      end
+
+      namespace :admin do
+        get :stats
       end
     end
   end

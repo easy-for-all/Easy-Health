@@ -8,6 +8,8 @@ import { useAuth } from "@/features/auth/auth-context";
 import { api } from "@/shared/lib/api";
 import { compressImage } from "@/shared/lib/image";
 import { LoadingScreen } from "@/shared/components/loading-screen";
+import { DeleteAccountModal } from "@/shared/components/delete-account-modal";
+import { CleanDataModal } from "@/shared/components/clean-data-modal";
 import { setLocale } from "@/app/actions";
 import type { HealthProfile, Goal, FitnessLevel } from "@/shared/types/health-profile";
 
@@ -78,6 +80,8 @@ export default function ProfilePage() {
   const [bodyAnalysis, setBodyAnalysis] = useState<{ id: number; observation: string; confidence: number | null } | null>(null);
   const [photoHistoryOpen, setPhotoHistoryOpen] = useState(false);
   const [lightboxPhoto, setLightboxPhoto] = useState<UserMedia | null>(null);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [cleanDataOpen, setCleanDataOpen] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -628,6 +632,48 @@ export default function ProfilePage() {
             <span>Política de Privacidade</span>
             <span className="text-gray-300">›</span>
           </a>
+          <a
+            href="mailto:suporte@easyhealth.com.br"
+            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            <span>Fale Conosco</span>
+            <span className="text-gray-300">›</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Admin */}
+      {user?.admin && (
+        <Link
+          href="/admin"
+          className="mt-4 flex items-center justify-between rounded-2xl border border-primary-100 bg-primary-50 px-5 py-4 transition hover:bg-primary-100"
+        >
+          <div>
+            <p className="font-semibold text-primary-700">Painel Administrativo</p>
+            <p className="text-xs text-primary-500">Estatísticas da plataforma</p>
+          </div>
+          <span className="text-lg text-primary-400">→</span>
+        </Link>
+      )}
+
+      {/* Conta */}
+      <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5">
+        <h2 className="mb-4 font-semibold text-gray-900">Conta</h2>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => setCleanDataOpen(true)}
+            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            <span>Limpar Meus Dados</span>
+            <span className="text-gray-300">›</span>
+          </button>
+          <button
+            onClick={() => setDeleteAccountOpen(true)}
+            className="flex items-center justify-between rounded-xl border border-red-100 px-4 py-3 text-sm text-red-500 hover:bg-red-50"
+          >
+            <span>Excluir Conta</span>
+            <span className="text-red-200">›</span>
+          </button>
         </div>
       </div>
 
@@ -702,6 +748,29 @@ export default function ProfilePage() {
             </p>
           )}
         </div>
+      )}
+
+      {/* ─── Modais ──────────────────────────────────────────────────────────── */}
+      {deleteAccountOpen && (
+        <DeleteAccountModal
+          onClose={() => setDeleteAccountOpen(false)}
+          onSignOut={signOut}
+        />
+      )}
+      {cleanDataOpen && (
+        <CleanDataModal
+          onClose={() => setCleanDataOpen(false)}
+          onSuccess={() => {
+            // Reload media and profile after data cleanup
+            Promise.all([
+              api.get<HealthProfile>("/api/v1/health_profile").catch(() => null),
+              api.get<UserMedia[]>("/api/v1/user_media").catch(() => []),
+            ]).then(([p, media]) => {
+              setProfile(p);
+              setMediaItems(media ?? []);
+            });
+          }}
+        />
       )}
     </div>
   );
