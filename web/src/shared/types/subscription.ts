@@ -1,4 +1,4 @@
-export type PlanName = "none" | "pro_monthly" | "pro_yearly";
+export type PlanName = "none" | "pro_monthly" | "pro_yearly" | "admin";
 export type SubscriptionStatus =
   | "none"
   | "trialing"
@@ -16,4 +16,5 @@ export interface BillingStatus {
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   stripe_customer_id: string | null;
+  free_workout_used: boolean;
 }

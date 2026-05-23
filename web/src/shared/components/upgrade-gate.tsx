@@ -5,12 +5,14 @@ import { useSubscription } from "@/features/billing/use-subscription";
 
 interface UpgradeGateProps {
   children: React.ReactNode;
+  allowFreeWorkout?: boolean;
 }
 
-export function UpgradeGate({ children }: UpgradeGateProps) {
-  const { canAccessPremiumFeatures } = useSubscription();
+export function UpgradeGate({ children, allowFreeWorkout }: UpgradeGateProps) {
+  const { canAccessPremiumFeatures, canAccessWorkout } = useSubscription();
+  const canAccess = allowFreeWorkout ? canAccessWorkout : canAccessPremiumFeatures;
 
-  if (!canAccessPremiumFeatures) {
+  if (!canAccess) {
     return <UpgradeBanner />;
   }
 

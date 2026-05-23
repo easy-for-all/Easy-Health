@@ -65,7 +65,7 @@ Rails.application.routes.draw do
       end
 
       namespace :webhooks do
-        post :stripe
+        post "stripe", to: "stripe#create"
       end
 
       namespace :ai_agents do

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ApiError, api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
@@ -57,6 +58,7 @@ type Phase =
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export default function PlanPage() {
+  const router = useRouter();
   const [phase, setPhase]          = useState<Phase>("loading");
   const [plan, setPlan]            = useState<WorkoutPlan | null>(null);
   const [allPlans, setAllPlans]    = useState<PlanSummary[]>([]);
@@ -209,8 +211,16 @@ export default function PlanPage() {
 
   return (
     <div className="min-h-screen px-4 py-6">
-      <header className="mb-6">
+      <header className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Planejamento de Treinos</h1>
+        {phase === "view" && (
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100"
+          >
+            ✨ Dicas IA
+          </button>
+        )}
       </header>
 
       {showProgress && (
@@ -809,7 +819,18 @@ function WizardLocation({
 
 // ── Plan Day Detail Drawer ────────────────────────────────────────────────────
 
-type ExerciseEdits = Record<number, { sets?: number; reps?: number }>;
+const CARDIO_EXERCISE_TYPES = ["cardio", "corrida", "caminhada", "hiit", "natacao"] as const;
+function isCardioEx(ex: { exercise_type: string }) {
+  return CARDIO_EXERCISE_TYPES.includes(ex.exercise_type as (typeof CARDIO_EXERCISE_TYPES)[number]);
+}
+
+const INTENSITIES = [
+  { value: "leve", label: "Leve", color: "text-green-700 bg-green-50" },
+  { value: "moderado", label: "Moderado", color: "text-yellow-700 bg-yellow-50" },
+  { value: "intenso", label: "Intenso", color: "text-red-700 bg-red-50" },
+] as const;
+
+type ExerciseEdits = Record<number, { sets?: number; reps?: number; duration_minutes?: number; intensity?: string }>;
 
 type AddExerciseOption = {
   id: number;
@@ -818,6 +839,8 @@ type AddExerciseOption = {
   exercise_type: string;
   image_url: string;
 };
+
+type CardioAddConfig = { exerciseId: number; duration: number; intensity: string };
 
 function PlanDayDetailDrawer({
   dayId,
@@ -839,6 +862,8 @@ function PlanDayDetailDrawer({
   const [addSearch, setAddSearch] = useState("");
   const [addResults, setAddResults] = useState<AddExerciseOption[]>([]);
   const [addLoading, setAddLoading] = useState(false);
+  const [addTypeFilter, setAddTypeFilter] = useState<"all" | "cardio">("all");
+  const [cardioConfig, setCardioConfig] = useState<CardioAddConfig | null>(null);
   const addTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -851,12 +876,16 @@ function PlanDayDetailDrawer({
       .finally(() => setLoading(false));
   }, [dayId]);
 
-  const fetchAddOptions = useCallback(async (name: string) => {
+  const fetchAddOptions = useCallback(async (name: string, typeFilter: "all" | "cardio" = "all") => {
     setAddLoading(true);
     try {
       const params = new URLSearchParams({ name, exclude_ids: exercises.map((e) => e.exercise_id).join(",") });
+      if (typeFilter === "cardio") params.set("exercise_types", CARDIO_EXERCISE_TYPES.join(","));
       const data = await api.get<AddExerciseOption[]>(`/api/v1/exercises?${params}`);
-      setAddResults(data);
+      const filtered = typeFilter === "cardio"
+        ? data.filter((e) => isCardioEx(e))
+        : data;
+      setAddResults(filtered);
     } catch {
       setAddResults([]);
     } finally {
@@ -867,14 +896,21 @@ function PlanDayDetailDrawer({
   function handleAddSearchChange(value: string) {
     setAddSearch(value);
     if (addTimerRef.current) clearTimeout(addTimerRef.current);
-    addTimerRef.current = setTimeout(() => fetchAddOptions(value), 300);
+    addTimerRef.current = setTimeout(() => fetchAddOptions(value, addTypeFilter), 300);
   }
 
   function openAdd() {
     setAddSearch("");
     setAddResults([]);
+    setAddTypeFilter("all");
+    setCardioConfig(null);
     setShowAdd(true);
     fetchAddOptions("");
+  }
+
+  function handleAddTypeFilter(type: "all" | "cardio") {
+    setAddTypeFilter(type);
+    fetchAddOptions(addSearch, type);
   }
 
   function setField(id: number, field: "sets" | "reps", raw: string) {
@@ -909,17 +945,23 @@ function PlanDayDetailDrawer({
     if (day) onChanged({ ...day, exercises: newList });
   }
 
-  async function handleAdd(exerciseId: number) {
+  async function handleAdd(exerciseId: number, cardioParams?: { duration_minutes: number; intensity: string }) {
     if (!day) return;
     setDrawerError("");
     try {
+      const body: Record<string, unknown> = { exercise_id: exerciseId };
+      if (cardioParams) {
+        body.duration_minutes = cardioParams.duration_minutes;
+        body.intensity = cardioParams.intensity;
+      }
       const created = await api.post<WorkoutDayExercise>(
         `/api/v1/workout_days/${day.id}/exercises`,
-        { exercise_id: exerciseId }
+        body
       );
       const newList = [...exercises, created];
       setExercises(newList);
       setShowAdd(false);
+      setCardioConfig(null);
       if (day) onChanged({ ...day, exercises: newList });
     } catch (e: unknown) {
       setDrawerError(e instanceof Error ? e.message : "Erro ao adicionar exercício.");
@@ -950,12 +992,20 @@ function PlanDayDetailDrawer({
     setDrawerError("");
     try {
       await Promise.all(
-        Object.entries(edits).map(([id, vals]) =>
-          api.patch(`/api/v1/workout_day_exercises/${id}`, {
-            sets: vals.sets ?? exercises.find((e) => e.workout_day_exercise_id === Number(id))?.sets,
-            reps: vals.reps ?? exercises.find((e) => e.workout_day_exercise_id === Number(id))?.reps,
-          })
-        )
+        Object.entries(edits).map(([id, vals]) => {
+          const ex = exercises.find((e) => e.workout_day_exercise_id === Number(id));
+          if (!ex) return Promise.resolve();
+          if (isCardioEx(ex)) {
+            return api.patch(`/api/v1/workout_day_exercises/${id}`, {
+              duration_minutes: vals.duration_minutes ?? ex.duration_minutes,
+              intensity: vals.intensity ?? ex.intensity,
+            });
+          }
+          return api.patch(`/api/v1/workout_day_exercises/${id}`, {
+            sets: vals.sets ?? ex.sets,
+            reps: vals.reps ?? ex.reps,
+          });
+        })
       );
       setEdits({});
       if (day) onChanged(day);
@@ -1005,9 +1055,19 @@ function PlanDayDetailDrawer({
                   />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 text-sm leading-tight">{ex.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {currentValue(ex, "sets")} séries · {currentValue(ex, "reps")} reps
-                    </p>
+                    {isCardioEx(ex) ? (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {edits[ex.workout_day_exercise_id]?.duration_minutes ?? ex.duration_minutes ?? 20} min
+                        {" · "}
+                        <span className={`capitalize ${INTENSITIES.find(i => i.value === (edits[ex.workout_day_exercise_id]?.intensity ?? ex.intensity))?.color ?? "text-gray-400"}`}>
+                          {INTENSITIES.find(i => i.value === (edits[ex.workout_day_exercise_id]?.intensity ?? ex.intensity))?.label ?? "Moderado"}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {currentValue(ex, "sets")} séries · {currentValue(ex, "reps")} reps
+                      </p>
+                    )}
                     <div className="flex gap-3 mt-2">
                       <button
                         onClick={() => setSwapTarget(ex)}
@@ -1037,31 +1097,69 @@ function PlanDayDetailDrawer({
                   </div>
                 </div>
 
-                {/* Editable sets / reps */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Séries</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={currentValue(ex, "sets")}
-                      onChange={(e) => setField(ex.workout_day_exercise_id, "sets", e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-center text-sm font-semibold focus:border-primary-500 focus:outline-none"
-                    />
+                {/* Editable fields: sets/reps for strength, duration/intensity for cardio */}
+                {isCardioEx(ex) ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Duração (min)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={edits[ex.workout_day_exercise_id]?.duration_minutes ?? ex.duration_minutes ?? 20}
+                        onChange={(e) => setEdits((prev) => ({
+                          ...prev,
+                          [ex.workout_day_exercise_id]: {
+                            ...prev[ex.workout_day_exercise_id],
+                            duration_minutes: Math.max(1, parseInt(e.target.value, 10) || 1),
+                          },
+                        }))}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-center text-sm font-semibold focus:border-primary-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Intensidade</label>
+                      <select
+                        value={edits[ex.workout_day_exercise_id]?.intensity ?? ex.intensity ?? "moderado"}
+                        onChange={(e) => setEdits((prev) => ({
+                          ...prev,
+                          [ex.workout_day_exercise_id]: {
+                            ...prev[ex.workout_day_exercise_id],
+                            intensity: e.target.value,
+                          },
+                        }))}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold focus:border-primary-500 focus:outline-none"
+                      >
+                        {INTENSITIES.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Reps</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={currentValue(ex, "reps")}
-                      onChange={(e) => setField(ex.workout_day_exercise_id, "reps", e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-center text-sm font-semibold focus:border-primary-500 focus:outline-none"
-                    />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Séries</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={currentValue(ex, "sets")}
+                        onChange={(e) => setField(ex.workout_day_exercise_id, "sets", e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-center text-sm font-semibold focus:border-primary-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Reps</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={currentValue(ex, "reps")}
+                        onChange={(e) => setField(ex.workout_day_exercise_id, "reps", e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-center text-sm font-semibold focus:border-primary-500 focus:outline-none"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -1100,7 +1198,7 @@ function PlanDayDetailDrawer({
       {showAdd && (
         <div
           className="fixed inset-0 z-[60] flex items-end bg-black/40"
-          onClick={() => { setShowAdd(false); setAddSearch(""); }}
+          onClick={() => { setShowAdd(false); setAddSearch(""); setCardioConfig(null); }}
         >
           <div
             className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4"
@@ -1108,6 +1206,23 @@ function PlanDayDetailDrawer({
           >
             <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
             <h3 className="mb-3 mt-2 text-base font-bold text-gray-900">Adicionar exercício</h3>
+
+            {/* Type filter chips */}
+            <div className="mb-3 flex gap-2">
+              <button
+                onClick={() => handleAddTypeFilter("all")}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${addTypeFilter === "all" ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600"}`}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => handleAddTypeFilter("cardio")}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${addTypeFilter === "cardio" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"}`}
+              >
+                🏃 Cardio
+              </button>
+            </div>
+
             <input
               type="text"
               placeholder="Buscar por nome..."
@@ -1115,6 +1230,51 @@ function PlanDayDetailDrawer({
               onChange={(e) => handleAddSearchChange(e.target.value)}
               className="mb-3 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
             />
+
+            {/* Cardio config step */}
+            {cardioConfig && (
+              <div className="mb-4 rounded-xl border border-orange-200 bg-orange-50 p-4">
+                <p className="mb-3 text-sm font-semibold text-orange-800">Configurar cardio</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Duração (min)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={cardioConfig.duration}
+                      onChange={(e) => setCardioConfig((p) => p ? { ...p, duration: Math.max(1, parseInt(e.target.value, 10) || 1) } : p)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-center text-sm font-semibold focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Intensidade</label>
+                    <select
+                      value={cardioConfig.intensity}
+                      onChange={(e) => setCardioConfig((p) => p ? { ...p, intensity: e.target.value } : p)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold focus:border-orange-400 focus:outline-none"
+                    >
+                      {INTENSITIES.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => handleAdd(cardioConfig.exerciseId, { duration_minutes: cardioConfig.duration, intensity: cardioConfig.intensity })}
+                    className="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+                  >
+                    Adicionar
+                  </button>
+                  <button
+                    onClick={() => setCardioConfig(null)}
+                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
             {addLoading ? (
               <p className="rounded-lg bg-gray-50 p-3 text-center text-sm text-gray-400">Buscando...</p>
             ) : addResults.length === 0 ? (
@@ -1123,7 +1283,13 @@ function PlanDayDetailDrawer({
               addResults.map((opt) => (
                 <button
                   key={opt.id}
-                  onClick={() => handleAdd(opt.id)}
+                  onClick={() => {
+                    if (isCardioEx(opt)) {
+                      setCardioConfig({ exerciseId: opt.id, duration: 20, intensity: "moderado" });
+                    } else {
+                      handleAdd(opt.id);
+                    }
+                  }}
                   className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
                 >
                   <img
@@ -1132,10 +1298,13 @@ function PlanDayDetailDrawer({
                     className="h-12 w-16 rounded-md object-cover flex-shrink-0"
                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `/exercise-images/${opt.exercise_type || "treino"}.svg`; }}
                   />
-                  <div>
+                  <div className="flex-1">
                     <p className="font-medium text-gray-900">{opt.name}</p>
                     <p className="text-xs text-gray-400">{opt.muscle_group ?? opt.exercise_type}</p>
                   </div>
+                  {isCardioEx(opt) && (
+                    <span className="self-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">Cardio</span>
+                  )}
                 </button>
               ))
             )}

@@ -36,6 +36,12 @@ class User < ApplicationRecord
     subscription.nil? || subscription.billing_required?
   end
 
+  def can_access_workout?
+    return true if admin?
+    return true if paid_plan?
+    !free_workout_used?
+  end
+
   def billing_status
     if admin?
       return {
@@ -45,10 +51,11 @@ class User < ApplicationRecord
         trial_end: nil,
         current_period_end: nil,
         cancel_at_period_end: false,
-        stripe_customer_id: nil
+        stripe_customer_id: nil,
+        free_workout_used: free_workout_used
       }
     end
-    subscription&.billing_status || {
+    base = subscription&.billing_status || {
       plan: "none",
       status: "none",
       paid: false,
@@ -57,5 +64,6 @@ class User < ApplicationRecord
       cancel_at_period_end: false,
       stripe_customer_id: nil
     }
+    base.merge(free_workout_used: free_workout_used)
   end
 end

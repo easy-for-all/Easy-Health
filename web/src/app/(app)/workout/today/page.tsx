@@ -32,6 +32,19 @@ type ExerciseRuntime = {
   weight_by_set: string[];
   rest_seconds: number;
   feeling: string;
+  duration_minutes?: number;
+  intensity?: string;
+};
+
+const CARDIO_TYPES_SET = new Set(["cardio", "corrida", "caminhada", "hiit", "natacao"]);
+function isCardio(ex: WorkoutDayExercise) {
+  return !ex.muscle_group && CARDIO_TYPES_SET.has(ex.exercise_type);
+}
+
+const INTENSITY_STYLES: Record<string, string> = {
+  leve: "bg-green-100 text-green-700",
+  moderado: "bg-yellow-100 text-yellow-700",
+  intenso: "bg-red-100 text-red-700",
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -44,7 +57,7 @@ const FEELINGS = [
 ];
 
 export default function WorkoutTodayPage() {
-  return <UpgradeGate><WorkoutTodayContent /></UpgradeGate>;
+  return <UpgradeGate allowFreeWorkout><WorkoutTodayContent /></UpgradeGate>;
 }
 
 function WorkoutTodayContent() {
@@ -58,13 +71,16 @@ function WorkoutTodayContent() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
   const [restLeft, setRestLeft] = useState(0);
-  const { startTime, elapsedSeconds, beginSession, endSession } = useWorkoutSession();
+  const { startTime, elapsedSeconds, beginSession, endSession, saveRestEnd, getRestEnd } = useWorkoutSession();
+  const [restAlert, setRestAlert] = useState(false);
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
   const [weightError, setWeightError] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
+  const [cardioTimeLeft, setCardioTimeLeft] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cardioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const beepFiredRef = useRef(false);
 
@@ -91,12 +107,65 @@ function WorkoutTodayContent() {
         }
       }
     }).finally(() => setLoading(false));
+
+    // Restore rest timer if user navigated away and came back
+    const restEnd = getRestEnd();
+    if (restEnd && restEnd > Date.now()) {
+      const remaining = Math.ceil((restEnd - Date.now()) / 1000);
+      setRestLeft(remaining);
+      setPhase("rest");
+      beepFiredRef.current = false;
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setRestLeft((prev) => {
+          if (prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            saveRestEnd(null);
+            if (!beepFiredRef.current) {
+              beepFiredRef.current = true;
+              playBeep();
+              navigator.vibrate?.(300);
+              setRestAlert(true);
+              setTimeout(() => { setRestAlert(false); setPhase("exercising"); }, 2000);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    if (cardioTimerRef.current) clearInterval(cardioTimerRef.current);
   }, []);
+
+  // Auto-start cardio timer when switching to a cardio exercise in exercising phase
+  useEffect(() => {
+    if (phase !== "exercising") return;
+    const ex = day?.exercises?.[currentIndex];
+    if (!ex || !isCardio(ex)) return;
+    const mins = ex.duration_minutes ?? 20;
+    setCardioTimeLeft(mins * 60);
+    if (cardioTimerRef.current) clearInterval(cardioTimerRef.current);
+    cardioTimerRef.current = setInterval(() => {
+      setCardioTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (cardioTimerRef.current) clearInterval(cardioTimerRef.current);
+          playBeep();
+          navigator.vibrate?.([200, 100, 200]);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (cardioTimerRef.current) clearInterval(cardioTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, phase]);
 
   async function chooseWorkout(workoutDay: WorkoutDay) {
     setLoading(true);
@@ -190,18 +259,26 @@ function WorkoutTodayContent() {
 
   function startRest(seconds: number) {
     setRestLeft(seconds);
+    setRestAlert(false);
     setPhase("rest");
     beepFiredRef.current = false;
+    saveRestEnd(Date.now() + seconds * 1000);
+    if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setRestLeft((prev) => {
         if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
+          saveRestEnd(null);
           if (!beepFiredRef.current) {
             beepFiredRef.current = true;
             playBeep();
             navigator.vibrate?.(300);
+            setRestAlert(true);
+            setTimeout(() => {
+              setRestAlert(false);
+              setPhase("exercising");
+            }, 2000);
           }
-          setPhase("exercising");
           return 0;
         }
         return prev - 1;
@@ -268,6 +345,8 @@ function WorkoutTodayContent() {
 
   function skipRest() {
     if (timerRef.current) clearInterval(timerRef.current);
+    saveRestEnd(null);
+    setRestAlert(false);
     setPhase("exercising");
   }
 
@@ -341,19 +420,30 @@ function WorkoutTodayContent() {
 
   if (phase === "rest") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-4">
+      <div className={`flex min-h-screen flex-col items-center justify-center px-4 transition-colors ${restAlert ? "bg-primary-50" : ""}`}>
         <p className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-3 py-1 rounded-full mb-4">
           Treino: {formatElapsed(elapsedSeconds)}
         </p>
-        <p className="text-sm font-medium uppercase tracking-wide text-gray-400">Descanso</p>
-        <p className="mt-4 text-7xl font-bold text-primary-500">{restLeft}s</p>
-        <p className="mt-2 text-gray-500">Próximo: {exercise.name}</p>
-        <button onClick={skipRest} className="mt-8 rounded-lg border border-gray-200 px-6 py-3 text-sm text-gray-500 hover:bg-gray-50">
-          Pular descanso
-        </button>
-        <button onClick={() => setPhase("done")} className="mt-3 text-sm font-medium text-red-500">
-          Encerrar treino agora
-        </button>
+        {restAlert ? (
+          <div className="flex flex-col items-center animate-bounce">
+            <p className="text-4xl font-bold text-primary-500">Hora de treinar!</p>
+            <p className="mt-2 text-2xl">💪</p>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm font-medium uppercase tracking-wide text-gray-400">Descanso</p>
+            <p className={`mt-4 text-7xl font-bold tabular-nums transition-colors ${restLeft <= 5 ? "text-orange-500 animate-pulse" : "text-primary-500"}`}>
+              {restLeft}s
+            </p>
+            <p className="mt-2 text-gray-500">Próximo: {exercise.name}</p>
+            <button onClick={skipRest} className="mt-8 rounded-lg border border-gray-200 px-6 py-3 text-sm text-gray-500 hover:bg-gray-50">
+              Pular descanso
+            </button>
+            <button onClick={() => setPhase("done")} className="mt-3 text-sm font-medium text-red-500">
+              Encerrar treino agora
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -448,45 +538,70 @@ function WorkoutTodayContent() {
         })()}
         <p className="mt-2 text-gray-500">{exercise.description}</p>
 
-        <div className="mt-6 grid grid-cols-3 gap-3">
-          <AdjustBox label="séries" value={runtime.planned_sets} onMinus={() => changePlannedSets(exercise, runtime.planned_sets - 1)} onPlus={() => changePlannedSets(exercise, runtime.planned_sets + 1)} />
-          <AdjustBox label={`reps série ${currentSet}`} value={runtime.reps_by_set[currentSet - 1] ?? exercise.reps} onMinus={() => updateCurrentSetReps(exercise, Math.max(1, (runtime.reps_by_set[currentSet - 1] ?? exercise.reps) - 1))} onPlus={() => updateCurrentSetReps(exercise, (runtime.reps_by_set[currentSet - 1] ?? exercise.reps) + 1)} />
-          <Metric label="série atual" value={currentSet} highlight />
-        </div>
+        {isCardio(exercise) ? (
+          /* ── Cardio exercise panel ───────────────────────── */
+          <div className="mt-6 flex flex-col items-center gap-4">
+            <span className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize ${INTENSITY_STYLES[runtime.intensity ?? "moderado"] ?? "bg-yellow-100 text-yellow-700"}`}>
+              {runtime.intensity ?? "moderado"}
+            </span>
+            <div className="flex flex-col items-center">
+              <p className="text-7xl font-bold tabular-nums text-primary-500">
+                {Math.floor(cardioTimeLeft / 60).toString().padStart(2, "0")}:{(cardioTimeLeft % 60).toString().padStart(2, "0")}
+              </p>
+              <p className="mt-1 text-sm text-gray-400">restante</p>
+            </div>
+            <p className="text-xs text-gray-400">{runtime.duration_minutes ?? 20} min planejados</p>
+          </div>
+        ) : (
+          /* ── Strength exercise panel ─────────────────────── */
+          <>
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <AdjustBox label="séries" value={runtime.planned_sets} onMinus={() => changePlannedSets(exercise, runtime.planned_sets - 1)} onPlus={() => changePlannedSets(exercise, runtime.planned_sets + 1)} />
+              <AdjustBox label={`reps série ${currentSet}`} value={runtime.reps_by_set[currentSet - 1] ?? exercise.reps} onMinus={() => updateCurrentSetReps(exercise, Math.max(1, (runtime.reps_by_set[currentSet - 1] ?? exercise.reps) - 1))} onPlus={() => updateCurrentSetReps(exercise, (runtime.reps_by_set[currentSet - 1] ?? exercise.reps) + 1)} />
+              <Metric label="série atual" value={currentSet} highlight />
+            </div>
 
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-600">
-            Peso (kg)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.5"
-              value={runtime.weight_by_set[currentSet - 1] ?? ""}
-              onChange={(event) => { setWeightError(false); updateCurrentSetWeight(exercise, event.target.value); }}
-              placeholder="kg"
-              className={`mt-2 w-36 rounded-xl border px-4 py-3 text-sm focus:outline-none ${weightError ? "border-red-400 focus:border-red-500" : "border-gray-200 focus:border-primary-500"}`}
-            />
-          </label>
-          {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
-        </div>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-600">
+                Peso (kg)
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.5"
+                  value={runtime.weight_by_set[currentSet - 1] ?? ""}
+                  onChange={(event) => { setWeightError(false); updateCurrentSetWeight(exercise, event.target.value); }}
+                  placeholder="kg"
+                  className={`mt-2 w-36 rounded-xl border px-4 py-3 text-sm focus:outline-none ${weightError ? "border-red-400 focus:border-red-500" : "border-gray-200 focus:border-primary-500"}`}
+                />
+              </label>
+              {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
+            </div>
 
-        <label className="mt-4 block text-sm font-medium text-gray-600">
-          Descanso (s)
-          <input
-            type="number"
-            min="0"
-            step="5"
-            value={runtime.rest_seconds}
-            onChange={(event) => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
-            className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
-          />
-        </label>
+            <label className="mt-4 block text-sm font-medium text-gray-600">
+              Descanso (s)
+              <input
+                type="number"
+                min="0"
+                step="5"
+                value={runtime.rest_seconds}
+                onChange={(event) => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
+                className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
+              />
+            </label>
+          </>
+        )}
       </div>
 
-      <button onClick={handleSetDone} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">
-        Feito
-      </button>
+      {isCardio(exercise) ? (
+        <button onClick={() => finishExercise("bem")} className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white hover:bg-orange-600">
+          Concluir cardio
+        </button>
+      ) : (
+        <button onClick={handleSetDone} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">
+          Feito
+        </button>
+      )}
     </div>
 
     <ExerciseInfoModal exercise={infoModalExercise} onClose={() => setInfoModalExercise(null)} />
@@ -537,6 +652,20 @@ function recommendedDayId(plan: WorkoutPlan, sessions: WorkoutSession[]): number
   return plan.days[(lastIdx + 1) % plan.days.length]?.id ?? null;
 }
 
+function lastSessionForDay(sessions: WorkoutSession[], dayId: number): WorkoutSession | null {
+  return sessions
+    .filter((s) => s.workout_day_id === dayId)
+    .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())[0] ?? null;
+}
+
+function relativeDate(dateStr: string): string {
+  const daysAgo = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  if (daysAgo === 0) return "feito hoje";
+  if (daysAgo === 1) return "feito ontem";
+  if (daysAgo < 7) return `há ${daysAgo} dias`;
+  return "há mais de 7 dias";
+}
+
 function ChooseScreen({
   plan,
   sessions,
@@ -549,16 +678,26 @@ function ChooseScreen({
   onBack: () => void;
 }) {
   const recommendedId = recommendedDayId(plan, sessions);
+  const router = useRouter();
 
   return (
     <div className="min-h-screen px-4 py-6">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500">← Voltar</button>
+      <div className="mb-4 flex items-center justify-between">
+        <button onClick={onBack} className="text-sm text-gray-500">← Voltar</button>
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100"
+        >
+          ✨ Dicas IA
+        </button>
+      </div>
       <h1 className="text-2xl font-bold text-gray-900">Escolha seu treino</h1>
       <p className="mt-1 text-sm text-gray-500">Faça A, B, C ou qualquer outro que fizer sentido hoje.</p>
 
       <div className="mt-6 space-y-3">
         {plan.days.map((day, idx) => {
           const isRecommended = day.id === recommendedId;
+          const lastSession = lastSessionForDay(sessions, day.id);
           return (
             <button
               key={day.id}
@@ -575,6 +714,9 @@ function ChooseScreen({
                     )}
                   </div>
                   <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {lastSession ? relativeDate(lastSession.completed_at) : "nunca executado"}
+                  </p>
                 </div>
               </div>
             </button>
@@ -698,10 +840,20 @@ function OverviewScreen({
     }
   }
 
+  const overviewRouter = useRouter();
+
   return (
   <>
     <div className="flex min-h-screen flex-col px-4 py-6">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500">← Escolher outro</button>
+      <div className="mb-4 flex items-center justify-between">
+        <button onClick={onBack} className="text-sm text-gray-500">← Escolher outro</button>
+        <button
+          onClick={() => overviewRouter.push("/dashboard")}
+          className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100"
+        >
+          ✨ Dicas IA
+        </button>
+      </div>
       <h1 className="text-2xl font-bold text-gray-900">{day.name}</h1>
       <p className="mt-1 text-sm text-gray-500">{exercises.length} exercícios</p>
 
@@ -1092,6 +1244,8 @@ function createRuntime(exercise: WorkoutDayExercise): ExerciseRuntime {
     weight_by_set: Array.from({ length: exercise.sets }, () => ""),
     rest_seconds: exercise.rest_seconds,
     feeling: "",
+    duration_minutes: exercise.duration_minutes ?? undefined,
+    intensity: exercise.intensity ?? undefined,
   };
 }
 

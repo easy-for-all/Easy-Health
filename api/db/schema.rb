@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_17_200003) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_22_100001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -54,6 +54,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200003) do
     t.bigint "user_id", null: false
     t.index ["user_id", "task_type", "created_at"], name: "index_ai_usage_logs_on_user_id_and_task_type_and_created_at"
     t.index ["user_id"], name: "index_ai_usage_logs_on_user_id"
+  end
+
+  create_table "equipment_identifications", force: :cascade do |t|
+    t.boolean "compatible"
+    t.float "confidence"
+    t.datetime "created_at", null: false
+    t.string "equipment_name"
+    t.bigint "exercise_id"
+    t.string "image_checksum"
+    t.string "localized_name"
+    t.string "muscle_groups", default: [], array: true
+    t.jsonb "raw_response"
+    t.text "reason"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["exercise_id"], name: "index_equipment_identifications_on_exercise_id"
+    t.index ["image_checksum"], name: "index_equipment_identifications_on_image_checksum"
+    t.index ["user_id"], name: "index_equipment_identifications_on_user_id"
   end
 
   create_table "exercises", force: :cascade do |t|
@@ -116,8 +134,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200003) do
 
   create_table "stripe_events", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.text "error_message"
     t.string "event_type"
     t.datetime "processed_at", null: false
+    t.string "status", default: "processed", null: false
     t.string "stripe_event_id", null: false
     t.datetime "updated_at", null: false
     t.index ["stripe_event_id"], name: "index_stripe_events_on_stripe_event_id", unique: true
@@ -155,9 +175,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200003) do
 
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
+    t.datetime "anonymized_at"
     t.datetime "created_at", null: false
+    t.datetime "deletion_requested_at"
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
+    t.datetime "first_workout_completed_at"
+    t.boolean "free_workout_used", default: false, null: false
     t.string "name", default: "", null: false
     t.datetime "remember_created_at"
     t.datetime "reset_password_sent_at"
@@ -170,7 +194,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200003) do
 
   create_table "workout_day_exercises", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.integer "duration_minutes"
     t.bigint "exercise_id", null: false
+    t.string "intensity"
     t.integer "order_index"
     t.integer "reps"
     t.integer "rest_seconds"
@@ -216,6 +242,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_200003) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_usage_logs", "users"
+  add_foreign_key "equipment_identifications", "exercises"
+  add_foreign_key "equipment_identifications", "users"
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"

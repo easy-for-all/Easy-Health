@@ -11,6 +11,8 @@ export function useSubscription() {
   const canAccessPremiumFeatures = isProUser && isBillingActive;
   const isTrialing = bs?.status === "trialing";
   const hasNoPlan = !bs || bs.plan === "none" || bs.plan === null;
+  const freeWorkoutUsed = bs?.free_workout_used === true;
+  const canAccessWorkout = canAccessPremiumFeatures || !freeWorkoutUsed;
 
   return {
     billingStatus: bs,
@@ -19,5 +21,7 @@ export function useSubscription() {
     canAccessPremiumFeatures,
     isTrialing,
     hasNoPlan,
+    freeWorkoutUsed,
+    canAccessWorkout,
   };
 }
