@@ -69,12 +69,12 @@ export function AiRecommendationsCard() {
   const visibleRecs = expanded ? allRecs : allRecs.slice(0, 2);
 
   return (
-    <div className="rounded-2xl border border-primary-100 bg-white overflow-hidden shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-50 to-white">
+    <div className="rounded-2xl border border-primary-100 bg-white overflow-hidden shadow-sm dark:border-primary-900 dark:bg-gray-900">
+      <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-50 to-white dark:from-primary-950 dark:to-gray-900">
         <span className="text-lg">🤖</span>
         <div className="flex-1">
-          <p className="text-sm font-bold text-gray-900">Personal IA</p>
-          <p className="text-xs text-gray-400">Análise baseada no seu histórico</p>
+          <p className="text-sm font-bold text-gray-900 dark:text-gray-50">Personal IA</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Análise baseada no seu histórico</p>
         </div>
         {highPriority.length > 0 && (
           <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-600">

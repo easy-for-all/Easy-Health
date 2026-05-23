@@ -41,7 +41,7 @@ const SOCIAL_LINKS = [
 
 export function Footer() {
   return (
-    <footer className="border-t border-gray-100 bg-gray-50 py-10">
+    <footer className="border-t border-gray-100 bg-gray-50 py-10 dark:border-gray-800 dark:bg-gray-900">
       <div className="mx-auto max-w-5xl px-6">
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2">
@@ -55,14 +55,14 @@ export function Footer() {
                 key={link.label}
                 href={link.href}
                 aria-label={link.label}
-                className="text-gray-400 transition hover:text-primary-500"
+                className="text-gray-400 transition hover:text-primary-500 dark:text-gray-600 dark:hover:text-primary-400"
               >
                 {link.icon}
               </a>
             ))}
           </div>
 
-          <div className="flex flex-col items-center gap-2 text-sm text-gray-400 sm:items-end">
+          <div className="flex flex-col items-center gap-2 text-sm text-gray-400 dark:text-gray-600 sm:items-end">
             <div className="flex gap-4">
               <Link href="/privacy" className="hover:text-primary-500 transition">
                 Política de Privacidade

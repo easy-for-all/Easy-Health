@@ -210,13 +210,13 @@ export default function PlanPage() {
   const showProgress = wizardStep >= 0 && phase !== "wizard_generating";
 
   return (
-    <div className="min-h-screen px-4 py-6">
+    <div className="min-h-screen bg-white px-4 py-6 dark:bg-gray-950">
       <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Planejamento de Treinos</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">Planejamento de Treinos</h1>
         {phase === "view" && (
           <button
             onClick={() => router.push("/dashboard")}
-            className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100"
+            className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100 dark:bg-primary-950 dark:text-primary-400 dark:hover:bg-primary-900"
           >
             ✨ Dicas IA
           </button>
@@ -228,7 +228,7 @@ export default function PlanPage() {
           {WIZARD_ORDERED.map((_, i) => (
             <div
               key={i}
-              className={`h-1 flex-1 rounded-full transition-colors ${i <= wizardStep ? "bg-primary-500" : "bg-gray-200"}`}
+              className={`h-1 flex-1 rounded-full transition-colors ${i <= wizardStep ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-800"}`}
             />
           ))}
         </div>
@@ -237,17 +237,17 @@ export default function PlanPage() {
       {phase === "view" && plan && (
         <>
           <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} />
-          <button onClick={startWizard} className="mt-6 w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50">
+          <button onClick={startWizard} className="mt-6 w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
             Replanejar
           </button>
           {allPlans.length > 1 && (
             <div className="mt-6">
               <button
                 onClick={() => setShowHistory((v) => !v)}
-                className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3"
+                className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900"
               >
-                <span className="text-sm font-semibold text-gray-700">Treinos anteriores</span>
-                <span className="text-xs text-gray-400">{showHistory ? "▲ Ocultar" : "▼ Ver"}</span>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Treinos anteriores</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">{showHistory ? "▲ Ocultar" : "▼ Ver"}</span>
               </button>
               {showHistory && (
                 <div className="mt-2 space-y-2">
@@ -359,15 +359,15 @@ function SelectionCard<T extends string>({
       onClick={() => onSelect(option.value)}
       className={`w-full rounded-2xl border-2 p-4 text-left transition ${
         selected
-          ? "border-primary-500 bg-primary-50 shadow-sm"
-          : "border-gray-200 bg-white hover:border-primary-200 hover:bg-gray-50"
+          ? "border-primary-500 bg-primary-50 shadow-sm dark:bg-primary-950/40"
+          : "border-gray-200 bg-white hover:border-primary-200 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary-700"
       }`}
     >
       <div className="flex items-start gap-3">
         <span className="text-2xl leading-none">{option.icon}</span>
         <div>
-          <p className="font-semibold text-gray-900">{option.label}</p>
-          <p className="mt-0.5 text-xs text-gray-500">{option.description}</p>
+          <p className="font-semibold text-gray-900 dark:text-gray-50">{option.label}</p>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{option.description}</p>
         </div>
         {selected && (
           <div className="ml-auto flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary-500">
@@ -383,12 +383,12 @@ function WizardHeader({ title, subtitle, onBack }: { title: string; subtitle: st
   return (
     <>
       {onBack && (
-        <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">
+        <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
           ← Voltar
         </button>
       )}
-      <h2 className="mb-1 text-lg font-bold text-gray-900">{title}</h2>
-      <p className="mb-5 text-sm text-gray-500">{subtitle}</p>
+      <h2 className="mb-1 text-lg font-bold text-gray-900 dark:text-gray-50">{title}</h2>
+      <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
     </>
   );
 }
@@ -584,7 +584,7 @@ function WizardCustomSplit({
 
       <div className="space-y-4">
         {splits.map((split, idx) => (
-          <div key={idx} className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div key={idx} className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
             <div className="mb-3 flex items-center gap-2">
               <input
                 type="text"
@@ -653,7 +653,7 @@ function PlanView({
       {plan.days?.map((day, idx) => (
         <div
           key={day.id}
-          className="rounded-xl border border-gray-100 bg-white transition hover:border-primary-200 hover:bg-primary-50"
+          className="rounded-xl border border-gray-100 bg-white transition hover:border-primary-200 hover:bg-primary-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-primary-800 dark:hover:bg-primary-950/30"
         >
           <button
             onClick={() => onDayClick(day.id)}
@@ -661,21 +661,21 @@ function PlanView({
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-gray-400">Treino {LETTERS[idx] ?? idx + 1}</p>
-                <p className="font-semibold text-gray-900">{day.name}</p>
+                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500">Treino {LETTERS[idx] ?? idx + 1}</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-50">{day.name}</p>
                 <p className="mt-0.5 text-xs text-gray-400">
                   {day.exercise_count} exercícios
                   {day.muscle_groups?.length ? ` · ${day.muscle_groups.join(", ")}` : ""}
                 </p>
               </div>
-              <span className="text-gray-300 text-lg">›</span>
+              <span className="text-lg text-gray-300 dark:text-gray-600">›</span>
             </div>
           </button>
           {onDuplicate && (
-            <div className="border-t border-gray-50 px-4 pb-3 pt-2">
+            <div className="border-t border-gray-50 px-4 pb-3 pt-2 dark:border-gray-800">
               <button
                 onClick={() => onDuplicate(day.id)}
-                className="text-xs font-medium text-gray-400 hover:text-primary-600"
+                className="text-xs font-medium text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
               >
                 + Duplicar treino
               </button>
@@ -690,10 +690,10 @@ function PlanView({
 function PlanHistoryCard({ plan }: { plan: PlanSummary }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4">
+    <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
       <button className="flex w-full items-center justify-between" onClick={() => setExpanded((v) => !v)}>
         <div className="text-left">
-          <p className="text-sm font-semibold text-gray-700">
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
             {new Date(plan.created_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
           </p>
           <p className="text-xs text-gray-400">{plan.days_count} dias · {plan.days.reduce((s, d) => s + d.exercise_count, 0)} exercícios</p>
@@ -750,16 +750,16 @@ function WizardDays({
 }: { selected: number; onSelect: (n: number) => void; onNext: () => void; onBack: () => void }) {
   return (
     <div>
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">← Voltar</button>
-      <h2 className="mb-2 text-lg font-bold text-gray-900">Quantos dias por semana?</h2>
-      <p className="mb-6 text-sm text-gray-500">Escolha com base na sua disponibilidade.</p>
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Voltar</button>
+      <h2 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">Quantos dias por semana?</h2>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Escolha com base na sua disponibilidade.</p>
       <div className="flex justify-center gap-3">
         {[2, 3, 4, 5, 6].map((n) => (
           <button
             key={n}
             onClick={() => onSelect(n)}
             className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold transition ${
-              selected === n ? "bg-primary-500 text-white shadow-md" : "border-2 border-gray-200 text-gray-600 hover:border-primary-300"
+              selected === n ? "bg-primary-500 text-white shadow-md" : "border-2 border-gray-200 text-gray-600 hover:border-primary-300 dark:border-gray-700 dark:text-gray-300"
             }`}
           >
             {n}
@@ -786,9 +786,9 @@ function WizardLocation({
 }: { selected: TrainingLocation; onSelect: (v: TrainingLocation) => void; onNext: () => void; onBack: () => void }) {
   return (
     <div>
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">← Voltar</button>
-      <h2 className="mb-2 text-lg font-bold text-gray-900">Onde você vai treinar?</h2>
-      <p className="mb-6 text-sm text-gray-500">Isso adapta os exercícios disponíveis no seu plano.</p>
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Voltar</button>
+      <h2 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">Onde você vai treinar?</h2>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Isso adapta os exercícios disponíveis no seu plano.</p>
       <div className="space-y-3">
         {LOCATION_OPTIONS.map((opt) => (
           <button
@@ -797,13 +797,13 @@ function WizardLocation({
             className={`w-full rounded-2xl border-2 p-4 text-left transition ${
               selected === opt.value
                 ? "border-primary-500 bg-primary-50 shadow-sm"
-                : "border-gray-200 bg-white hover:border-primary-200 hover:bg-gray-50"
+                : "border-gray-200 bg-white hover:border-primary-200 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary-700"
             }`}
           >
             <div className="flex items-start gap-3">
               <span className="text-2xl leading-none">{opt.icon}</span>
               <div>
-                <p className="font-semibold text-gray-900">{opt.label}</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-50">{opt.label}</p>
                 <p className="mt-0.5 text-xs text-gray-500">{opt.description}</p>
               </div>
             </div>
@@ -1023,13 +1023,13 @@ function PlanDayDetailDrawer({
     <>
       <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
         <div
-          className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-8 pt-4"
+          className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-8 pt-4 dark:bg-gray-900"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
+          <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200 dark:bg-gray-700" />
           <div className="flex items-center justify-between mt-2 mb-4">
-            <h3 className="text-base font-bold text-gray-900">{day?.name ?? "Treino"}</h3>
-            <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600">Fechar</button>
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-50">{day?.name ?? "Treino"}</h3>
+            <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Fechar</button>
           </div>
 
           {loading && <p className="py-8 text-center text-sm text-gray-400">Carregando...</p>}
@@ -1087,12 +1087,12 @@ function PlanDayDetailDrawer({
                     <button
                       onClick={() => handleMove(ex.workout_day_exercise_id, "up")}
                       disabled={exercises.indexOf(ex) === 0}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                     >↑</button>
                     <button
                       onClick={() => handleMove(ex.workout_day_exercise_id, "down")}
                       disabled={exercises.indexOf(ex) === exercises.length - 1}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                     >↓</button>
                   </div>
                 </div>
@@ -1201,7 +1201,7 @@ function PlanDayDetailDrawer({
           onClick={() => { setShowAdd(false); setAddSearch(""); setCardioConfig(null); }}
         >
           <div
-            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4"
+            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4 dark:bg-gray-900"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
@@ -1244,7 +1244,7 @@ function PlanDayDetailDrawer({
                       max={120}
                       value={cardioConfig.duration}
                       onChange={(e) => setCardioConfig((p) => p ? { ...p, duration: Math.max(1, parseInt(e.target.value, 10) || 1) } : p)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-center text-sm font-semibold focus:border-orange-400 focus:outline-none"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-center text-sm font-semibold focus:border-orange-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-50"
                     />
                   </div>
                   <div>
@@ -1252,7 +1252,7 @@ function PlanDayDetailDrawer({
                     <select
                       value={cardioConfig.intensity}
                       onChange={(e) => setCardioConfig((p) => p ? { ...p, intensity: e.target.value } : p)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold focus:border-orange-400 focus:outline-none"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold focus:border-orange-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-50"
                     >
                       {INTENSITIES.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
                     </select>

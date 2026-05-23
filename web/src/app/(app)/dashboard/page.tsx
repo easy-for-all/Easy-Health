@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
+import { useTheme } from "@/features/theme/theme-context";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { AiRecommendationsCard } from "@/shared/components/ai-recommendations-card";
@@ -12,6 +13,7 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -45,20 +47,29 @@ export default function DashboardPage() {
     <div className="min-h-screen px-4 py-6">
       <header className="mb-6 flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-500">Olá,</p>
-          <h1 className="text-xl font-bold text-gray-900">{user?.name}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Olá,</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">{user?.name}</h1>
         </div>
-        {streak > 0 && (
-          <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-600">
-            🔥 {streak} dias
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {streak > 0 && (
+            <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+              🔥 {streak} dias
+            </span>
+          )}
+          <button
+            onClick={toggleTheme}
+            aria-label="Alternar modo escuro"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+          >
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
+        </div>
       </header>
 
       <WorkoutCard plan={plan} />
 
       <section className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Seus treinos</h2>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Seus treinos</h2>
         {plan?.days?.length ? (
           <div className="space-y-3">
             {plan.days.map((day, idx) => (
@@ -66,8 +77,8 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center">
-            <p className="mb-3 text-sm text-gray-500">Nenhum treino cadastrado ainda.</p>
+          <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center dark:border-gray-700">
+            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">Nenhum treino cadastrado ainda.</p>
             <Link href="/plan" className="rounded-lg bg-primary-500 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-600">
               Criar plano de treinamento
             </Link>
@@ -80,7 +91,7 @@ export default function DashboardPage() {
       </section>
 
       <div className="mt-4 flex gap-3">
-        <Link href="/history" className="flex-1 rounded-lg border border-gray-200 py-3 text-center text-sm font-medium text-gray-600 hover:bg-gray-50">
+        <Link href="/history" className="flex-1 rounded-lg border border-gray-200 py-3 text-center text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
           Histórico
         </Link>
       </div>
@@ -117,17 +128,17 @@ const MUSCLE_COLORS: Record<string, string> = {
 function DayCard({ day, index }: { day: WorkoutDay; index: number }) {
   const muscles = day.muscle_groups?.slice(0, 2) ?? [];
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900 dark:text-primary-400">
               {LETTERS[index] ?? index + 1}
             </span>
-            <p className="font-semibold text-gray-900 truncate">{day.name}</p>
+            <p className="font-semibold text-gray-900 truncate dark:text-gray-50">{day.name}</p>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-gray-400">{day.exercise_count} exercícios</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">{day.exercise_count} exercícios</span>
             {muscles.map((m) => (
               <span key={m} className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-gray-100 text-gray-600"}`}>
                 {m}
@@ -135,7 +146,7 @@ function DayCard({ day, index }: { day: WorkoutDay; index: number }) {
             ))}
           </div>
         </div>
-        <Link href={`/workout/today?day=${day.id}`} className="ml-3 rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white whitespace-nowrap">
+        <Link href={`/workout/today?day=${day.id}`} className="ml-3 rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white whitespace-nowrap hover:bg-primary-600">
           Treinar
         </Link>
       </div>

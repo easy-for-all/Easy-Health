@@ -14,12 +14,12 @@ export function FeatureCard({
   return (
     <Link
       href={href}
-      className="group block rounded-2xl border border-gray-100 bg-white p-6 transition hover:border-primary-200 hover:shadow-sm"
+      className="group block rounded-2xl border border-gray-100 bg-white p-6 transition hover:border-primary-200 hover:shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
     >
       <p className="text-3xl">{icon}</p>
-      <h3 className="mt-4 font-semibold text-gray-900">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-gray-500">{description}</p>
-      <p className="mt-4 text-sm font-medium text-primary-600 group-hover:underline">
+      <h3 className="mt-4 font-semibold text-gray-900 dark:text-gray-50">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">{description}</p>
+      <p className="mt-4 text-sm font-medium text-primary-600 group-hover:underline dark:text-primary-400">
         Saiba mais →
       </p>
     </Link>
