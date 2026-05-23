@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
+import { useTheme } from "@/features/theme/theme-context";
 import { api } from "@/shared/lib/api";
 import { compressImage } from "@/shared/lib/image";
 import { LoadingScreen } from "@/shared/components/loading-screen";
@@ -54,6 +55,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 export default function ProfilePage() {
   const { user, signOut, updateUser } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const t = useTranslations("profile");
   const locale = useLocale();
@@ -608,6 +610,25 @@ export default function ProfilePage() {
             🇺🇸 English
           </button>
         </div>
+      </div>
+
+      {/* Aparência */}
+      <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+        <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-50">Aparência</h2>
+        <button
+          onClick={toggleTheme}
+          className="flex w-full items-center justify-between rounded-xl border border-gray-100 px-4 py-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">{theme === "dark" ? "🌙" : "☀️"}</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              {theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"}
+            </span>
+          </div>
+          <span className="text-xs text-primary-500 font-semibold">
+            {theme === "dark" ? "Usar claro" : "Usar escuro"}
+          </span>
+        </button>
       </div>
 
       {/* Legal */}

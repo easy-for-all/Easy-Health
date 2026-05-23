@@ -12,6 +12,16 @@ function resolveImageSrc(src: string): string {
   return src;
 }
 
+const MUSCLE_COLORS: Record<string, string> = {
+  chest: "bg-red-100 text-red-700",
+  back: "bg-blue-100 text-blue-700",
+  shoulders: "bg-purple-100 text-purple-700",
+  biceps: "bg-yellow-100 text-yellow-700",
+  triceps: "bg-orange-100 text-orange-700",
+  legs: "bg-green-100 text-green-700",
+  core: "bg-teal-100 text-teal-700",
+};
+
 const GOAL_LABELS: Record<string, string> = {
   lose_weight: "Perder peso",
   gain_muscle: "Ganhar músculo",
@@ -663,10 +673,14 @@ function PlanView({
               <div>
                 <p className="text-xs font-semibold text-gray-400 dark:text-gray-500">Treino {LETTERS[idx] ?? idx + 1}</p>
                 <p className="font-semibold text-gray-900 dark:text-gray-50">{day.name}</p>
-                <p className="mt-0.5 text-xs text-gray-400">
-                  {day.exercise_count} exercícios
-                  {day.muscle_groups?.length ? ` · ${day.muscle_groups.join(", ")}` : ""}
-                </p>
+                <p className="mt-0.5 text-xs text-gray-400">{day.exercise_count} exercícios</p>
+                {day.muscle_groups?.length ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {day.muscle_groups.slice(0, 3).map((m) => (
+                      <span key={m} className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-gray-100 text-gray-600"}`}>{m}</span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <span className="text-lg text-gray-300 dark:text-gray-600">›</span>
             </div>

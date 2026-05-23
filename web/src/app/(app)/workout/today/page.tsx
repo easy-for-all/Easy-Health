@@ -36,6 +36,16 @@ type ExerciseRuntime = {
   intensity?: string;
 };
 
+const MUSCLE_COLORS: Record<string, string> = {
+  chest: "bg-red-100 text-red-700",
+  back: "bg-blue-100 text-blue-700",
+  shoulders: "bg-purple-100 text-purple-700",
+  biceps: "bg-yellow-100 text-yellow-700",
+  triceps: "bg-orange-100 text-orange-700",
+  legs: "bg-green-100 text-green-700",
+  core: "bg-teal-100 text-teal-700",
+};
+
 const CARDIO_TYPES_SET = new Set(["cardio", "corrida", "caminhada", "hiit", "natacao"]);
 function isCardio(ex: WorkoutDayExercise) {
   return !ex.muscle_group && CARDIO_TYPES_SET.has(ex.exercise_type);
@@ -702,7 +712,7 @@ function ChooseScreen({
             <button
               key={day.id}
               onClick={() => onChoose(day)}
-              className={`w-full rounded-xl border p-4 text-left transition ${isRecommended ? "border-primary-400 bg-primary-50 hover:border-primary-500" : "border-gray-100 bg-white hover:border-primary-300"}`}
+              className={`w-full rounded-xl border p-4 text-left transition ${isRecommended ? "border-primary-400 bg-primary-50 hover:border-primary-500" : "border-gray-100 bg-white hover:border-primary-300 dark:border-gray-800 dark:bg-gray-900"}`}
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600">{LETTERS[idx] ?? idx + 1}</span>
@@ -714,6 +724,13 @@ function ChooseScreen({
                     )}
                   </div>
                   <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
+                  {day.muscle_groups?.length ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {day.muscle_groups.slice(0, 2).map((m) => (
+                        <span key={m} className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-gray-100 text-gray-600"}`}>{m}</span>
+                      ))}
+                    </div>
+                  ) : null}
                   <p className="mt-0.5 text-xs text-gray-400">
                     {lastSession ? relativeDate(lastSession.completed_at) : "nunca executado"}
                   </p>

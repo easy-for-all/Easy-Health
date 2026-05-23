@@ -377,7 +377,6 @@ function StepPhoto({ onFinish }: { onFinish: (file: File | null) => void }) {
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={handleFileChange}
       />
