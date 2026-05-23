@@ -57,3 +57,13 @@ export interface WorkoutSession {
   }[];
   notes: string | null;
 }
+
+export interface CardioExerciseLog {
+  workout_day_exercise_id: number;
+  exercise_id: number;
+  name: string;
+  duration_minutes: number | null;
+  intensity: string | null;
+  feeling?: string | null;
+}
+

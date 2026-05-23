@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
+import { compressImage } from "@/shared/lib/image";
 import type { Goal, FitnessLevel, ActivityType } from "@/shared/types/health-profile";
 
 type TrainingLocation = "gym" | "home" | "outdoor" | "any";
@@ -87,7 +88,7 @@ export default function OnboardingPage() {
         activity_preferences: form.activity_preferences,
         training_location: form.training_location || "gym",
       });
-      router.push("/plan");
+      setStep(6);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao salvar perfil");
     } finally {
@@ -95,16 +96,31 @@ export default function OnboardingPage() {
     }
   }
 
-  const TOTAL_STEPS = 5;
+  async function handlePhotoFinish(file: File | null) {
+    if (file) {
+      try {
+        const compressed = await compressImage(file, 1920, 0.85);
+        const formData = new FormData();
+        formData.append("file", compressed);
+        formData.append("category", "body_photo");
+        await api.uploadPost("/api/v1/user_media", formData);
+      } catch {
+        // upload failure is non-blocking — proceed to plan
+      }
+    }
+    router.push("/plan");
+  }
+
+  const TOTAL_STEPS = 6;
 
   return (
-    <div className="flex min-h-screen flex-col px-4 py-8">
+    <div className="flex min-h-screen flex-col bg-white px-4 py-8 dark:bg-gray-950">
       <div className="mb-8 flex gap-1">
         {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
           <div
             key={n}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              n <= step ? "bg-primary-500" : "bg-gray-200"
+              n <= step ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-800"
             }`}
           />
         ))}
@@ -153,6 +169,10 @@ export default function OnboardingPage() {
           onBack={() => setStep(4)}
         />
       )}
+
+      {step === 6 && (
+        <StepPhoto onFinish={handlePhotoFinish} />
+      )}
     </div>
   );
 }
@@ -160,8 +180,8 @@ export default function OnboardingPage() {
 function StepGoal({ selected, onSelect }: { selected: string; onSelect: (v: Goal) => void }) {
   return (
     <div className="flex flex-1 flex-col">
-      <h2 className="mb-2 text-xl font-bold text-gray-900">Qual é o seu objetivo?</h2>
-      <p className="mb-6 text-sm text-gray-500">Isso define seu plano de treino.</p>
+      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Qual é o seu objetivo?</h2>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Isso define seu plano de treino.</p>
       <div className="space-y-3">
         {GOALS.map((g) => (
           <button
@@ -169,11 +189,11 @@ function StepGoal({ selected, onSelect }: { selected: string; onSelect: (v: Goal
             onClick={() => onSelect(g.value)}
             className={`w-full rounded-xl border-2 p-4 text-left transition ${
               selected === g.value
-                ? "border-primary-500 bg-primary-50"
-                : "border-gray-200 hover:border-gray-300"
+                ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
+                : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
             }`}
           >
-            <p className="font-semibold text-gray-900">{g.label}</p>
+            <p className="font-semibold text-gray-900 dark:text-gray-50">{g.label}</p>
             <p className="text-sm text-gray-500">{g.desc}</p>
           </button>
         ))}
@@ -193,11 +213,11 @@ function StepLevel({
 }) {
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900">Seu nível de condicionamento?</h2>
-      <p className="mb-6 text-sm text-gray-500">Seja honesto — isso ajusta a intensidade.</p>
+      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Seu nível de condicionamento?</h2>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Seja honesto — isso ajusta a intensidade.</p>
       <div className="space-y-3">
         {LEVELS.map((l) => (
           <button
@@ -205,11 +225,11 @@ function StepLevel({
             onClick={() => onSelect(l.value)}
             className={`w-full rounded-xl border-2 p-4 text-left transition ${
               selected === l.value
-                ? "border-primary-500 bg-primary-50"
-                : "border-gray-200 hover:border-gray-300"
+                ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
+                : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
             }`}
           >
-            <p className="font-semibold text-gray-900">{l.label}</p>
+            <p className="font-semibold text-gray-900 dark:text-gray-50">{l.label}</p>
             <p className="text-sm text-gray-500">{l.desc}</p>
           </button>
         ))}
@@ -233,11 +253,11 @@ function StepBody({
 
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900">Seus dados físicos</h2>
-      <p className="mb-6 text-sm text-gray-500">Usados para personalizar sua experiência.</p>
+      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Seus dados físicos</h2>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Usados para personalizar sua experiência.</p>
 
       <div className="space-y-4">
         {[
@@ -246,7 +266,7 @@ function StepBody({
           { label: "Altura", key: "height_cm" as const, placeholder: "Ex: 175", unit: "cm",  min: "50", max: "300" },
         ].map(({ label, key, placeholder, unit, min, max }) => (
           <div key={key}>
-            <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
             <div className="flex">
               <input
                 type="number"
@@ -255,9 +275,9 @@ function StepBody({
                 min={min}
                 max={max}
                 placeholder={placeholder}
-                className="flex-1 rounded-l-lg border border-r-0 border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
+                className="flex-1 rounded-l-lg border border-r-0 border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-primary-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-50"
               />
-              <span className="flex items-center rounded-r-lg border border-gray-300 bg-gray-50 px-3 text-sm text-gray-500">
+              <span className="flex items-center rounded-r-lg border border-gray-300 bg-gray-50 px-3 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
                 {unit}
               </span>
             </div>
@@ -289,11 +309,11 @@ function StepActivities({
 }) {
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900">O que você gosta de fazer?</h2>
-      <p className="mb-6 text-sm text-gray-500">Selecione pelo menos uma atividade.</p>
+      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">O que você gosta de fazer?</h2>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Selecione pelo menos uma atividade.</p>
 
       <div className="grid grid-cols-2 gap-3">
         {ACTIVITIES.map((a) => {
@@ -304,12 +324,12 @@ function StepActivities({
               onClick={() => onToggle(a.value)}
               className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
                 isSelected
-                  ? "border-primary-500 bg-primary-50"
-                  : "border-gray-200 hover:border-gray-300"
+                  ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
+                  : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
               }`}
             >
               <span className="text-xl leading-none">{a.icon}</span>
-              <span className="text-sm font-medium text-gray-900">{a.label}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{a.label}</span>
             </button>
           );
         })}
@@ -321,6 +341,81 @@ function StepActivities({
         className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
       >
         Continuar →
+      </button>
+    </div>
+  );
+}
+
+function StepPhoto({ onFinish }: { onFinish: (file: File | null) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    if (!file) return;
+    setSelectedFile(file);
+    setPreview(URL.createObjectURL(file));
+  }
+
+  async function handleSend() {
+    setUploading(true);
+    await onFinish(selectedFile);
+    setUploading(false);
+  }
+
+  return (
+    <div className="flex flex-1 flex-col">
+      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Foto do perfil físico</h2>
+      <p className="mb-1 text-sm text-gray-500">
+        Quer enviar uma foto para ajudar a IA a entender melhor seu perfil físico? Isso é opcional.
+      </p>
+      <p className="mb-6 text-xs text-gray-400">Sua foto fica armazenada com segurança e não é compartilhada.</p>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {preview ? (
+        <div className="mb-4 flex flex-col items-center gap-3">
+          <img src={preview} alt="preview" className="h-48 w-48 rounded-2xl object-cover shadow" />
+          <button
+            onClick={() => { setPreview(null); setSelectedFile(null); if (inputRef.current) inputRef.current.value = ""; }}
+            className="text-xs text-gray-400 hover:text-gray-600"
+          >
+            Remover foto
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="mb-4 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 py-10 hover:border-primary-300 hover:bg-primary-50"
+        >
+          <span className="text-3xl">📷</span>
+          <span className="text-sm font-medium text-gray-600">Escolher foto</span>
+          <span className="text-xs text-gray-400">JPG, PNG ou HEIC</span>
+        </button>
+      )}
+
+      <button
+        onClick={handleSend}
+        disabled={uploading}
+        className="mt-2 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+      >
+        {uploading ? "Enviando..." : selectedFile ? "Enviar foto e continuar →" : "Continuar com foto →"}
+      </button>
+      <button
+        onClick={() => onFinish(null)}
+        disabled={uploading}
+        className="mt-3 w-full py-2 text-sm text-gray-400 hover:text-gray-600 disabled:opacity-50"
+      >
+        Pular por enquanto
       </button>
     </div>
   );
@@ -343,11 +438,11 @@ function StepLocation({
 }) {
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700">
+      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900">Onde você costuma treinar?</h2>
-      <p className="mb-6 text-sm text-gray-500">Isso adapta os exercícios do seu plano.</p>
+      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Onde você costuma treinar?</h2>
+      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Isso adapta os exercícios do seu plano.</p>
 
       {error && (
         <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
@@ -360,14 +455,14 @@ function StepLocation({
             onClick={() => onSelect(l.value)}
             className={`w-full rounded-xl border-2 p-4 text-left transition ${
               selected === l.value
-                ? "border-primary-500 bg-primary-50"
-                : "border-gray-200 hover:border-gray-300"
+                ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
+                : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
             }`}
           >
             <div className="flex items-center gap-3">
               <span className="text-xl leading-none">{l.icon}</span>
               <div>
-                <p className="font-semibold text-gray-900">{l.label}</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-50">{l.label}</p>
                 <p className="text-sm text-gray-500">{l.desc}</p>
               </div>
             </div>

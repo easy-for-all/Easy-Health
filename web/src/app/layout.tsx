@@ -4,6 +4,7 @@ import { getLocale, getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
 import Script from "next/script";
 import { AuthProvider } from "@/features/auth/auth-context";
+import { ThemeProvider } from "@/features/theme/theme-context";
 import "./globals.css";
 
 const GTAG_ID = "G-FG3BDM75T1";
@@ -22,6 +23,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className={`${geist.variable} h-full antialiased`}>
       <head>
+        {/* Apply saved theme before first paint to prevent flash */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');})();` }} />
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GTAG_ID}`}
           strategy="afterInteractive"
@@ -33,9 +36,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           gtag('config', '${GTAG_ID}');
         `}</Script>
       </head>
-      <body className="min-h-full bg-gray-50 font-sans">
+      <body className="min-h-full bg-gray-50 dark:bg-gray-950 font-sans">
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <AuthProvider>{children}</AuthProvider>
+          <ThemeProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </ThemeProvider>
         </NextIntlClientProvider>
       </body>
     </html>

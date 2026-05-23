@@ -58,7 +58,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-gray-100 bg-white">
+    <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-950">
       <div className="flex">
         {ITEMS.map(({ href, label, Icon }) => {
           const active = pathname.startsWith(href);
@@ -67,7 +67,7 @@ export function BottomNav() {
               key={href}
               href={href}
               className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
-                active ? "text-primary-500" : "text-gray-400"
+                active ? "text-primary-500" : "text-gray-400 dark:text-gray-500"
               }`}
             >
               <Icon />

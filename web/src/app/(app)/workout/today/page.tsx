@@ -293,7 +293,7 @@ function WorkoutTodayContent() {
     const state = runtimeFor(exerciseRuntime, exercise);
 
     const currentWeight = state.weight_by_set[currentSet - 1];
-    if (!currentWeight) {
+    if (!isCardio(exercise) && !currentWeight) {
       setWeightError(true);
       return;
     }
@@ -354,8 +354,8 @@ function WorkoutTodayContent() {
 
   if (!plan?.days?.length) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Nenhum treino disponível</h1>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4 text-center dark:bg-gray-950">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">Nenhum treino disponível</h1>
         <p className="mt-2 text-sm text-gray-500">Crie um planejamento para começar.</p>
         <button onClick={() => router.push("/plan")} className="mt-6 rounded-lg bg-primary-500 px-6 py-3 text-sm font-semibold text-white">
           Ver planejamento
@@ -409,7 +409,7 @@ function WorkoutTodayContent() {
 
   if (!exercise) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4 text-center dark:bg-gray-950">
         <p className="mt-4 text-gray-600">Nenhum exercício encontrado para este treino.</p>
         <button onClick={() => setPhase("overview")} className="mt-4 text-sm text-primary-600 hover:underline">
           Voltar
@@ -450,7 +450,7 @@ function WorkoutTodayContent() {
 
   if (phase === "exercise_feedback") {
     return (
-      <div className="flex min-h-screen flex-col px-4 py-6">
+      <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
         <div className="flex flex-1 flex-col justify-center">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary-500">Exercício concluído</p>
           <h1 className="mt-2 text-3xl font-bold text-gray-900">{exercise.name}</h1>
@@ -476,9 +476,9 @@ function WorkoutTodayContent() {
 
   return (
     <>
-    <div className="flex min-h-screen flex-col px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm text-gray-500">{currentIndex + 1}/{exercises.length}</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">{currentIndex + 1}/{exercises.length}</span>
         <span className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
           {formatElapsed(elapsedSeconds)}
         </span>
@@ -516,7 +516,7 @@ function WorkoutTodayContent() {
           </button>
         </div>
         <div className="mt-4">
-          <h2 className="text-3xl font-bold text-gray-900">{exercise.name}</h2>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-50">{exercise.name}</h2>
         </div>
         {(() => {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
@@ -681,9 +681,9 @@ function ChooseScreen({
   const router = useRouter();
 
   return (
-    <div className="min-h-screen px-4 py-6">
+    <div className="min-h-screen bg-white px-4 py-6 dark:bg-gray-950">
       <div className="mb-4 flex items-center justify-between">
-        <button onClick={onBack} className="text-sm text-gray-500">← Voltar</button>
+        <button onClick={onBack} className="text-sm text-gray-500 dark:text-gray-400">← Voltar</button>
         <button
           onClick={() => router.push("/dashboard")}
           className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100"
@@ -691,7 +691,7 @@ function ChooseScreen({
           ✨ Dicas IA
         </button>
       </div>
-      <h1 className="text-2xl font-bold text-gray-900">Escolha seu treino</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">Escolha seu treino</h1>
       <p className="mt-1 text-sm text-gray-500">Faça A, B, C ou qualquer outro que fizer sentido hoje.</p>
 
       <div className="mt-6 space-y-3">
@@ -708,7 +708,7 @@ function ChooseScreen({
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600">{LETTERS[idx] ?? idx + 1}</span>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-900">{day.name}</p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-50">{day.name}</p>
                     {isRecommended && (
                       <span className="rounded-full bg-primary-500 px-2 py-0.5 text-xs font-semibold text-white">Hoje</span>
                     )}
@@ -725,14 +725,14 @@ function ChooseScreen({
       </div>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Últimos 7 dias</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Últimos 7 dias</h2>
         {sessions.length === 0 ? (
           <p className="mt-3 rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-500">Nenhum treino registrado nesse período.</p>
         ) : (
           <div className="mt-3 space-y-2">
             {sessions.map((session) => (
-              <div key={session.id} className="rounded-xl border border-gray-100 bg-white p-4">
-                <p className="font-medium text-gray-900">{session.workout_day_name}</p>
+              <div key={session.id} className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                <p className="font-medium text-gray-900 dark:text-gray-50">{session.workout_day_name}</p>
                 <p className="text-xs text-gray-500">
                   {new Date(session.completed_at).toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" })}
                   {" · "}{session.duration_minutes} min
@@ -844,9 +844,9 @@ function OverviewScreen({
 
   return (
   <>
-    <div className="flex min-h-screen flex-col px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
       <div className="mb-4 flex items-center justify-between">
-        <button onClick={onBack} className="text-sm text-gray-500">← Escolher outro</button>
+        <button onClick={onBack} className="text-sm text-gray-500 dark:text-gray-400">← Escolher outro</button>
         <button
           onClick={() => overviewRouter.push("/dashboard")}
           className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100"
@@ -854,7 +854,7 @@ function OverviewScreen({
           ✨ Dicas IA
         </button>
       </div>
-      <h1 className="text-2xl font-bold text-gray-900">{day.name}</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">{day.name}</h1>
       <p className="mt-1 text-sm text-gray-500">{exercises.length} exercícios</p>
 
       <div className="mt-4 flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
@@ -878,12 +878,12 @@ function OverviewScreen({
         {exercises.map((ex) => {
           const state = runtimeFor(runtime, ex);
           return (
-            <div key={ex.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-4">
+            <div key={ex.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
               <div className="flex gap-3">
                 <SmartImage src={ex.image_url} fallbackSrc={exerciseFallback(ex)} alt={ex.name} className="h-16 w-20 rounded-lg object-cover" />
                 <SmartImage src={ex.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={ex.muscle_group ?? "músculo"} className="h-16 w-14 rounded-lg object-cover" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-gray-900">{ex.name}</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-50">{ex.name}</p>
                   <p className="text-xs text-gray-400">{state.planned_sets} séries · {ex.reps} reps</p>
                   {(() => {
                     const prev = lastExerciseLog(sessions, ex.exercise_id);
@@ -925,26 +925,28 @@ function OverviewScreen({
                   ℹ Info
                 </button>
               </div>
-              <div className="mt-3">
-                <label className="block text-xs font-medium text-gray-500">
-                  Peso (kg)
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.5"
-                    value={state.weight_by_set[0] ?? ""}
-                    onChange={(event) => {
-                      const weight = event.target.value;
-                      onChangeRuntime(ex.workout_day_exercise_id, {
-                        weight_by_set: Array.from({ length: state.planned_sets }, () => weight),
-                      });
-                    }}
-                    placeholder="kg"
-                    className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
-                  />
-                </label>
-              </div>
+              {!isCardio(ex) && (
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-gray-500">
+                    Peso (kg)
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.5"
+                      value={state.weight_by_set[0] ?? ""}
+                      onChange={(event) => {
+                        const weight = event.target.value;
+                        onChangeRuntime(ex.workout_day_exercise_id, {
+                          weight_by_set: Array.from({ length: state.planned_sets }, () => weight),
+                        });
+                      }}
+                      placeholder="kg"
+                      className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+                    />
+                  </label>
+                </div>
+              )}
             </div>
           );
         })}
@@ -985,7 +987,7 @@ function OverviewScreen({
                 <button key={alt.id} onClick={() => doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
                   <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
                   <div>
-                    <p className="font-medium text-gray-900">{alt.name}</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-50">{alt.name}</p>
                     <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
                   </div>
                 </button>
@@ -1048,6 +1050,16 @@ function DoneScreen({
       completed_at: finishedAt.toISOString(),
       exercise_logs: exercises.map((exercise) => {
         const state = runtimeFor(runtime, exercise);
+        if (isCardio(exercise)) {
+          return {
+            workout_day_exercise_id: exercise.workout_day_exercise_id,
+            exercise_id: exercise.exercise_id,
+            name: exercise.name,
+            duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
+            intensity: state.intensity ?? null,
+            feeling: state.feeling || null,
+          };
+        }
         return {
           workout_day_exercise_id: exercise.workout_day_exercise_id,
           exercise_id: exercise.exercise_id,
@@ -1072,7 +1084,7 @@ function DoneScreen({
   }
 
   return (
-    <div className="flex min-h-screen flex-col px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
       <div className="text-center">
         <h1 className="mt-4 text-2xl font-bold text-gray-900">Treino concluído</h1>
         <p className="mt-2 text-gray-500">{day.name} · {duration} min</p>
@@ -1080,17 +1092,28 @@ function DoneScreen({
 
       <div className="mt-6 space-y-3">
         <label className="block text-sm font-semibold text-gray-700">Peso por série</label>
-        {exercises.map((exercise) => (
-          <div key={exercise.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-3">
-            <span className="text-sm font-medium text-gray-900">{exercise.name}</span>
-            <p className="mt-1 text-xs text-gray-400">
-              Peso: {formatWeights(runtimeFor(runtime, exercise).weight_by_set)} · Reps: {runtimeFor(runtime, exercise).reps_by_set.join(", ")}
-              {runtimeFor(runtime, exercise).feeling ? ` · ${runtimeFor(runtime, exercise).feeling}` : ""}
-            </p>
-          </div>
-        ))}
+        {exercises.map((exercise) => {
+          const state = runtimeFor(runtime, exercise);
+          return (
+            <div key={exercise.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+              <span className="text-sm font-medium text-gray-900">{exercise.name}</span>
+              {isCardio(exercise) ? (
+                <p className="mt-1 text-xs text-gray-400">
+                  Duração: {state.duration_minutes ?? exercise.duration_minutes ?? "—"} min
+                  {state.intensity ? ` · ${state.intensity}` : ""}
+                  {state.feeling ? ` · ${state.feeling}` : ""}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-gray-400">
+                  Peso: {formatWeights(state.weight_by_set)} · Reps: {state.reps_by_set.join(", ")}
+                  {state.feeling ? ` · ${state.feeling}` : ""}
+                </p>
+              )}
+            </div>
+          );
+        })}
 
-        <div className="rounded-xl border border-gray-100 bg-white p-4">
+        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
           <label className="text-sm font-semibold text-gray-700">Nível geral de cansaço</label>
           <div className="mt-3 flex gap-2">
             {[1, 2, 3, 4, 5].map((level) => (
@@ -1127,7 +1150,7 @@ function WarmupScreen({ day, onStart }: { day: WorkoutDay; onStart: () => void }
   const items = WARMUP_BY_TYPE[type] ?? WARMUP_BY_TYPE.default;
 
   return (
-    <div className="flex min-h-screen flex-col px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
       <div className="flex flex-1 flex-col">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-500">Aquecimento</p>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">Prepare o corpo</h1>
@@ -1166,7 +1189,7 @@ function CooldownScreen({ day, onFinish }: { day: WorkoutDay; onFinish: () => vo
   const items = COOLDOWN_BY_TYPE[type] ?? COOLDOWN_BY_TYPE.default;
 
   return (
-    <div className="flex min-h-screen flex-col px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
       <div className="flex flex-1 flex-col">
         <p className="text-xs font-semibold uppercase tracking-wide text-green-600">Finalização</p>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">Recuperação</h1>

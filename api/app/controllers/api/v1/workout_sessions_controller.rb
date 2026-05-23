@@ -66,6 +66,8 @@ module Api
             :sets,
             :rest_seconds,
             :feeling,
+            :duration_minutes,
+            :intensity,
             weight_by_set: [],
             reps: []
           ]
