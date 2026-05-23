@@ -21,10 +21,15 @@ module Api
       end
 
       def create
+        unless current_user.can_access_workout?
+          render json: { error: "Plano ativo necessário." }, status: :forbidden and return
+        end
+
         session = current_user.workout_sessions.build(session_params)
         session.completed_at ||= Time.current
 
         if session.save
+          mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
           render json: session_json(session), status: :created
         else
           render json: { errors: session.errors.full_messages }, status: :unprocessable_entity
@@ -37,6 +42,13 @@ module Api
       end
 
       private
+
+      def mark_free_workout_used
+        current_user.update_columns(
+          free_workout_used: true,
+          first_workout_completed_at: Time.current
+        )
+      end
 
       def session_params
         params.permit(

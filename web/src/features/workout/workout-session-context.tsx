@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 const STORAGE_PREFIX = "wk_";
 const KEY_START_TS = `${STORAGE_PREFIX}start_ts`;
 const KEY_DAY_ID = `${STORAGE_PREFIX}day_id`;
+const KEY_REST_END = `${STORAGE_PREFIX}rest_end_ts`;
 
 interface WorkoutSessionState {
   startTime: Date | null;
@@ -12,6 +13,8 @@ interface WorkoutSessionState {
   elapsedSeconds: number;
   beginSession: (dayId: number) => void;
   endSession: () => void;
+  saveRestEnd: (timestampMs: number | null) => void;
+  getRestEnd: () => number | null;
 }
 
 const WorkoutSessionContext = createContext<WorkoutSessionState | null>(null);
@@ -80,14 +83,32 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     try {
       sessionStorage.removeItem(KEY_START_TS);
       sessionStorage.removeItem(KEY_DAY_ID);
+      sessionStorage.removeItem(KEY_REST_END);
     } catch { /* storage unavailable */ }
     setStartTime(null);
     setActiveWorkoutDayId(null);
     setElapsedSeconds(0);
   }, []);
 
+  const saveRestEnd = useCallback((timestampMs: number | null) => {
+    try {
+      if (timestampMs === null) {
+        sessionStorage.removeItem(KEY_REST_END);
+      } else {
+        sessionStorage.setItem(KEY_REST_END, String(timestampMs));
+      }
+    } catch { /* storage unavailable */ }
+  }, []);
+
+  const getRestEnd = useCallback((): number | null => {
+    try {
+      const v = sessionStorage.getItem(KEY_REST_END);
+      return v ? parseInt(v, 10) : null;
+    } catch { return null; }
+  }, []);
+
   return (
-    <WorkoutSessionContext.Provider value={{ startTime, activeWorkoutDayId, elapsedSeconds, beginSession, endSession }}>
+    <WorkoutSessionContext.Provider value={{ startTime, activeWorkoutDayId, elapsedSeconds, beginSession, endSession, saveRestEnd, getRestEnd }}>
       {children}
     </WorkoutSessionContext.Provider>
   );

@@ -98,6 +98,8 @@ module Api
             sets: wde.sets,
             reps: wde.reps,
             rest_seconds: wde.rest_seconds,
+            duration_minutes: wde.duration_minutes,
+            intensity: wde.intensity,
             order_index: idx
           )
         end
@@ -169,6 +171,8 @@ module Api
               sets: wde.sets,
               reps: wde.reps,
               rest_seconds: wde.rest_seconds,
+              duration_minutes: wde.duration_minutes,
+              intensity: wde.intensity,
               order_index: wde.order_index,
               last_performed_at: last_performed[wde.exercise.id]
             }

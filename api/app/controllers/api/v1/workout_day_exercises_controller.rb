@@ -96,20 +96,36 @@ module Api
           return render json: { error: "Exercise is already in this workout" }, status: :unprocessable_entity
         end
 
-        reference = day.workout_day_exercises.includes(:exercise).find { |wde| same_target?(wde.exercise, exercise) }
-        unless reference
-          return render json: { error: "Exercise must match a muscle group already trained here" }, status: :unprocessable_entity
+        next_order = (day.workout_day_exercises.maximum(:order_index) || -1) + 1
+
+        if WorkoutDayExercise::CARDIO_TYPES.include?(exercise.exercise_type)
+          wde = day.workout_day_exercises.create!(
+            exercise: exercise,
+            sets: 1,
+            reps: 1,
+            rest_seconds: 0,
+            duration_minutes: cardio_create_params[:duration_minutes]&.to_i || 20,
+            intensity: cardio_create_params[:intensity] || "moderado",
+            order_index: next_order
+          )
+        else
+          reference = day.workout_day_exercises.includes(:exercise).find { |wde| same_target?(wde.exercise, exercise) }
+          unless reference
+            return render json: { error: "Exercise must match a muscle group already trained here" }, status: :unprocessable_entity
+          end
+
+          wde = day.workout_day_exercises.create!(
+            exercise: exercise,
+            sets: reference.sets,
+            reps: reference.reps,
+            rest_seconds: reference.rest_seconds,
+            order_index: next_order
+          )
         end
 
-        wde = day.workout_day_exercises.create!(
-          exercise: exercise,
-          sets: reference.sets,
-          reps: reference.reps,
-          rest_seconds: reference.rest_seconds,
-          order_index: (day.workout_day_exercises.maximum(:order_index) || -1) + 1
-        )
-
         render json: workout_day_exercise_json(wde), status: :created
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Not found" }, status: :not_found
       end
@@ -117,7 +133,11 @@ module Api
       private
 
       def update_params
-        params.permit(:sets, :reps, :rest_seconds)
+        params.permit(:sets, :reps, :rest_seconds, :duration_minutes, :intensity)
+      end
+
+      def cardio_create_params
+        params.permit(:duration_minutes, :intensity)
       end
 
       def same_target?(current, replacement)
@@ -138,6 +158,8 @@ module Api
           sets: wde.sets,
           reps: wde.reps,
           rest_seconds: wde.rest_seconds,
+          duration_minutes: wde.duration_minutes,
+          intensity: wde.intensity,
           order_index: wde.order_index
         }
       end

@@ -37,7 +37,7 @@ class StripeWebhookService
       handle_subscription_upsert(event.data.object)
     when "customer.subscription.deleted"
       handle_subscription_deleted(event.data.object)
-    when "invoice.paid"
+    when "invoice.paid", "invoice.payment_succeeded"
       handle_invoice_paid(event.data.object)
     when "invoice.payment_failed"
       handle_invoice_payment_failed(event.data.object)

@@ -13,6 +13,8 @@ export interface WorkoutDayExercise {
   sets: number;
   reps: number;
   rest_seconds: number;
+  duration_minutes?: number | null;
+  intensity?: string | null;
   order_index: number;
   last_performed_at?: string | null;
 }
