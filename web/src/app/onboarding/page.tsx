@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
-import { analytics } from "@/shared/lib/analytics";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import type { Goal, FitnessLevel, ActivityType } from "@/shared/types/health-profile";
 
 type TrainingLocation = "gym" | "home" | "outdoor" | "any";
@@ -88,7 +88,7 @@ export default function OnboardingPage() {
         activity_preferences: form.activity_preferences,
         training_location: location || form.training_location || "gym",
       });
-      analytics.onboardingCompleted();
+      trackEvent(EVENTS.ONBOARDING_COMPLETED);
       router.push("/plan");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao salvar perfil");
@@ -101,7 +101,7 @@ export default function OnboardingPage() {
 
   function goToStep(n: number) {
     setStep(n);
-    analytics.onboardingStep(n, STEP_LABELS[n - 1]);
+    trackEvent(EVENTS.ONBOARDING_STEP, { step: n, label: STEP_LABELS[n - 1] });
   }
 
   const TOTAL_STEPS = 5;

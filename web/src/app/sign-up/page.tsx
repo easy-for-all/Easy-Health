@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
-import { analytics } from "@/shared/lib/analytics";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 
 export default function SignUpPage() {
   const { signUp } = useAuth();
@@ -18,7 +18,7 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { analytics.signupStarted(); }, []);
+  useEffect(() => { trackEvent(EVENTS.SIGNUP_STARTED); }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,7 +26,7 @@ export default function SignUpPage() {
     setLoading(true);
     try {
       await signUp(name, email, password);
-      analytics.signupCompleted();
+      trackEvent(EVENTS.SIGNUP_COMPLETED);
       const pending = getPendingPlan();
       if (pending) {
         clearPendingPlan();

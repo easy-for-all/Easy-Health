@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { analytics } from "@/shared/lib/analytics";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 
 const PLANS = [
   {
@@ -41,7 +41,7 @@ const PLANS = [
 ];
 
 export function PricingPlans() {
-  useEffect(() => { analytics.paywallViewed(); }, []);
+  useEffect(() => { trackEvent(EVENTS.PAYWALL_VIEWED); }, []);
 
   return (
     <div className="grid gap-6 sm:grid-cols-2">
@@ -75,7 +75,7 @@ export function PricingPlans() {
           </ul>
           <Link
             href="/sign-up"
-            onClick={() => analytics.checkoutStarted(plan.id)}
+            onClick={() => trackEvent(EVENTS.CHECKOUT_STARTED, { plan: plan.id })}
             className={`mt-8 block w-full rounded-xl py-3 text-center text-sm font-semibold transition-colors ${
               plan.highlighted
                 ? "bg-primary-500 text-white hover:bg-primary-600"

@@ -1,26 +1,35 @@
 declare global {
   interface Window {
-    gtag: (...args: unknown[]) => void;
+    gtag?: (...args: unknown[]) => void;
   }
 }
 
-const GTAG_ID = "G-FG3BDM75T1";
+type EventParams = Record<string, string | number | boolean | undefined>;
 
-function gtag(event: string, params?: Record<string, unknown>) {
-  if (typeof window === "undefined" || typeof window.gtag !== "function") return;
-  window.gtag("event", event, { send_to: GTAG_ID, ...params });
+export function trackEvent(eventName: string, params?: EventParams): void {
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[Analytics] ${eventName}`, params ?? {});
+  }
+  if (typeof window.gtag !== "function") return;
+  window.gtag("event", eventName, params);
 }
 
-export const analytics = {
-  signupStarted: () => gtag("signup_started"),
-  signupCompleted: () => gtag("signup_completed"),
-
-  onboardingStep: (step: number, label: string) =>
-    gtag("onboarding_step", { step, label }),
-  onboardingCompleted: () => gtag("onboarding_completed"),
-
-  paywallViewed: (plan?: string) => gtag("paywall_viewed", { plan }),
-  checkoutStarted: (plan: string) => gtag("checkout_started", { plan }),
-
-  ctaClick: (location: string) => gtag("cta_click", { location }),
-};
+export const EVENTS = {
+  LANDING_VIEW:         "landing_view",
+  SIGNUP_STARTED:       "signup_started",
+  SIGNUP_COMPLETED:     "signup_completed",
+  ONBOARDING_STARTED:   "onboarding_started",
+  ONBOARDING_STEP:      "onboarding_step",
+  ONBOARDING_COMPLETED: "onboarding_completed",
+  WORKOUT_CREATED:      "workout_created",
+  WORKOUT_STARTED:      "workout_started",
+  WORKOUT_COMPLETED:    "workout_completed",
+  PAYWALL_VIEWED:       "paywall_viewed",
+  CHECKOUT_STARTED:     "checkout_started",
+  SUBSCRIPTION_CREATED: "subscription_created",
+  AI_TIP_VIEWED:        "ai_tip_viewed",
+  AI_WORKOUT_GENERATED: "ai_workout_generated",
+  SCREEN_VIEW:          "screen_view",
+  CTA_CLICK:            "cta_click",
+} as const;
