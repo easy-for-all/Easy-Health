@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
-import { compressImage } from "@/shared/lib/image";
 import type { Goal, FitnessLevel, ActivityType } from "@/shared/types/health-profile";
 
 type TrainingLocation = "gym" | "home" | "outdoor" | "any";
@@ -81,7 +80,7 @@ export default function OnboardingPage() {
     );
   }
 
-  async function handleFinish() {
+  async function handleFinish(location?: TrainingLocation) {
     setError("");
     setLoading(true);
     try {
@@ -92,9 +91,10 @@ export default function OnboardingPage() {
         weight_kg: Number(form.weight_kg),
         height_cm: Number(form.height_cm),
         activity_preferences: form.activity_preferences,
-        training_location: form.training_location || "gym",
+        training_location: location || form.training_location || "gym",
       });
-      setStep(6);
+      trackEvent(EVENTS.ONBOARDING_COMPLETED);
+      router.push("/plan");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao salvar perfil");
     } finally {
@@ -102,23 +102,14 @@ export default function OnboardingPage() {
     }
   }
 
-  async function handlePhotoFinish(file: File | null) {
-    if (file) {
-      try {
-        const compressed = await compressImage(file, 1920, 0.85);
-        const formData = new FormData();
-        formData.append("file", compressed);
-        formData.append("category", "body_photo");
-        await api.uploadPost("/api/v1/user_media", formData);
-      } catch {
-        // upload failure is non-blocking — proceed to plan
-      }
-    }
-    trackEvent(EVENTS.ONBOARDING_COMPLETED);
-    router.push("/plan");
+  const STEP_LABELS = ["goal", "level", "body", "activities", "location"];
+
+  function goToStep(n: number) {
+    setStep(n);
+    trackEvent(EVENTS.ONBOARDING_STEP, { step: n, label: STEP_LABELS[n - 1] });
   }
 
-  const TOTAL_STEPS = 6;
+  const TOTAL_STEPS = 5;
 
   return (
     <div className="flex min-h-screen flex-col bg-white px-4 py-8 dark:bg-gray-950">
@@ -136,15 +127,15 @@ export default function OnboardingPage() {
       {step === 1 && (
         <StepGoal
           selected={form.goal}
-          onSelect={(v) => { set("goal", v); setStep(2); }}
+          onSelect={(v) => { set("goal", v); goToStep(2); }}
         />
       )}
 
       {step === 2 && (
         <StepLevel
           selected={form.fitness_level}
-          onSelect={(v) => { set("fitness_level", v); setStep(3); }}
-          onBack={() => setStep(1)}
+          onSelect={(v) => { set("fitness_level", v); goToStep(3); }}
+          onBack={() => goToStep(1)}
         />
       )}
 
@@ -152,8 +143,8 @@ export default function OnboardingPage() {
         <StepBody
           form={form}
           onChange={set}
-          onNext={() => setStep(4)}
-          onBack={() => setStep(2)}
+          onNext={() => goToStep(4)}
+          onBack={() => goToStep(2)}
         />
       )}
 
@@ -161,24 +152,19 @@ export default function OnboardingPage() {
         <StepActivities
           selected={form.activity_preferences}
           onToggle={toggleActivity}
-          onNext={() => setStep(5)}
-          onBack={() => setStep(3)}
+          onNext={() => goToStep(5)}
+          onBack={() => goToStep(3)}
         />
       )}
 
       {step === 5 && (
         <StepLocation
           selected={form.training_location}
-          onSelect={(v) => set("training_location", v)}
           error={error}
           loading={loading}
-          onFinish={handleFinish}
-          onBack={() => setStep(4)}
+          onSelect={(v) => { set("training_location", v); handleFinish(v); }}
+          onBack={() => goToStep(4)}
         />
-      )}
-
-      {step === 6 && (
-        <StepPhoto onFinish={handlePhotoFinish} />
       )}
     </div>
   );
@@ -314,6 +300,13 @@ function StepActivities({
   onNext: () => void;
   onBack: () => void;
 }) {
+  const [attempted, setAttempted] = useState(false);
+
+  function handleNext() {
+    if (selected.length === 0) { setAttempted(true); return; }
+    onNext();
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
@@ -328,7 +321,7 @@ function StepActivities({
           return (
             <button
               key={a.value}
-              onClick={() => onToggle(a.value)}
+              onClick={() => { onToggle(a.value); setAttempted(false); }}
               className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
                 isSelected
                   ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
@@ -342,86 +335,15 @@ function StepActivities({
         })}
       </div>
 
-      <button
-        onClick={onNext}
-        disabled={selected.length === 0}
-        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
-      >
-        Continuar →
-      </button>
-    </div>
-  );
-}
-
-function StepPhoto({ onFinish }: { onFinish: (file: File | null) => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null;
-    if (!file) return;
-    setSelectedFile(file);
-    setPreview(URL.createObjectURL(file));
-  }
-
-  async function handleSend() {
-    setUploading(true);
-    await onFinish(selectedFile);
-    setUploading(false);
-  }
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Foto do perfil físico</h2>
-      <p className="mb-1 text-sm text-gray-500">
-        Quer enviar uma foto para ajudar a IA a entender melhor seu perfil físico? Isso é opcional.
-      </p>
-      <p className="mb-6 text-xs text-gray-400">Sua foto fica armazenada com segurança e não é compartilhada.</p>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-
-      {preview ? (
-        <div className="mb-4 flex flex-col items-center gap-3">
-          <img src={preview} alt="preview" className="h-48 w-48 rounded-2xl object-cover shadow" />
-          <button
-            onClick={() => { setPreview(null); setSelectedFile(null); if (inputRef.current) inputRef.current.value = ""; }}
-            className="text-xs text-gray-400 hover:text-gray-600"
-          >
-            Remover foto
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => inputRef.current?.click()}
-          className="mb-4 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 py-10 hover:border-primary-300 hover:bg-primary-50"
-        >
-          <span className="text-3xl">📷</span>
-          <span className="text-sm font-medium text-gray-600">Escolher foto</span>
-          <span className="text-xs text-gray-400">JPG, PNG ou HEIC</span>
-        </button>
+      {attempted && selected.length === 0 && (
+        <p className="mt-4 text-sm text-red-600">Selecione pelo menos uma atividade para continuar.</p>
       )}
 
       <button
-        onClick={handleSend}
-        disabled={uploading}
-        className="mt-2 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+        onClick={handleNext}
+        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600"
       >
-        {uploading ? "Enviando..." : selectedFile ? "Enviar foto e continuar →" : "Continuar com foto →"}
-      </button>
-      <button
-        onClick={() => onFinish(null)}
-        disabled={uploading}
-        className="mt-3 w-full py-2 text-sm text-gray-400 hover:text-gray-600 disabled:opacity-50"
-      >
-        Pular por enquanto
+        Continuar →
       </button>
     </div>
   );
@@ -432,14 +354,12 @@ function StepLocation({
   onSelect,
   error,
   loading,
-  onFinish,
   onBack,
 }: {
   selected: TrainingLocation | "";
   onSelect: (v: TrainingLocation) => void;
   error: string;
   loading: boolean;
-  onFinish: () => void;
   onBack: () => void;
 }) {
   return (
@@ -459,7 +379,8 @@ function StepLocation({
           <button
             key={l.value}
             onClick={() => onSelect(l.value)}
-            className={`w-full rounded-xl border-2 p-4 text-left transition ${
+            disabled={loading}
+            className={`w-full rounded-xl border-2 p-4 text-left transition disabled:opacity-70 ${
               selected === l.value
                 ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
                 : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
@@ -476,13 +397,9 @@ function StepLocation({
         ))}
       </div>
 
-      <button
-        onClick={onFinish}
-        disabled={!selected || loading}
-        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
-      >
-        {loading ? "Criando plano..." : "Criar meu plano →"}
-      </button>
+      {loading && (
+        <p className="mt-4 text-center text-sm text-gray-400">Criando seu plano...</p>
+      )}
     </div>
   );
 }

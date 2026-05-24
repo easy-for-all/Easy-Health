@@ -20,6 +20,7 @@ export const EVENTS = {
   SIGNUP_STARTED:       "signup_started",
   SIGNUP_COMPLETED:     "signup_completed",
   ONBOARDING_STARTED:   "onboarding_started",
+  ONBOARDING_STEP:      "onboarding_step",
   ONBOARDING_COMPLETED: "onboarding_completed",
   WORKOUT_CREATED:      "workout_created",
   WORKOUT_STARTED:      "workout_started",
@@ -30,4 +31,5 @@ export const EVENTS = {
   AI_TIP_VIEWED:        "ai_tip_viewed",
   AI_WORKOUT_GENERATED: "ai_workout_generated",
   SCREEN_VIEW:          "screen_view",
+  CTA_CLICK:            "cta_click",
 } as const;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Footer } from "@/shared/components/footer";
 import { FeatureCard } from "@/shared/components/feature-card";
+import { HeroCta } from "@/shared/components/hero-cta";
 import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
 
 export const metadata: Metadata = {
@@ -77,6 +78,10 @@ export default function LandingPage() {
       <main className="flex-1">
         {/* Hero */}
         <section className="mx-auto max-w-5xl px-6 py-20 text-center">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-primary-50 px-4 py-1.5 text-sm font-medium text-primary-700 dark:bg-primary-950/40 dark:text-primary-300">
+            <span className="text-primary-500">✓</span>
+            Mais de 500 treinos gerados · Grátis por 7 dias
+          </div>
           <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-gray-50 sm:text-5xl">
             Treino inteligente com IA<br />
             <span className="text-primary-500">para evoluir com mais constância.</span>
@@ -85,13 +90,14 @@ export default function LandingPage() {
             A EasyHealth cria treinos personalizados, acompanha sua evolução e ajuda você a manter uma rotina fitness mais inteligente.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Link href="/sign-up" className="w-full rounded-xl bg-primary-500 px-8 py-4 text-base font-semibold text-white hover:bg-primary-600 sm:w-auto">
-              Começar agora
-            </Link>
-            <Link href="#como-funciona" className="w-full rounded-xl border border-gray-200 px-8 py-4 text-base font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto">
+            <HeroCta />
+            <Link href="#como-funciona" className="w-full rounded-xl border border-gray-200 px-8 py-4 text-base font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 sm:w-auto">
               Ver como funciona
             </Link>
           </div>
+          <p className="mt-6 text-sm italic text-gray-400 dark:text-gray-500">
+            "Em 2 semanas já sabia exatamente o que treinar todo dia." — Lucas M.
+          </p>
         </section>
 
         {/* Como funciona — Feature cards */}
