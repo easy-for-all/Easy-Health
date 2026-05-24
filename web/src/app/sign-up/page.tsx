@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 
 export default function SignUpPage() {
   const { signUp } = useAuth();
@@ -17,12 +18,17 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    trackEvent(EVENTS.SIGNUP_STARTED);
+  }, []);
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
       await signUp(name, email, password);
+      trackEvent(EVENTS.SIGNUP_COMPLETED);
       const pending = getPendingPlan();
       if (pending) {
         clearPendingPlan();

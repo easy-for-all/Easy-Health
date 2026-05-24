@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 
 interface PersonalTrainerRec {
   exercise: string;
@@ -58,6 +59,10 @@ export function AiRecommendationsCard() {
     ]).then(([pt, cond]) => {
       if (pt) { setPtRecs(pt.recommendations ?? []); if (pt.message) setPtMessage(pt.message); }
       if (cond) { setCondRecs(cond.recommendations ?? []); if (cond.message) setCondMessage(cond.message); }
+      const total = (pt?.recommendations?.length ?? 0) + (cond?.recommendations?.length ?? 0);
+      if (total > 0) {
+        trackEvent(EVENTS.AI_TIP_VIEWED, { recommendations_count: total });
+      }
     }).finally(() => setLoading(false));
   }, []);
 

@@ -38,7 +38,42 @@ module Api
 
       def stats
         sessions = current_user.workout_sessions.order(completed_at: :desc)
-        render json: { total_sessions: sessions.count, streak: calculate_streak(sessions) }
+        weekly = sessions.select { |s| s.completed_at >= 7.days.ago }
+        goal = current_user.health_profile&.training_days_per_week || 3
+        total_volume = calculate_total_volume(sessions)
+
+        render json: {
+          total_sessions: sessions.count,
+          streak: calculate_streak(sessions),
+          weekly_sessions: weekly.count,
+          weekly_goal: goal,
+          total_volume_kg: total_volume
+        }
+      end
+
+      def personal_records
+        sessions = current_user.workout_sessions
+          .where("exercise_logs IS NOT NULL")
+          .order(completed_at: :desc)
+
+        records = {}
+        sessions.each do |session|
+          (session.exercise_logs || []).each do |log|
+            next unless log["exercise_id"] && log["weight_kg"].to_f > 0
+            ex_id = log["exercise_id"]
+            weight = log["weight_kg"].to_f
+            if records[ex_id].nil? || weight > records[ex_id][:max_weight_kg]
+              records[ex_id] = {
+                exercise_id: ex_id,
+                exercise_name: log["name"],
+                max_weight_kg: weight,
+                achieved_at: session.completed_at
+              }
+            end
+          end
+        end
+
+        render json: records.values
       end
 
       private
@@ -85,6 +120,21 @@ module Api
           exercise_logs: s.exercise_logs || [],
           notes: s.notes
         }
+      end
+
+      def calculate_total_volume(sessions)
+        total = 0.0
+        sessions.each do |session|
+          (session.exercise_logs || []).each do |log|
+            weight = log["weight_kg"].to_f
+            next if weight == 0
+            reps_array = Array(log["reps"])
+            sets = log["sets"].to_i
+            reps_per_set = reps_array.empty? ? log["reps"].to_i : reps_array.sum.to_f / [reps_array.size, 1].max
+            total += weight * reps_per_set * sets
+          end
+        end
+        total.round
       end
 
       def calculate_streak(sessions)

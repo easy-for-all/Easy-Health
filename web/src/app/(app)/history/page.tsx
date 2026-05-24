@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/shared/lib/api";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import type { WorkoutSession } from "@/shared/types/workout";
@@ -170,6 +171,10 @@ function HistoryContent() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<WorkoutSession | null>(null);
+
+  useEffect(() => {
+    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "historico" });
+  }, []);
 
   useEffect(() => {
     api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions")
