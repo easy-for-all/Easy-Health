@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { compressImage } from "@/shared/lib/image";
 import type { Goal, FitnessLevel, ActivityType } from "@/shared/types/health-profile";
 
@@ -63,6 +64,11 @@ export default function OnboardingPage() {
     training_location: "",
   });
 
+  useEffect(() => {
+    trackEvent(EVENTS.ONBOARDING_STARTED);
+    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "onboarding" });
+  }, []);
+
   function set<K extends keyof FormData>(key: K, value: FormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -108,6 +114,7 @@ export default function OnboardingPage() {
         // upload failure is non-blocking — proceed to plan
       }
     }
+    trackEvent(EVENTS.ONBOARDING_COMPLETED);
     router.push("/plan");
   }
 

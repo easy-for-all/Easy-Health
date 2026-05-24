@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from "@/shared/types/workout";
@@ -12,6 +13,9 @@ import { SwapModal } from "./swap-modal";
 import { ExerciseInfoModal } from "./exercise-info-modal";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
+import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared/components/motion";
+import { ShareButton } from "@/shared/components/workout-share/share-button";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -81,6 +85,8 @@ function WorkoutTodayContent() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
   const [restLeft, setRestLeft] = useState(0);
+  const [restTotal, setRestTotal] = useState(0);
+  const [setFlash, setSetFlash] = useState(false);
   const { startTime, elapsedSeconds, beginSession, endSession, saveRestEnd, getRestEnd } = useWorkoutSession();
   const [restAlert, setRestAlert] = useState(false);
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
@@ -93,6 +99,24 @@ function WorkoutTodayContent() {
   const cardioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const beepFiredRef = useRef(false);
+
+  const sessionVolume = useMemo(() => {
+    if (!day?.exercises) return 0;
+    let total = 0;
+    day.exercises.forEach((ex, idx) => {
+      if (isCardio(ex)) return;
+      const state = runtimeFor(exerciseRuntime, ex);
+      const setsCompleted = idx < currentIndex ? state.planned_sets : (idx === currentIndex ? currentSet - 1 : 0);
+      for (let s = 0; s < setsCompleted; s++) {
+        total += (Number(state.weight_by_set[s]) || 0) * (state.reps_by_set[s] || 0);
+      }
+    });
+    return Math.round(total);
+  }, [day?.exercises, exerciseRuntime, currentIndex, currentSet]);
+
+  useEffect(() => {
+    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "treino" });
+  }, []);
 
   useEffect(() => {
     const dayIdParam = searchParams.get("day");
@@ -197,7 +221,10 @@ function WorkoutTodayContent() {
 
   function startWorkout() {
     unlockAudio();
-    if (day) beginSession(day.id);
+    if (day) {
+      beginSession(day.id);
+      trackEvent(EVENTS.WORKOUT_STARTED, { workout_name: day.name });
+    }
     setPhase("warmup");
   }
 
@@ -269,6 +296,7 @@ function WorkoutTodayContent() {
 
   function startRest(seconds: number) {
     setRestLeft(seconds);
+    setRestTotal(seconds);
     setRestAlert(false);
     setPhase("rest");
     beepFiredRef.current = false;
@@ -318,6 +346,10 @@ function WorkoutTodayContent() {
     }
 
     updateRuntime(exercise.workout_day_exercise_id, { reps_by_set: repsBySet, weight_by_set: weightBySet });
+
+    navigator.vibrate?.(80);
+    setSetFlash(true);
+    setTimeout(() => setSetFlash(false), 600);
 
     if (currentSet < state.planned_sets) {
       setCurrentSet((s) => s + 1);
@@ -429,31 +461,76 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "rest") {
+    const isUrgent = restLeft <= 10;
+    const strokeColor = isUrgent ? "#f97316" : "#22c55e";
+    const radius = 80;
+    const circumference = 2 * Math.PI * radius;
+    const progress = restTotal > 0 ? restLeft / restTotal : 0;
+    const dashOffset = circumference * (1 - progress);
+
     return (
-      <div className={`flex min-h-screen flex-col items-center justify-center px-4 transition-colors ${restAlert ? "bg-primary-50" : ""}`}>
-        <p className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-3 py-1 rounded-full mb-4">
-          Treino: {formatElapsed(elapsedSeconds)}
+      <div className="flex min-h-screen flex-col items-center justify-center px-4 bg-white dark:bg-gray-950">
+        <p className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-3 py-1 rounded-full mb-8">
+          ⏱ {formatElapsed(elapsedSeconds)}
         </p>
-        {restAlert ? (
-          <div className="flex flex-col items-center animate-bounce">
-            <p className="text-4xl font-bold text-primary-500">Hora de treinar!</p>
-            <p className="mt-2 text-2xl">💪</p>
-          </div>
-        ) : (
-          <>
-            <p className="text-sm font-medium uppercase tracking-wide text-gray-400">Descanso</p>
-            <p className={`mt-4 text-7xl font-bold tabular-nums transition-colors ${restLeft <= 5 ? "text-orange-500 animate-pulse" : "text-primary-500"}`}>
-              {restLeft}s
-            </p>
-            <p className="mt-2 text-gray-500">Próximo: {exercise.name}</p>
-            <button onClick={skipRest} className="mt-8 rounded-lg border border-gray-200 px-6 py-3 text-sm text-gray-500 hover:bg-gray-50">
-              Pular descanso
-            </button>
-            <button onClick={() => setPhase("done")} className="mt-3 text-sm font-medium text-red-500">
-              Encerrar treino agora
-            </button>
-          </>
-        )}
+
+        <AnimatePresence mode="wait">
+          {restAlert ? (
+            <motion.div
+              key="alert"
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex flex-col items-center"
+            >
+              <motion.p
+                animate={{ scale: [1, 1.06, 1] }}
+                transition={{ duration: 0.6, repeat: Infinity }}
+                className="text-4xl font-bold text-primary-500"
+              >
+                Hora de treinar!
+              </motion.p>
+              <p className="mt-2 text-3xl">💪</p>
+            </motion.div>
+          ) : (
+            <motion.div key="timer" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">Descanso</p>
+
+              <div className="relative">
+                <svg width="200" height="200" className="-rotate-90">
+                  <circle cx="100" cy="100" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="8" />
+                  <motion.circle
+                    cx="100" cy="100" r={radius}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    animate={{ strokeDashoffset: dashOffset }}
+                    transition={{ duration: 0.9, ease: "easeOut" }}
+                    style={{ filter: `drop-shadow(0 0 8px ${strokeColor})` }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <p className={`text-5xl font-bold tabular-nums ${isUrgent ? "text-orange-500" : "text-primary-500"}`}>
+                    {restLeft}s
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-6 text-sm text-gray-500">Próximo: <span className="font-semibold text-gray-700">{exercise.name}</span></p>
+
+              <PressButton
+                onClick={skipRest}
+                className="mt-8 rounded-xl border border-gray-200 px-6 py-3 text-sm font-medium text-gray-500 hover:bg-gray-50"
+              >
+                Pular descanso
+              </PressButton>
+              <button onClick={() => setPhase("done")} className="mt-3 text-sm font-medium text-red-400">
+                Encerrar treino agora
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -484,21 +561,48 @@ function WorkoutTodayContent() {
     );
   }
 
+  const historicalMaxWeight = getHistoricalMaxWeight(sessions, exercise.exercise_id);
+  const currentWeightNum = Number(runtime.weight_by_set[currentSet - 1]) || 0;
+  const isNewPR = !isCardio(exercise) && currentWeightNum > 0 && historicalMaxWeight > 0 && currentWeightNum > historicalMaxWeight;
+
   return (
     <>
-    <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm text-gray-500 dark:text-gray-400">{currentIndex + 1}/{exercises.length}</span>
-        <span className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
-          {formatElapsed(elapsedSeconds)}
-        </span>
-        <button onClick={() => setPhase("done")} className="text-sm font-medium text-red-500">Encerrar</button>
-      </div>
-      <div className="mb-4 h-1.5 rounded-full bg-gray-100">
-        <div className="h-1.5 rounded-full bg-primary-500 transition-all" style={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }} />
+    <div className="flex min-h-screen flex-col bg-white dark:bg-gray-950">
+      {/* Sticky premium header */}
+      <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-gray-100/50 dark:bg-gray-950/90 dark:border-gray-800/50 px-4 pt-3 pb-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-gray-400">{currentIndex + 1}/{exercises.length}</span>
+          <span className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-2.5 py-1 rounded-full">
+            ⏱ {formatElapsed(elapsedSeconds)}
+          </span>
+          <button onClick={() => setPhase("done")} className="text-xs font-medium text-red-400">Encerrar</button>
+        </div>
+        <div className="mt-2 flex items-center gap-3">
+          <div className="flex-1 h-1.5 rounded-full bg-gray-100">
+            <motion.div
+              className="h-1.5 rounded-full bg-primary-500"
+              animate={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            />
+          </div>
+          {sessionVolume > 0 && (
+            <p className="shrink-0 text-xs font-bold tabular-nums text-gray-500">
+              <AnimatedCounter value={sessionVolume} />kg
+            </p>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col px-4 pt-4">
+      <AnimatePresence mode="wait">
+      <motion.div
+        key={currentIndex}
+        initial={{ opacity: 0, x: 28 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -28 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="flex flex-1 flex-col"
+      >
         <div className="grid grid-cols-[1fr_104px] gap-3">
           <SmartImage src={exercise.image_url} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
           <SmartImage src={exercise.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={exercise.muscle_group ?? "músculo"} className="h-48 w-full rounded-xl object-cover" />
@@ -601,17 +705,48 @@ function WorkoutTodayContent() {
             </label>
           </>
         )}
+
+        {/* PR Badge */}
+        <AnimatePresence>
+          {isNewPR && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="mt-3 flex items-center gap-2 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-2.5"
+              style={{ boxShadow: "0 0 12px 2px rgba(234,179,8,0.25)" }}
+            >
+              <span className="text-lg">🏆</span>
+              <div>
+                <p className="text-sm font-bold text-yellow-700">Novo recorde pessoal!</p>
+                <p className="text-xs text-yellow-600">{currentWeightNum}kg — anterior: {historicalMaxWeight}kg</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+      </AnimatePresence>
       </div>
 
+      <div className="px-4 pb-6">
       {isCardio(exercise) ? (
-        <button onClick={() => finishExercise("bem")} className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white hover:bg-orange-600">
+        <PressButton onClick={() => finishExercise("bem")} className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white">
           Concluir cardio
-        </button>
+        </PressButton>
       ) : (
-        <button onClick={handleSetDone} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">
-          Feito
-        </button>
+        <GlowPulse color="green" radius={16} className="w-full">
+          <motion.button
+            onClick={handleSetDone}
+            animate={setFlash ? { boxShadow: "0 0 0 3px rgba(34,197,94,0.5)" } : { boxShadow: "0 0 0 0px rgba(34,197,94,0)" }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: 0.12 }}
+            className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
+          >
+            Feito — série {currentSet}/{runtime.planned_sets}
+          </motion.button>
+        </GlowPulse>
       )}
+      </div>
     </div>
 
     <ExerciseInfoModal exercise={infoModalExercise} onClose={() => setInfoModalExercise(null)} />
@@ -1091,6 +1226,11 @@ function DoneScreen({
         };
       }),
     });
+    trackEvent(EVENTS.WORKOUT_COMPLETED, {
+      workout_name: day.name,
+      duration_minutes: duration,
+      exercises_count: exercises.length,
+    });
     onSaved?.();
     router.push("/dashboard");
     } catch {
@@ -1100,19 +1240,79 @@ function DoneScreen({
     }
   }
 
+  const totalVolume = useMemo(() => {
+    let total = 0;
+    exercises.forEach((ex) => {
+      if (isCardio(ex)) return;
+      const state = runtimeFor(runtime, ex);
+      state.weight_by_set.forEach((w, i) => {
+        total += (Number(w) || 0) * (state.reps_by_set[i] || 0);
+      });
+    });
+    return Math.round(total);
+  }, [exercises, runtime]);
+
+  const staggerContainer = {
+    hidden: {},
+    visible: { transition: { staggerChildren: 0.08 } },
+  };
+  const staggerItem = {
+    hidden: { opacity: 0, y: 16 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
-      <div className="text-center">
-        <h1 className="mt-4 text-2xl font-bold text-gray-900">Treino concluído</h1>
-        <p className="mt-2 text-gray-500">{day.name} · {duration} min</p>
-      </div>
+      <ConfettiBurst preset="workout" />
 
-      <div className="mt-6 space-y-3">
-        <label className="block text-sm font-semibold text-gray-700">Peso por série</label>
+      <motion.div
+        className="text-center"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      >
+        <p className="text-4xl mb-2">🎉</p>
+        <h1 className="text-2xl font-bold text-gray-900">Treino concluído!</h1>
+        <p className="mt-1 text-gray-500">{day.name}</p>
+      </motion.div>
+
+      {/* Summary metrics */}
+      <motion.div
+        className="mt-6 grid grid-cols-3 gap-3"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div variants={staggerItem} className="flex flex-col items-center rounded-2xl bg-primary-50 p-4">
+          <p className="text-2xl font-bold text-primary-600"><AnimatedCounter value={duration} /></p>
+          <p className="mt-0.5 text-xs text-primary-400">minutos</p>
+        </motion.div>
+        <motion.div variants={staggerItem} className="flex flex-col items-center rounded-2xl bg-green-50 p-4">
+          <p className="text-2xl font-bold text-green-600">
+            {totalVolume >= 1000
+              ? <><AnimatedCounter value={totalVolume / 1000} format={(v) => v.toFixed(1)} />t</>
+              : <><AnimatedCounter value={totalVolume} />kg</>
+            }
+          </p>
+          <p className="mt-0.5 text-xs text-green-400">volume</p>
+        </motion.div>
+        <motion.div variants={staggerItem} className="flex flex-col items-center rounded-2xl bg-gray-50 p-4">
+          <p className="text-2xl font-bold text-gray-700"><AnimatedCounter value={exercises.length} /></p>
+          <p className="mt-0.5 text-xs text-gray-400">exercícios</p>
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        className="mt-6 space-y-3"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.p variants={staggerItem} className="text-sm font-semibold text-gray-700">Resumo por exercício</motion.p>
         {exercises.map((exercise) => {
           const state = runtimeFor(runtime, exercise);
           return (
-            <div key={exercise.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+            <motion.div variants={staggerItem} key={exercise.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
               <span className="text-sm font-medium text-gray-900">{exercise.name}</span>
               {isCardio(exercise) ? (
                 <p className="mt-1 text-xs text-gray-400">
@@ -1126,28 +1326,47 @@ function DoneScreen({
                   {state.feeling ? ` · ${state.feeling}` : ""}
                 </p>
               )}
-            </div>
+            </motion.div>
           );
         })}
 
-        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <motion.div variants={staggerItem} className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
           <label className="text-sm font-semibold text-gray-700">Nível geral de cansaço</label>
           <div className="mt-3 flex gap-2">
             {[1, 2, 3, 4, 5].map((level) => (
-              <button key={level} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold ${fatigueLevel === level ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-500"}`}>
+              <button key={level} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold transition-colors ${fatigueLevel === level ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-500"}`}>
                 {level}
               </button>
             ))}
           </div>
-        </div>
+        </motion.div>
 
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alguma anotação? (opcional)" rows={3} className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none" />
+        <motion.div variants={staggerItem}>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alguma anotação? (opcional)" rows={3} className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none" />
+        </motion.div>
+
         {saveError && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{saveError}</p>}
-        <button onClick={handleSave} disabled={saving} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white disabled:opacity-50">
-          {saving ? "Salvando..." : "Registrar treino"}
-        </button>
+
+        <motion.div variants={staggerItem}>
+          <GlowPulse color="green" radius={16} className="w-full">
+            <PressButton onClick={handleSave} disabled={saving} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white disabled:opacity-50">
+              {saving ? "Salvando..." : "Registrar treino"}
+            </PressButton>
+          </GlowPulse>
+        </motion.div>
+
+        <motion.div variants={staggerItem}>
+          <ShareButton
+            workoutName={day.name}
+            durationMinutes={duration}
+            volumeKg={totalVolume}
+            exerciseCount={exercises.length}
+            muscles={[...new Set(exercises.map((e) => e.muscle_group).filter(Boolean) as string[])]}
+          />
+        </motion.div>
+
         <button onClick={onBack} className="w-full py-2 text-sm text-gray-400">Não registrar</button>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -1355,6 +1574,18 @@ function SmartImage({
 
 function exerciseFallback(exercise: Pick<WorkoutDayExercise, "exercise_type"> | Pick<ExerciseOption, "exercise_type">) {
   return `/exercise-images/${exercise.exercise_type || "treino"}.svg`;
+}
+
+function getHistoricalMaxWeight(sessions: WorkoutSession[], exerciseId: number): number {
+  let max = 0;
+  for (const session of sessions) {
+    for (const log of session.exercise_logs ?? []) {
+      if (log.exercise_id === exerciseId && log.weight_kg) {
+        max = Math.max(max, log.weight_kg);
+      }
+    }
+  }
+  return max;
 }
 
 function firstWeight(weights: string[]) {

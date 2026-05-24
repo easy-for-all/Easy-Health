@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Footer } from "@/shared/components/footer";
 import { FeatureCard } from "@/shared/components/feature-card";
+import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
 
 export const metadata: Metadata = {
   title: "EasyHealth — Treino inteligente com IA",
@@ -50,6 +51,8 @@ const FEATURES = [
 export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-gray-950">
+      <AnalyticsTracker eventName="landing_view" />
+      <AnalyticsTracker eventName="screen_view" params={{ screen_name: "home" }} />
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-950/90">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { motion } from "framer-motion";
 
 function UserIcon() {
   return (
@@ -58,7 +59,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-950">
+    <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-gray-100/60 bg-white/85 backdrop-blur-md dark:border-gray-800/60 dark:bg-gray-950/85">
       <div className="flex">
         {ITEMS.map(({ href, label, Icon }) => {
           const active = pathname.startsWith(href);
@@ -70,8 +71,21 @@ export function BottomNav() {
                 active ? "text-primary-500" : "text-gray-400 dark:text-gray-500"
               }`}
             >
-              <Icon />
-              {label}
+              <motion.span
+                whileTap={{ scale: 0.85 }}
+                transition={{ duration: 0.1 }}
+                className="relative flex flex-col items-center gap-1"
+              >
+                <Icon />
+                {label}
+                {active && (
+                  <motion.span
+                    layoutId="nav-dot"
+                    className="absolute -bottom-2.5 h-1 w-1 rounded-full bg-primary-500"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+              </motion.span>
             </Link>
           );
         })}

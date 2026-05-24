@@ -7,6 +7,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
 import { useTheme } from "@/features/theme/theme-context";
 import { api } from "@/shared/lib/api";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { compressImage } from "@/shared/lib/image";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { DeleteAccountModal } from "@/shared/components/delete-account-modal";
@@ -87,6 +88,10 @@ export default function ProfilePage() {
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "perfil" });
+  }, []);
 
   useEffect(() => {
     Promise.all([

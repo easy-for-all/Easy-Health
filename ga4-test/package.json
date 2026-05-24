@@ -1,0 +1,18 @@
+{
+  "name": "ga4-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@google-analytics/data": "^6.0.0",
+    "googleapis": "^172.0.0",
+    "open": "^11.0.0"
+  }
+}
