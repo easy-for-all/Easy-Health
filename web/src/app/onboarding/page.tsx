@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
@@ -62,6 +62,11 @@ export default function OnboardingPage() {
     activity_preferences: [],
     training_location: "",
   });
+
+  useEffect(() => {
+    trackEvent(EVENTS.ONBOARDING_STARTED);
+    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "onboarding" });
+  }, []);
 
   function set<K extends keyof FormData>(key: K, value: FormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));

@@ -10,9 +10,10 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_22_100001) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_24_000004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+  enable_extension "vector"
 
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
@@ -40,6 +41,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_22_100001) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "ai_chat_messages", force: :cascade do |t|
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.string "role", null: false
+    t.string "session_id", null: false
+    t.string "source", default: "rag", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["created_at"], name: "index_ai_chat_messages_on_created_at"
+    t.index ["session_id"], name: "index_ai_chat_messages_on_session_id"
+    t.index ["user_id", "created_at"], name: "index_ai_chat_messages_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_ai_chat_messages_on_user_id"
   end
 
   create_table "ai_usage_logs", force: :cascade do |t|
@@ -80,13 +96,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_22_100001) do
     t.string "difficulty", default: "intermediate"
     t.string "equipment_type", default: "gym", null: false
     t.string "exercise_type", default: "musculacao", null: false
+    t.string "gif_path"
     t.string "gif_url"
     t.boolean "home_compatible", default: false, null: false
+    t.string "image_fallback_url"
     t.string "image_url"
     t.text "instructions"
     t.string "muscle_group"
     t.string "name"
     t.text "setup_guide"
+    t.string "source_dataset"
     t.datetime "updated_at", null: false
     t.string "video_url"
     t.index ["equipment_type"], name: "index_exercises_on_equipment_type"
@@ -130,6 +149,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_22_100001) do
     t.bigint "user_id", null: false
     t.decimal "weight_kg"
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
+  end
+
+# Could not dump table "knowledge_chunks" because of following StandardError
+#   Unknown type 'vector(1536)' for column 'embedding'
+
+
+  create_table "knowledge_documents", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.string "category", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.string "source"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_knowledge_documents_on_active"
+    t.index ["category"], name: "index_knowledge_documents_on_category"
+    t.index ["source"], name: "index_knowledge_documents_on_source", unique: true
   end
 
   create_table "stripe_events", force: :cascade do |t|
@@ -241,12 +277,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_22_100001) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "ai_chat_messages", "users"
   add_foreign_key "ai_usage_logs", "users"
   add_foreign_key "equipment_identifications", "exercises"
   add_foreign_key "equipment_identifications", "users"
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
+  add_foreign_key "knowledge_chunks", "knowledge_documents"
   add_foreign_key "subscriptions", "users"
   add_foreign_key "user_media", "users"
   add_foreign_key "workout_day_exercises", "exercises"

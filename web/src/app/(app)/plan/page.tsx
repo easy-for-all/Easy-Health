@@ -7,6 +7,7 @@ import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 
 function resolveImageSrc(src: string): string {
   return src;
@@ -198,6 +199,8 @@ export default function PlanPage() {
       ]);
       clearInterval(interval);
       setPlan(newPlan);
+      trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: mod });
+      trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: mod });
       setPhase("view");
     } catch (err) {
       clearInterval(interval);

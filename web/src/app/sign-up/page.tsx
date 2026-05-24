@@ -18,7 +18,9 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { trackEvent(EVENTS.SIGNUP_STARTED); }, []);
+  useEffect(() => {
+    trackEvent(EVENTS.SIGNUP_STARTED);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

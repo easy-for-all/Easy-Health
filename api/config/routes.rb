@@ -42,7 +42,10 @@ Rails.application.routes.draw do
       patch  "workout_days/:workout_day_id/exercises/reorder", to: "workout_day_exercises#reorder"
 
       resources :workout_sessions, only: [:index, :create] do
-        collection { get :stats }
+        collection do
+          get :stats
+          get :personal_records
+        end
       end
 
       patch  "profile/avatar", to: "profile#update_avatar"
