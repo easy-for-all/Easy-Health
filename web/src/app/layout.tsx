@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/features/theme/theme-context";
 import "./globals.css";
 
 const GTAG_ID = "G-FG3BDM75T1";
+const CLARITY_ID = "wwdmi83dip";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
@@ -34,6 +35,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
           gtag('config', '${GTAG_ID}');
+        `}</Script>
+        <Script id="clarity-init" strategy="afterInteractive">{`
+          (function(c,l,a,r,i,t,y){
+            c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+            t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+          })(window,document,"clarity","script","${CLARITY_ID}");
         `}</Script>
       </head>
       <body className="min-h-full bg-gray-50 dark:bg-gray-950 font-sans">
