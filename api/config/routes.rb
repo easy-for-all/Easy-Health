@@ -28,12 +28,18 @@ Rails.application.routes.draw do
       get  "workout_plan/today",        to: "workout_plans#today"
       get  "workout_days/:id",          to: "workout_plans#day"
       post "workout_plan/regenerate",   to: "workout_plans#regenerate"
-      post "workout_days/:id/duplicate", to: "workout_plans#duplicate_day"
+      post "workout_days/:id/duplicate",       to: "workout_plans#duplicate_day"
+      patch "workout_days/:id/toggle_favorite", to: "workout_days#toggle_favorite"
 
       resources :exercises, only: [:index] do
         collection { post :ai_substitute }
-        member     { get  :setup_guide  }
+        member do
+          get  :setup_guide
+          post :favorite,   to: "user_favorite_exercises#create"
+          delete :favorite, to: "user_favorite_exercises#destroy"
+        end
       end
+      get "exercises/favorites", to: "user_favorite_exercises#index"
 
       post   "workout_day_exercises/:id/swap", to: "workout_day_exercises#swap"
       patch  "workout_day_exercises/:id",      to: "workout_day_exercises#update"

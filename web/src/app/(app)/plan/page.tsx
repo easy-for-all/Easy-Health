@@ -105,6 +105,20 @@ export default function PlanPage() {
     });
   }, []);
 
+  async function handleToggleFavorite(dayId: number) {
+    try {
+      const resp = await api.patch<{ favorited: boolean }>(`/api/v1/workout_days/${dayId}/toggle_favorite`, {});
+      if (plan) {
+        setPlan({
+          ...plan,
+          days: plan.days.map((d) => d.id === dayId ? { ...d, favorited: resp.favorited } : d),
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   async function handleDuplicateDay(dayId: number) {
     try {
       const { day: newDay } = await api.post<{ day: import("@/shared/types/workout").WorkoutDay }>(
@@ -249,7 +263,7 @@ export default function PlanPage() {
 
       {phase === "view" && plan && (
         <>
-          <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} />
+          <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} onToggleFavorite={handleToggleFavorite} />
           <button onClick={startWizard} className="mt-6 w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
             Replanejar
           </button>
@@ -656,10 +670,12 @@ function PlanView({
   plan,
   onDayClick,
   onDuplicate,
+  onToggleFavorite,
 }: {
   plan: WorkoutPlan;
   onDayClick: (dayId: number) => void;
   onDuplicate?: (dayId: number) => void;
+  onToggleFavorite?: (dayId: number) => Promise<void>;
 }) {
   return (
     <div className="space-y-3">
@@ -688,14 +704,25 @@ function PlanView({
               <span className="text-lg text-gray-300 dark:text-gray-600">›</span>
             </div>
           </button>
-          {onDuplicate && (
-            <div className="border-t border-gray-50 px-4 pb-3 pt-2 dark:border-gray-800">
-              <button
-                onClick={() => onDuplicate(day.id)}
-                className="text-xs font-medium text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
-              >
-                + Duplicar treino
-              </button>
+          {(onToggleFavorite || (onDuplicate && day.favorited)) && (
+            <div className="border-t border-gray-50 px-4 pb-3 pt-2 flex items-center gap-4 dark:border-gray-800">
+              {onToggleFavorite && (
+                <button
+                  onClick={() => onToggleFavorite(day.id)}
+                  className="text-base leading-none transition-transform active:scale-110"
+                  aria-label={day.favorited ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                >
+                  {day.favorited ? "❤️" : "🤍"}
+                </button>
+              )}
+              {onDuplicate && day.favorited && (
+                <button
+                  onClick={() => onDuplicate(day.id)}
+                  className="text-xs font-medium text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
+                >
+                  + Duplicar treino
+                </button>
+              )}
             </div>
           )}
         </div>

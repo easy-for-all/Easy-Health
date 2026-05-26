@@ -28,6 +28,14 @@ module Api
         session = current_user.workout_sessions.build(session_params)
         session.completed_at ||= Time.current
 
+        workout_day = WorkoutDay.includes(workout_day_exercises: :exercise).find_by(id: session.workout_day_id)
+        calories = CalorieEstimationService.new(
+          duration_minutes: session.duration_minutes,
+          workout_day: workout_day,
+          user: current_user
+        ).estimate
+        session.calories_estimated = calories if calories > 0
+
         if session.save
           mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
           render json: session_json(session), status: :created
@@ -41,10 +49,13 @@ module Api
         weekly = sessions.select { |s| s.completed_at >= 7.days.ago }
         goal = current_user.health_profile&.training_days_per_week || 3
         total_volume = calculate_total_volume(sessions)
+        streak_svc = WorkoutStreakService.new(sessions)
 
         render json: {
           total_sessions: sessions.count,
-          streak: calculate_streak(sessions),
+          streak: streak_svc.current_streak,
+          best_streak: streak_svc.best_streak,
+          last_activity_at: streak_svc.last_activity_at,
           weekly_sessions: weekly.count,
           weekly_goal: goal,
           total_volume_kg: total_volume
@@ -118,7 +129,8 @@ module Api
           duration_minutes: s.duration_minutes,
           fatigue_level: s.fatigue_level,
           exercise_logs: s.exercise_logs || [],
-          notes: s.notes
+          notes: s.notes,
+          calories_estimated: s.calories_estimated
         }
       end
 
@@ -137,22 +149,6 @@ module Api
         total.round
       end
 
-      def calculate_streak(sessions)
-        return 0 if sessions.empty?
-
-        dates = sessions.map { |s| s.completed_at.to_date }.uniq.sort.reverse
-        streak = 0
-        expected = Date.today
-
-        dates.each do |date|
-          break if date < expected - 1
-
-          streak += 1
-          expected = date - 1
-        end
-
-        streak
-      end
     end
   end
 end
