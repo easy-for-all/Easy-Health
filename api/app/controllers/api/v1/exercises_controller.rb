@@ -8,11 +8,18 @@ module Api
         exercises = exercises.where(equipment_type: params[:equipment_type]) if params[:equipment_type].present?
         if params[:name].present?
           term = "%#{params[:name]}%"
-          exercises = exercises.where("name ILIKE ? OR description ILIKE ?", term, term)
+          if params[:lang] == "en"
+            exercises = exercises.where("name_en ILIKE ? OR name ILIKE ? OR description ILIKE ?", term, term, term)
+          else
+            exercises = exercises.where("name ILIKE ? OR description ILIKE ?", term, term)
+          end
         end
         exercises = exercises.where.not(id: params[:exclude_ids].to_s.split(",")) if params[:exclude_ids].present?
 
-        render json: exercises.map { |e| exercise_json(e) }
+        favorite_ids = Set.new(current_user.user_favorite_exercises.pluck(:exercise_id))
+        sorted = exercises.sort_by { |e| favorite_ids.include?(e.id) ? 0 : 1 }
+
+        render json: sorted.map { |e| exercise_json(e, favorite_ids) }
       end
 
       def setup_guide
@@ -55,10 +62,11 @@ module Api
 
       include ExerciseImageHelper
 
-      def exercise_json(exercise)
+      def exercise_json(exercise, favorite_ids = Set.new)
         {
           id: exercise.id,
           name: exercise.name,
+          name_en: exercise.name_en,
           muscle_group: exercise.muscle_group,
           exercise_type: exercise.exercise_type,
           equipment_type: exercise.equipment_type,
@@ -67,7 +75,8 @@ module Api
           image_url: exercise_image_url(exercise),
           gif_url: exercise.gif_url,
           video_url: exercise.video_url,
-          muscle_image_url: muscle_image_url(exercise.muscle_group)
+          muscle_image_url: muscle_image_url(exercise.muscle_group),
+          is_favorite: favorite_ids.include?(exercise.id)
         }
       end
     end

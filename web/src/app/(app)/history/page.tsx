@@ -6,7 +6,7 @@ import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
-import type { WorkoutSession } from "@/shared/types/workout";
+import type { WorkoutSession, WorkoutPlan } from "@/shared/types/workout";
 
 export default function HistoryPage() {
   return <UpgradeGate><HistoryContent /></UpgradeGate>;
@@ -64,7 +64,7 @@ function SessionDetailModal({ session, onClose }: { session: WorkoutSession; onC
         </div>
 
         {/* Summary stats */}
-        <div className="px-4 pt-3 pb-3 grid grid-cols-3 gap-2">
+        <div className={`px-4 pt-3 pb-3 grid gap-2 ${session.calories_estimated ? "grid-cols-4" : "grid-cols-3"}`}>
           <div className="rounded-xl bg-primary-50 p-3 text-center">
             <p className="text-xl font-bold text-primary-600">{session.duration_minutes}</p>
             <p className="text-xs text-primary-400 mt-0.5">minutos</p>
@@ -77,6 +77,12 @@ function SessionDetailModal({ session, onClose }: { session: WorkoutSession; onC
             <p className="text-xl font-bold text-gray-700">{completedExercises}</p>
             <p className="text-xs text-gray-400 mt-0.5">exercícios</p>
           </div>
+          {session.calories_estimated != null && session.calories_estimated > 0 && (
+            <div className="rounded-xl bg-orange-50 p-3 text-center">
+              <p className="text-xl font-bold text-orange-500">~{session.calories_estimated}</p>
+              <p className="text-xs text-orange-400 mt-0.5">kcal</p>
+            </div>
+          )}
         </div>
 
         {session.fatigue_level && (
@@ -171,53 +177,92 @@ function HistoryContent() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<WorkoutSession | null>(null);
+  const [favoritedDayIds, setFavoritedDayIds] = useState<Set<number>>(new Set());
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "historico" });
   }, []);
 
   useEffect(() => {
-    api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions")
-      .then(({ sessions: s, total: t }) => { setSessions(s); setTotal(t); })
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions"),
+      api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
+    ]).then(([{ sessions: s, total: t }, plan]) => {
+      setSessions(s);
+      setTotal(t);
+      if (plan) {
+        setFavoritedDayIds(new Set(plan.days.filter((d) => d.favorited).map((d) => d.id)));
+      }
+    }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <LoadingScreen />;
 
+  const filtered = onlyFavorites
+    ? sessions.filter((s) => favoritedDayIds.has(s.workout_day_id))
+    : sessions;
+
   return (
     <div className="min-h-screen px-4 py-6">
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-4 flex items-center gap-3">
         <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-600">←</Link>
         <h1 className="text-xl font-bold text-gray-900">Histórico</h1>
         <span className="ml-auto text-sm text-gray-400">{total} treinos</span>
       </div>
 
-      {sessions.length === 0 ? (
+      {favoritedDayIds.size > 0 && (
+        <div className="mb-4 flex gap-2">
+          <button
+            onClick={() => setOnlyFavorites(false)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${!onlyFavorites ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600"}`}
+          >
+            Todos
+          </button>
+          <button
+            onClick={() => setOnlyFavorites(true)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${onlyFavorites ? "bg-red-400 text-white" : "bg-gray-100 text-gray-600"}`}
+          >
+            ❤️ Favoritos
+          </button>
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <p className="text-4xl">📋</p>
-          <p className="mt-3 text-gray-500">Nenhum treino registrado ainda.</p>
-          <Link href="/workout/today" className="mt-4 text-sm font-medium text-primary-600 hover:underline">
-            Fazer meu primeiro treino
-          </Link>
+          <p className="mt-3 text-gray-500">
+            {onlyFavorites ? "Nenhum treino favorito registrado." : "Nenhum treino registrado ainda."}
+          </p>
+          {!onlyFavorites && (
+            <Link href="/workout/today" className="mt-4 text-sm font-medium text-primary-600 hover:underline">
+              Fazer meu primeiro treino
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
-          {sessions.map((s) => (
+          {filtered.map((s) => (
             <button
               key={s.id}
               onClick={() => setSelected(s)}
               className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left active:bg-gray-50"
             >
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900">{s.workout_day_name}</p>
-                  <p className="text-sm text-gray-400">
-                    {new Date(s.completed_at).toLocaleDateString("pt-BR", {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </p>
+                <div className="flex items-center gap-2">
+                  {favoritedDayIds.has(s.workout_day_id) && (
+                    <span className="text-sm leading-none">❤️</span>
+                  )}
+                  <div>
+                    <p className="font-semibold text-gray-900">{s.workout_day_name}</p>
+                    <p className="text-sm text-gray-400">
+                      {new Date(s.completed_at).toLocaleDateString("pt-BR", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600">

@@ -5,6 +5,8 @@ class User < ApplicationRecord
   has_one :health_profile, dependent: :destroy
   has_many :workout_plans, dependent: :destroy
   has_many :workout_sessions, dependent: :destroy
+  has_many :user_favorite_exercises, dependent: :destroy
+  has_many :favorite_exercises, through: :user_favorite_exercises, source: :exercise
   has_many :user_media, class_name: "UserMedia", dependent: :destroy
   has_many :health_data_points, dependent: :destroy
   has_many :ai_usage_logs, dependent: :destroy

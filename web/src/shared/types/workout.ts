@@ -24,6 +24,7 @@ export interface WorkoutDay {
   position?: number;
   day_of_week: number;
   name: string;
+  favorited?: boolean;
   muscle_groups?: string[];
   exercise_types?: string[];
   exercise_count?: number;
@@ -56,6 +57,7 @@ export interface WorkoutSession {
     feeling?: string | null;
   }[];
   notes: string | null;
+  calories_estimated?: number | null;
 }
 
 export interface CardioExerciseLog {

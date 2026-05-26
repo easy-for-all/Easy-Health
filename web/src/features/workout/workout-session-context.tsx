@@ -84,6 +84,11 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       sessionStorage.removeItem(KEY_START_TS);
       sessionStorage.removeItem(KEY_DAY_ID);
       sessionStorage.removeItem(KEY_REST_END);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}phase`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}current_index`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}current_set`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}exercise_runtime`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}exercises_order`);
     } catch { /* storage unavailable */ }
     setStartTime(null);
     setActiveWorkoutDayId(null);

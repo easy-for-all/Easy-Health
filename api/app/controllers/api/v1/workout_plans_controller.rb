@@ -139,6 +139,7 @@ module Api
           position: day.position,
           day_of_week: day.day_of_week,
           name: day.name,
+          favorited: day.favorited,
           muscle_groups: exercises.map { |wde| wde.exercise.muscle_group }.compact.uniq,
           exercise_types: exercises.map { |wde| wde.exercise.exercise_type }.compact.uniq,
           exercise_count: exercises.count
@@ -155,6 +156,7 @@ module Api
           position: day.position,
           day_of_week: day.day_of_week,
           name: day.name,
+          favorited: day.favorited,
           exercises: wdes.map do |wde|
             {
               workout_day_exercise_id: wde.id,

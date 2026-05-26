@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_24_000004) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_25_100004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "vector"
@@ -104,6 +104,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_24_000004) do
     t.text "instructions"
     t.string "muscle_group"
     t.string "name"
+    t.string "name_en"
     t.text "setup_guide"
     t.string "source_dataset"
     t.datetime "updated_at", null: false
@@ -198,6 +199,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_24_000004) do
     t.index ["user_id"], name: "index_subscriptions_on_user_id", unique: true
   end
 
+  create_table "user_favorite_exercises", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "exercise_id", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["exercise_id"], name: "index_user_favorite_exercises_on_exercise_id"
+    t.index ["user_id", "exercise_id"], name: "index_user_favorite_exercises_on_user_id_and_exercise_id", unique: true
+    t.index ["user_id"], name: "index_user_favorite_exercises_on_user_id"
+  end
+
   create_table "user_media", force: :cascade do |t|
     t.datetime "captured_at", null: false
     t.string "category", null: false
@@ -246,6 +257,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_24_000004) do
   create_table "workout_days", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "day_of_week"
+    t.boolean "favorited", default: false, null: false
     t.string "name"
     t.integer "position"
     t.datetime "updated_at", null: false
@@ -262,6 +274,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_24_000004) do
   end
 
   create_table "workout_sessions", force: :cascade do |t|
+    t.integer "calories_estimated"
     t.datetime "completed_at"
     t.datetime "created_at", null: false
     t.integer "duration_minutes"
@@ -286,6 +299,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_24_000004) do
   add_foreign_key "health_profiles", "users"
   add_foreign_key "knowledge_chunks", "knowledge_documents"
   add_foreign_key "subscriptions", "users"
+  add_foreign_key "user_favorite_exercises", "exercises"
+  add_foreign_key "user_favorite_exercises", "users"
   add_foreign_key "user_media", "users"
   add_foreign_key "workout_day_exercises", "exercises"
   add_foreign_key "workout_day_exercises", "workout_days"

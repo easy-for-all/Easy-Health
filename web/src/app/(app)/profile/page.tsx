@@ -17,7 +17,7 @@ import type { HealthProfile, Goal, FitnessLevel } from "@/shared/types/health-pr
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-type Stats = { total_sessions: number; streak: number };
+type Stats = { total_sessions: number; streak: number; best_streak?: number; last_activity_at?: string | null };
 type MediaCategory = "body_photo" | "exam";
 type UserMedia = {
   id: number;
@@ -287,15 +287,37 @@ export default function ProfilePage() {
 
       {/* Stats */}
       {stats && (
-        <div className="mb-4 flex gap-3">
-          <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
-            <p className="text-2xl font-bold text-gray-900">{stats.total_sessions}</p>
-            <p className="text-xs text-gray-500">{t("workouts")}</p>
+        <div className="mb-4 space-y-3">
+          <div className="flex gap-3">
+            <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
+              <p className="text-2xl font-bold text-gray-900">{stats.total_sessions}</p>
+              <p className="text-xs text-gray-500">{t("workouts")}</p>
+            </div>
+            <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
+              <p className="text-2xl font-bold text-orange-500">🔥 {stats.streak}</p>
+              <p className="text-xs text-gray-500">{t("streak")}</p>
+            </div>
           </div>
-          <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
-            <p className="text-2xl font-bold text-orange-500">🔥 {stats.streak}</p>
-            <p className="text-xs text-gray-500">{t("streak")}</p>
-          </div>
+          {(stats.best_streak != null || stats.last_activity_at) && (
+            <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
+              <div className="flex items-center justify-between">
+                {stats.best_streak != null && stats.best_streak > 0 && (
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-orange-600">🏆 {stats.best_streak}</p>
+                    <p className="text-xs text-orange-400">Melhor sequência</p>
+                  </div>
+                )}
+                {stats.last_activity_at && (
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-gray-700">
+                      {new Date(stats.last_activity_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                    </p>
+                    <p className="text-xs text-gray-400">Último treino</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

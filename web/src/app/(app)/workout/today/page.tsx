@@ -94,6 +94,7 @@ function WorkoutTodayContent() {
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
+  const [showReorderModal, setShowReorderModal] = useState(false);
   const [cardioTimeLeft, setCardioTimeLeft] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cardioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -120,34 +121,12 @@ function WorkoutTodayContent() {
 
   useEffect(() => {
     const dayIdParam = searchParams.get("day");
-    Promise.all([
-      api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-      api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions?recent=1").catch(() => ({ sessions: [], total: 0 })),
-    ]).then(async ([p, history]) => {
-      setPlan(p);
-      setSessions(history.sessions ?? []);
-      if (dayIdParam && p?.days) {
-        const target = p.days.find((d) => String(d.id) === dayIdParam);
-        if (target) {
-          try {
-            const { day: loaded } = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${target.id}`);
-            const runtime = Object.fromEntries((loaded.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
-            setDay(loaded);
-            setExerciseRuntime(runtime);
-            setCurrentIndex(0);
-            setCurrentSet(1);
-            setPhase("overview");
-          } catch { /* fall through to choose screen */ }
-        }
-      }
-    }).finally(() => setLoading(false));
 
-    // Restore rest timer if user navigated away and came back
+    // Pre-start rest interval immediately (accurate countdown regardless of API latency)
     const restEnd = getRestEnd();
     if (restEnd && restEnd > Date.now()) {
       const remaining = Math.ceil((restEnd - Date.now()) / 1000);
       setRestLeft(remaining);
-      setPhase("rest");
       beepFiredRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
@@ -168,6 +147,82 @@ function WorkoutTodayContent() {
         });
       }, 1000);
     }
+
+    Promise.all([
+      api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
+      api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions?recent=1").catch(() => ({ sessions: [], total: 0 })),
+    ]).then(async ([p, history]) => {
+      setPlan(p);
+      setSessions(history.sessions ?? []);
+      if (dayIdParam && p?.days) {
+        const target = p.days.find((d) => String(d.id) === dayIdParam);
+        if (target) {
+          try {
+            const { day: loaded } = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${target.id}`);
+            const runtime = Object.fromEntries((loaded.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
+            setDay(loaded);
+            setExerciseRuntime(runtime);
+            setCurrentIndex(0);
+            setCurrentSet(1);
+            setPhase("overview");
+          } catch { /* fall through to choose screen */ }
+        }
+      } else {
+        // Restore active workout session if user navigated away mid-workout
+        const storedStartTs = sessionStorage.getItem("wk_start_ts");
+        const storedDayId = sessionStorage.getItem("wk_day_id");
+        const storedPhase = sessionStorage.getItem("wk_phase") as Phase | null;
+
+        if (storedStartTs && storedDayId && storedPhase && storedPhase !== "done" && storedPhase !== "choose") {
+          try {
+            const { day: loaded } = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${storedDayId}`);
+
+            // Restore exercise order
+            let exercises = loaded.exercises ?? [];
+            const storedOrderRaw = sessionStorage.getItem("wk_exercises_order");
+            if (storedOrderRaw) {
+              try {
+                const orderIds: number[] = JSON.parse(storedOrderRaw);
+                const orderMap = new Map(orderIds.map((id, i) => [id, i]));
+                exercises = [...exercises].sort((a, b) =>
+                  (orderMap.get(a.workout_day_exercise_id) ?? 999) - (orderMap.get(b.workout_day_exercise_id) ?? 999)
+                );
+              } catch { /* use API order */ }
+            }
+
+            // Build runtime: defaults merged with saved state
+            const defaultRuntime = Object.fromEntries(exercises.map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
+            const storedRuntimeRaw = sessionStorage.getItem("wk_exercise_runtime");
+            let restoredRuntime = defaultRuntime;
+            if (storedRuntimeRaw) {
+              try {
+                const parsed = JSON.parse(storedRuntimeRaw) as Record<string, ExerciseRuntime>;
+                restoredRuntime = {
+                  ...defaultRuntime,
+                  ...Object.fromEntries(Object.entries(parsed).map(([k, v]) => [Number(k), v])),
+                };
+              } catch { /* use defaults */ }
+            }
+
+            setDay({ ...loaded, exercises });
+            setExerciseRuntime(restoredRuntime);
+            setCurrentIndex(Math.max(0, parseInt(sessionStorage.getItem("wk_current_index") ?? "0", 10)));
+            setCurrentSet(Math.max(1, parseInt(sessionStorage.getItem("wk_current_set") ?? "1", 10)));
+
+            // If rest timer is still active, go to rest phase; otherwise restore saved phase
+            const currentRestEnd = getRestEnd();
+            if (currentRestEnd && currentRestEnd > Date.now()) {
+              const remaining = Math.ceil((currentRestEnd - Date.now()) / 1000);
+              setRestLeft(remaining);
+              setRestTotal(remaining);
+              setPhase("rest");
+            } else {
+              setPhase(storedPhase);
+            }
+          } catch { /* restore failed, stay on choose screen */ }
+        }
+      }
+    }).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -175,6 +230,19 @@ function WorkoutTodayContent() {
     if (timerRef.current) clearInterval(timerRef.current);
     if (cardioTimerRef.current) clearInterval(cardioTimerRef.current);
   }, []);
+
+  // Persist workout state so it can be restored if user navigates away mid-workout
+  useEffect(() => {
+    if (!startTime || !day) return;
+    if (phase === "choose" || phase === "done") return;
+    try {
+      sessionStorage.setItem("wk_phase", phase);
+      sessionStorage.setItem("wk_current_index", String(currentIndex));
+      sessionStorage.setItem("wk_current_set", String(currentSet));
+      sessionStorage.setItem("wk_exercise_runtime", JSON.stringify(exerciseRuntime));
+      sessionStorage.setItem("wk_exercises_order", JSON.stringify((day.exercises ?? []).map((e) => e.workout_day_exercise_id)));
+    } catch { /* storage unavailable */ }
+  }, [startTime, phase, currentIndex, currentSet, exerciseRuntime, day]);
 
   // Auto-start cardio timer when switching to a cardio exercise in exercising phase
   useEffect(() => {
@@ -356,6 +424,33 @@ function WorkoutTodayContent() {
       startRest(state.rest_seconds);
     } else {
       setPhase("exercise_feedback");
+    }
+  }
+
+  async function handleMoveExercising(wdeId: number, direction: "up" | "down") {
+    if (!day) return;
+    const list = day.exercises ?? [];
+    const idx = list.findIndex((e) => e.workout_day_exercise_id === wdeId);
+    if (idx === -1) return;
+    if (direction === "up" && idx === 0) return;
+    if (direction === "down" && idx === list.length - 1) return;
+    const newList = [...list];
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    [newList[idx], newList[swapIdx]] = [newList[swapIdx], newList[idx]];
+    const currentExId = list[currentIndex]?.workout_day_exercise_id;
+    const newCurrentIndex = currentExId != null
+      ? newList.findIndex((e) => e.workout_day_exercise_id === currentExId)
+      : currentIndex;
+    setDay({ ...day, exercises: newList });
+    if (newCurrentIndex >= 0 && newCurrentIndex !== currentIndex) {
+      setCurrentIndex(newCurrentIndex);
+    }
+    try {
+      await api.patch(`/api/v1/workout_days/${day.id}/exercises/reorder`, {
+        ordered_ids: newList.map((e) => e.workout_day_exercise_id),
+      });
+    } catch {
+      setDay(day);
     }
   }
 
@@ -571,7 +666,16 @@ function WorkoutTodayContent() {
       {/* Sticky premium header */}
       <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-gray-100/50 dark:bg-gray-950/90 dark:border-gray-800/50 px-4 pt-3 pb-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-400">{currentIndex + 1}/{exercises.length}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-400">{currentIndex + 1}/{exercises.length}</span>
+            <button
+              onClick={() => setShowReorderModal(true)}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              aria-label="Reordenar exercícios"
+            >
+              ⇅
+            </button>
+          </div>
           <span className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-2.5 py-1 rounded-full">
             ⏱ {formatElapsed(elapsedSeconds)}
           </span>
@@ -781,9 +885,52 @@ function WorkoutTodayContent() {
     {showSwapModal && (
       <SwapModal
         exercise={exercise}
+        allWorkoutExerciseIds={exercises.map(e => e.exercise_id)}
         onSwap={swapDuringExercise}
         onClose={() => setShowSwapModal(false)}
       />
+    )}
+
+    {showReorderModal && (
+      <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setShowReorderModal(false)}>
+        <div
+          className="max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-8 pt-4 dark:bg-gray-900"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="flex items-center justify-between mt-2 mb-4">
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-50">Reordenar exercícios</h3>
+            <button onClick={() => setShowReorderModal(false)} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Fechar</button>
+          </div>
+          <div className="space-y-2">
+            {exercises.map((ex, idx) => {
+              const isCurrent = ex.workout_day_exercise_id === exercises[currentIndex]?.workout_day_exercise_id;
+              return (
+                <div
+                  key={ex.workout_day_exercise_id}
+                  className={`flex items-center gap-3 rounded-xl border p-3 ${isCurrent ? "border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-950/30" : "border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900"}`}
+                >
+                  <span className="w-5 text-center text-xs font-bold text-gray-400">{idx + 1}</span>
+                  <p className="flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-50">{ex.name}</p>
+                  {isCurrent && <span className="text-xs font-semibold text-primary-500">atual</span>}
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleMoveExercising(ex.workout_day_exercise_id, "up")}
+                      disabled={idx === 0}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                    >↑</button>
+                    <button
+                      onClick={() => handleMoveExercising(ex.workout_day_exercise_id, "down")}
+                      disabled={idx === exercises.length - 1}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                    >↓</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     )}
     </>
   );
@@ -1109,6 +1256,7 @@ function OverviewScreen({
       {swapMode && (
         <SwapModal
           exercise={swapMode}
+          allWorkoutExerciseIds={exercises.map(e => e.exercise_id)}
           onSwap={doSwap}
           onClose={() => setSwapMode(null)}
         />
@@ -1188,51 +1336,54 @@ function DoneScreen({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [savedCalories, setSavedCalories] = useState<number | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   const exercises = useMemo(() => day.exercises ?? [], [day.exercises]);
 
   async function handleSave() {
     setSaving(true);
     setSaveError("");
     try {
-    await api.post("/api/v1/workout_sessions", {
-      workout_day_id: day.id,
-      duration_minutes: duration,
-      fatigue_level: fatigueLevel,
-      notes: notes || null,
-      completed_at: finishedAt.toISOString(),
-      exercise_logs: exercises.map((exercise) => {
-        const state = runtimeFor(runtime, exercise);
-        if (isCardio(exercise)) {
+      const saved = await api.post<WorkoutSession>("/api/v1/workout_sessions", {
+        workout_day_id: day.id,
+        duration_minutes: duration,
+        fatigue_level: fatigueLevel,
+        notes: notes || null,
+        completed_at: finishedAt.toISOString(),
+        exercise_logs: exercises.map((exercise) => {
+          const state = runtimeFor(runtime, exercise);
+          if (isCardio(exercise)) {
+            return {
+              workout_day_exercise_id: exercise.workout_day_exercise_id,
+              exercise_id: exercise.exercise_id,
+              name: exercise.name,
+              duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
+              intensity: state.intensity ?? null,
+              feeling: state.feeling || null,
+            };
+          }
           return {
             workout_day_exercise_id: exercise.workout_day_exercise_id,
             exercise_id: exercise.exercise_id,
             name: exercise.name,
-            duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
-            intensity: state.intensity ?? null,
+            weight_kg: firstWeight(state.weight_by_set),
+            weight_by_set: state.weight_by_set.map((value) => value ? Number(value) : null),
+            planned_sets: exercise.sets,
+            sets: state.planned_sets,
+            reps: state.reps_by_set,
+            rest_seconds: state.rest_seconds,
             feeling: state.feeling || null,
           };
-        }
-        return {
-          workout_day_exercise_id: exercise.workout_day_exercise_id,
-          exercise_id: exercise.exercise_id,
-          name: exercise.name,
-          weight_kg: firstWeight(state.weight_by_set),
-          weight_by_set: state.weight_by_set.map((value) => value ? Number(value) : null),
-          planned_sets: exercise.sets,
-          sets: state.planned_sets,
-          reps: state.reps_by_set,
-          rest_seconds: state.rest_seconds,
-          feeling: state.feeling || null,
-        };
-      }),
-    });
-    trackEvent(EVENTS.WORKOUT_COMPLETED, {
-      workout_name: day.name,
-      duration_minutes: duration,
-      exercises_count: exercises.length,
-    });
-    onSaved?.();
-    router.push("/dashboard");
+        }),
+      });
+      trackEvent(EVENTS.WORKOUT_COMPLETED, {
+        workout_name: day.name,
+        duration_minutes: duration,
+        exercises_count: exercises.length,
+      });
+      onSaved?.();
+      setSavedCalories(saved.calories_estimated ?? null);
+      setIsSaved(true);
     } catch {
       setSaveError("Erro ao salvar o treino. Tente novamente.");
     } finally {
@@ -1278,7 +1429,7 @@ function DoneScreen({
 
       {/* Summary metrics */}
       <motion.div
-        className="mt-6 grid grid-cols-3 gap-3"
+        className={`mt-6 grid gap-3 ${isSaved && savedCalories ? "grid-cols-2" : "grid-cols-3"}`}
         variants={staggerContainer}
         initial="hidden"
         animate="visible"
@@ -1300,6 +1451,12 @@ function DoneScreen({
           <p className="text-2xl font-bold text-gray-700"><AnimatedCounter value={exercises.length} /></p>
           <p className="mt-0.5 text-xs text-gray-400">exercícios</p>
         </motion.div>
+        {isSaved && savedCalories != null && savedCalories > 0 && (
+          <motion.div variants={staggerItem} className="flex flex-col items-center rounded-2xl bg-orange-50 p-4">
+            <p className="text-2xl font-bold text-orange-500">~<AnimatedCounter value={savedCalories} /></p>
+            <p className="mt-0.5 text-xs text-orange-400">kcal est.</p>
+          </motion.div>
+        )}
       </motion.div>
 
       <motion.div
@@ -1347,25 +1504,45 @@ function DoneScreen({
 
         {saveError && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{saveError}</p>}
 
-        <motion.div variants={staggerItem}>
-          <GlowPulse color="green" radius={16} className="w-full">
-            <PressButton onClick={handleSave} disabled={saving} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white disabled:opacity-50">
-              {saving ? "Salvando..." : "Registrar treino"}
-            </PressButton>
-          </GlowPulse>
-        </motion.div>
-
-        <motion.div variants={staggerItem}>
-          <ShareButton
-            workoutName={day.name}
-            durationMinutes={duration}
-            volumeKg={totalVolume}
-            exerciseCount={exercises.length}
-            muscles={[...new Set(exercises.map((e) => e.muscle_group).filter(Boolean) as string[])]}
-          />
-        </motion.div>
-
-        <button onClick={onBack} className="w-full py-2 text-sm text-gray-400">Não registrar</button>
+        {!isSaved ? (
+          <>
+            <motion.div variants={staggerItem}>
+              <GlowPulse color="green" radius={16} className="w-full">
+                <PressButton onClick={handleSave} disabled={saving} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white disabled:opacity-50">
+                  {saving ? "Salvando..." : "Registrar treino"}
+                </PressButton>
+              </GlowPulse>
+            </motion.div>
+            <motion.div variants={staggerItem}>
+              <ShareButton
+                workoutName={day.name}
+                durationMinutes={duration}
+                volumeKg={totalVolume}
+                exerciseCount={exercises.length}
+                muscles={[...new Set(exercises.map((e) => e.muscle_group).filter(Boolean) as string[])]}
+              />
+            </motion.div>
+            <button onClick={onBack} className="w-full py-2 text-sm text-gray-400">Não registrar</button>
+          </>
+        ) : (
+          <>
+            <motion.div variants={staggerItem}>
+              <ShareButton
+                workoutName={day.name}
+                durationMinutes={duration}
+                volumeKg={totalVolume}
+                exerciseCount={exercises.length}
+                muscles={[...new Set(exercises.map((e) => e.muscle_group).filter(Boolean) as string[])]}
+                caloriesEstimated={savedCalories ?? undefined}
+              />
+            </motion.div>
+            <motion.div variants={staggerItem}>
+              <PressButton onClick={() => router.push("/dashboard")} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white">
+                Ir para o dashboard →
+              </PressButton>
+            </motion.div>
+          </>
+        )}
       </motion.div>
     </div>
   );

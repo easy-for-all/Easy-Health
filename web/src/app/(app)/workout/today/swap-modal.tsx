@@ -25,6 +25,7 @@ type ExerciseOption = {
   gif_url?: string | null;
   video_url?: string | null;
   muscle_image_url: string;
+  is_favorite?: boolean;
 };
 
 const MUSCLE_LABELS: Record<string, string> = {
@@ -59,10 +60,12 @@ function SmartImage({ src, fallbackSrc, alt, className }: { src: string; fallbac
 
 export function SwapModal({
   exercise,
+  allWorkoutExerciseIds = [],
   onSwap,
   onClose,
 }: {
   exercise: WorkoutDayExercise;
+  allWorkoutExerciseIds?: number[];
   onSwap: (wdeId: number, replacementId: number) => Promise<void>;
   onClose: () => void;
 }) {
@@ -74,30 +77,35 @@ export function SwapModal({
   const [aiSuggestions, setAiSuggestions] = useState<ExerciseOption[]>([]);
   const [aiIdentification, setAiIdentification] = useState<EquipmentIdentification | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [searchLang, setSearchLang] = useState<"pt" | "en">("pt");
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openSwapFetch = useCallback(async (wde: WorkoutDayExercise) => {
+    const excludeIds = [...new Set([wde.exercise_id, ...allWorkoutExerciseIds])].join(",");
     const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
-    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${wde.exercise_id}`);
+    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${excludeIds}`);
     setAlternatives(data);
-  }, []);
+  }, [allWorkoutExerciseIds]);
 
   useEffect(() => {
     openSwapFetch(exercise);
   }, [exercise, openSwapFetch]);
 
-  const fetchByName = useCallback(async (name: string) => {
+  const fetchByName = useCallback(async (name: string, lang: "pt" | "en" = "pt") => {
     setSearchLoading(true);
     try {
-      const params = new URLSearchParams({ name, exclude_ids: String(exercise.exercise_id) });
+      const excludeIds = [...new Set([exercise.exercise_id, ...allWorkoutExerciseIds])].join(",");
+      const params = new URLSearchParams({ name, exclude_ids: excludeIds });
       if (exercise.muscle_group) params.set("muscle_group", exercise.muscle_group);
       else params.set("exercise_type", exercise.exercise_type);
+      if (lang === "en") params.set("lang", "en");
       const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${params.toString()}`);
       setAlternatives(data);
     } finally {
       setSearchLoading(false);
     }
-  }, [exercise.exercise_id, exercise.muscle_group, exercise.exercise_type]);
+  }, [exercise.exercise_id, exercise.muscle_group, exercise.exercise_type, allWorkoutExerciseIds]);
 
   async function fetchByFilter(filter: { muscle_group?: string; exercise_type?: string }) {
     const compatibleGroup = exercise.muscle_group ?? null;
@@ -110,7 +118,8 @@ export function SwapModal({
     setSearchLoading(true);
     setSwapFilter(filter);
     try {
-      const params = new URLSearchParams({ exclude_ids: String(exercise.exercise_id) });
+      const excludeIds = [...new Set([exercise.exercise_id, ...allWorkoutExerciseIds])].join(",");
+      const params = new URLSearchParams({ exclude_ids: excludeIds });
       if (filter.muscle_group) params.set("muscle_group", filter.muscle_group);
       if (filter.exercise_type) params.set("exercise_type", filter.exercise_type);
       const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${params.toString()}`);
@@ -125,11 +134,38 @@ export function SwapModal({
     setSwapFilter(null);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     if (value.trim().length >= 2) {
-      searchTimerRef.current = setTimeout(() => fetchByName(value.trim()), 300);
+      searchTimerRef.current = setTimeout(() => fetchByName(value.trim(), searchLang), 300);
     } else if (value.trim().length === 0) {
       openSwapFetch(exercise);
     }
   }
+
+  function handleLangChange(lang: "pt" | "en") {
+    setSearchLang(lang);
+    if (swapSearch.trim().length >= 2) {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      fetchByName(swapSearch.trim(), lang);
+    }
+  }
+
+  async function toggleFavorite(exerciseId: number, currentlyFav: boolean) {
+    try {
+      if (currentlyFav) {
+        await api.delete(`/api/v1/exercises/${exerciseId}/favorite`);
+      } else {
+        await api.post(`/api/v1/exercises/${exerciseId}/favorite`, {});
+      }
+      setAlternatives((prev) =>
+        prev.map((e) => e.id === exerciseId ? { ...e, is_favorite: !currentlyFav } : e)
+      );
+    } catch {
+      // ignore favorite toggle errors silently
+    }
+  }
+
+  const displayedAlternatives = onlyFavorites
+    ? alternatives.filter((a) => a.is_favorite)
+    : alternatives;
 
   async function handleAiPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -219,14 +255,40 @@ export function SwapModal({
           ))}
         </div>
 
-        {/* Campo de busca */}
-        <input
-          type="text"
-          placeholder="Buscar por nome..."
-          value={swapSearch}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          className="mb-3 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
-        />
+        {/* Toggle de idioma + campo de busca */}
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              onClick={() => handleLangChange("pt")}
+              className={`px-3 py-2 text-xs font-semibold transition ${searchLang === "pt" ? "bg-primary-500 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+            >
+              🇧🇷 PT
+            </button>
+            <button
+              onClick={() => handleLangChange("en")}
+              className={`px-3 py-2 text-xs font-semibold transition ${searchLang === "en" ? "bg-primary-500 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+            >
+              🇺🇸 EN
+            </button>
+          </div>
+          <input
+            type="text"
+            placeholder={searchLang === "en" ? "Search by name..." : "Buscar por nome..."}
+            value={swapSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
+          />
+        </div>
+
+        {/* Filtro somente favoritos */}
+        <div className="mb-2 flex gap-2">
+          <button
+            onClick={() => setOnlyFavorites((v) => !v)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${onlyFavorites ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-orange-50"}`}
+          >
+            {onlyFavorites ? "❤️ Somente favoritos" : "🤍 Todos"}
+          </button>
+        </div>
 
         {/* Chips de filtro por músculo/tipo */}
         <div className="mb-3 flex flex-wrap gap-1.5">
@@ -273,21 +335,31 @@ export function SwapModal({
         {/* Lista de alternativas */}
         {searchLoading ? (
           <p className="rounded-lg bg-gray-50 p-3 text-center text-sm text-gray-400">Buscando...</p>
-        ) : alternatives.length === 0 ? (
-          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma alternativa encontrada.</p>
+        ) : displayedAlternatives.length === 0 ? (
+          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
+            {onlyFavorites ? "Nenhum favorito encontrado para este grupo." : "Nenhuma alternativa encontrada."}
+          </p>
         ) : (
-          alternatives.map((alt) => (
-            <button
-              key={alt.id}
-              onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
-              className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
-            >
-              <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
-              <div>
-                <p className="font-medium text-gray-900">{alt.name}</p>
-                <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
-              </div>
-            </button>
+          displayedAlternatives.map((alt) => (
+            <div key={alt.id} className="mb-2 flex w-full items-center gap-1">
+              <button
+                onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
+                className="flex flex-1 gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
+              >
+                <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
+                <div>
+                  <p className="font-medium text-gray-900">{alt.name}</p>
+                  <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
+                </div>
+              </button>
+              <button
+                onClick={() => toggleFavorite(alt.id, !!alt.is_favorite)}
+                className="flex-shrink-0 px-2 py-3 text-lg"
+                title={alt.is_favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+              >
+                {alt.is_favorite ? "❤️" : "🤍"}
+              </button>
+            </div>
           ))
         )}
       </div>
