@@ -7,6 +7,7 @@ import { PublicLayout } from "@/shared/components/public-layout";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { setPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 
 const FEATURES = [
   "Treinos personalizados por IA",
@@ -34,6 +35,11 @@ export default function PricingPage() {
   const handleSelectPlan = useCallback(async (plan: PendingPlan) => {
     setError(null);
     setLoadingPlan(plan);
+    trackEvent(EVENTS.CHECKOUT_STARTED, {
+      plan_name: plan,
+      billing_cycle: plan === "pro_monthly" ? "monthly" : "yearly",
+      value: plan === "pro_monthly" ? 19.9 : 118.8,
+    });
 
     if (!user) {
       setPendingPlan(plan);

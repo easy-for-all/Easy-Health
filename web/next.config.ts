@@ -37,6 +37,7 @@ const securityHeaders = [
 
 export default withNextIntl({
   poweredByHeader: false,
+  transpilePackages: ["framer-motion", "canvas-confetti", "html-to-image"],
 
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];

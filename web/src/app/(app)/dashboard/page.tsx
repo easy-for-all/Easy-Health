@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { useAuth } from "@/features/auth/auth-context";
 import { useTheme } from "@/features/theme/theme-context";
 import { api } from "@/shared/lib/api";
+import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { AiRecommendationsCard } from "@/shared/components/ai-recommendations-card";
 import type { WorkoutPlan, WorkoutDay } from "@/shared/types/workout";
@@ -16,17 +18,25 @@ export default function DashboardPage() {
   const { theme, toggleTheme } = useTheme();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [streak, setStreak] = useState(0);
+  const [weeklySessions, setWeeklySessions] = useState(0);
+  const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [loading, setLoading] = useState(true);
   const [noProfile, setNoProfile] = useState(false);
 
   useEffect(() => {
+    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "home" });
+  }, []);
+
+  useEffect(() => {
     Promise.all([
       api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-      api.get<{ streak: number; total_sessions: number }>("/api/v1/workout_sessions/stats").catch(() => null),
+      api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number }>("/api/v1/workout_sessions/stats").catch(() => null),
     ]).then(([p, s]) => {
       if (!p) { setNoProfile(true); }
       setPlan(p);
       setStreak(s?.streak ?? 0);
+      setWeeklySessions(s?.weekly_sessions ?? 0);
+      setWeeklyGoal(s?.weekly_goal ?? 3);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -51,11 +61,6 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">{user?.name}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {streak > 0 && (
-            <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
-              🔥 {streak} dias
-            </span>
-          )}
           <button
             onClick={toggleTheme}
             aria-label="Alternar modo escuro"
@@ -67,6 +72,8 @@ export default function DashboardPage() {
       </header>
 
       <WorkoutCard plan={plan} />
+
+      <StreakCard streak={streak} weeklySessions={weeklySessions} weeklyGoal={weeklyGoal} />
 
       <section className="mt-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Seus treinos</h2>
@@ -94,6 +101,65 @@ export default function DashboardPage() {
         <Link href="/history" className="flex-1 rounded-lg border border-gray-200 py-3 text-center text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
           Histórico
         </Link>
+      </div>
+    </div>
+  );
+}
+
+function StreakCard({ streak, weeklySessions, weeklyGoal }: { streak: number; weeklySessions: number; weeklyGoal: number }) {
+  const progress = Math.min(weeklySessions / Math.max(weeklyGoal, 1), 1);
+  const remaining = Math.max(weeklyGoal - weeklySessions, 0);
+  const weekDays = ["S", "T", "Q", "Q", "S", "S", "D"];
+
+  return (
+    <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900" style={{ boxShadow: "var(--shadow-card)" }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <motion.span
+            animate={streak > 0 ? { scale: [1, 1.15, 1] } : {}}
+            transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+            className="text-2xl"
+          >
+            🔥
+          </motion.span>
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-gray-50">
+              {streak > 0 ? `${streak} dias seguidos` : "Comece sua ofensiva"}
+            </p>
+            <p className="text-xs text-gray-400">
+              {remaining === 0 ? "Meta semanal atingida! 🎉" : `Faltam ${remaining} treinos para sua meta`}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-bold text-primary-500">{weeklySessions}<span className="text-sm text-gray-400">/{weeklyGoal}</span></p>
+          <p className="text-xs text-gray-400">esta semana</p>
+        </div>
+      </div>
+
+      {/* Weekly dots */}
+      <div className="mt-3 flex gap-1.5">
+        {weekDays.map((day, idx) => (
+          <div key={idx} className="flex flex-1 flex-col items-center gap-1">
+            <motion.div
+              className={`h-2 w-2 rounded-full ${idx < weeklySessions ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-700"}`}
+              initial={false}
+              animate={idx < weeklySessions ? { scale: [1, 1.3, 1] } : {}}
+              transition={{ duration: 0.3, delay: idx * 0.05 }}
+            />
+            <span className="text-[9px] text-gray-400">{day}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress bar */}
+      <div className="mt-3 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800">
+        <motion.div
+          className="h-1.5 rounded-full bg-primary-500"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress * 100}%` }}
+          transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+        />
       </div>
     </div>
   );
@@ -128,7 +194,13 @@ const MUSCLE_COLORS: Record<string, string> = {
 function DayCard({ day, index }: { day: WorkoutDay; index: number }) {
   const muscles = day.muscle_groups?.slice(0, 2) ?? [];
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: index * 0.06 }}
+      className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+      style={{ boxShadow: "var(--shadow-card)" }}
+    >
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -146,10 +218,15 @@ function DayCard({ day, index }: { day: WorkoutDay; index: number }) {
             ))}
           </div>
         </div>
-        <Link href={`/workout/today?day=${day.id}`} className="ml-3 rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white whitespace-nowrap hover:bg-primary-600">
-          Treinar
+        <Link href={`/workout/today?day=${day.id}`}>
+          <motion.span
+            whileTap={{ scale: 0.95 }}
+            className="ml-3 block rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white whitespace-nowrap hover:bg-primary-600"
+          >
+            Treinar
+          </motion.span>
         </Link>
       </div>
-    </div>
+    </motion.div>
   );
 }
