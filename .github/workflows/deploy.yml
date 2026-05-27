@@ -27,6 +27,8 @@ jobs:
           ssh-keyscan -H 177.7.58.46 >> ~/.ssh/known_hosts || true
 
       - name: Deploy to VPS
+        env:
+          GIT_COMMIT: ${{ github.sha }}
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o ConnectTimeout=30 \
@@ -35,6 +37,8 @@ jobs:
             -o PreferredAuthentications=publickey \
             easy@177.7.58.46 "
             cd /home/easy/Easy-Health &&
+            sed -i '/^GIT_COMMIT=/d' .env 2>/dev/null || true &&
+            echo 'GIT_COMMIT=${{ github.sha }}' >> .env &&
             git fetch origin main &&
             git reset --hard origin/main &&
             git submodule update --init --recursive || true &&

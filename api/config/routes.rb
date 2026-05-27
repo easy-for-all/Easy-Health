@@ -85,6 +85,11 @@ Rails.application.routes.draw do
       namespace :admin do
         get :stats
       end
+
+      # Debug routes — non-production only
+      unless Rails.env.production?
+        get "debug/sentry_test", to: "debug#sentry_test"
+      end
     end
   end
 end
