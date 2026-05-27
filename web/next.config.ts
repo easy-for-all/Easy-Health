@@ -1,4 +1,5 @@
 import createNextIntlPlugin from "next-intl/plugin";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -27,7 +28,7 @@ const securityHeaders = [
       `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com https://www.googletagmanager.com`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
-      `connect-src 'self' https: https://www.google-analytics.com${process.env.NODE_ENV === "development" ? " http://localhost:*" : ""}`,
+      `connect-src 'self' https: https://www.google-analytics.com https://*.sentry.io${process.env.NODE_ENV === "development" ? " http://localhost:*" : ""}`,
       "font-src 'self'",
       "object-src 'none'",
       "frame-ancestors 'none'",
@@ -35,7 +36,7 @@ const securityHeaders = [
   },
 ];
 
-export default withNextIntl({
+const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ["framer-motion", "canvas-confetti", "html-to-image"],
 
@@ -56,4 +57,10 @@ export default withNextIntl({
       },
     ];
   },
+};
+
+export default withSentryConfig(withNextIntl(nextConfig), {
+  silent: true,
+  disableLogger: true,
+  hideSourceMaps: true,
 });
