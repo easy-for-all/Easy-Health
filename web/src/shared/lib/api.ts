@@ -1,5 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -27,9 +25,6 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown): Pro
   if (!res.ok) {
     const message = data?.error ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
     const err = new ApiError(message, res.status);
-    if (res.status >= 500) {
-      Sentry.captureException(err, { extra: { path, method, status: res.status } });
-    }
     throw err;
   }
 

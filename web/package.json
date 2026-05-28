@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@sentry/nextjs": "^8.55.2",
     "@swc/helpers": "^0.5.21",
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.40.0",
