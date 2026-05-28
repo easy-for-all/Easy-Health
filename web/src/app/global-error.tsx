@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { captureException } from "@/shared/lib/sentry";
+
 export default function GlobalError({
   error,
   reset,
@@ -7,7 +10,9 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  void error;
+  useEffect(() => {
+    captureException(error);
+  }, [error]);
 
   return (
     <html lang="pt-BR">

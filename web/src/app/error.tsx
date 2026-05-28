@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { captureException } from "@/shared/lib/sentry";
+
 export default function ErrorPage({
   error,
   reset,
@@ -7,7 +10,9 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  void error;
+  useEffect(() => {
+    captureException(error);
+  }, [error]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">

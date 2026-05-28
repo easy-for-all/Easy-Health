@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import Script from "next/script";
 import { AuthProvider } from "@/features/auth/auth-context";
 import { ThemeProvider } from "@/features/theme/theme-context";
+import { SentryInit } from "@/shared/components/sentry-init";
 import "./globals.css";
 
 const GTAG_ID = "G-FG3BDM75T1";
@@ -45,6 +46,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         `}</Script>
       </head>
       <body className="min-h-full bg-gray-50 dark:bg-gray-950 font-sans">
+        <SentryInit />
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
             <AuthProvider>{children}</AuthProvider>
