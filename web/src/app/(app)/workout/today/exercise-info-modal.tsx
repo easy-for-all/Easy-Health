@@ -68,15 +68,40 @@ function GuideRenderer({ text }: { text: string }) {
 export function ExerciseInfoModal({
   exercise,
   onClose,
+  onToggleFavorite,
 }: {
   exercise: WorkoutDayExercise | null;
   onClose: () => void;
+  onToggleFavorite?: (exerciseId: number, currentlyFav: boolean) => void;
 }) {
   const [setupGuide, setSetupGuide] = useState<string | null>(null);
   const [setupGuideLoading, setSetupGuideLoading] = useState(false);
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
+  const [isFavorite, setIsFavorite] = useState<boolean | null>(null);
+  const [favLoading, setFavLoading] = useState(false);
 
   if (!exercise) return null;
+
+  const favState = isFavorite ?? (exercise as WorkoutDayExercise & { is_favorite?: boolean }).is_favorite ?? false;
+
+  async function handleToggleFav() {
+    if (favLoading) return;
+    setFavLoading(true);
+    const next = !favState;
+    setIsFavorite(next);
+    try {
+      if (next) {
+        await api.post(`/api/v1/exercises/${exercise!.exercise_id}/favorite`, {});
+      } else {
+        await api.delete(`/api/v1/exercises/${exercise!.exercise_id}/favorite`);
+      }
+      onToggleFavorite?.(exercise!.exercise_id, !next);
+    } catch {
+      setIsFavorite(favState);
+    } finally {
+      setFavLoading(false);
+    }
+  }
 
   async function handleSetupGuide() {
     if (setupGuide !== null) {
@@ -105,7 +130,17 @@ export function ExerciseInfoModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
-        <h3 className="mt-4 text-xl font-bold text-gray-900">{exercise.name}</h3>
+        <div className="mt-4 flex items-start justify-between gap-3">
+          <h3 className="text-xl font-bold text-gray-900">{exercise.name}</h3>
+          <button
+            onClick={handleToggleFav}
+            disabled={favLoading}
+            className="shrink-0 text-2xl leading-none transition-transform active:scale-90 disabled:opacity-50"
+            aria-label={favState ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+          >
+            {favState ? "❤️" : "🤍"}
+          </button>
+        </div>
         <p className="mt-3 text-sm leading-relaxed text-gray-600">{exercise.description}</p>
 
         {exercise.instructions && (

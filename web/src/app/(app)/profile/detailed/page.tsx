@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
+import { BodyCompositionMap, type BodyCompositionData } from "@/shared/components/body-composition-map";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -208,6 +209,14 @@ export default function DetailedProfilePage() {
             (dp.field_name === "body_analysis" || dp.field_name === "visual_observation")
   );
 
+  const latestCompositionPoint = data_points.find((dp) => dp.field_name === "body_composition_map");
+  const bodyCompositionData: BodyCompositionData | null = (() => {
+    if (!latestCompositionPoint?.raw_text) return null;
+    try { return JSON.parse(latestCompositionPoint.raw_text) as BodyCompositionData; } catch { return null; }
+  })();
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
+
   const examPoints = data_points.filter((dp) => dp.source_type === "exam");
 
   const riskPoints = examPoints.filter((dp) => {
@@ -250,6 +259,21 @@ export default function DetailedProfilePage() {
   const hasEstData = !!(estBmi || estLeanMass || estIdealMin || estBmr);
 
   const isEmpty = !data.physical && data_points.length === 0 && media.length === 0;
+
+  async function handleReanalyze() {
+    if (!bodyPhotos[0]) return;
+    setReanalyzing(true);
+    setReanalyzeError(null);
+    try {
+      await api.post(`/api/v1/user_media/${bodyPhotos[0].id}/reanalyze`, {});
+      const fresh = await api.get<DetailedProfile>("/api/v1/detailed_profile");
+      setData(fresh);
+    } catch {
+      setReanalyzeError("Não foi possível analisar. Tente novamente.");
+    } finally {
+      setReanalyzing(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 pb-28">
@@ -439,6 +463,56 @@ export default function DetailedProfilePage() {
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
             Observação geral. Consulte um profissional de saúde para avaliação precisa.
           </p>
+        </Section>
+      )}
+
+      {/* 3.5 Mapa Corporal por IA */}
+      {(bodyCompositionData || bodyPhotos.length > 0) && (
+        <Section
+          title="Mapa Corporal por IA"
+          subtitle="Avaliação muscular e de gordura por região"
+        >
+          {bodyCompositionData ? (
+            <>
+              <BodyCompositionMap data={bodyCompositionData} />
+              {bodyPhotos.length > 0 && (
+                <div className="mt-4">
+                  {reanalyzeError && (
+                    <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{reanalyzeError}</p>
+                  )}
+                  <button
+                    onClick={handleReanalyze}
+                    disabled={reanalyzing}
+                    className="w-full rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-500 transition hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {reanalyzing ? "Analisando foto..." : "↺ Re-analisar foto mais recente"}
+                  </button>
+                </div>
+              )}
+              <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                Estimativa visual por IA. Consulte um profissional para avaliação precisa.
+              </p>
+            </>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-sm text-gray-500 mb-3">
+                Gere um mapa corporal detalhado a partir da sua foto mais recente.
+              </p>
+              {reanalyzeError && (
+                <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{reanalyzeError}</p>
+              )}
+              <button
+                onClick={handleReanalyze}
+                disabled={reanalyzing || bodyPhotos.length === 0}
+                className="w-full rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
+              >
+                {reanalyzing ? "Analisando foto..." : "🔍 Gerar mapa corporal"}
+              </button>
+              {bodyPhotos.length === 0 && (
+                <p className="mt-2 text-xs text-gray-400">Adicione uma foto corporal para ativar essa funcionalidade.</p>
+              )}
+            </div>
+          )}
         </Section>
       )}
 

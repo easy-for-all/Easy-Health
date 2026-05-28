@@ -77,6 +77,16 @@ module Api
                 confidence:  analysis.data_point.confidence
               }
             end
+
+            comp_cfg    = AiConfig.for(:body_composition)
+            composition = BodyCompositionAnalysisService.new(
+              image_data:   file_data,
+              content_type: file.content_type,
+              user:         current_user,
+              user_media:   media
+            ).call
+            log_ai_usage(user: current_user, task_type: :body_composition, model: comp_cfg[:model])
+            extra[:body_composition_map] = { id: composition.data_point.id } if composition.data_point
           end
 
           render json: media_json(media).merge(extra), status: :created
@@ -90,6 +100,39 @@ module Api
         media.file.purge_later if media.file.attached?
         media.destroy!
         head :no_content
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Not found" }, status: :not_found
+      end
+
+      def reanalyze
+        media = current_user.user_media.find(params[:id])
+
+        unless media.category == "body_photo" && media.file.attached?
+          return render json: { error: "Invalid media for reanalysis" }, status: :unprocessable_entity
+        end
+
+        check_rate_limit!(:image_analysis); return if performed?
+
+        file_data    = media.file.download
+        content_type = media.file.content_type
+
+        cfg         = AiConfig.for(:body_composition)
+        composition = BodyCompositionAnalysisService.new(
+          image_data:   file_data,
+          content_type: content_type,
+          user:         current_user,
+          user_media:   media
+        ).call
+        log_ai_usage(user: current_user, task_type: :body_composition, model: cfg[:model])
+
+        if composition.data_point
+          render json: {
+            data_point_id: composition.data_point.id,
+            composition:   composition.composition
+          }
+        else
+          render json: { error: "Não foi possível analisar. Tente novamente." }, status: :unprocessable_entity
+        end
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Not found" }, status: :not_found
       end

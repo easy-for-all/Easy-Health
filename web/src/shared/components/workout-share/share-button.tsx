@@ -16,6 +16,19 @@ type ShareButtonProps = {
   caloriesEstimated?: number;
 };
 
+async function captureCard(el: HTMLElement): Promise<string> {
+  const opts = {
+    pixelRatio: 2,
+    skipAutoScale: true,
+    cacheBust: true,
+    skipFonts: false,
+    includeQueryParams: true,
+  };
+  // html-to-image sometimes needs a warm-up pass to load embedded resources
+  await toPng(el, { ...opts, pixelRatio: 1 }).catch(() => null);
+  return toPng(el, opts);
+}
+
 export function ShareButton({ workoutName, durationMinutes, volumeKg, exerciseCount, muscles, hasPR, caloriesEstimated }: ShareButtonProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [showCard, setShowCard] = useState(false);
@@ -27,7 +40,7 @@ export function ShareButton({ workoutName, durationMinutes, volumeKg, exerciseCo
     setExporting(true);
     setExportError(null);
     try {
-      const dataUrl = await toPng(cardRef.current, { pixelRatio: 2, skipAutoScale: true });
+      const dataUrl = await captureCard(cardRef.current);
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], "easyhealth-treino.png", { type: "image/png" });
 
@@ -35,9 +48,12 @@ export function ShareButton({ workoutName, durationMinutes, volumeKg, exerciseCo
         await navigator.share({ files: [file], title: "Meu treino no EasyHealth" });
       } else {
         const link = document.createElement("a");
-        link.href = dataUrl;
+        link.href = URL.createObjectURL(blob);
         link.download = "easyhealth-treino.png";
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 5000);
       }
     } catch {
       setExportError("Não foi possível gerar a imagem. Tente novamente.");
@@ -50,7 +66,7 @@ export function ShareButton({ workoutName, durationMinutes, volumeKg, exerciseCo
     <div className="w-full">
       <PressButton
         onClick={() => setShowCard((v) => !v)}
-        className="w-full rounded-2xl border border-gray-200 py-3.5 text-sm font-semibold text-gray-700"
+        className="w-full rounded-2xl border border-gray-200 py-3.5 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300"
       >
         {showCard ? "Fechar prévia" : "🎯 Compartilhar treino"}
       </PressButton>
@@ -82,7 +98,7 @@ export function ShareButton({ workoutName, durationMinutes, volumeKg, exerciseCo
                 disabled={exporting}
                 className="w-full max-w-[360px] rounded-2xl bg-gray-900 py-3.5 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {exporting ? "Gerando..." : "Baixar / Compartilhar"}
+                {exporting ? "Gerando imagem..." : "Baixar / Compartilhar"}
               </PressButton>
             </div>
           </motion.div>

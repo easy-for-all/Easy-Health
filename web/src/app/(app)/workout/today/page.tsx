@@ -287,6 +287,20 @@ function WorkoutTodayContent() {
     }
   }
 
+  async function toggleFavoriteWorkoutDay(dayId: number) {
+    if (!plan) return;
+    const prev = plan.days.find((d) => d.id === dayId)?.favorited ?? false;
+    // Optimistic update
+    setPlan((p) => p ? { ...p, days: p.days.map((d) => d.id === dayId ? { ...d, favorited: !prev } : d) } : p);
+    try {
+      const resp = await api.patch<{ favorited: boolean }>(`/api/v1/workout_days/${dayId}/toggle_favorite`, {});
+      setPlan((p) => p ? { ...p, days: p.days.map((d) => d.id === dayId ? { ...d, favorited: resp.favorited } : d) } : p);
+    } catch {
+      // Revert on error
+      setPlan((p) => p ? { ...p, days: p.days.map((d) => d.id === dayId ? { ...d, favorited: prev } : d) } : p);
+    }
+  }
+
   function startWorkout() {
     unlockAudio();
     if (day) {
@@ -502,7 +516,7 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "choose") {
-    return <ChooseScreen plan={plan} sessions={sessions} onChoose={chooseWorkout} onBack={() => router.push("/dashboard")} />;
+    return <ChooseScreen plan={plan} sessions={sessions} onChoose={chooseWorkout} onToggleFavorite={toggleFavoriteWorkoutDay} onBack={() => router.push("/dashboard")} />;
   }
 
   if (phase === "overview") {
@@ -537,7 +551,7 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "done") {
-    return <DoneScreen day={day!} startTime={startTime ?? new Date()} runtime={exerciseRuntime} onBack={() => router.push("/dashboard")} onSaved={endSession} />;
+    return <DoneScreen day={day!} startTime={startTime ?? new Date()} runtime={exerciseRuntime} onSaved={endSession} />;
   }
 
   const exercises = day!.exercises ?? [];
@@ -905,14 +919,32 @@ function WorkoutTodayContent() {
           <div className="space-y-2">
             {exercises.map((ex, idx) => {
               const isCurrent = ex.workout_day_exercise_id === exercises[currentIndex]?.workout_day_exercise_id;
+              const isDone = idx < currentIndex;
               return (
                 <div
                   key={ex.workout_day_exercise_id}
-                  className={`flex items-center gap-3 rounded-xl border p-3 ${isCurrent ? "border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-950/30" : "border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900"}`}
+                  className={`flex items-center gap-3 rounded-xl border p-3 ${isCurrent ? "border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-950/30" : isDone ? "border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-800" : "border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900"}`}
                 >
-                  <span className="w-5 text-center text-xs font-bold text-gray-400">{idx + 1}</span>
-                  <p className="flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-50">{ex.name}</p>
-                  {isCurrent && <span className="text-xs font-semibold text-primary-500">atual</span>}
+                  <span className="w-5 text-center text-xs font-bold text-gray-400">
+                    {isDone ? "✓" : idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-50">{ex.name}</p>
+                    {!isCurrent && !isDone && (
+                      <button
+                        onClick={() => {
+                          setCurrentIndex(idx);
+                          setCurrentSet(1);
+                          setPhase("exercising");
+                          setShowReorderModal(false);
+                        }}
+                        className="mt-0.5 text-xs font-semibold text-primary-500 hover:text-primary-700"
+                      >
+                        Começar por este
+                      </button>
+                    )}
+                  </div>
+                  {isCurrent && <span className="shrink-0 text-xs font-semibold text-primary-500">atual</span>}
                   <div className="flex gap-1">
                     <button
                       onClick={() => handleMoveExercising(ex.workout_day_exercise_id, "up")}
@@ -962,15 +994,21 @@ function ChooseScreen({
   plan,
   sessions,
   onChoose,
+  onToggleFavorite,
   onBack,
 }: {
   plan: WorkoutPlan;
   sessions: WorkoutSession[];
   onChoose: (day: WorkoutDay) => void;
+  onToggleFavorite: (dayId: number) => void;
   onBack: () => void;
 }) {
   const recommendedId = recommendedDayId(plan, sessions);
   const router = useRouter();
+  const [filter, setFilter] = useState<"all" | "favorites">("all");
+
+  const favoriteDays = plan.days.filter((d) => d.favorited);
+  const displayedDays = filter === "favorites" ? favoriteDays : plan.days;
 
   return (
     <div className="min-h-screen bg-white px-4 py-6 dark:bg-gray-950">
@@ -986,41 +1024,72 @@ function ChooseScreen({
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">Escolha seu treino</h1>
       <p className="mt-1 text-sm text-gray-500">Faça A, B, C ou qualquer outro que fizer sentido hoje.</p>
 
-      <div className="mt-6 space-y-3">
-        {plan.days.map((day, idx) => {
-          const isRecommended = day.id === recommendedId;
-          const lastSession = lastSessionForDay(sessions, day.id);
-          return (
-            <button
-              key={day.id}
-              onClick={() => onChoose(day)}
-              className={`w-full rounded-xl border p-4 text-left transition ${isRecommended ? "border-primary-400 bg-primary-50 hover:border-primary-500" : "border-gray-100 bg-white hover:border-primary-300 dark:border-gray-800 dark:bg-gray-900"}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600">{LETTERS[idx] ?? idx + 1}</span>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-900 dark:text-gray-50">{day.name}</p>
-                    {isRecommended && (
-                      <span className="rounded-full bg-primary-500 px-2 py-0.5 text-xs font-semibold text-white">Hoje</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
-                  {day.muscle_groups?.length ? (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {day.muscle_groups.slice(0, 2).map((m) => (
-                        <span key={m} className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-gray-100 text-gray-600"}`}>{m}</span>
-                      ))}
+      {/* Filter tabs */}
+      <div className="mt-4 flex gap-2">
+        <button
+          onClick={() => setFilter("all")}
+          className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${filter === "all" ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}
+        >
+          Todos
+        </button>
+        <button
+          onClick={() => setFilter("favorites")}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${filter === "favorites" ? "bg-red-500 text-white" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}
+        >
+          ❤️ Favoritos {favoriteDays.length > 0 && <span className="rounded-full bg-white/30 px-1.5 text-xs">{favoriteDays.length}</span>}
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {displayedDays.length === 0 ? (
+          <p className="rounded-xl border border-gray-100 bg-gray-50 p-6 text-center text-sm text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+            Nenhum treino favoritado ainda.<br />Toque em ❤️ em qualquer treino para adicionar.
+          </p>
+        ) : (
+          displayedDays.map((day, idx) => {
+            const isRecommended = day.id === recommendedId;
+            const lastSession = lastSessionForDay(sessions, day.id);
+            const originalIdx = plan.days.findIndex((d) => d.id === day.id);
+            return (
+              <div
+                key={day.id}
+                className={`w-full rounded-xl border p-4 transition ${isRecommended ? "border-primary-400 bg-primary-50 dark:border-primary-700 dark:bg-primary-950/20" : "border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900"}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600 dark:bg-primary-950/40">
+                    {LETTERS[originalIdx] ?? originalIdx + 1}
+                  </span>
+                  <button className="flex-1 text-left" onClick={() => onChoose(day)}>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900 dark:text-gray-50">{day.name}</p>
+                      {isRecommended && (
+                        <span className="rounded-full bg-primary-500 px-2 py-0.5 text-xs font-semibold text-white">Hoje</span>
+                      )}
                     </div>
-                  ) : null}
-                  <p className="mt-0.5 text-xs text-gray-400">
-                    {lastSession ? relativeDate(lastSession.completed_at) : "nunca executado"}
-                  </p>
+                    <p className="text-xs text-gray-500">{day.exercise_count} exercícios</p>
+                    {day.muscle_groups?.length ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {day.muscle_groups.slice(0, 2).map((m) => (
+                          <span key={m} className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-gray-100 text-gray-600"}`}>{m}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      {lastSession ? relativeDate(lastSession.completed_at) : "nunca executado"}
+                    </p>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(day.id); }}
+                    className="shrink-0 p-1 text-xl leading-none transition-transform active:scale-90"
+                    aria-label={day.favorited ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                  >
+                    {day.favorited ? "❤️" : "🤍"}
+                  </button>
                 </div>
               </div>
-            </button>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       <section className="mt-8">
@@ -1320,13 +1389,11 @@ function DoneScreen({
   day,
   startTime,
   runtime,
-  onBack,
   onSaved,
 }: {
   day: WorkoutDay;
   startTime: Date;
   runtime: Record<number, ExerciseRuntime>;
-  onBack: () => void;
   onSaved?: () => void;
 }) {
   const router = useRouter();
@@ -1340,7 +1407,79 @@ function DoneScreen({
   const [isSaved, setIsSaved] = useState(false);
   const exercises = useMemo(() => day.exercises ?? [], [day.exercises]);
 
-  async function handleSave() {
+  const totalVolume = useMemo(() => {
+    let total = 0;
+    exercises.forEach((ex) => {
+      if (isCardio(ex)) return;
+      const state = runtimeFor(runtime, ex);
+      state.weight_by_set.forEach((w, i) => {
+        total += (Number(w) || 0) * (state.reps_by_set[i] || 0);
+      });
+    });
+    return Math.round(total);
+  }, [exercises, runtime]);
+
+  const muscles = useMemo(
+    () => [...new Set(exercises.map((e) => e.muscle_group).filter(Boolean) as string[])],
+    [exercises],
+  );
+
+  // Auto-save on mount — no intermediate step needed
+  useEffect(() => {
+    async function save() {
+      setSaving(true);
+      try {
+        const saved = await api.post<WorkoutSession>("/api/v1/workout_sessions", {
+          workout_day_id: day.id,
+          duration_minutes: duration,
+          fatigue_level: fatigueLevel,
+          notes: notes || null,
+          completed_at: finishedAt.toISOString(),
+          exercise_logs: exercises.map((exercise) => {
+            const state = runtimeFor(runtime, exercise);
+            if (isCardio(exercise)) {
+              return {
+                workout_day_exercise_id: exercise.workout_day_exercise_id,
+                exercise_id: exercise.exercise_id,
+                name: exercise.name,
+                duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
+                intensity: state.intensity ?? null,
+                feeling: state.feeling || null,
+              };
+            }
+            return {
+              workout_day_exercise_id: exercise.workout_day_exercise_id,
+              exercise_id: exercise.exercise_id,
+              name: exercise.name,
+              weight_kg: firstWeight(state.weight_by_set),
+              weight_by_set: state.weight_by_set.map((value) => value ? Number(value) : null),
+              planned_sets: exercise.sets,
+              sets: state.planned_sets,
+              reps: state.reps_by_set,
+              rest_seconds: state.rest_seconds,
+              feeling: state.feeling || null,
+            };
+          }),
+        });
+        trackEvent(EVENTS.WORKOUT_COMPLETED, {
+          workout_name: day.name,
+          duration_minutes: duration,
+          exercises_count: exercises.length,
+        });
+        onSaved?.();
+        setSavedCalories(saved.calories_estimated ?? null);
+        setIsSaved(true);
+      } catch {
+        setSaveError("Erro ao salvar o treino. Tente novamente.");
+      } finally {
+        setSaving(false);
+      }
+    }
+    save();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function retrySave() {
     setSaving(true);
     setSaveError("");
     try {
@@ -1376,32 +1515,15 @@ function DoneScreen({
           };
         }),
       });
-      trackEvent(EVENTS.WORKOUT_COMPLETED, {
-        workout_name: day.name,
-        duration_minutes: duration,
-        exercises_count: exercises.length,
-      });
       onSaved?.();
       setSavedCalories(saved.calories_estimated ?? null);
       setIsSaved(true);
     } catch {
-      setSaveError("Erro ao salvar o treino. Tente novamente.");
+      setSaveError("Erro ao salvar. Tente novamente.");
     } finally {
       setSaving(false);
     }
   }
-
-  const totalVolume = useMemo(() => {
-    let total = 0;
-    exercises.forEach((ex) => {
-      if (isCardio(ex)) return;
-      const state = runtimeFor(runtime, ex);
-      state.weight_by_set.forEach((w, i) => {
-        total += (Number(w) || 0) * (state.reps_by_set[i] || 0);
-      });
-    });
-    return Math.round(total);
-  }, [exercises, runtime]);
 
   const staggerContainer = {
     hidden: {},
@@ -1411,6 +1533,8 @@ function DoneScreen({
     hidden: { opacity: 0, y: 16 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
   };
+
+  const calCols = savedCalories != null && savedCalories > 0 ? "grid-cols-2" : "grid-cols-3";
 
   return (
     <div className="flex min-h-screen flex-col bg-white px-4 py-6 dark:bg-gray-950">
@@ -1423,13 +1547,14 @@ function DoneScreen({
         transition={{ duration: 0.4, ease: "easeOut" }}
       >
         <p className="text-4xl mb-2">🎉</p>
-        <h1 className="text-2xl font-bold text-gray-900">Treino concluído!</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">Treino concluído!</h1>
         <p className="mt-1 text-gray-500">{day.name}</p>
+        {saving && <p className="mt-2 text-xs text-primary-500">Salvando...</p>}
       </motion.div>
 
-      {/* Summary metrics */}
+      {/* Metrics */}
       <motion.div
-        className={`mt-6 grid gap-3 ${isSaved && savedCalories ? "grid-cols-2" : "grid-cols-3"}`}
+        className={`mt-6 grid gap-3 ${calCols}`}
         variants={staggerContainer}
         initial="hidden"
         animate="visible"
@@ -1447,16 +1572,22 @@ function DoneScreen({
           </p>
           <p className="mt-0.5 text-xs text-green-400">volume</p>
         </motion.div>
-        <motion.div variants={staggerItem} className="flex flex-col items-center rounded-2xl bg-gray-50 p-4">
-          <p className="text-2xl font-bold text-gray-700"><AnimatedCounter value={exercises.length} /></p>
+        <motion.div variants={staggerItem} className="flex flex-col items-center rounded-2xl bg-gray-50 p-4 dark:bg-gray-900">
+          <p className="text-2xl font-bold text-gray-700 dark:text-gray-200"><AnimatedCounter value={exercises.length} /></p>
           <p className="mt-0.5 text-xs text-gray-400">exercícios</p>
         </motion.div>
-        {isSaved && savedCalories != null && savedCalories > 0 && (
-          <motion.div variants={staggerItem} className="flex flex-col items-center rounded-2xl bg-orange-50 p-4">
-            <p className="text-2xl font-bold text-orange-500">~<AnimatedCounter value={savedCalories} /></p>
-            <p className="mt-0.5 text-xs text-orange-400">kcal est.</p>
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {savedCalories != null && savedCalories > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center rounded-2xl bg-orange-50 p-4"
+            >
+              <p className="text-2xl font-bold text-orange-500">~<AnimatedCounter value={savedCalories} /></p>
+              <p className="mt-0.5 text-xs text-orange-400">kcal est.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       <motion.div
@@ -1465,12 +1596,13 @@ function DoneScreen({
         initial="hidden"
         animate="visible"
       >
-        <motion.p variants={staggerItem} className="text-sm font-semibold text-gray-700">Resumo por exercício</motion.p>
+        {/* Exercise summary */}
+        <motion.p variants={staggerItem} className="text-sm font-semibold text-gray-700 dark:text-gray-300">Resumo por exercício</motion.p>
         {exercises.map((exercise) => {
           const state = runtimeFor(runtime, exercise);
           return (
             <motion.div variants={staggerItem} key={exercise.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-              <span className="text-sm font-medium text-gray-900">{exercise.name}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{exercise.name}</span>
               {isCardio(exercise) ? (
                 <p className="mt-1 text-xs text-gray-400">
                   Duração: {state.duration_minutes ?? exercise.duration_minutes ?? "—"} min
@@ -1487,11 +1619,12 @@ function DoneScreen({
           );
         })}
 
+        {/* Fatigue + notes */}
         <motion.div variants={staggerItem} className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-          <label className="text-sm font-semibold text-gray-700">Nível geral de cansaço</label>
+          <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nível geral de cansaço</label>
           <div className="mt-3 flex gap-2">
             {[1, 2, 3, 4, 5].map((level) => (
-              <button key={level} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold transition-colors ${fatigueLevel === level ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-500"}`}>
+              <button key={level} disabled={isSaved} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold transition-colors disabled:cursor-default ${fatigueLevel === level ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-500"}`}>
                 {level}
               </button>
             ))}
@@ -1499,50 +1632,46 @@ function DoneScreen({
         </motion.div>
 
         <motion.div variants={staggerItem}>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Alguma anotação? (opcional)" rows={3} className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none" />
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            disabled={isSaved}
+            placeholder="Alguma anotação? (opcional)"
+            rows={2}
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900"
+          />
         </motion.div>
 
-        {saveError && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{saveError}</p>}
-
-        {!isSaved ? (
-          <>
-            <motion.div variants={staggerItem}>
-              <GlowPulse color="green" radius={16} className="w-full">
-                <PressButton onClick={handleSave} disabled={saving} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white disabled:opacity-50">
-                  {saving ? "Salvando..." : "Registrar treino"}
-                </PressButton>
-              </GlowPulse>
-            </motion.div>
-            <motion.div variants={staggerItem}>
-              <ShareButton
-                workoutName={day.name}
-                durationMinutes={duration}
-                volumeKg={totalVolume}
-                exerciseCount={exercises.length}
-                muscles={[...new Set(exercises.map((e) => e.muscle_group).filter(Boolean) as string[])]}
-              />
-            </motion.div>
-            <button onClick={onBack} className="w-full py-2 text-sm text-gray-400">Não registrar</button>
-          </>
-        ) : (
-          <>
-            <motion.div variants={staggerItem}>
-              <ShareButton
-                workoutName={day.name}
-                durationMinutes={duration}
-                volumeKg={totalVolume}
-                exerciseCount={exercises.length}
-                muscles={[...new Set(exercises.map((e) => e.muscle_group).filter(Boolean) as string[])]}
-                caloriesEstimated={savedCalories ?? undefined}
-              />
-            </motion.div>
-            <motion.div variants={staggerItem}>
-              <PressButton onClick={() => router.push("/dashboard")} className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white">
-                Ir para o dashboard →
-              </PressButton>
-            </motion.div>
-          </>
+        {saveError && (
+          <motion.div variants={staggerItem} className="flex flex-col gap-2 rounded-lg bg-red-50 px-4 py-3">
+            <p className="text-sm text-red-700">{saveError}</p>
+            <button onClick={retrySave} disabled={saving} className="self-start text-xs font-semibold text-red-600 underline">
+              Tentar novamente
+            </button>
+          </motion.div>
         )}
+
+        {/* Share */}
+        <motion.div variants={staggerItem}>
+          <ShareButton
+            workoutName={day.name}
+            durationMinutes={duration}
+            volumeKg={totalVolume}
+            exerciseCount={exercises.length}
+            muscles={muscles}
+            caloriesEstimated={savedCalories ?? undefined}
+          />
+        </motion.div>
+
+        {/* Done CTA */}
+        <motion.div variants={staggerItem}>
+          <PressButton
+            onClick={() => router.push("/dashboard")}
+            className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
+          >
+            {isSaved ? "Ir para o dashboard →" : "Concluir sem salvar →"}
+          </PressButton>
+        </motion.div>
       </motion.div>
     </div>
   );
