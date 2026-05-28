@@ -57,7 +57,9 @@ Rails.application.routes.draw do
       patch  "profile/avatar", to: "profile#update_avatar"
       delete "profile/data",  to: "profile#destroy_data"
 
-      resources :user_media, only: [:index, :create, :destroy]
+      resources :user_media, only: [:index, :create, :destroy] do
+        member { post :reanalyze }
+      end
 
       resources :health_data_points, only: [:index, :update]
 

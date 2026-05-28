@@ -27,57 +27,72 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
     const showCalories = caloriesEstimated != null && caloriesEstimated > 0;
     const cols = showCalories ? "grid-cols-2" : "grid-cols-3";
 
+    const gridCols = showCalories
+      ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }
+      : { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 };
+
     return (
       <div
         ref={ref}
-        className="relative w-[360px] overflow-hidden rounded-3xl bg-gradient-to-br from-gray-950 via-gray-900 to-primary-950 p-6 text-white"
-        style={{ fontFamily: "Arial, sans-serif" }}
+        style={{
+          position: "relative",
+          width: 360,
+          overflow: "hidden",
+          borderRadius: 24,
+          background: "linear-gradient(135deg, #030712 0%, #111827 50%, #0c0a1e 100%)",
+          padding: 24,
+          color: "#fff",
+          fontFamily: "Arial, Helvetica, sans-serif",
+          boxSizing: "border-box",
+        }}
       >
         {/* Background glow */}
-        <div className="absolute inset-0 opacity-20" style={{
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          opacity: 0.2,
           background: "radial-gradient(ellipse at 30% 20%, rgba(59,130,246,0.5) 0%, transparent 60%)",
+          pointerEvents: "none",
         }} />
 
         {/* Header */}
-        <div className="relative mb-5 flex items-start justify-between">
+        <div style={{ position: "relative", marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-primary-400">EasyHealth</p>
-            <h2 className="mt-1 text-xl font-bold text-white">{workoutName}</h2>
+            <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 4, color: "#818cf8", margin: 0 }}>EasyHealth</p>
+            <h2 style={{ marginTop: 4, fontSize: 20, fontWeight: 700, color: "#fff", margin: "4px 0 0" }}>{workoutName}</h2>
           </div>
           {hasPR && (
-            <span className="rounded-full bg-yellow-400/20 border border-yellow-400/40 px-2.5 py-1 text-xs font-bold text-yellow-400">
+            <span style={{ borderRadius: 999, background: "rgba(250,204,21,0.2)", border: "1px solid rgba(250,204,21,0.4)", padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#fbbf24" }}>
               🏆 PR
             </span>
           )}
         </div>
 
         {/* Metrics grid */}
-        <div className={`relative mb-5 grid ${cols} gap-3`}>
-          <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(255,255,255,0.10)" }}>
-            <p className="text-2xl font-bold text-white">{durationMinutes}</p>
-            <p className="text-xs" style={{ color: "rgba(255,255,255,0.60)" }}>min</p>
-          </div>
-          <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(255,255,255,0.10)" }}>
-            <p className="text-2xl font-bold text-primary-300">{volumeDisplay}</p>
-            <p className="text-xs" style={{ color: "rgba(255,255,255,0.60)" }}>volume</p>
-          </div>
-          <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(255,255,255,0.10)" }}>
-            <p className="text-2xl font-bold text-white">{exerciseCount}</p>
-            <p className="text-xs" style={{ color: "rgba(255,255,255,0.60)" }}>exercícios</p>
-          </div>
+        <div style={{ position: "relative", marginBottom: 20, ...gridCols }}>
+          {[
+            { value: String(durationMinutes), label: "min" },
+            { value: volumeDisplay, label: "volume", color: "#a5b4fc" },
+            { value: String(exerciseCount), label: "exercícios" },
+          ].map(({ value, label, color }) => (
+            <div key={label} style={{ borderRadius: 16, padding: 12, textAlign: "center", background: "rgba(255,255,255,0.10)" }}>
+              <p style={{ fontSize: 22, fontWeight: 700, color: color ?? "#fff", margin: 0 }}>{value}</p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.60)", margin: "2px 0 0" }}>{label}</p>
+            </div>
+          ))}
           {showCalories && (
-            <div className="rounded-2xl p-3 text-center" style={{ background: "rgba(255,165,0,0.15)" }}>
-              <p className="text-2xl font-bold text-orange-300">~{caloriesEstimated}</p>
-              <p className="text-xs" style={{ color: "rgba(255,255,255,0.60)" }}>kcal</p>
+            <div style={{ borderRadius: 16, padding: 12, textAlign: "center", background: "rgba(255,165,0,0.15)" }}>
+              <p style={{ fontSize: 22, fontWeight: 700, color: "#fdba74", margin: 0 }}>~{caloriesEstimated}</p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.60)", margin: "2px 0 0" }}>kcal</p>
             </div>
           )}
         </div>
 
         {/* Muscle badges */}
         {muscles.length > 0 && (
-          <div className="relative mb-5 flex flex-wrap gap-1.5">
+          <div style={{ position: "relative", marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 6 }}>
             {muscles.slice(0, 4).map((m) => (
-              <span key={m} className="rounded-full px-2.5 py-1 text-xs font-medium text-primary-300" style={{ background: "rgba(99,102,241,0.20)", border: "1px solid rgba(99,102,241,0.30)" }}>
+              <span key={m} style={{ borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 500, color: "#a5b4fc", background: "rgba(99,102,241,0.20)", border: "1px solid rgba(99,102,241,0.30)" }}>
                 {MUSCLE_LABELS[m] ?? m}
               </span>
             ))}
@@ -85,8 +100,8 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
         )}
 
         {/* Phrase */}
-        <div className="relative pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
-          <p className="text-sm italic" style={{ color: "rgba(255,255,255,0.70)" }}>&ldquo;{phrase}&rdquo;</p>
+        <div style={{ position: "relative", paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.10)" }}>
+          <p style={{ fontSize: 13, fontStyle: "italic", color: "rgba(255,255,255,0.70)", margin: 0 }}>&ldquo;{phrase}&rdquo;</p>
         </div>
       </div>
     );
