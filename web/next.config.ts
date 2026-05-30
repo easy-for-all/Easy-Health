@@ -29,6 +29,7 @@ const securityHeaders = [
       "img-src 'self' data: blob:",
       `connect-src 'self' https: https://www.google-analytics.com https://*.sentry.io${process.env.NODE_ENV === "development" ? " http://localhost:*" : ""}`,
       "font-src 'self'",
+      "worker-src blob: 'self'",
       "object-src 'none'",
       "frame-ancestors 'none'",
     ].join("; "),
