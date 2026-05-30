@@ -23,6 +23,7 @@ services:
       - ./api:/rails
       - ./external:/external
       - api_bundle:/usr/local/bundle
+      - ./api/public/exercise-images:/rails/public/exercise-images
     ports:
       - "3001:3001"
     environment:
