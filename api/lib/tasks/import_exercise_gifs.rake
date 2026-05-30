@@ -55,7 +55,7 @@ namespace :exercises do
 
       exercise = exercise_index[name_key]
       if exercise
-        exercise.update_columns(gif_url: gif_url, gif_path: gif_path)
+        exercise.update_columns(gif_url: gif_url)
         exercise_index[name_key] = exercise
         updated += 1
       else
@@ -67,7 +67,6 @@ namespace :exercises do
           equipment_type: "gym",
           difficulty:     "intermediate",
           gif_url:        gif_url,
-          gif_path:       gif_path,
           source_dataset: "gifdotreino"
         )
         exercise_index[name_key] = ex
