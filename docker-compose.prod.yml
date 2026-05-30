@@ -23,6 +23,7 @@ services:
       - "3001:3001"
     volumes:
       - storage_data:/rails/storage
+      - ./api/public/exercise-images:/rails/public/exercise-images
     environment:
       RAILS_ENV: production
       RAILS_SERVE_STATIC_FILES: "true"
