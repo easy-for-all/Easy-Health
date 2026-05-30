@@ -178,6 +178,8 @@ export default function DetailedProfilePage() {
   const [loading, setLoading]         = useState(true);
   const [photoHistoryOpen, setPhotoHistoryOpen] = useState(false);
   const [lightboxItem, setLightboxItem]         = useState<MediaItem | null>(null);
+  const [reanalyzing, setReanalyzing]           = useState(false);
+  const [reanalyzeError, setReanalyzeError]     = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -214,9 +216,6 @@ export default function DetailedProfilePage() {
     if (!latestCompositionPoint?.raw_text) return null;
     try { return JSON.parse(latestCompositionPoint.raw_text) as BodyCompositionData; } catch { return null; }
   })();
-  const [reanalyzing, setReanalyzing] = useState(false);
-  const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
-
   const examPoints = data_points.filter((dp) => dp.source_type === "exam");
 
   const riskPoints = examPoints.filter((dp) => {
