@@ -557,6 +557,10 @@ const ALL_MUSCLE_GROUPS = [
   { value: "biceps",    label: "Bíceps" },
   { value: "triceps",   label: "Tríceps" },
   { value: "legs",      label: "Pernas" },
+  { value: "glutes",    label: "Glúteos" },
+  { value: "calves",    label: "Panturrilhas" },
+  { value: "trapezius", label: "Trapézio" },
+  { value: "forearms",  label: "Antebraços" },
   { value: "core",      label: "Core" },
 ];
 

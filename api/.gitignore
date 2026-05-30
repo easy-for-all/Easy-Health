@@ -9,3 +9,6 @@
 !/tmp/pids/.keep
 /storage/*
 !/storage/.keep
+
+# GIFs do gifdotreino (2.6 GB — rodar rake exercises:import_gifdotreino para importar)
+/public/exercise-images/gifdotreino/

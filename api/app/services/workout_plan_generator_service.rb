@@ -211,8 +211,8 @@ class WorkoutPlanGeneratorService
   end
 
   def exercise_scope(relation)
-    return relation.where(home_compatible: true) if @training_location == "home"
-    relation
+    rel = @training_location == "home" ? relation.where(home_compatible: true) : relation
+    rel.order(Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END"), :id)
   end
 
   # Resolve cardio_type to an exercise_type that exists in the DB
