@@ -264,7 +264,7 @@ export default function ProfilePage() {
             disabled={uploadingAvatar}
             className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-400 text-xl font-bold text-white hover:bg-primary-300 disabled:opacity-60"
           >
-            {user?.avatar_url ? (
+            {user?.avatar_url?.startsWith("/") ? (
               <img src={`${API_URL}${user.avatar_url}`} alt="Avatar" className="h-full w-full object-cover" />
             ) : (
               initials
