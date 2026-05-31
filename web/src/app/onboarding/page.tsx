@@ -121,13 +121,13 @@ export default function OnboardingPage() {
   const TOTAL_STEPS = 5;
 
   return (
-    <div className="flex min-h-screen flex-col bg-white px-4 py-8 dark:bg-gray-950">
+    <div className="flex min-h-screen flex-col px-4 py-8" style={{ background: "#0a0f1e" }}>
       <div className="mb-8 flex gap-1">
         {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
           <div
             key={n}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              n <= step ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-800"
+              n <= step ? "bg-primary-500" : "bg-slate-800"
             }`}
           />
         ))}
@@ -182,8 +182,8 @@ export default function OnboardingPage() {
 function StepGoal({ selected, onSelect }: { selected: string; onSelect: (v: Goal) => void }) {
   return (
     <div className="flex flex-1 flex-col">
-      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Qual é o seu objetivo?</h2>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Isso define seu plano de treino.</p>
+      <h2 className="mb-2 text-xl font-bold text-white">Qual é o seu objetivo?</h2>
+      <p className="mb-6 text-sm text-slate-400">Isso define seu plano de treino.</p>
       <div className="space-y-3">
         {GOALS.map((g) => (
           <button
@@ -191,11 +191,11 @@ function StepGoal({ selected, onSelect }: { selected: string; onSelect: (v: Goal
             onClick={() => onSelect(g.value)}
             className={`w-full rounded-xl border-2 p-4 text-left transition ${
               selected === g.value
-                ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
-                : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                ? "border-primary-500 bg-primary-500/12"
+                : "border-slate-800 bg-slate-900 hover:border-slate-600"
             }`}
           >
-            <p className="font-semibold text-gray-900 dark:text-gray-50">{g.label}</p>
+            <p className="font-semibold text-white">{g.label}</p>
             <p className="text-sm text-gray-500">{g.desc}</p>
           </button>
         ))}
@@ -215,11 +215,11 @@ function StepLevel({
 }) {
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Seu nível de condicionamento?</h2>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Seja honesto — isso ajusta a intensidade.</p>
+      <h2 className="mb-2 text-xl font-bold text-white">Seu nível de condicionamento?</h2>
+      <p className="mb-6 text-sm text-slate-400">Seja honesto — isso ajusta a intensidade.</p>
       <div className="space-y-3">
         {LEVELS.map((l) => (
           <button
@@ -227,11 +227,11 @@ function StepLevel({
             onClick={() => onSelect(l.value)}
             className={`w-full rounded-xl border-2 p-4 text-left transition ${
               selected === l.value
-                ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
-                : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                ? "border-primary-500 bg-primary-500/12"
+                : "border-slate-800 bg-slate-900 hover:border-slate-600"
             }`}
           >
-            <p className="font-semibold text-gray-900 dark:text-gray-50">{l.label}</p>
+            <p className="font-semibold text-white">{l.label}</p>
             <p className="text-sm text-gray-500">{l.desc}</p>
           </button>
         ))}
@@ -261,15 +261,15 @@ function StepBody({
 
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Seus dados físicos</h2>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Usados para personalizar sua experiência.</p>
+      <h2 className="mb-2 text-xl font-bold text-white">Seus dados físicos</h2>
+      <p className="mb-6 text-sm text-slate-400">Usados para personalizar sua experiência.</p>
 
       <div className="space-y-6">
         <div>
-          <label className="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label className="mb-3 block text-sm font-medium text-slate-400">
             Como você se identifica?
           </label>
           <div className="flex gap-2">
@@ -279,8 +279,8 @@ function StepBody({
                 onClick={() => onChange("gender", g.value)}
                 className={`flex-1 rounded-xl border-2 px-2 py-3 text-center text-sm font-medium transition ${
                   form.gender === g.value
-                    ? "border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300"
-                    : "border-gray-200 text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:text-gray-300 dark:hover:border-gray-600"
+                    ? "border-primary-500 bg-primary-500/12 text-primary-400"
+                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600"
                 }`}
               >
                 {g.label}
@@ -294,10 +294,10 @@ function StepBody({
           return (
             <div key={key}>
               <div className="mb-2 flex items-baseline justify-between">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                <label className="text-sm font-medium text-slate-400">{label}</label>
                 <span className="text-2xl font-bold text-primary-500">
                   {value}
-                  <span className="ml-1 text-sm font-normal text-gray-500 dark:text-gray-400">{unit}</span>
+                  <span className="ml-1 text-sm font-normal text-slate-400">{unit}</span>
                 </span>
               </div>
               <input
@@ -310,7 +310,7 @@ function StepBody({
                 className="w-full cursor-pointer"
                 style={{ accentColor: "var(--color-primary-500)" }}
               />
-              <div className="mt-1 flex justify-between text-xs text-gray-400 dark:text-gray-500">
+              <div className="mt-1 flex justify-between text-xs text-slate-600">
                 <span>{min} {unit}</span>
                 <span>{max} {unit}</span>
               </div>
@@ -322,7 +322,7 @@ function StepBody({
       <button
         onClick={onNext}
         disabled={!valid}
-        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+        className="mt-8 w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
       >
         Continuar →
       </button>
@@ -350,11 +350,11 @@ function StepActivities({
 
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">O que você gosta de fazer?</h2>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Selecione pelo menos uma atividade.</p>
+      <h2 className="mb-2 text-xl font-bold text-white">O que você gosta de fazer?</h2>
+      <p className="mb-6 text-sm text-slate-400">Selecione pelo menos uma atividade.</p>
 
       <div className="grid grid-cols-2 gap-3">
         {ACTIVITIES.map((a) => {
@@ -365,24 +365,24 @@ function StepActivities({
               onClick={() => { onToggle(a.value); setAttempted(false); }}
               className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
                 isSelected
-                  ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
-                  : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                  ? "border-primary-500 bg-primary-500/12"
+                  : "border-slate-800 bg-slate-900 hover:border-slate-600"
               }`}
             >
               <span className="text-xl leading-none">{a.icon}</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-50">{a.label}</span>
+              <span className="text-sm font-medium text-white">{a.label}</span>
             </button>
           );
         })}
       </div>
 
       {attempted && selected.length === 0 && (
-        <p className="mt-4 text-sm text-red-600">Selecione pelo menos uma atividade para continuar.</p>
+        <p className="mt-4 text-sm text-red-400">Selecione pelo menos uma atividade para continuar.</p>
       )}
 
       <button
         onClick={handleNext}
-        className="mt-8 w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600"
+        className="mt-8 w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600"
       >
         Continuar →
       </button>
@@ -405,14 +405,14 @@ function StepLocation({
 }) {
   return (
     <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
         ← Voltar
       </button>
-      <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Onde você costuma treinar?</h2>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Isso adapta os exercícios do seu plano.</p>
+      <h2 className="mb-2 text-xl font-bold text-white">Onde você costuma treinar?</h2>
+      <p className="mb-6 text-sm text-slate-400">Isso adapta os exercícios do seu plano.</p>
 
       {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        <p className="mb-4 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
       )}
 
       <div className="space-y-3">
@@ -423,14 +423,14 @@ function StepLocation({
             disabled={loading}
             className={`w-full rounded-xl border-2 p-4 text-left transition disabled:opacity-70 ${
               selected === l.value
-                ? "border-primary-500 bg-primary-50 dark:bg-primary-950/40"
-                : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                ? "border-primary-500 bg-primary-500/12"
+                : "border-slate-800 bg-slate-900 hover:border-slate-600"
             }`}
           >
             <div className="flex items-center gap-3">
               <span className="text-xl leading-none">{l.icon}</span>
               <div>
-                <p className="font-semibold text-gray-900 dark:text-gray-50">{l.label}</p>
+                <p className="font-semibold text-white">{l.label}</p>
                 <p className="text-sm text-gray-500">{l.desc}</p>
               </div>
             </div>
@@ -439,7 +439,7 @@ function StepLocation({
       </div>
 
       {loading && (
-        <p className="mt-4 text-center text-sm text-gray-400">Criando seu plano...</p>
+        <p className="mt-4 text-center text-sm text-slate-400">Criando seu plano...</p>
       )}
     </div>
   );

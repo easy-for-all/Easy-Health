@@ -2,6 +2,7 @@ class ApplicationController < ActionController::API
   include ActionController::Cookies
 
   before_action :configure_permitted_parameters, if: :devise_controller?
+  after_action :set_request_id_header
 
   protected
 
@@ -11,6 +12,10 @@ class ApplicationController < ActionController::API
   end
 
   private
+
+  def set_request_id_header
+    response.headers["X-Request-Id"] = request.request_id
+  end
 
   def require_admin!
     unless current_user&.admin?
