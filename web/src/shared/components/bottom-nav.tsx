@@ -52,17 +52,21 @@ export function BottomNav() {
   const t = useTranslations("nav");
 
   const ITEMS = [
-    { href: "/profile",       label: t("profile"),      Icon: UserIcon },
-    { href: "/workout/today", label: t("workout"),       Icon: DumbbellIcon },
-    { href: "/plan",          label: t("workouts"),      Icon: ClipboardIcon },
-    { href: "/billing",       label: t("subscription"),  Icon: CreditCardIcon },
+    { href: "/profile",   label: t("profile"),      Icon: UserIcon },
+    { href: "/workouts",  label: t("workouts"),      Icon: DumbbellIcon },
+    { href: "/billing",   label: t("subscription"),  Icon: CreditCardIcon },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-gray-100/60 bg-white/85 backdrop-blur-md dark:border-gray-800/60 dark:bg-gray-950/85">
       <div className="flex">
         {ITEMS.map(({ href, label, Icon }) => {
-          const active = pathname.startsWith(href);
+          const active =
+            href === "/workouts"
+              ? pathname.startsWith("/workouts") ||
+                pathname.startsWith("/workout") ||
+                pathname.startsWith("/plan")
+              : pathname.startsWith(href);
           return (
             <Link
               key={href}

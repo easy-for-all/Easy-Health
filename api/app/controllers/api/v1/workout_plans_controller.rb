@@ -40,7 +40,7 @@ module Api
         profile_attrs[:training_location]      = training_location    if training_location
         current_user.health_profile&.update!(profile_attrs) if profile_attrs.any?
 
-        plan = WorkoutPlanGeneratorService.new(
+        service = WorkoutPlanGeneratorService.new(
           current_user,
           days_per_week:        days_per_week,
           activity_preferences: activity_preferences,
@@ -50,8 +50,9 @@ module Api
           cardio_format:        cardio_format,
           custom_splits:        custom_splits,
           training_location:    training_location
-        ).call
-        render json: serialize_plan(plan), status: :ok
+        )
+        plan = service.call
+        render json: serialize_plan(plan).merge(summary: service.plan_summary), status: :ok
       rescue ActiveRecord::RecordInvalid => e
         render_error(e.record.errors.full_messages.to_sentence)
       end
