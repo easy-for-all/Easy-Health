@@ -15,6 +15,22 @@ export function trackEvent(eventName: string, params?: EventParams): void {
   window.gtag("event", eventName, params);
 }
 
+// send_to labels: get from Google Ads → Conversions → select action → Tag setup
+export const CONVERSIONS = {
+  SIGNUP:       "AW-17759537883/-FCPCJ7mkrAcENuVtJRC",
+  SUBSCRIPTION: "AW-17759537883/REPLACE_SUBSCRIPTION_LABEL",
+} as const;
+
+export function trackConversion(sendTo: string): void {
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[GAds Conversion] ${sendTo}`);
+    return;
+  }
+  if (typeof window.gtag !== "function") return;
+  window.gtag("event", "conversion", { send_to: sendTo });
+}
+
 export const EVENTS = {
   LANDING_VIEW:         "landing_view",
   SIGNUP_STARTED:       "signup_started",

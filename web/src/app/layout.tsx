@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/features/theme/theme-context";
 import "./globals.css";
 
 const GTAG_ID = "G-FG3BDM75T1";
+const GADS_ID = "AW-17759537883";
 const CLARITY_ID = "wwdmi83dip";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
           gtag('config', '${GTAG_ID}');
+          gtag('config', '${GADS_ID}');
         `}</Script>
         <Script id="clarity-init" strategy="afterInteractive">{`
           (function(c,l,a,r,i,t,y){

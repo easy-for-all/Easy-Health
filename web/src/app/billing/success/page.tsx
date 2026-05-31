@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
+import { CONVERSIONS } from "@/shared/lib/analytics";
 
 export default function BillingSuccessPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <AnalyticsTracker eventName="subscription_created" />
+      <AnalyticsTracker eventName="subscription_created" conversionLabel={CONVERSIONS.SUBSCRIPTION} />
       <div className="max-w-sm w-full bg-white rounded-2xl border border-gray-200 p-8 text-center">
         <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <svg className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
