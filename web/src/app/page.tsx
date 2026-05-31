@@ -1,74 +1,430 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Footer } from "@/shared/components/footer";
-import { FeatureCard } from "@/shared/components/feature-card";
 import { HeroCta } from "@/shared/components/hero-cta";
 import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
 
 export const metadata: Metadata = {
   title: "EasyHealth — Treino inteligente com IA",
-  description: "A EasyHealth cria treinos personalizados com IA, acompanha sua evolução e ajuda você a manter uma rotina fitness mais inteligente.",
+  description:
+    "A EasyHealth monta seu plano, adapta a cada semana e te puxa pra treinar — do jeito que um personal faria, no seu bolso.",
 };
 
+// ── Phone mockup: dashboard replica ────────────────────────────────────────
+function PhoneMockup() {
+  return (
+    <div className="relative grid place-items-center">
+      {/* glow blob */}
+      <div
+        className="absolute -top-10 -right-8 w-72 h-72 rounded-full opacity-40 z-0"
+        style={{ background: "#3b82f6", filter: "blur(70px)" }}
+      />
+      <div
+        className="relative z-10 w-[310px] flex-none rounded-[46px] p-[13px] border border-slate-700"
+        style={{
+          background: "linear-gradient(160deg, #1e293b, #0f172a)",
+          boxShadow: "0 18px 50px -18px rgba(0,0,0,.8), 0 50px 90px -50px rgba(0,0,0,.6)",
+        }}
+      >
+        <div
+          className="relative rounded-[34px] overflow-hidden flex flex-col"
+          style={{ background: "#0a0f1e", aspectRatio: "310/620" }}
+        >
+          {/* notch */}
+          <div className="absolute top-[10px] left-1/2 -translate-x-1/2 w-24 h-6 bg-black rounded-full z-10" />
+
+          {/* appbar */}
+          <div className="flex items-center justify-between px-[18px] pt-[38px] pb-2">
+            <div className="leading-tight">
+              <div className="text-[11px] text-slate-500">Olá,</div>
+              <div className="text-[18px] font-extrabold text-white tracking-tight">MARCUS</div>
+            </div>
+            <div className="w-[30px] h-[30px] rounded-full border border-slate-700 grid place-items-center text-[13px] text-slate-400">
+              ☾
+            </div>
+          </div>
+
+          {/* scroll area */}
+          <div className="flex-1 overflow-hidden px-[14px] pb-[14px] flex flex-col gap-[10px]">
+            {/* train card */}
+            <div
+              className="rounded-[20px] p-[16px] relative overflow-hidden"
+              style={{ background: "linear-gradient(150deg, #3b82f6, #2563eb)" }}
+            >
+              <div className="text-[10px] font-extrabold uppercase tracking-[.14em] text-blue-200 opacity-90">
+                Domingo
+              </div>
+              <div className="text-[24px] font-extrabold text-white leading-tight my-1">Treinar agora</div>
+              <div className="text-[11px] text-blue-100 mb-3">3 treinos no seu plano</div>
+              <span className="inline-flex items-center gap-1.5 bg-white/15 text-white text-[12px] font-bold px-3 py-2 rounded-full">
+                Escolher treino →
+              </span>
+            </div>
+
+            {/* streak */}
+            <div className="rounded-[15px] p-[13px] border border-slate-800 bg-slate-900">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-[12px] font-semibold text-white">🔥 Comece sua ofensiva</span>
+                <span className="text-[15px] font-extrabold text-primary-400">0/3</span>
+              </div>
+              <div className="flex justify-between">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <span key={i} className="w-[10px] h-[10px] rounded-full bg-slate-800 border border-slate-700" />
+                ))}
+              </div>
+            </div>
+
+            <div className="text-[10px] font-extrabold uppercase tracking-[.14em] text-slate-500 mx-0.5">
+              Seus treinos
+            </div>
+
+            {/* wkt A */}
+            <div className="flex items-center gap-[11px] p-[11px] border border-slate-800 rounded-[14px] bg-slate-900">
+              <span className="w-[29px] h-[29px] rounded-[9px] grid place-items-center text-[13px] font-extrabold text-primary-400 bg-primary-500/15">
+                A
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-white">Full Body A</div>
+                <div className="text-[10px] text-slate-500">6 exercícios · peito, costas</div>
+              </div>
+              <span className="text-[11px] font-bold text-slate-900 bg-primary-400 px-[11px] py-[6px] rounded-full">
+                Treinar
+              </span>
+            </div>
+
+            {/* wkt B */}
+            <div className="flex items-center gap-[11px] p-[11px] border border-slate-800 rounded-[14px] bg-slate-900">
+              <span className="w-[29px] h-[29px] rounded-[9px] grid place-items-center text-[13px] font-extrabold text-primary-400 bg-primary-500/15">
+                B
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-white">Full Body B</div>
+                <div className="text-[10px] text-slate-500">6 exercícios · ombros</div>
+              </div>
+              <span className="text-[11px] font-bold text-slate-900 bg-primary-400 px-[11px] py-[6px] rounded-full">
+                Treinar
+              </span>
+            </div>
+          </div>
+
+          {/* tabbar */}
+          <div className="flex justify-around px-2 py-[10px] border-t border-slate-800 bg-slate-900">
+            {[
+              {
+                label: "Perfil",
+                active: false,
+                path: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z",
+              },
+              {
+                label: "Treino",
+                active: true,
+                path: "M6 8v8M18 8v8M4 10h2M18 10h2M6 12h12",
+              },
+              {
+                label: "Treinos",
+                active: false,
+                path: "M9 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2M9 3a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 3a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
+              },
+              {
+                label: "Plano",
+                active: false,
+                path: "M3 6h18M3 10h18M3 14h18M3 18h18",
+              },
+            ].map((tab) => (
+              <div
+                key={tab.label}
+                className={`flex flex-col items-center gap-1 text-[9px] font-semibold ${tab.active ? "text-primary-400" : "text-slate-600"}`}
+              >
+                <svg
+                  className="w-[18px] h-[18px]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d={tab.path} />
+                </svg>
+                {tab.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Mini phone: onboarding ──────────────────────────────────────────────────
+function MiniPhoneOnboarding() {
+  return (
+    <MiniPhoneShell>
+      <div className="p-[18px] flex flex-col gap-[10px] h-full">
+        <div className="flex gap-[5px]">
+          {[true, false, false, false, false].map((on, i) => (
+            <div
+              key={i}
+              className={`h-[5px] flex-1 rounded-full ${on ? "bg-primary-500" : "bg-slate-800"}`}
+            />
+          ))}
+        </div>
+        <h4 className="text-[15px] font-bold text-white mt-2">Qual é o seu objetivo?</h4>
+        {[
+          { label: "Perder peso", sub: "Reduzir gordura corporal", sel: false },
+          { label: "Ganhar músculo", sub: "Aumentar massa muscular", sel: true },
+          { label: "Manter", sub: "Manter o peso atual", sel: false },
+        ].map((opt) => (
+          <div
+            key={opt.label}
+            className={`rounded-[11px] px-[12px] py-[10px] text-[12px] font-semibold border ${
+              opt.sel
+                ? "border-primary-500 bg-primary-500/12 text-primary-400"
+                : "border-slate-700 bg-slate-900 text-white"
+            }`}
+          >
+            {opt.label}
+            <div className={`text-[10px] font-normal mt-0.5 ${opt.sel ? "text-primary-400/80" : "text-slate-500"}`}>
+              {opt.sub}
+            </div>
+          </div>
+        ))}
+      </div>
+    </MiniPhoneShell>
+  );
+}
+
+// ── Mini phone: IA loading ──────────────────────────────────────────────────
+function MiniPhoneLoading() {
+  const lines = [
+    { text: "Analisando seu perfil", done: true },
+    { text: "Definindo divisão semanal", done: true },
+    { text: "Selecionando exercícios", done: true },
+    { text: "Ajustando intensidade…", done: false },
+  ];
+  return (
+    <MiniPhoneShell>
+      <div className="p-[22px] flex flex-col gap-[12px] h-full">
+        {/* loading ring */}
+        <div
+          className="w-[44px] h-[44px] rounded-full border-4 border-slate-800 border-t-primary-500 animate-spin mx-auto mt-3"
+        />
+        <div className="flex flex-col gap-[9px] mt-1">
+          {lines.map((l) => (
+            <div
+              key={l.text}
+              className={`flex items-center gap-[7px] text-[11.5px] font-semibold ${
+                l.done ? "text-primary-400" : "text-slate-600"
+              }`}
+            >
+              {l.done ? (
+                <svg className="w-[14px] h-[14px] flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              ) : (
+                <div className="w-[14px] h-[14px] flex-none rounded-full border border-slate-700" />
+              )}
+              {l.text}
+            </div>
+          ))}
+        </div>
+      </div>
+    </MiniPhoneShell>
+  );
+}
+
+// ── Mini phone: treino ativo ────────────────────────────────────────────────
+function MiniPhoneActive() {
+  return (
+    <MiniPhoneShell>
+      <div className="flex flex-col h-full">
+        <div
+          className="grid place-items-center"
+          style={{ aspectRatio: "16/10", background: "linear-gradient(135deg, #1e3a5f, #1e293b)" }}
+        >
+          <svg className="w-[38px] h-[38px] text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M6 8v8M18 8v8M4 10h2M18 10h2M6 12h12" />
+          </svg>
+        </div>
+        <div className="p-[13px] flex flex-col gap-[10px] flex-1">
+          <h4 className="text-[16px] font-extrabold text-white">Bench Press</h4>
+          <div className="flex gap-[7px]">
+            {[
+              { val: "4", label: "SÉRIES" },
+              { val: "10", label: "REPS" },
+              { val: "1", label: "ATUAL" },
+            ].map((c) => (
+              <div key={c.label} className="flex-1 bg-slate-800 rounded-[10px] p-[8px] text-center">
+                <div className="text-[17px] font-extrabold text-white">{c.val}</div>
+                <div className="text-[9px] text-slate-500">{c.label}</div>
+              </div>
+            ))}
+          </div>
+          <div
+            className="mt-auto text-center font-extrabold text-[12px] py-[12px] rounded-[12px] text-white"
+            style={{ background: "#3b82f6", boxShadow: "0 4px 16px rgba(59,130,246,.45)" }}
+          >
+            Feito — série 1/4
+          </div>
+        </div>
+      </div>
+    </MiniPhoneShell>
+  );
+}
+
+function MiniPhoneShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="mx-auto w-[224px] rounded-[28px] p-[9px] border border-slate-700 mb-6"
+      style={{
+        background: "linear-gradient(160deg, #1e293b, #0f172a)",
+        boxShadow: "0 18px 40px -20px rgba(0,0,0,.7)",
+      }}
+    >
+      <div
+        className="rounded-[21px] overflow-hidden flex flex-col"
+        style={{ background: "#0a0f1e", aspectRatio: "224/372" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Feature icon wrappers ───────────────────────────────────────────────────
 const FEATURES = [
   {
-    icon: "🤖",
-    title: "IA para treino",
-    description: "Receba sugestões de treino com base no seu objetivo, rotina e evolução.",
-    href: "/ia-para-treino",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-primary-400 fill-none stroke-[1.9] [stroke-linecap:round] [stroke-linejoin:round]">
+        <path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z" />
+      </svg>
+    ),
+    title: "Treino com IA",
+    desc: "Responda algumas perguntas e a IA monta um plano sob medida pro seu objetivo, nível e rotina.",
   },
   {
-    icon: "📋",
-    title: "Treino personalizado",
-    description: "Planos ajustados ao seu nível, frequência e disponibilidade.",
-    href: "/treino-personalizado",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-primary-400 fill-none stroke-[1.9] [stroke-linecap:round] [stroke-linejoin:round]">
+        <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" /><circle cx="4" cy="12" r="2" /><circle cx="20" cy="12" r="2" />
+      </svg>
+    ),
+    title: "Personalizado de verdade",
+    desc: "Cada exercício considera seu equipamento, local de treino e o que você gosta de fazer.",
   },
   {
-    icon: "🔥",
-    title: "Emagrecimento",
-    description: "Organize uma rotina de treino focada em perda de gordura e consistência.",
-    href: "/emagrecimento",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-primary-400 fill-none stroke-[1.9] [stroke-linecap:round] [stroke-linejoin:round]">
+        <path d="M12 2c1 5 6 6 6 11a6 6 0 0 1-12 0c0-2 1-3 2-4 .5 2 2 2 2 0 0-3 1-5 2-7z" />
+      </svg>
+    ),
+    title: "Engajamento que pega",
+    desc: "Ofensivas, sequências e metas semanais pra você não largar no terceiro dia.",
   },
   {
-    icon: "🏠",
-    title: "Treino em casa",
-    description: "Treinos possíveis mesmo sem academia, com exercícios adaptados ao seu contexto.",
-    href: "/treino-em-casa",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-primary-400 fill-none stroke-[1.9] [stroke-linecap:round] [stroke-linejoin:round]">
+        <path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" />
+      </svg>
+    ),
+    title: "Treino em casa ou rua",
+    desc: "Academia, peso corporal, ar livre — o plano se adapta a onde você está hoje.",
   },
   {
-    icon: "🩺",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-primary-400 fill-none stroke-[1.9] [stroke-linecap:round] [stroke-linejoin:round]">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" />
+      </svg>
+    ),
     title: "Análise de exames",
-    description: "Use seus dados de saúde para apoiar uma jornada fitness mais personalizada.",
-    href: "/analise-de-exames",
+    desc: "Suba fotos e exames e receba estimativas de IMC, peso ideal, TMB e mais — só pra acompanhar.",
   },
   {
-    icon: "💳",
-    title: "Preços",
-    description: "Escolha o plano ideal para começar sua evolução.",
-    href: "/precos",
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-primary-400 fill-none stroke-[1.9] [stroke-linecap:round] [stroke-linejoin:round]">
+        <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      </svg>
+    ),
+    title: "Preço que cabe",
+    desc: "A partir de R$9,90/mês no plano anual. Comece com 7 dias grátis, sem compromisso.",
   },
 ];
 
+const STEPS = [
+  {
+    num: "PASSO 01",
+    title: "Conte seu objetivo",
+    desc: "Objetivo, nível, dados físicos e o que você curte. Leva menos de um minuto.",
+    phone: <MiniPhoneOnboarding />,
+  },
+  {
+    num: "PASSO 02",
+    title: "A IA monta seu plano",
+    desc: "Em segundos, a EasyHealth gera uma divisão semanal completa com os exercícios certos.",
+    phone: <MiniPhoneLoading />,
+  },
+  {
+    num: "PASSO 03",
+    title: "Treine e registre",
+    desc: "Acompanhe séries, reps, descanso e carga. No fim, veja seu resumo e ofensiva.",
+    phone: <MiniPhoneActive />,
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    quote: "Eu vivia largando treino na segunda semana. Com a ofensiva da EasyHealth, fechei 3 meses seguidos.",
+    name: "Larissa M.",
+    sub: "Ganhou constância · exemplo fictício",
+  },
+  {
+    quote: "Treino em casa sem equipamento e o plano se adapta. Parece que tem um personal me acompanhando.",
+    name: "Rafael T.",
+    sub: "Treina em casa · exemplo fictício",
+  },
+  {
+    quote: "O resumo no fim de cada treino me motiva demais. Ver a evolução semana a semana muda o jogo.",
+    name: "Bruna S.",
+    sub: "3 meses no app · exemplo fictício",
+  },
+];
+
+// ── Page ────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-white dark:bg-gray-950">
+    <div className="flex min-h-screen flex-col" style={{ background: "#0a0f1e", color: "#f0f4ff" }}>
       <AnalyticsTracker eventName="landing_view" />
       <AnalyticsTracker eventName="screen_view" params={{ screen_name: "home" }} />
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-gray-100 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-950/90">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="EasyHealth" className="h-10 w-auto" />
-            <span className="text-xl font-bold text-primary-600">EasyHealth</span>
-          </div>
+
+      {/* ── NAV ── */}
+      <header
+        className="sticky top-0 z-50 border-b border-slate-800/70 backdrop-blur-xl"
+        style={{ background: "rgba(10,15,30,0.82)" }}
+      >
+        <div className="mx-auto flex max-w-[1180px] items-center justify-between h-[72px] px-6">
+          <Link href="/" className="flex items-center gap-[11px] font-extrabold text-[21px] tracking-tight text-white no-underline">
+            <span
+              className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[18px] font-black text-white bg-primary-500"
+              style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 40px rgba(59,130,246,.28)" }}
+            >
+              E
+            </span>
+            EasyHealth
+          </Link>
           <nav className="flex items-center gap-3">
-            <Link href="/precos" className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 sm:block">
-              Preços
-            </Link>
-            <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+            <a href="#funciona" className="hidden sm:block text-[15px] font-semibold text-slate-400 hover:text-white transition-colors px-3 py-2 no-underline">
+              Como funciona
+            </a>
+            <a href="#planos" className="hidden sm:block text-[15px] font-semibold text-slate-400 hover:text-white transition-colors px-3 py-2 no-underline">
+              Planos
+            </a>
+            <Link href="/login" className="hidden sm:block text-[15px] font-semibold text-slate-400 hover:text-white transition-colors px-3 py-2 no-underline">
               Entrar
             </Link>
-            <Link href="/sign-up" className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600">
+            <Link
+              href="/sign-up"
+              className="rounded-full bg-primary-500 hover:bg-primary-600 text-white text-[15px] font-bold px-5 py-[10px] transition-all hover:-translate-y-0.5 no-underline"
+              style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 24px rgba(59,130,246,.3)" }}
+            >
               Criar conta
             </Link>
           </nav>
@@ -76,219 +432,275 @@ export default function LandingPage() {
       </header>
 
       <main className="flex-1">
-        {/* Hero */}
-        <section className="mx-auto max-w-5xl px-6 py-20 text-center">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-primary-50 px-4 py-1.5 text-sm font-medium text-primary-700 dark:bg-primary-950/40 dark:text-primary-300">
-            <span className="text-primary-500">✓</span>
-            Mais de 500 treinos gerados · Grátis por 7 dias
+        {/* ── HERO ── */}
+        <section
+          className="relative overflow-hidden"
+          style={{
+            background:
+              "radial-gradient(110% 100% at 100% 0%, rgba(30,58,95,0.7) 0%, transparent 55%), #0a0f1e",
+          }}
+        >
+          <div className="mx-auto max-w-[1180px] px-6 grid gap-[clamp(30px,5vw,70px)] items-center py-[clamp(48px,7vw,96px)] sm:grid-cols-[1.05fr_0.95fr] grid-cols-1">
+            {/* copy */}
+            <div className="max-sm:text-center">
+              {/* pill */}
+              <div className="inline-flex items-center gap-[9px] mb-[26px] px-[14px] py-[8px] rounded-full border border-slate-700 bg-slate-900 text-[13px] font-semibold text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-primary-500" style={{ boxShadow: "0 0 0 4px rgba(59,130,246,.25)" }} />
+                <b className="text-white font-bold">+300 treinos gerados</b> · Grátis por 7 dias
+              </div>
+
+              <h1
+                className="text-[clamp(40px,6.4vw,78px)] font-extrabold leading-[1.02] tracking-tight mb-5"
+                style={{ textWrap: "balance" } as React.CSSProperties}
+              >
+                Treino com IA pra você evoluir com{" "}
+                <span className="text-primary-400">constância</span>.
+              </h1>
+
+              <p className="text-[clamp(17px,1.4vw,21px)] text-slate-400 max-w-[30ch] mb-8 leading-[1.5] max-sm:mx-auto">
+                A EasyHealth monta seu plano, adapta a cada semana e te puxa pra treinar — do jeito que um personal faria, no seu bolso.
+              </p>
+
+              <div className="flex gap-[14px] flex-wrap max-sm:justify-center">
+                <HeroCta />
+                <a
+                  href="#funciona"
+                  className="inline-flex items-center rounded-full border border-slate-600 hover:border-slate-400 text-white text-[17px] font-bold px-[34px] py-[19px] transition-all hover:-translate-y-0.5 no-underline"
+                >
+                  Ver como funciona
+                </a>
+              </div>
+
+              <div className="mt-[18px] text-[13.5px] text-slate-500 flex items-center gap-2 max-sm:justify-center">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                Sem cartão de crédito · Cancele quando quiser
+              </div>
+            </div>
+
+            {/* phone */}
+            <div className="max-sm:order-first max-sm:mb-3 max-sm:flex max-sm:justify-center">
+              <PhoneMockup />
+            </div>
           </div>
-          <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-gray-50 sm:text-5xl">
-            Treino inteligente com IA<br />
-            <span className="text-primary-500">para evoluir com mais constância.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg text-gray-500 dark:text-gray-400">
-            A EasyHealth cria treinos personalizados, acompanha sua evolução e ajuda você a manter uma rotina fitness mais inteligente.
-          </p>
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <HeroCta />
-            <Link href="#como-funciona" className="w-full rounded-xl border border-gray-200 px-8 py-4 text-base font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 sm:w-auto">
-              Ver como funciona
-            </Link>
-          </div>
-          <p className="mt-6 text-sm italic text-gray-400 dark:text-gray-500">
-            "Em 2 semanas já sabia exatamente o que treinar todo dia." — Lucas M.
-          </p>
         </section>
 
-        {/* Como funciona — Feature cards */}
-        <section id="como-funciona" className="bg-gray-50 py-20 dark:bg-gray-900">
-          <div className="mx-auto max-w-5xl px-6">
-            <div className="mb-12 text-center">
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-50">O que a EasyHealth faz por você</h2>
-              <p className="mt-4 text-gray-500 dark:text-gray-400">Ferramentas de IA para tornar sua rotina fitness mais simples e eficaz.</p>
+        {/* ── STATS ── */}
+        <section className="border-t border-b border-slate-800" style={{ background: "#111827" }}>
+          <div className="mx-auto max-w-[1180px] px-6 grid grid-cols-2 sm:grid-cols-4 gap-6 py-[34px]">
+            {[
+              { val: "+300", label: "treinos gerados" },
+              { val: "IA", label: "adapta toda semana" },
+              { val: "7 dias", label: "grátis pra testar" },
+              { val: "R$9,90", label: "por mês no plano anual" },
+            ].map((s) => (
+              <div key={s.label} className="text-center">
+                <div className="text-[clamp(28px,3.4vw,42px)] font-extrabold tracking-tight text-white">{s.val}</div>
+                <div className="text-[13px] text-slate-400 font-semibold mt-0.5">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── FEATURES ── */}
+        <section className="py-[clamp(64px,9vw,120px)]" id="recursos">
+          <div className="mx-auto max-w-[1180px] px-6">
+            <div className="mb-[52px]">
+              <div className="text-[12.5px] font-extrabold uppercase tracking-[.16em] text-primary-400 mb-3">
+                O que a EasyHealth faz por você
+              </div>
+              <h2
+                className="text-[clamp(31px,4.6vw,54px)] font-extrabold tracking-tight leading-[1.02]"
+                style={{ textWrap: "balance" } as React.CSSProperties}
+              >
+                Um personal trainer que cabe no seu dia.
+              </h2>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[18px]">
               {FEATURES.map((f) => (
-                <FeatureCard key={f.href} {...f} />
+                <div
+                  key={f.title}
+                  className="rounded-[22px] border border-slate-800 p-[26px] bg-slate-900/60 transition-all duration-200 hover:-translate-y-1 hover:border-slate-600 cursor-default"
+                >
+                  <div className="w-12 h-12 rounded-[13px] grid place-items-center mb-[18px] bg-primary-500/15">
+                    {f.icon}
+                  </div>
+                  <h3 className="text-[20px] font-bold tracking-tight mb-2 text-white">{f.title}</h3>
+                  <p className="text-slate-400 text-[15px] leading-[1.5] m-0">{f.desc}</p>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Como funciona na prática */}
-        <section className="py-20">
-          <div className="mx-auto max-w-5xl px-6">
-            <div className="mb-12 text-center">
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Como funciona na prática</h2>
-              <p className="mt-4 text-gray-500 dark:text-gray-400">Veja o que você terá acesso ao entrar na plataforma.</p>
+        {/* ── COMO FUNCIONA ── */}
+        <section className="py-[clamp(64px,9vw,120px)]" id="funciona" style={{ background: "#111827" }}>
+          <div className="mx-auto max-w-[1180px] px-6">
+            <div className="text-center mb-[52px]">
+              <div className="text-[12.5px] font-extrabold uppercase tracking-[.16em] text-primary-400 mb-3">
+                Como funciona na prática
+              </div>
+              <h2
+                className="text-[clamp(31px,4.6vw,54px)] font-extrabold tracking-tight leading-[1.02]"
+                style={{ textWrap: "balance" } as React.CSSProperties}
+              >
+                Três passos até o primeiro treino.
+              </h2>
             </div>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {/* Card 1: IA gera seu treino */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm">🤖</span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-primary-600">IA gera seu treino</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-[26px]">
+              {STEPS.map((s) => (
+                <div key={s.num} className="text-center">
+                  {s.phone}
+                  <div className="text-[12px] font-extrabold tracking-[.12em] text-primary-400 mb-2">{s.num}</div>
+                  <h3 className="text-[22px] font-bold tracking-tight mb-2 text-white">{s.title}</h3>
+                  <p className="text-slate-400 text-[14.5px] leading-[1.5] max-w-[28ch] mx-auto m-0">{s.desc}</p>
                 </div>
-                <div className="space-y-2 rounded-xl bg-gray-50 p-3">
-                  <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                    <span className="text-xs font-medium text-gray-700">Supino Reto</span>
-                    <span className="text-xs text-gray-400">4 × 10</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                    <span className="text-xs font-medium text-gray-700">Remada Curvada</span>
-                    <span className="text-xs text-gray-400">3 × 12</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                    <span className="text-xs font-medium text-gray-700">Agachamento Livre</span>
-                    <span className="text-xs text-gray-400">4 × 8</span>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-gray-500">Plano personalizado gerado em segundos com base no seu perfil.</p>
-              </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
-              {/* Card 2: Treino do dia */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-sm">💪</span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-green-600">Treino do dia</span>
-                </div>
-                <div className="rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 p-4 text-white">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary-200">Hoje · Treino A</p>
-                  <p className="mt-1 text-lg font-bold">Peito + Tríceps</p>
-                  <p className="mt-1 text-xs text-primary-100">6 exercícios · ~50 min</p>
-                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-primary-600">
-                    Iniciar treino →
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-gray-500">Sabe exatamente o que fazer a cada dia sem precisar pensar.</p>
+        {/* ── TESTIMONIALS ── */}
+        <section className="py-[clamp(64px,9vw,120px)]">
+          <div className="mx-auto max-w-[1180px] px-6">
+            <div className="text-center mb-[52px]">
+              <div className="text-[12.5px] font-extrabold uppercase tracking-[.16em] text-primary-400 mb-3">
+                Feito para quem quer evoluir de verdade{" "}
+                <span className="inline-block text-[10px] font-bold uppercase tracking-[.08em] text-slate-500 border border-dashed border-slate-600 rounded-full px-[9px] py-[3px] ml-2 align-middle">
+                  exemplos
+                </span>
               </div>
-
-              {/* Card 3: Histórico e evolução */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm">📈</span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-blue-600">Evolução</span>
-                </div>
-                <div className="space-y-2 rounded-xl bg-gray-50 p-3">
-                  {[
-                    { label: "Supino", value: "80 kg", change: "+5 kg", up: true },
-                    { label: "Agachamento", value: "100 kg", change: "+10 kg", up: true },
-                    { label: "Corrida", value: "5,2 km", change: "+0,4 km", up: true },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                      <span className="text-xs font-medium text-gray-700">{item.label}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-gray-900">{item.value}</span>
-                        <span className="text-xs font-medium text-green-600">{item.change}</span>
-                      </div>
+              <h2
+                className="text-[clamp(31px,4.6vw,54px)] font-extrabold tracking-tight leading-[1.02]"
+                style={{ textWrap: "balance" } as React.CSSProperties}
+              >
+                Gente que parou de começar do zero.
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-[18px]">
+              {TESTIMONIALS.map((t) => (
+                <div key={t.name} className="rounded-[22px] border border-slate-800 p-[26px] bg-slate-900/60">
+                  <div className="text-primary-400 tracking-[2px] text-[15px] mb-3">★★★★★</div>
+                  <p className="text-[16px] leading-[1.55] mb-5 text-slate-300">&ldquo;{t.quote}&rdquo;</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-[44px] h-[44px] rounded-full bg-slate-800 border border-slate-700 flex-none grid place-items-center text-[10px] text-slate-500 font-semibold text-center leading-tight">
+                      FOTO<br />aqui
                     </div>
-                  ))}
-                </div>
-                <p className="mt-3 text-xs text-gray-500">Acompanhe sua evolução semana a semana com registros automáticos.</p>
-              </div>
-
-              {/* Card 4: Adaptação com IA */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-sm">🔄</span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-orange-600">Adaptação IA</span>
-                </div>
-                <div className="rounded-xl bg-orange-50 p-3">
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-base">✨</span>
                     <div>
-                      <p className="text-xs font-semibold text-orange-800">Sugestão da IA</p>
-                      <p className="mt-1 text-xs text-orange-700">
-                        Você relatou dor no ombro. Sugiro substituir o desenvolvimento militar por elevação lateral por 2 semanas.
-                      </p>
+                      <div className="text-[14.5px] font-bold text-white">{t.name}</div>
+                      <div className="text-[12.5px] text-slate-500">{t.sub}</div>
                     </div>
                   </div>
-                  <button className="mt-3 w-full rounded-lg bg-orange-500 py-2 text-xs font-semibold text-white">Aplicar sugestão</button>
                 </div>
-                <p className="mt-3 text-xs text-gray-500">A IA ajusta seu treino com base no seu feedback e histórico.</p>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── PRICING ── */}
+        <section className="py-[clamp(64px,9vw,120px)]" id="planos" style={{ background: "#111827" }}>
+          <div className="mx-auto max-w-[1180px] px-6">
+            <div className="text-center mb-[52px]">
+              <div className="text-[12.5px] font-extrabold uppercase tracking-[.16em] text-primary-400 mb-3">Planos</div>
+              <h2
+                className="text-[clamp(31px,4.6vw,54px)] font-extrabold tracking-tight leading-[1.02]"
+                style={{ textWrap: "balance" } as React.CSSProperties}
+              >
+                Comece grátis. Continue se valer a pena.
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-[760px] mx-auto">
+              {/* Mensal */}
+              <div className="rounded-[22px] border border-slate-700 p-[30px] bg-slate-900/60">
+                <h3 className="text-[19px] font-bold text-white mb-1.5">Pro Mensal</h3>
+                <div className="text-[44px] font-extrabold tracking-tight text-white leading-none">
+                  R$ 19,90<span className="text-[16px] text-slate-400 font-semibold">/mês</span>
+                </div>
+                <div className="text-[13.5px] text-slate-500 mt-1 mb-5">Depois de 7 dias grátis</div>
+                <ul className="list-none p-0 m-0 flex flex-col gap-[11px] mb-6">
+                  {["Acesso completo a todos os recursos", "Treinos personalizados por IA", "Histórico ilimitado"].map(
+                    (item) => (
+                      <li key={item} className="flex gap-[10px] text-[15px] text-slate-400 items-start">
+                        <svg className="w-[18px] h-[18px] flex-none mt-0.5 stroke-primary-400 fill-none" strokeWidth="2.4" viewBox="0 0 24 24">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                        {item}
+                      </li>
+                    )
+                  )}
+                </ul>
+                <Link
+                  href="/sign-up"
+                  className="w-full flex justify-center items-center rounded-full border border-slate-600 hover:border-slate-400 text-white text-[16px] font-bold px-6 py-4 transition-all hover:-translate-y-0.5 no-underline"
+                >
+                  Começar 7 dias grátis
+                </Link>
               </div>
 
-              {/* Card 5: Academia, casa ou cardio */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-sm">🏃</span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-purple-600">Seu contexto</span>
+              {/* Anual */}
+              <div
+                className="rounded-[22px] border p-[30px] relative bg-slate-900/60"
+                style={{
+                  borderColor: "#3b82f6",
+                  boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 40px rgba(59,130,246,.18)",
+                }}
+              >
+                <span
+                  className="absolute -top-[13px] left-1/2 -translate-x-1/2 bg-primary-500 text-white text-[12px] font-extrabold px-4 py-[6px] rounded-full"
+                >
+                  Mais vantajoso
+                </span>
+                <h3 className="text-[19px] font-bold text-white mb-1.5">Pro Anual</h3>
+                <div className="text-[44px] font-extrabold tracking-tight text-white leading-none">
+                  R$ 118,80<span className="text-[16px] text-slate-400 font-semibold">/ano</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { icon: "🏋️", label: "Academia" },
-                    { icon: "🏠", label: "Em casa" },
-                    { icon: "❤️", label: "Cardio" },
-                  ].map((ctx) => (
-                    <div key={ctx.label} className="flex flex-col items-center gap-1.5 rounded-xl bg-gray-50 py-3 text-center">
-                      <span className="text-xl">{ctx.icon}</span>
-                      <span className="text-xs font-medium text-gray-700">{ctx.label}</span>
-                    </div>
+                <div className="text-[14px] text-primary-400 font-bold mt-1 mb-5">≈ R$ 9,90/mês · economize ~50%</div>
+                <ul className="list-none p-0 m-0 flex flex-col gap-[11px] mb-6">
+                  {["Tudo do Pro Mensal", "Metade do preço por mês", "7 dias grátis pra testar"].map((item) => (
+                    <li key={item} className="flex gap-[10px] text-[15px] text-slate-400 items-start">
+                      <svg className="w-[18px] h-[18px] flex-none mt-0.5 stroke-primary-400 fill-none" strokeWidth="2.4" viewBox="0 0 24 24">
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                      {item}
+                    </li>
                   ))}
-                </div>
-                <p className="mt-3 text-xs text-gray-500">Treinos adaptados para academia, casa ou cardio conforme o seu dia.</p>
-              </div>
-
-              {/* Card 6: Troca de exercício */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-100 text-sm">⇄</span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-teal-600">Troca rápida</span>
-                </div>
-                <div className="space-y-2 rounded-xl bg-gray-50 p-3">
-                  <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-sm opacity-50 line-through">
-                    <span className="text-xs text-gray-500">Supino Inclinado</span>
-                  </div>
-                  <div className="flex items-center justify-center py-1">
-                    <span className="text-xs text-teal-500">↕ trocado pela IA</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg bg-teal-50 px-3 py-2 ring-1 ring-teal-300">
-                    <span className="text-xs font-semibold text-teal-800">Crucifixo com Halteres</span>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-gray-500">Troque qualquer exercício com um clique. A IA sugere a melhor alternativa.</p>
+                </ul>
+                <Link
+                  href="/sign-up"
+                  className="w-full flex justify-center items-center rounded-full bg-primary-500 hover:bg-primary-600 text-white text-[16px] font-bold px-6 py-4 transition-all hover:-translate-y-0.5 no-underline"
+                  style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 24px rgba(59,130,246,.3)" }}
+                >
+                  Começar 7 dias grátis
+                </Link>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Sobre */}
-        <section className="bg-primary-50 py-20 dark:bg-primary-950/30">
-          <div className="mx-auto max-w-5xl px-6">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Feito para quem quer evoluir de verdade</h2>
-              <p className="mt-4 leading-relaxed text-gray-600 dark:text-gray-400">
-                Somos um time apaixonado por saúde e tecnologia. A EasyHealth foi criada para tornar a rotina fitness mais simples, inteligente e adaptável — seja você iniciante ou avançado.
+        {/* ── FINAL CTA ── */}
+        <section className="py-[clamp(64px,9vw,120px)] text-center">
+          <div className="mx-auto max-w-[1180px] px-6">
+            <div
+              className="rounded-[30px] px-[30px] py-[clamp(46px,7vw,88px)] relative overflow-hidden"
+              style={{ background: "linear-gradient(150deg, #2563eb, #1d4ed8)" }}
+            >
+              <h2
+                className="text-[clamp(30px,4.6vw,56px)] font-extrabold tracking-tight leading-[1.02] text-white mb-4"
+                style={{ textWrap: "balance" } as React.CSSProperties}
+              >
+                Comece hoje com 7 dias grátis.
+              </h2>
+              <p className="text-[18px] text-blue-100 opacity-90 mb-8">
+                Sem cartão de crédito pra começar. Cancele quando quiser.
               </p>
-              <div className="mt-10 grid gap-6 sm:grid-cols-3">
-                <div className="rounded-2xl bg-white p-6 text-center shadow-sm dark:bg-gray-900">
-                  <p className="text-3xl">🎯</p>
-                  <p className="mt-3 font-semibold text-gray-900 dark:text-gray-50">Foco no que importa</p>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Só o treino que você precisa fazer hoje.</p>
-                </div>
-                <div className="rounded-2xl bg-white p-6 text-center shadow-sm dark:bg-gray-900">
-                  <p className="text-3xl">📈</p>
-                  <p className="mt-3 font-semibold text-gray-900 dark:text-gray-50">Evolução visível</p>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Registre cargas e acompanhe seu progresso semana a semana.</p>
-                </div>
-                <div className="rounded-2xl bg-white p-6 text-center shadow-sm dark:bg-gray-900">
-                  <p className="text-3xl">🔄</p>
-                  <p className="mt-3 font-semibold text-gray-900 dark:text-gray-50">Adaptável ao seu ritmo</p>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Troque exercícios, ajuste cargas e siga no seu ritmo.</p>
-                </div>
-              </div>
+              <Link
+                href="/sign-up"
+                className="inline-flex items-center rounded-full bg-white text-primary-700 text-[17.5px] font-bold px-[34px] py-[19px] hover:bg-blue-50 transition-all hover:-translate-y-0.5 no-underline"
+              >
+                Criar conta grátis →
+              </Link>
             </div>
-          </div>
-        </section>
-
-        {/* CTA final */}
-        <section className="bg-primary-500 py-20">
-          <div className="mx-auto max-w-5xl px-6 text-center">
-            <h2 className="text-3xl font-bold text-white">Comece hoje com 7 dias grátis</h2>
-            <p className="mx-auto mt-4 max-w-xl text-lg text-primary-100">Sem cartão de crédito para começar. Cancele quando quiser.</p>
-            <Link href="/sign-up" className="mt-8 inline-block rounded-xl bg-white px-8 py-4 text-base font-semibold text-primary-600 hover:bg-primary-50">
-              Criar conta grátis
-            </Link>
           </div>
         </section>
       </main>
