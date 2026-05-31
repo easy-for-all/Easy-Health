@@ -29,6 +29,17 @@ async function captureCard(el: HTMLElement): Promise<string> {
   return toPng(el, opts);
 }
 
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(",");
+  const mime = header.match(/:(.*?);/)?.[1] ?? "image/png";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
+
 export function ShareButton({ workoutName, durationMinutes, volumeKg, exerciseCount, muscles, hasPR, caloriesEstimated }: ShareButtonProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [showCard, setShowCard] = useState(false);
@@ -41,7 +52,7 @@ export function ShareButton({ workoutName, durationMinutes, volumeKg, exerciseCo
     setExportError(null);
     try {
       const dataUrl = await captureCard(cardRef.current);
-      const blob = await (await fetch(dataUrl)).blob();
+      const blob = dataUrlToBlob(dataUrl);
       const file = new File([blob], "easyhealth-treino.png", { type: "image/png" });
 
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
