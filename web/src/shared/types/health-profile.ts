@@ -3,6 +3,7 @@ export type Goal = "lose_weight" | "gain_muscle" | "maintain" | "health";
 export type ActivityType =
   | "musculacao" | "cardio"    | "natacao"
   | "corrida"    | "funcional" | "caminhada" | "hiit";
+export type Gender = "male" | "female" | "not_informed";
 
 export interface HealthProfile {
   id: number;
@@ -13,4 +14,5 @@ export interface HealthProfile {
   goal: Goal;
   activity_preferences: ActivityType[];
   training_days_per_week?: number;
+  gender?: Gender | null;
 }

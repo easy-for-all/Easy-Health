@@ -507,11 +507,13 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-2 gap-2">
                   {bodyPhotos.length >= 2 ? (
                     <button onClick={() => setLightboxPhoto(bodyPhotos[bodyPhotos.length - 1])} className="text-center">
-                      <img
-                        src={`${API_URL}${bodyPhotos[bodyPhotos.length - 1].file_url}`}
-                        alt="Antes"
-                        className="h-32 w-full rounded-lg object-cover"
-                      />
+                      {bodyPhotos[bodyPhotos.length - 1].file_url && (
+                        <img
+                          src={`${API_URL}${bodyPhotos[bodyPhotos.length - 1].file_url}`}
+                          alt="Antes"
+                          className="h-32 w-full rounded-lg object-cover"
+                        />
+                      )}
                       <p className="mt-1 text-xs font-semibold text-gray-600">{t("before")}</p>
                       <p className="text-xs text-gray-400">
                         {new Date(bodyPhotos[bodyPhotos.length - 1].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
@@ -523,11 +525,13 @@ export default function ProfilePage() {
                     </div>
                   )}
                   <button onClick={() => setLightboxPhoto(bodyPhotos[0])} className="text-center">
-                    <img
-                      src={`${API_URL}${bodyPhotos[0].file_url}`}
-                      alt="Agora"
-                      className="h-32 w-full rounded-lg object-cover"
-                    />
+                    {bodyPhotos[0].file_url && (
+                      <img
+                        src={`${API_URL}${bodyPhotos[0].file_url}`}
+                        alt="Agora"
+                        className="h-32 w-full rounded-lg object-cover"
+                      />
+                    )}
                     <p className="mt-1 text-xs font-semibold text-gray-600">{t("now")}</p>
                     <p className="text-xs text-gray-400">
                       {new Date(bodyPhotos[0].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
@@ -574,7 +578,7 @@ export default function ProfilePage() {
                   {item.mime_type === "application/pdf" ? (
                     <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-red-50 text-xl">📄</div>
                   ) : (
-                    <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                    {item.file_url && <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />}
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-gray-900">{item.file_name ?? "Arquivo"}</p>
@@ -594,7 +598,7 @@ export default function ProfilePage() {
                   {item.mime_type === "application/pdf" ? (
                     <div className="flex h-32 w-full items-center justify-center rounded-lg bg-gray-100 text-3xl">📄</div>
                   ) : (
-                    <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-32 w-full rounded-lg object-cover" />
+                    {item.file_url && <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-32 w-full rounded-lg object-cover" />}
                   )}
                   <div className="mt-1 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
@@ -757,11 +761,13 @@ export default function ProfilePage() {
                   }}
                   className="text-center"
                 >
-                  <img
-                    src={`${API_URL}${photo.file_url}`}
-                    alt="Foto corporal"
-                    className="h-28 w-full rounded-xl object-cover"
-                  />
+                  {photo.file_url && (
+                    <img
+                      src={`${API_URL}${photo.file_url}`}
+                      alt="Foto corporal"
+                      className="h-28 w-full rounded-xl object-cover"
+                    />
+                  )}
                   <p className="mt-1 text-xs text-gray-500">
                     {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
                   </p>

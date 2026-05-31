@@ -203,6 +203,7 @@ export default function DetailedProfilePage() {
   const { data_points, media } = data;
 
   const bodyPhotos = media.filter((m) => m.category === "body_photo");
+  const analyzablePhoto = bodyPhotos.find((p) => p.file_url !== null) ?? null;
   const exams      = media.filter((m) => m.category === "exam");
 
   // Bug fix: cobrir field_name legado ("visual_observation") e novo ("body_analysis")
@@ -214,7 +215,11 @@ export default function DetailedProfilePage() {
   const latestCompositionPoint = data_points.find((dp) => dp.field_name === "body_composition_map");
   const bodyCompositionData: BodyCompositionData | null = (() => {
     if (!latestCompositionPoint?.raw_text) return null;
-    try { return JSON.parse(latestCompositionPoint.raw_text) as BodyCompositionData; } catch { return null; }
+    try {
+      const raw = latestCompositionPoint.raw_text;
+      const jsonStr = raw.match(/\{[\s\S]*\}/)?.[0] ?? raw;
+      return JSON.parse(jsonStr) as BodyCompositionData;
+    } catch { return null; }
   })();
   const examPoints = data_points.filter((dp) => dp.source_type === "exam");
 
@@ -260,15 +265,16 @@ export default function DetailedProfilePage() {
   const isEmpty = !data.physical && data_points.length === 0 && media.length === 0;
 
   async function handleReanalyze() {
-    if (!bodyPhotos[0]) return;
+    if (!analyzablePhoto) return;
     setReanalyzing(true);
     setReanalyzeError(null);
     try {
-      await api.post(`/api/v1/user_media/${bodyPhotos[0].id}/reanalyze`, {});
+      await api.post(`/api/v1/user_media/${analyzablePhoto.id}/reanalyze`, {});
       const fresh = await api.get<DetailedProfile>("/api/v1/detailed_profile");
       setData(fresh);
-    } catch {
-      setReanalyzeError("Não foi possível analisar. Tente novamente.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Não foi possível analisar. Tente novamente.";
+      setReanalyzeError(msg);
     } finally {
       setReanalyzing(false);
     }
@@ -474,7 +480,7 @@ export default function DetailedProfilePage() {
           {bodyCompositionData ? (
             <>
               <BodyCompositionMap data={bodyCompositionData} />
-              {bodyPhotos.length > 0 && (
+              {analyzablePhoto && (
                 <div className="mt-4">
                   {reanalyzeError && (
                     <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{reanalyzeError}</p>
@@ -502,13 +508,17 @@ export default function DetailedProfilePage() {
               )}
               <button
                 onClick={handleReanalyze}
-                disabled={reanalyzing || bodyPhotos.length === 0}
+                disabled={reanalyzing || !analyzablePhoto}
                 className="w-full rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
               >
                 {reanalyzing ? "Analisando foto..." : "🔍 Gerar mapa corporal"}
               </button>
-              {bodyPhotos.length === 0 && (
-                <p className="mt-2 text-xs text-gray-400">Adicione uma foto corporal para ativar essa funcionalidade.</p>
+              {!analyzablePhoto && (
+                <p className="mt-2 text-xs text-gray-400">
+                  {bodyPhotos.length === 0
+                    ? "Adicione uma foto corporal para ativar essa funcionalidade."
+                    : "A foto salva não está mais disponível. Envie uma nova foto para usar esta função."}
+                </p>
               )}
             </div>
           )}

@@ -36,7 +36,7 @@ module Api
 
       def profile_params
         params.permit(:age, :weight_kg, :height_cm, :fitness_level, :goal,
-                      :training_days_per_week, :training_location, activity_preferences: [])
+                      :training_days_per_week, :training_location, :gender, activity_preferences: [])
       end
 
       def profile_json(profile)
@@ -49,7 +49,8 @@ module Api
           goal: profile.goal,
           activity_preferences: profile.activity_preferences || [],
           training_days_per_week: profile.training_days_per_week,
-          training_location: profile.training_location
+          training_location: profile.training_location,
+          gender: profile.gender
         }
       end
     end
