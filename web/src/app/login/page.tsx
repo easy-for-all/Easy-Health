@@ -48,30 +48,35 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center px-4" style={{ background: "#0a0f1e" }}>
       <div className="w-full max-w-sm">
-        <h1 className="mb-8 text-center text-2xl font-bold text-gray-900">Easy Health</h1>
+        {/* Brand */}
+        <div className="mb-8 flex flex-col items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="EasyHealth" className="h-10 w-auto" />
+          <span className="text-xl font-extrabold tracking-tight text-white">EasyHealth</span>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+            <p className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
           )}
 
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">{t("email")}</label>
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-400">{t("email")}</label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
               placeholder="seu@email.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">{t("password")}</label>
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-400">{t("password")}</label>
             <input
               id="password"
               type="password"
@@ -80,7 +85,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
               placeholder="••••••••"
             />
           </div>
@@ -88,21 +93,22 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+            className="w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+            style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 6px 20px rgba(59,130,246,.28)" }}
           >
             {loading ? t("signingIn") : t("signIn")}
           </button>
 
           <p className="text-center">
-            <Link href="/forgot-password" className="text-sm text-primary-600 hover:underline">
+            <Link href="/forgot-password" className="text-sm text-primary-400 hover:underline">
               {t("forgotPassword")}
             </Link>
           </p>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-slate-500">
           {t("noAccount")}{" "}
-          <Link href="/sign-up" className="font-medium text-primary-600 hover:underline">
+          <Link href="/sign-up" className="font-medium text-primary-400 hover:underline">
             {t("signUp")}
           </Link>
         </p>

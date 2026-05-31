@@ -370,24 +370,6 @@ const STEPS = [
   },
 ];
 
-const TESTIMONIALS = [
-  {
-    quote: "Eu vivia largando treino na segunda semana. Com a ofensiva da EasyHealth, fechei 3 meses seguidos.",
-    name: "Larissa M.",
-    sub: "Ganhou constância · exemplo fictício",
-  },
-  {
-    quote: "Treino em casa sem equipamento e o plano se adapta. Parece que tem um personal me acompanhando.",
-    name: "Rafael T.",
-    sub: "Treina em casa · exemplo fictício",
-  },
-  {
-    quote: "O resumo no fim de cada treino me motiva demais. Ver a evolução semana a semana muda o jogo.",
-    name: "Bruna S.",
-    sub: "3 meses no app · exemplo fictício",
-  },
-];
-
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
   return (
@@ -401,13 +383,9 @@ export default function LandingPage() {
         style={{ background: "rgba(10,15,30,0.82)" }}
       >
         <div className="mx-auto flex max-w-[1180px] items-center justify-between h-[72px] px-6">
-          <Link href="/" className="flex items-center gap-[11px] font-extrabold text-[21px] tracking-tight text-white no-underline">
-            <span
-              className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[18px] font-black text-white bg-primary-500"
-              style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 40px rgba(59,130,246,.28)" }}
-            >
-              E
-            </span>
+          <Link href="/" className="flex items-center gap-[10px] font-extrabold text-[21px] tracking-tight text-white no-underline">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="EasyHealth" className="h-8 w-auto" />
             EasyHealth
           </Link>
           <nav className="flex items-center gap-3">
@@ -555,43 +533,6 @@ export default function LandingPage() {
                   <div className="text-[12px] font-extrabold tracking-[.12em] text-primary-400 mb-2">{s.num}</div>
                   <h3 className="text-[22px] font-bold tracking-tight mb-2 text-white">{s.title}</h3>
                   <p className="text-slate-400 text-[14.5px] leading-[1.5] max-w-[28ch] mx-auto m-0">{s.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── TESTIMONIALS ── */}
-        <section className="py-[clamp(64px,9vw,120px)]">
-          <div className="mx-auto max-w-[1180px] px-6">
-            <div className="text-center mb-[52px]">
-              <div className="text-[12.5px] font-extrabold uppercase tracking-[.16em] text-primary-400 mb-3">
-                Feito para quem quer evoluir de verdade{" "}
-                <span className="inline-block text-[10px] font-bold uppercase tracking-[.08em] text-slate-500 border border-dashed border-slate-600 rounded-full px-[9px] py-[3px] ml-2 align-middle">
-                  exemplos
-                </span>
-              </div>
-              <h2
-                className="text-[clamp(31px,4.6vw,54px)] font-extrabold tracking-tight leading-[1.02]"
-                style={{ textWrap: "balance" } as React.CSSProperties}
-              >
-                Gente que parou de começar do zero.
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-[18px]">
-              {TESTIMONIALS.map((t) => (
-                <div key={t.name} className="rounded-[22px] border border-slate-800 p-[26px] bg-slate-900/60">
-                  <div className="text-primary-400 tracking-[2px] text-[15px] mb-3">★★★★★</div>
-                  <p className="text-[16px] leading-[1.55] mb-5 text-slate-300">&ldquo;{t.quote}&rdquo;</p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-[44px] h-[44px] rounded-full bg-slate-800 border border-slate-700 flex-none grid place-items-center text-[10px] text-slate-500 font-semibold text-center leading-tight">
-                      FOTO<br />aqui
-                    </div>
-                    <div>
-                      <div className="text-[14.5px] font-bold text-white">{t.name}</div>
-                      <div className="text-[12.5px] text-slate-500">{t.sub}</div>
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>

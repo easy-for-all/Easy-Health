@@ -41,12 +41,13 @@ const SOCIAL_LINKS = [
 
 export function Footer() {
   return (
-    <footer className="border-t border-gray-100 bg-gray-50 py-10 dark:border-gray-800 dark:bg-gray-900">
+    <footer className="border-t border-slate-800 bg-slate-950 py-10">
       <div className="mx-auto max-w-5xl px-6">
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="Easy Health" className="h-7 w-auto" />
-            <span className="text-base font-bold text-primary-600">Easy Health</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="EasyHealth" className="h-7 w-auto" />
+            <span className="text-base font-bold text-white">EasyHealth</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -55,26 +56,26 @@ export function Footer() {
                 key={link.label}
                 href={link.href}
                 aria-label={link.label}
-                className="text-gray-400 transition hover:text-primary-500 dark:text-gray-600 dark:hover:text-primary-400"
+                className="text-slate-500 transition hover:text-primary-400"
               >
                 {link.icon}
               </a>
             ))}
           </div>
 
-          <div className="flex flex-col items-center gap-2 text-sm text-gray-400 dark:text-gray-600 sm:items-end">
+          <div className="flex flex-col items-center gap-2 text-sm text-slate-500 sm:items-end">
             <div className="flex gap-4">
-              <Link href="/privacy" className="hover:text-primary-500 transition">
+              <Link href="/privacy" className="hover:text-primary-400 transition">
                 Política de Privacidade
               </Link>
-              <Link href="/terms" className="hover:text-primary-500 transition">
+              <Link href="/terms" className="hover:text-primary-400 transition">
                 Termos de Uso
               </Link>
-              <a href="mailto:suporte@easyhealth.com.br" className="hover:text-primary-500 transition">
+              <a href="mailto:suporte@easyhealth.com.br" className="hover:text-primary-400 transition">
                 Fale Conosco
               </a>
             </div>
-            <p>© {new Date().getFullYear()} Easy Health</p>
+            <p>© {new Date().getFullYear()} EasyHealth</p>
           </div>
         </div>
       </div>

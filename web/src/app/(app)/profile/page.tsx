@@ -248,10 +248,10 @@ export default function ProfilePage() {
     : "?";
 
   return (
-    <div className="min-h-screen px-4 py-6 pb-28">
+    <div className="min-h-screen px-4 py-6 pb-28" style={{ background: "#0a0f1e" }}>
       <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">{t("title")}</h1>
-        <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-red-500">
+        <h1 className="text-xl font-bold text-white">{t("title")}</h1>
+        <button onClick={handleSignOut} className="text-sm text-slate-500 hover:text-red-400">
           {t("signOut")}
         </button>
       </header>
@@ -282,37 +282,37 @@ export default function ProfilePage() {
       </div>
       <input ref={avatarInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
       {avatarError && (
-        <p className="mb-3 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{avatarError}</p>
+        <p className="mb-3 rounded-xl border border-red-800 bg-red-950/40 px-4 py-2 text-sm text-red-400">{avatarError}</p>
       )}
 
       {/* Stats */}
       {stats && (
         <div className="mb-4 space-y-3">
           <div className="flex gap-3">
-            <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
-              <p className="text-2xl font-bold text-gray-900">{stats.total_sessions}</p>
-              <p className="text-xs text-gray-500">{t("workouts")}</p>
+            <div className="flex-1 rounded-xl border border-slate-800 bg-slate-900 p-4 text-center">
+              <p className="text-2xl font-bold text-white">{stats.total_sessions}</p>
+              <p className="text-xs text-slate-400">{t("workouts")}</p>
             </div>
-            <div className="flex-1 rounded-xl border border-gray-100 bg-white p-4 text-center">
-              <p className="text-2xl font-bold text-orange-500">🔥 {stats.streak}</p>
-              <p className="text-xs text-gray-500">{t("streak")}</p>
+            <div className="flex-1 rounded-xl border border-slate-800 bg-slate-900 p-4 text-center">
+              <p className="text-2xl font-bold text-orange-400">🔥 {stats.streak}</p>
+              <p className="text-xs text-slate-400">{t("streak")}</p>
             </div>
           </div>
           {(stats.best_streak != null || stats.last_activity_at) && (
-            <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
+            <div className="rounded-xl border border-orange-900/50 bg-orange-950/30 p-4">
               <div className="flex items-center justify-between">
                 {stats.best_streak != null && stats.best_streak > 0 && (
                   <div className="text-center">
-                    <p className="text-lg font-bold text-orange-600">🏆 {stats.best_streak}</p>
-                    <p className="text-xs text-orange-400">Melhor sequência</p>
+                    <p className="text-lg font-bold text-orange-400">🏆 {stats.best_streak}</p>
+                    <p className="text-xs text-orange-500/70">Melhor sequência</p>
                   </div>
                 )}
                 {stats.last_activity_at && (
                   <div className="text-center">
-                    <p className="text-sm font-semibold text-gray-700">
+                    <p className="text-sm font-semibold text-slate-300">
                       {new Date(stats.last_activity_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
                     </p>
-                    <p className="text-xs text-gray-400">Último treino</p>
+                    <p className="text-xs text-slate-500">Último treino</p>
                   </div>
                 )}
               </div>
@@ -322,18 +322,18 @@ export default function ProfilePage() {
       )}
 
       {/* Dados físicos */}
-      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5">
+      <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">{t("physicalData")}</h2>
+          <h2 className="font-semibold text-white">{t("physicalData")}</h2>
           {!editing && (
-            <button onClick={() => setEditing(true)} className="text-sm text-primary-600 hover:underline">
+            <button onClick={() => setEditing(true)} className="text-sm text-primary-400 hover:underline">
               {t("edit")}
             </button>
           )}
         </div>
 
         {!profile ? (
-          <p className="text-sm text-gray-400">{t("noProfile")}</p>
+          <p className="text-sm text-slate-500">{t("noProfile")}</p>
         ) : editing ? (
           <EditForm
             form={form}
@@ -360,23 +360,23 @@ export default function ProfilePage() {
       {/* CTA Perfil Detalhado */}
       <Link
         href="/profile/detailed"
-        className="mb-4 flex items-center justify-between rounded-2xl border border-primary-100 bg-primary-50 px-5 py-4 transition hover:bg-primary-100"
+        className="mb-4 flex items-center justify-between rounded-2xl border border-primary-500/30 bg-primary-500/10 px-5 py-4 transition hover:bg-primary-500/15"
       >
         <div>
-          <p className="font-semibold text-primary-700">Ver perfil detalhado</p>
-          <p className="text-xs text-primary-500">Análises, exames e evolução corporal</p>
+          <p className="font-semibold text-primary-400">Ver perfil detalhado</p>
+          <p className="text-xs text-primary-500/70">Análises, exames e evolução corporal</p>
         </div>
         <span className="text-primary-400 text-lg">→</span>
       </Link>
 
       {/* Fotos e Exames */}
-      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5">
+      <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">{t("photosAndExams")}</h2>
+          <h2 className="font-semibold text-white">{t("photosAndExams")}</h2>
           <button
             onClick={() => mediaInputRef.current?.click()}
             disabled={uploadingMedia}
-            className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+            className="rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
           >
             {uploadingMedia ? t("sending") : t("addMedia")}
           </button>
@@ -391,58 +391,58 @@ export default function ProfilePage() {
         />
 
         {mediaUploadError && (
-          <div className="mb-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-3 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">
             {mediaUploadError}
           </div>
         )}
 
         {faceBlurredNotice && (
-          <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700 flex items-start gap-2">
+          <div className="mb-3 rounded-xl border border-blue-800 bg-blue-950/40 px-4 py-3 text-sm text-blue-400 flex items-start gap-2">
             <span className="mt-0.5">&#128274;</span>
             <span>Rosto ofuscado por privacidade. A foto foi salva com o rosto pixelado.</span>
           </div>
         )}
 
         {pendingDataPoints.length > 0 && (
-          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4">
-            <p className="mb-3 text-sm font-semibold text-green-800">
+          <div className="mb-4 rounded-xl border border-green-800/50 bg-green-950/30 p-4">
+            <p className="mb-3 text-sm font-semibold text-green-400">
               Encontramos dados no exame. O que deseja fazer?
             </p>
             {pendingDataPoints.map((dp) => (
-              <div key={dp.id} className="mb-3 rounded-lg bg-white border border-green-100 p-3">
+              <div key={dp.id} className="mb-3 rounded-xl border border-slate-700 bg-slate-800 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-800">
+                  <span className="text-sm font-medium text-white">
                     {FIELD_LABELS[dp.field_name] ?? dp.field_name}:{" "}
                     <strong>{dp.value}{dp.unit ? ` ${dp.unit}` : ""}</strong>
                   </span>
                   {dp.confidence != null && (
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-slate-500">
                       {Math.round(dp.confidence * 100)}% confiança
                     </span>
                   )}
                 </div>
                 {dp.ai_notes && (
-                  <p className="mb-2 text-xs text-gray-500">{dp.ai_notes}</p>
+                  <p className="mb-2 text-xs text-slate-400">{dp.ai_notes}</p>
                 )}
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleDataPointAction(dp, "confirm")}
                     disabled={confirmingDp === dp.id}
-                    className="flex-1 rounded-lg bg-primary-500 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    className="flex-1 rounded-full bg-primary-500 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                   >
                     Atualizar perfil
                   </button>
                   <button
                     onClick={() => handleDataPointAction(dp, "save_advanced")}
                     disabled={confirmingDp === dp.id}
-                    className="flex-1 rounded-lg border border-gray-200 py-1.5 text-xs font-medium text-gray-600 disabled:opacity-50"
+                    className="flex-1 rounded-full border border-slate-700 py-1.5 text-xs font-medium text-slate-400 disabled:opacity-50"
                   >
                     Salvar no histórico
                   </button>
                   <button
                     onClick={() => handleDataPointAction(dp, "ignore")}
                     disabled={confirmingDp === dp.id}
-                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-400 disabled:opacity-50"
+                    className="rounded-full border border-slate-700 px-3 py-1.5 text-xs text-slate-500 disabled:opacity-50"
                   >
                     Ignorar
                   </button>
@@ -453,16 +453,16 @@ export default function ProfilePage() {
         )}
 
         {bodyAnalysis && (
-          <div className="mb-4 rounded-xl border border-purple-200 bg-purple-50 p-4">
-            <p className="mb-2 text-sm font-semibold text-purple-800">Observação da foto</p>
-            <p className="mb-3 text-sm text-gray-700">{bodyAnalysis.observation}</p>
+          <div className="mb-4 rounded-xl border border-purple-800/50 bg-purple-950/30 p-4">
+            <p className="mb-2 text-sm font-semibold text-purple-400">Observação da foto</p>
+            <p className="mb-3 text-sm text-slate-300">{bodyAnalysis.observation}</p>
             <div className="flex gap-2">
               <button
                 onClick={async () => {
                   await api.patch(`/api/v1/health_data_points/${bodyAnalysis.id}`, { action_type: "save_advanced" }).catch(() => null);
                   setBodyAnalysis(null);
                 }}
-                className="flex-1 rounded-lg bg-purple-500 py-1.5 text-xs font-semibold text-white"
+                className="flex-1 rounded-full bg-purple-600 py-1.5 text-xs font-semibold text-white"
               >
                 Salvar observação
               </button>
@@ -471,7 +471,7 @@ export default function ProfilePage() {
                   await api.patch(`/api/v1/health_data_points/${bodyAnalysis.id}`, { action_type: "ignore" }).catch(() => null);
                   setBodyAnalysis(null);
                 }}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-400"
+                className="rounded-full border border-slate-700 px-3 py-1.5 text-xs text-slate-500"
               >
                 Ignorar
               </button>
@@ -485,10 +485,10 @@ export default function ProfilePage() {
             <button
               key={tab}
               onClick={() => setMediaTab(tab)}
-              className={`flex-1 rounded-lg border py-2 text-xs font-semibold transition ${
+              className={`flex-1 rounded-full border py-2 text-xs font-semibold transition ${
                 mediaTab === tab
-                  ? "border-primary-500 bg-primary-50 text-primary-700"
-                  : "border-gray-200 text-gray-500"
+                  ? "border-primary-500 bg-primary-500/12 text-primary-400"
+                  : "border-slate-800 text-slate-500"
               }`}
             >
               {tab === "body_photo" ? t("bodyEvolution") : t("exams")}
@@ -502,8 +502,8 @@ export default function ProfilePage() {
             <p className="text-center text-sm text-gray-400">{t("noPhotos")}</p>
           ) : (
             <>
-              <div className="mb-3 rounded-xl border border-primary-100 bg-primary-50 p-3">
-                <p className="mb-2 text-xs font-semibold text-primary-600">{t("beforeVsNow")}</p>
+              <div className="mb-3 rounded-xl border border-primary-500/30 bg-primary-500/10 p-3">
+                <p className="mb-2 text-xs font-semibold text-primary-400">{t("beforeVsNow")}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {bodyPhotos.length >= 2 ? (
                     <button onClick={() => setLightboxPhoto(bodyPhotos[bodyPhotos.length - 1])} className="text-center">
@@ -514,14 +514,14 @@ export default function ProfilePage() {
                           className="h-32 w-full rounded-lg object-cover"
                         />
                       )}
-                      <p className="mt-1 text-xs font-semibold text-gray-600">{t("before")}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="mt-1 text-xs font-semibold text-slate-400">{t("before")}</p>
+                      <p className="text-xs text-slate-500">
                         {new Date(bodyPhotos[bodyPhotos.length - 1].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
                       </p>
                     </button>
                   ) : (
-                    <div className="flex h-32 items-center justify-center rounded-lg bg-gray-100">
-                      <p className="px-2 text-center text-xs text-gray-400">Adicione mais fotos para comparar</p>
+                    <div className="flex h-32 items-center justify-center rounded-lg bg-slate-800">
+                      <p className="px-2 text-center text-xs text-slate-500">Adicione mais fotos para comparar</p>
                     </div>
                   )}
                   <button onClick={() => setLightboxPhoto(bodyPhotos[0])} className="text-center">
@@ -532,7 +532,7 @@ export default function ProfilePage() {
                         className="h-32 w-full rounded-lg object-cover"
                       />
                     )}
-                    <p className="mt-1 text-xs font-semibold text-gray-600">{t("now")}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">{t("now")}</p>
                     <p className="text-xs text-gray-400">
                       {new Date(bodyPhotos[0].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
@@ -541,7 +541,7 @@ export default function ProfilePage() {
               </div>
               <button
                 onClick={() => setPhotoHistoryOpen(true)}
-                className="w-full rounded-xl border border-primary-100 bg-primary-50 py-2.5 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
+                className="w-full rounded-full border border-primary-500/30 bg-primary-500/10 py-2.5 text-sm font-semibold text-primary-400 transition hover:bg-primary-500/15"
               >
                 Histórico de fotos ({bodyPhotos.length})
               </button>
@@ -554,13 +554,13 @@ export default function ProfilePage() {
           <div className="mb-3 flex justify-end gap-1">
             <button
               onClick={() => setMediaViewMode("grid")}
-              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${mediaViewMode === "grid" ? "border-primary-500 bg-primary-50 text-primary-700" : "border-gray-200 text-gray-500"}`}
+              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${mediaViewMode === "grid" ? "border-primary-500 bg-primary-500/12 text-primary-400" : "border-slate-800 text-slate-500"}`}
             >
               {t("gridView")}
             </button>
             <button
               onClick={() => setMediaViewMode("list")}
-              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${mediaViewMode === "list" ? "border-primary-500 bg-primary-50 text-primary-700" : "border-gray-200 text-gray-500"}`}
+              className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${mediaViewMode === "list" ? "border-primary-500 bg-primary-500/12 text-primary-400" : "border-slate-800 text-slate-500"}`}
             >
               {t("listView")}
             </button>
@@ -574,15 +574,15 @@ export default function ProfilePage() {
           ) : mediaViewMode === "list" ? (
             <div className="space-y-2">
               {exams.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
+                <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-800/50 p-3">
                   {item.mime_type === "application/pdf" ? (
                     <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-red-50 text-xl">📄</div>
                   ) : (
                     <>{item.file_url && <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />}</>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-gray-900">{item.file_name ?? "Arquivo"}</p>
-                    <p className="text-xs text-gray-400">
+                    <p className="truncate text-sm font-medium text-white">{item.file_name ?? "Arquivo"}</p>
+                    <p className="text-xs text-slate-500">
                       {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
                       {item.file_size ? ` · ${(item.file_size / 1024).toFixed(0)} KB` : ""}
                     </p>
@@ -596,13 +596,13 @@ export default function ProfilePage() {
               {exams.map((item) => (
                 <div key={item.id} className="relative">
                   {item.mime_type === "application/pdf" ? (
-                    <div className="flex h-32 w-full items-center justify-center rounded-lg bg-gray-100 text-3xl">📄</div>
+                    <div className="flex h-32 w-full items-center justify-center rounded-lg bg-slate-800 text-3xl">📄</div>
                   ) : (
                     <>{item.file_url && <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-32 w-full rounded-lg object-cover" />}</>
                   )}
                   <div className="mt-1 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs text-gray-500">
+                      <p className="truncate text-xs text-slate-500">
                         {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
                       </p>
                       {item.file_name && <p className="truncate text-xs text-gray-400">{item.file_name}</p>}
@@ -617,25 +617,25 @@ export default function ProfilePage() {
       </div>
 
       {/* Idioma */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-5">
-        <h2 className="mb-4 font-semibold text-gray-900">{t("language")}</h2>
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+        <h2 className="mb-4 font-semibold text-white">{t("language")}</h2>
         <div className="flex gap-3">
           <button
             onClick={() => handleLocaleChange("pt-BR")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full border py-3 text-sm font-semibold transition ${
               locale === "pt-BR"
-                ? "border-primary-500 bg-primary-50 text-primary-700"
-                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                ? "border-primary-500 bg-primary-500/12 text-primary-400"
+                : "border-slate-800 text-slate-500 hover:border-slate-600"
             }`}
           >
             🇧🇷 Português
           </button>
           <button
             onClick={() => handleLocaleChange("en-US")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full border py-3 text-sm font-semibold transition ${
               locale === "en-US"
-                ? "border-primary-500 bg-primary-50 text-primary-700"
-                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                ? "border-primary-500 bg-primary-500/12 text-primary-400"
+                : "border-slate-800 text-slate-500 hover:border-slate-600"
             }`}
           >
             🇺🇸 English
@@ -644,52 +644,52 @@ export default function ProfilePage() {
       </div>
 
       {/* Aparência */}
-      <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-        <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-50">Aparência</h2>
+      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+        <h2 className="mb-4 font-semibold text-white">Aparência</h2>
         <button
           onClick={toggleTheme}
-          className="flex w-full items-center justify-between rounded-xl border border-gray-100 px-4 py-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
+          className="flex w-full items-center justify-between rounded-xl border border-slate-800 px-4 py-3 hover:bg-slate-800"
         >
           <div className="flex items-center gap-3">
             <span className="text-xl">{theme === "dark" ? "🌙" : "☀️"}</span>
-            <span className="text-sm text-gray-700 dark:text-gray-300">
+            <span className="text-sm text-slate-400">
               {theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"}
             </span>
           </div>
-          <span className="text-xs text-primary-500 font-semibold">
+          <span className="text-xs text-primary-400 font-semibold">
             {theme === "dark" ? "Usar claro" : "Usar escuro"}
           </span>
         </button>
       </div>
 
       {/* Legal */}
-      <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5">
-        <h2 className="mb-4 font-semibold text-gray-900">Legal</h2>
+      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+        <h2 className="mb-4 font-semibold text-white">Legal</h2>
         <div className="flex flex-col gap-2">
           <a
             href="/terms"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
           >
             <span>Termos de Uso</span>
-            <span className="text-gray-300">›</span>
+            <span className="text-slate-600">›</span>
           </a>
           <a
             href="/privacy"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
           >
             <span>Política de Privacidade</span>
-            <span className="text-gray-300">›</span>
+            <span className="text-slate-600">›</span>
           </a>
           <a
             href="mailto:suporte@easyhealth.com.br"
-            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
           >
             <span>Fale Conosco</span>
-            <span className="text-gray-300">›</span>
+            <span className="text-slate-600">›</span>
           </a>
         </div>
       </div>
@@ -698,33 +698,33 @@ export default function ProfilePage() {
       {user?.admin && (
         <Link
           href="/admin"
-          className="mt-4 flex items-center justify-between rounded-2xl border border-primary-100 bg-primary-50 px-5 py-4 transition hover:bg-primary-100"
+          className="mt-4 flex items-center justify-between rounded-2xl border border-primary-500/30 bg-primary-500/10 px-5 py-4 transition hover:bg-primary-500/15"
         >
           <div>
-            <p className="font-semibold text-primary-700">Painel Administrativo</p>
-            <p className="text-xs text-primary-500">Estatísticas da plataforma</p>
+            <p className="font-semibold text-primary-400">Painel Administrativo</p>
+            <p className="text-xs text-primary-500/70">Estatísticas da plataforma</p>
           </div>
           <span className="text-lg text-primary-400">→</span>
         </Link>
       )}
 
       {/* Conta */}
-      <div className="mt-4 rounded-2xl border border-gray-100 bg-white p-5">
-        <h2 className="mb-4 font-semibold text-gray-900">Conta</h2>
+      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+        <h2 className="mb-4 font-semibold text-white">Conta</h2>
         <div className="flex flex-col gap-2">
           <button
             onClick={() => setCleanDataOpen(true)}
-            className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
           >
             <span>Limpar Meus Dados</span>
-            <span className="text-gray-300">›</span>
+            <span className="text-slate-600">›</span>
           </button>
           <button
             onClick={() => setDeleteAccountOpen(true)}
-            className="flex items-center justify-between rounded-xl border border-red-100 px-4 py-3 text-sm text-red-500 hover:bg-red-50"
+            className="flex items-center justify-between rounded-xl border border-red-900/50 px-4 py-3 text-sm text-red-400 hover:bg-red-950/30"
           >
             <span>Excluir Conta</span>
-            <span className="text-red-200">›</span>
+            <span className="text-red-700">›</span>
           </button>
         </div>
       </div>
@@ -736,17 +736,17 @@ export default function ProfilePage() {
           onClick={() => setPhotoHistoryOpen(false)}
         >
           <div
-            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4"
+            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-slate-900 px-4 pb-24 pt-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-gray-200" />
+            <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-slate-700" />
             <div className="mb-4 mt-3 flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-900">
+              <h3 className="text-base font-bold text-white">
                 Histórico de fotos ({bodyPhotos.length})
               </h3>
               <button
                 onClick={() => setPhotoHistoryOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-sm text-gray-500"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 text-sm text-slate-400"
               >
                 ✕
               </button>
@@ -768,7 +768,7 @@ export default function ProfilePage() {
                       className="h-28 w-full rounded-xl object-cover"
                     />
                   )}
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-slate-500">
                     {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
                   </p>
                 </button>
@@ -833,8 +833,8 @@ export default function ProfilePage() {
 function ProfileRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-1">
-      <dt className="text-sm text-gray-500">{label}</dt>
-      <dd className="text-sm font-medium text-gray-900">{value}</dd>
+      <dt className="text-sm text-slate-400">{label}</dt>
+      <dd className="text-sm font-medium text-white">{value}</dd>
     </div>
   );
 }
@@ -862,7 +862,7 @@ function EditForm({
 }) {
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-xl border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <Select
         label={t("goal")}
@@ -879,23 +879,23 @@ function EditForm({
 
       {(["age", "weight_kg", "height_cm"] as const).map((key) => (
         <div key={key}>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-slate-400">
             {key === "age" ? t("age") : key === "weight_kg" ? t("weightKg") : t("heightCm")}
           </label>
           <input
             type="number"
             value={String(form[key] ?? "")}
             onChange={(e) => onChange(key, Number(e.target.value))}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+            className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-primary-500 focus:outline-none"
           />
         </div>
       ))}
 
       <div className="flex gap-2 pt-2">
-        <button onClick={onCancel} className="flex-1 rounded-lg border border-gray-200 py-2 text-sm text-gray-600">
+        <button onClick={onCancel} className="flex-1 rounded-full border border-slate-700 py-2 text-sm text-slate-400">
           {t("cancel")}
         </button>
-        <button onClick={onSave} disabled={saving} className="flex-1 rounded-lg bg-primary-500 py-2 text-sm font-semibold text-white disabled:opacity-50">
+        <button onClick={onSave} disabled={saving} className="flex-1 rounded-full bg-primary-500 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {saving ? t("saving") : t("save")}
         </button>
       </div>
@@ -916,11 +916,11 @@ function Select({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-slate-400">{label}</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+        className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-primary-500 focus:outline-none"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>

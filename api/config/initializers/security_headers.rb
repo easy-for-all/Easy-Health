@@ -4,7 +4,8 @@ Rails.application.config.action_dispatch.default_headers.merge!(
   "Referrer-Policy"             => "strict-origin-when-cross-origin",
   "Permissions-Policy"          => "camera=(), microphone=(), geolocation=()",
   "Cross-Origin-Opener-Policy"  => "same-origin",
-  "Strict-Transport-Security"   => "max-age=31536000; includeSubDomains"
+  "Strict-Transport-Security"   => "max-age=31536000; includeSubDomains",
+  "Content-Security-Policy"     => "default-src 'none'; frame-ancestors 'none'"
 )
 
 # Remove Server header set by Puma/Thruster at HTTP level (not reachable via default_headers)
