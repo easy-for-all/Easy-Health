@@ -33,10 +33,12 @@ namespace :exercises do
       s.to_s.unicode_normalize(:nfkd).encode("ASCII", replace: "").downcase.gsub(/[^a-z0-9\s]/, "").squeeze(" ").strip
     end
 
+    has_name_en = Exercise.column_names.include?("name_en")
+
     exercise_index = {}
     Exercise.all.each do |ex|
-      exercise_index[normalize.(ex.name)]          = ex
-      exercise_index[normalize.(ex.name_en.to_s)]  = ex if ex.name_en.present?
+      exercise_index[normalize.(ex.name)] = ex
+      exercise_index[normalize.(ex.name_en.to_s)] = ex if has_name_en && ex.name_en.present?
     end
 
     updated = 0
