@@ -598,7 +598,7 @@ export default function ProfilePage() {
                   {item.mime_type === "application/pdf" ? (
                     <div className="flex h-32 w-full items-center justify-center rounded-lg bg-gray-100 text-3xl">📄</div>
                   ) : (
-                    {item.file_url && <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-32 w-full rounded-lg object-cover" />}
+                    <>{item.file_url && <img src={`${API_URL}${item.file_url}`} alt="Exame" className="h-32 w-full rounded-lg object-cover" />}</>
                   )}
                   <div className="mt-1 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
