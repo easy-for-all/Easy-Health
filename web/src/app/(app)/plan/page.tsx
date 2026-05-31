@@ -36,14 +36,32 @@ const LEVEL_LABELS: Record<string, string> = {
   advanced:     "Avançado",
 };
 
-const GENERATION_STEPS = [
-  "Analisando seu perfil",
-  "Definindo a divisão semanal",
-  "Selecionando exercícios",
-  "Ajustando intensidade",
-  "Configurando descanso",
-  "Finalizando planejamento",
-];
+function buildGenerationSteps(mod: Modality, loc: TrainingLocation, cType?: CardioType): string[] {
+  const base = ["Analisando seu perfil", "Configurando dias de treino"];
+  if (mod === "cardio" || mod === "misto") {
+    base.push(
+      loc === "outdoor" ? "Mapeando exercícios ao ar livre" : "Selecionando exercícios cardio",
+      "Criando progressão de intensidade",
+      "Distribuindo treinos na semana",
+      "Finalizando planejamento"
+    );
+  } else if (mod === "funcional") {
+    base.push(
+      "Selecionando exercícios funcionais",
+      "Balanceando mobilidade e força",
+      "Distribuindo treinos na semana",
+      "Finalizando planejamento"
+    );
+  } else {
+    base.push(
+      "Definindo divisão muscular",
+      "Selecionando exercícios",
+      "Ajustando séries e cargas",
+      "Finalizando planejamento"
+    );
+  }
+  return base;
+}
 
 type PlanSummary = {
   id: number;
@@ -82,6 +100,7 @@ export default function PlanPage() {
   const [genStep, setGenStep]   = useState(0);
   const genStepRef              = useRef(0);
   const [planSummary, setPlanSummary] = useState<string | null>(null);
+  const [generationSteps, setGenerationSteps] = useState<string[]>(buildGenerationSteps("musculacao", "gym"));
 
   // Wizard state
   const [daysPerWeek, setDaysPerWeek] = useState(3);
@@ -189,6 +208,8 @@ export default function PlanPage() {
     cFormat: CardioFormat | undefined,
     cSplits?: { name: string; muscle_groups: string[] }[]
   ) {
+    const steps = buildGenerationSteps(mod, trainingLocation, cType);
+    setGenerationSteps(steps);
     setPhase("wizard_generating");
     genStepRef.current = 0;
     setGenStep(0);
@@ -196,7 +217,7 @@ export default function PlanPage() {
 
     const STEP_MS = 600;
     const interval = setInterval(() => {
-      const next = Math.min(genStepRef.current + 1, GENERATION_STEPS.length - 1);
+      const next = Math.min(genStepRef.current + 1, steps.length - 1);
       genStepRef.current = next;
       setGenStep(next);
     }, STEP_MS);
@@ -210,13 +231,20 @@ export default function PlanPage() {
     if (cFormat) body.cardio_format    = cFormat;
     if (cSplits) body.custom_splits    = cSplits;
     body.training_location = trainingLocation;
-    if (mod === "funcional") body.activity_preferences = ["funcional"];
+
+    // Set activity_preferences explicitly so the backend never falls back to stale profile data
+    if (mod === "funcional")  body.activity_preferences = ["funcional"];
+    if (mod === "cardio")     body.activity_preferences = [cType ?? "cardio"];
+    if (mod === "misto")      body.activity_preferences = ["musculacao", cType ?? "cardio"];
+    if (mod === "musculacao") body.activity_preferences = ["musculacao"];
+    // ai_choice: omit so the backend uses its own logic
+
     if (mod === "ai_choice") delete body.split_type;
 
     try {
       const [newPlan] = await Promise.all([
         api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body),
-        new Promise<void>((resolve) => setTimeout(resolve, GENERATION_STEPS.length * STEP_MS)),
+        new Promise<void>((resolve) => setTimeout(resolve, steps.length * STEP_MS)),
       ]);
       clearInterval(interval);
       setPlan(newPlan);
@@ -365,7 +393,7 @@ export default function PlanPage() {
         />
       )}
 
-      {phase === "wizard_generating" && <GeneratingView step={genStep} />}
+      {phase === "wizard_generating" && <GeneratingView step={genStep} steps={generationSteps} />}
 
       {error && phase === "wizard_modality" && (
         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
@@ -1377,12 +1405,12 @@ function PlanDayDetailDrawer({
   );
 }
 
-function GeneratingView({ step }: { step: number }) {
+function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
   return (
     <div className="flex flex-col items-center py-12">
       <div className="mb-10 h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
       <div className="w-full space-y-4">
-        {GENERATION_STEPS.map((msg, idx) => (
+        {steps.map((msg, idx) => (
           <div
             key={idx}
             className={`flex items-center gap-3 transition-all duration-500 ${idx <= step ? "opacity-100 translate-x-0" : "opacity-20"}`}

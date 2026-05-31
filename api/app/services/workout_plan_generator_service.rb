@@ -135,6 +135,15 @@ class WorkoutPlanGeneratorService
     ]
   }.freeze
 
+  FUNCIONAL_WEEK_SCHEDULES = [
+    { name: "Funcional Completo",    exercise_type: "funcional" },
+    { name: "HIIT e Cardio",         exercise_type: "hiit" },
+    { name: "Mobilidade e Core",     exercise_type: "funcional" },
+    { name: "Funcional Resistência", exercise_type: "funcional" },
+    { name: "HIIT Intenso",          exercise_type: "hiit" },
+    { name: "Recuperação Ativa",     exercise_type: "caminhada", duration_minutes: 25, intensity: "leve" }
+  ].freeze
+
   def initialize(user, days_per_week: nil, activity_preferences: nil,
                  modality: nil, split_type: nil, cardio_type: nil,
                  cardio_format: nil, custom_splits: nil, training_location: nil)
@@ -180,6 +189,15 @@ class WorkoutPlanGeneratorService
         if day_tmpl[:exercise_type]
           ex_type   = day_tmpl[:exercise_type]
           exercises = exercise_scope(Exercise.where(exercise_type: ex_type)).limit(EXERCISES_PER_GROUP * 2)
+
+          # Outdoor funcional fallback: gym-equipment funcional exercises are filtered out,
+          # so complement with HIIT bodyweight exercises
+          if exercises.empty? && ex_type == "funcional" && @training_location == "outdoor"
+            exercises = exercise_scope(
+              Exercise.where(exercise_type: %w[funcional hiit])
+            ).limit(EXERCISES_PER_GROUP * 2)
+          end
+
           exercises.each do |ex|
             is_cardio = WorkoutDayExercise::CARDIO_TYPES.include?(ex.exercise_type)
             attrs = { exercise: ex, order_index: idx_exercise }
@@ -220,21 +238,34 @@ class WorkoutPlanGeneratorService
   end
 
   def plan_summary
-    wants_strength = @activity_preferences.include?("musculacao")
-    non_strength   = @activity_preferences - ["musculacao"]
-    primary_cardio = ACTIVITY_NAMES.fetch(non_strength.first || @cardio_type, "Cardio")
+    primary_cardio = ACTIVITY_NAMES.fetch(@cardio_type, "Cardio")
+    fmt = format_description
 
-    if @training_location == "outdoor" && !wants_strength
-      "Montamos um plano focado em #{primary_cardio.downcase} ao ar livre, com variações de intensidade para evoluir gradualmente."
-    elsif !wants_strength && non_strength.any?
-      "Montamos um plano de #{primary_cardio.downcase} com progressão de intensidade, complementado por fortalecimento funcional."
-    elsif @modality == "misto"
-      "Criamos um plano misto combinando musculação e #{primary_cardio.downcase} para equilíbrio entre força e condicionamento."
-    elsif @modality == "funcional"
-      "Criamos um plano funcional com peso corporal, mobilidade e exercícios que melhoram o desempenho no dia a dia."
+    case @modality
+    when "cardio"
+      base = "Criamos um plano focado em #{primary_cardio.downcase}"
+      base += " ao ar livre" if @training_location == "outdoor"
+      base += "#{fmt}para evoluir gradualmente no seu condicionamento cardiovascular."
+      base
+    when "funcional"
+      loc = case @training_location
+            when "home"    then " em casa"
+            when "outdoor" then " ao ar livre"
+            else ""
+            end
+      "Criamos um plano funcional#{loc} com exercícios de peso corporal, mobilidade e HIIT para melhorar o desempenho no dia a dia."
+    when "misto"
+      "Criamos um plano misto combinando musculação e #{primary_cardio.downcase}#{fmt}para equilíbrio entre força e condicionamento."
     else
-      split_name = @split_type == "ai_choice" ? "selecionada pela IA" : @split_type.upcase
-      "Como você escolheu musculação, criamos uma divisão #{split_name} para ganho de força e consistência."
+      wants_strength = @activity_preferences.include?("musculacao")
+      non_strength   = @activity_preferences - ["musculacao"]
+      if !wants_strength && non_strength.any?
+        primary = ACTIVITY_NAMES.fetch(non_strength.first, "Cardio")
+        "Montamos um plano de #{primary.downcase}#{fmt}com progressão de intensidade e fortalecimento complementar."
+      else
+        split_name = @split_type == "ai_choice" ? "selecionada pela IA" : @split_type.upcase
+        "Como você escolheu musculação, criamos uma divisão #{split_name} para ganho de força e consistência."
+      end
     end
   end
 
@@ -252,19 +283,22 @@ class WorkoutPlanGeneratorService
     case @modality
     when "cardio"
       build_cardio_week_template(resolved_cardio_type)
+    when "funcional"
+      build_funcional_template
     when "misto"
-      strength_count  = [(@days_per_week * 2 / 3.0).ceil, @days_per_week - 1].min
-      cardio_count    = @days_per_week - strength_count
-      strength_days   = base.cycle.take(strength_count)
-      cardio_schedule = CARDIO_WEEK_SCHEDULES[resolved_cardio_type] || CARDIO_WEEK_SCHEDULES["cardio"]
-      cardio_days     = cardio_schedule.first(cardio_count)
-      strength_days + cardio_days
+      build_misto_template
     else
       base.cycle.take(@days_per_week)
     end
   end
 
   def build_ai_template
+    # Explicit modality takes priority — honor what the user selected
+    return build_cardio_week_template(resolved_cardio_type) if @modality == "cardio"
+    return build_funcional_template                          if @modality == "funcional"
+    return build_misto_template                              if @modality == "misto"
+
+    # For musculacao / ai_choice: use activity_preferences to decide
     non_strength   = (@activity_preferences - ["musculacao"]).uniq
     wants_strength = @activity_preferences.include?("musculacao")
 
@@ -274,7 +308,7 @@ class WorkoutPlanGeneratorService
       return build_cardio_week_template(primary)
     end
 
-    # Mixed: strength as base + non-strength cardio/functional days
+    # Strength as base with optional cardio/functional days
     strength_count = [[@days_per_week - non_strength.size, 1].max, 6].min
     strength_days  = (STRENGTH_TEMPLATES[strength_count] || STRENGTH_TEMPLATES[3]).dup
     other_days     = non_strength.map do |t|
@@ -284,10 +318,57 @@ class WorkoutPlanGeneratorService
     (strength_days + other_days).first(@days_per_week)
   end
 
+  def build_funcional_template
+    FUNCIONAL_WEEK_SCHEDULES.first(@days_per_week)
+  end
+
+  def build_misto_template
+    strength_count  = [(@days_per_week * 2 / 3.0).ceil, @days_per_week - 1].min
+    cardio_count    = @days_per_week - strength_count
+    strength_days   = (STRENGTH_TEMPLATES[strength_count] || STRENGTH_TEMPLATES[3]).dup
+    cardio_schedule = CARDIO_WEEK_SCHEDULES[resolved_cardio_type] || CARDIO_WEEK_SCHEDULES["cardio"]
+    cardio_days     = cardio_schedule.first(cardio_count)
+    strength_days + cardio_days
+  end
+
   def build_cardio_week_template(cardio_key = nil)
     key = cardio_key.presence || resolved_cardio_type
     key = "cardio" unless CARDIO_WEEK_SCHEDULES.key?(key)
-    CARDIO_WEEK_SCHEDULES[key].first(@days_per_week)
+    schedule = CARDIO_WEEK_SCHEDULES[key].dup
+    schedule = apply_cardio_format(schedule)
+    schedule.first(@days_per_week)
+  end
+
+  def apply_cardio_format(schedule)
+    return schedule unless @cardio_format
+
+    case @cardio_format
+    when "progressivo"
+      # Sort light → functional/no-intensity → moderate → intense (gradual build-up)
+      intensity_rank = { "leve" => 0, nil => 1, "moderado" => 2, "intenso" => 3 }
+      schedule.sort_by { |d| intensity_rank.fetch(d[:intensity], 1) }
+    when "continuo_leve"
+      # Light sessions first
+      schedule.sort_by { |d| d[:intensity] == "leve" ? 0 : 1 }
+    when "continuo_moderado"
+      # Moderate sessions first
+      schedule.sort_by { |d| d[:intensity] == "moderado" ? 0 : 1 }
+    when "intervalado", "hiit"
+      # Alternate intense and easy sessions
+      intense = schedule.select { |d| d[:intensity] == "intenso" }
+      easy    = schedule.reject { |d| d[:intensity] == "intenso" }
+      result  = []
+      [intense.size, easy.size].max.times do |i|
+        result << intense[i] if intense[i]
+        result << easy[i]    if easy[i]
+      end
+      result
+    when "recuperacao"
+      # Light sessions first, intense last
+      schedule.sort_by { |d| d[:intensity] == "leve" ? 0 : 1 }
+    else
+      schedule
+    end
   end
 
   def build_custom_template
@@ -318,6 +399,18 @@ class WorkoutPlanGeneratorService
     when "natacao"                                  then "natacao"
     when "hiit"                                     then "hiit"
     else "cardio"
+    end
+  end
+
+  def format_description
+    case @cardio_format
+    when "progressivo"       then " com progressão gradual de intensidade, "
+    when "intervalado"       then " alternando entre esforço intenso e recuperação, "
+    when "continuo_leve"     then " em ritmo leve e constante, "
+    when "continuo_moderado" then " em ritmo moderado e constante, "
+    when "hiit"              then " com treinos curtos de alta intensidade, "
+    when "recuperacao"       then " com foco em recuperação ativa e baixo impacto, "
+    else                          " "
     end
   end
 end
