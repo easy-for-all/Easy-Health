@@ -13,7 +13,7 @@ class StripeWebhookService
         processed_at:    Time.current,
         status:          "processing"
       )
-    rescue ActiveRecord::RecordNotUnique
+    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
       Rails.logger.info("[Stripe] duplicate event id=#{event.id}, skipping")
       return
     end
@@ -88,17 +88,18 @@ class StripeWebhookService
       return
     end
 
-    plan_name = Subscription.plan_from_price_id(stripe_sub.items.data.first&.price&.id)
+    item      = stripe_sub.items.data.first
+    plan_name = Subscription.plan_from_price_id(item&.price&.id)
 
     sub.assign_attributes(
       stripe_subscription_id: stripe_sub.id,
-      stripe_price_id: stripe_sub.items.data.first&.price&.id,
-      plan_name: plan_name,
-      status: stripe_sub.status,
-      current_period_start: Time.zone.at(stripe_sub.current_period_start),
-      current_period_end: Time.zone.at(stripe_sub.current_period_end),
-      cancel_at_period_end: stripe_sub.cancel_at_period_end,
-      trial_end: stripe_sub.trial_end ? Time.zone.at(stripe_sub.trial_end) : nil
+      stripe_price_id:        item&.price&.id,
+      plan_name:              plan_name,
+      status:                 stripe_sub.status,
+      current_period_start:   item&.current_period_start ? Time.zone.at(item.current_period_start) : nil,
+      current_period_end:     item&.current_period_end   ? Time.zone.at(item.current_period_end)   : nil,
+      cancel_at_period_end:   stripe_sub.cancel_at_period_end,
+      trial_end:              stripe_sub.trial_end ? Time.zone.at(stripe_sub.trial_end) : nil
     )
     sub.save!
 
@@ -117,29 +118,35 @@ class StripeWebhookService
   end
 
   def self.handle_invoice_paid(invoice)
-    return if invoice.subscription.blank?
+    subscription_id = invoice.parent&.subscription_details&.subscription
+    return if subscription_id.blank?
 
-    sub = Subscription.find_by(stripe_subscription_id: invoice.subscription)
+    sub = Subscription.find_by(stripe_subscription_id: subscription_id)
     unless sub
-      Rails.logger.warn("[Stripe] invoice.paid subscription not found stripe_sub=#{invoice.subscription}")
+      Rails.logger.warn("[Stripe] invoice.paid subscription not found stripe_sub=#{subscription_id}")
       return
     end
 
-    sub.update!(status: "active", current_period_end: invoice.period_end ? Time.zone.at(invoice.period_end) : sub.current_period_end)
-    Rails.logger.info("[Stripe] invoice paid stripe_sub=#{invoice.subscription} → active")
+    period_end = invoice.lines&.data&.first&.period&.end
+    sub.update!(
+      status:             "active",
+      current_period_end: period_end ? Time.zone.at(period_end) : sub.current_period_end
+    )
+    Rails.logger.info("[Stripe] invoice paid stripe_sub=#{subscription_id} → active")
   end
 
   def self.handle_invoice_payment_failed(invoice)
-    return if invoice.subscription.blank?
+    subscription_id = invoice.parent&.subscription_details&.subscription
+    return if subscription_id.blank?
 
-    sub = Subscription.find_by(stripe_subscription_id: invoice.subscription)
+    sub = Subscription.find_by(stripe_subscription_id: subscription_id)
     unless sub
-      Rails.logger.warn("[Stripe] invoice.payment_failed subscription not found stripe_sub=#{invoice.subscription}")
+      Rails.logger.warn("[Stripe] invoice.payment_failed subscription not found stripe_sub=#{subscription_id}")
       return
     end
 
     sub.update!(status: "past_due")
-    Rails.logger.info("[Stripe] invoice payment failed stripe_sub=#{invoice.subscription} → past_due")
+    Rails.logger.info("[Stripe] invoice payment failed stripe_sub=#{subscription_id} → past_due")
   end
 
   def self.find_or_build_subscription(stripe_sub)

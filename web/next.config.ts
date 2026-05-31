@@ -24,7 +24,7 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.clarity.ms https://scripts.clarity.ms`,
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.clarity.ms https://scripts.clarity.ms https://googleads.g.doubleclick.net`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://www.google.com https://www.google.com.br https://*.googletagmanager.com https://googleads.g.doubleclick.net https://c.clarity.ms",
       `connect-src 'self' https: https://www.google-analytics.com https://googleads.g.doubleclick.net https://*.sentry.io https://*.clarity.ms${process.env.NODE_ENV === "development" ? " http://localhost:*" : ""}`,

@@ -9,6 +9,7 @@ class HealthProfile < ApplicationRecord
   CARDIO_TYPES        = %w[corrida caminhada bicicleta eliptico escada remo hiit natacao ai_choice].freeze
   CARDIO_FORMATS      = %w[continuo_leve continuo_moderado intervalado hiit progressivo recuperacao ai_choice].freeze
   TRAINING_LOCATIONS  = %w[gym home outdoor any].freeze
+  GENDERS             = %w[male female not_informed].freeze
 
   validates :age,        presence: true, numericality: { only_integer: true, greater_than: 0, less_than: 120 }
   validates :weight_kg,  presence: true, numericality: { greater_than: 0 }
@@ -23,6 +24,7 @@ class HealthProfile < ApplicationRecord
   validates :cardio_type,   inclusion: { in: CARDIO_TYPES },    allow_nil: true
   validates :cardio_format,      inclusion: { in: CARDIO_FORMATS },       allow_nil: true
   validates :training_location,  inclusion: { in: TRAINING_LOCATIONS },   allow_nil: true
+  validates :gender,             inclusion: { in: GENDERS },              allow_nil: true
   validate :activity_preferences_valid
 
   private

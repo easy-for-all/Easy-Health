@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
-import type { Goal, FitnessLevel, ActivityType } from "@/shared/types/health-profile";
+import type { Goal, FitnessLevel, ActivityType, Gender } from "@/shared/types/health-profile";
 
 type TrainingLocation = "gym" | "home" | "outdoor" | "any";
 
@@ -14,6 +14,7 @@ interface FormData {
   age: string;
   weight_kg: string;
   height_cm: string;
+  gender: Gender | "";
   activity_preferences: ActivityType[];
   training_location: TrainingLocation | "";
 }
@@ -41,6 +42,12 @@ const ACTIVITIES: { value: ActivityType; label: string; icon: string }[] = [
   { value: "hiit",       label: "HIIT",       icon: "🔥" },
 ];
 
+const GENDERS: { value: Gender; label: string }[] = [
+  { value: "male",         label: "Homem" },
+  { value: "female",       label: "Mulher" },
+  { value: "not_informed", label: "Prefiro não informar" },
+];
+
 const LOCATIONS: { value: TrainingLocation; label: string; desc: string; icon: string }[] = [
   { value: "gym",     label: "Academia",            desc: "Aparelhos, barras e halteres",    icon: "🏋️" },
   { value: "home",    label: "Em casa",             desc: "Sem equipamentos, peso corporal", icon: "🏠" },
@@ -56,9 +63,10 @@ export default function OnboardingPage() {
   const [form, setForm] = useState<FormData>({
     goal: "",
     fitness_level: "",
-    age: "",
-    weight_kg: "",
-    height_cm: "",
+    age: "35",
+    weight_kg: "70",
+    height_cm: "175",
+    gender: "",
     activity_preferences: [],
     training_location: "",
   });
@@ -90,6 +98,7 @@ export default function OnboardingPage() {
         age: Number(form.age),
         weight_kg: Number(form.weight_kg),
         height_cm: Number(form.height_cm),
+        gender: form.gender || null,
         activity_preferences: form.activity_preferences,
         training_location: location || form.training_location || "gym",
       });
@@ -242,7 +251,13 @@ function StepBody({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const valid = form.age && form.weight_kg && form.height_cm;
+  const valid = !!form.gender;
+
+  const sliders: { label: string; key: "age" | "weight_kg" | "height_cm"; unit: string; min: number; max: number }[] = [
+    { label: "Idade",  key: "age",       unit: "anos", min: 14,  max: 90  },
+    { label: "Peso",   key: "weight_kg", unit: "kg",   min: 35,  max: 180 },
+    { label: "Altura", key: "height_cm", unit: "cm",   min: 120, max: 220 },
+  ];
 
   return (
     <div className="flex flex-1 flex-col">
@@ -252,30 +267,56 @@ function StepBody({
       <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-50">Seus dados físicos</h2>
       <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Usados para personalizar sua experiência.</p>
 
-      <div className="space-y-4">
-        {[
-          { label: "Idade",  key: "age" as const,       placeholder: "Ex: 28", unit: "anos", min: "1",  max: "119" },
-          { label: "Peso",   key: "weight_kg" as const, placeholder: "Ex: 75", unit: "kg",   min: "1",  max: "500" },
-          { label: "Altura", key: "height_cm" as const, placeholder: "Ex: 175", unit: "cm",  min: "50", max: "300" },
-        ].map(({ label, key, placeholder, unit, min, max }) => (
-          <div key={key}>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-            <div className="flex">
+      <div className="space-y-6">
+        <div>
+          <label className="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Como você se identifica?
+          </label>
+          <div className="flex gap-2">
+            {GENDERS.map((g) => (
+              <button
+                key={g.value}
+                onClick={() => onChange("gender", g.value)}
+                className={`flex-1 rounded-xl border-2 px-2 py-3 text-center text-sm font-medium transition ${
+                  form.gender === g.value
+                    ? "border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300"
+                    : "border-gray-200 text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:text-gray-300 dark:hover:border-gray-600"
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {sliders.map(({ label, key, unit, min, max }) => {
+          const value = Number(form[key]);
+          return (
+            <div key={key}>
+              <div className="mb-2 flex items-baseline justify-between">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                <span className="text-2xl font-bold text-primary-500">
+                  {value}
+                  <span className="ml-1 text-sm font-normal text-gray-500 dark:text-gray-400">{unit}</span>
+                </span>
+              </div>
               <input
-                type="number"
-                value={form[key]}
-                onChange={(e) => onChange(key, e.target.value)}
+                type="range"
                 min={min}
                 max={max}
-                placeholder={placeholder}
-                className="flex-1 rounded-l-lg border border-r-0 border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-primary-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-50"
+                step={1}
+                value={form[key]}
+                onChange={(e) => onChange(key, e.target.value)}
+                className="w-full cursor-pointer"
+                style={{ accentColor: "var(--color-primary-500)" }}
               />
-              <span className="flex items-center rounded-r-lg border border-gray-300 bg-gray-50 px-3 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-                {unit}
-              </span>
+              <div className="mt-1 flex justify-between text-xs text-gray-400 dark:text-gray-500">
+                <span>{min} {unit}</span>
+                <span>{max} {unit}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button
