@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
-import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
 
 export default function SignUpPage() {
   const { signUp } = useAuth();
@@ -29,6 +29,7 @@ export default function SignUpPage() {
     try {
       await signUp(name, email, password);
       trackEvent(EVENTS.SIGNUP_COMPLETED);
+      trackConversion(CONVERSIONS.SIGNUP);
       const pending = getPendingPlan();
       if (pending) {
         clearPendingPlan();
