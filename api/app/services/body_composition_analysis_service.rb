@@ -34,7 +34,7 @@ class BodyCompositionAnalysisService
     })
 
     raw  = response.dig("content", 0, "text").to_s.strip
-    json = JSON.parse(raw)
+    json = JSON.parse(raw.match(/\{.*\}/m)&.to_s || "{}")
 
     body_fat   = json["estimatedBodyFatPercentage"]
     confidence = json["confidence"]
@@ -57,7 +57,7 @@ class BodyCompositionAnalysisService
 
     Result.new(data_point: dp, composition: json)
   rescue => e
-    Rails.logger.error("BodyCompositionAnalysisService: #{e.message}")
+    Rails.logger.error("BodyCompositionAnalysisService error: #{e.message} | raw: #{raw.to_s.truncate(300)}")
     Result.new(data_point: nil, composition: nil)
   end
 

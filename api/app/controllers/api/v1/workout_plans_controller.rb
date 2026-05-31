@@ -148,8 +148,11 @@ module Api
 
       def serialize_day_with_exercises(day)
         wdes = day.workout_day_exercises.includes(:exercise).to_a
-        exercise_ids = wdes.map { |wde| wde.exercise.id }
+        exercise_ids   = wdes.map { |wde| wde.exercise.id }
         last_performed = exercise_last_performed(current_user, exercise_ids)
+        favorite_ids   = current_user.user_favorite_exercises
+                                     .where(exercise_id: exercise_ids)
+                                     .pluck(:exercise_id).to_set
 
         {
           id: day.id,
@@ -176,6 +179,7 @@ module Api
               duration_minutes: wde.duration_minutes,
               intensity: wde.intensity,
               order_index: wde.order_index,
+              is_favorite: favorite_ids.include?(wde.exercise.id),
               last_performed_at: last_performed[wde.exercise.id]
             }
           end

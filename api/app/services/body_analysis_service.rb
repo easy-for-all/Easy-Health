@@ -50,7 +50,7 @@ class BodyAnalysisService
     })
 
     raw  = response.dig("content", 0, "text").to_s.strip
-    json = JSON.parse(raw)
+    json = JSON.parse(raw.match(/\{.*\}/m)&.to_s || "{}")
     observation = json["observation"].to_s.strip
     confidence  = json["confidence"]
 
@@ -70,7 +70,7 @@ class BodyAnalysisService
 
     Result.new(observation: observation, data_point: dp)
   rescue => e
-    Rails.logger.error("BodyAnalysisService: #{e.message}")
+    Rails.logger.error("BodyAnalysisService error: #{e.message} | raw: #{raw.to_s.truncate(300)}")
     Result.new(observation: nil, data_point: nil)
   end
 end
