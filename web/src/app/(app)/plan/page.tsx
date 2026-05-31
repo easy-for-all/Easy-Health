@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
@@ -70,6 +70,8 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export default function PlanPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const forceWizard = searchParams.get("wizard") === "1";
   const [phase, setPhase]          = useState<Phase>("loading");
   const [plan, setPlan]            = useState<WorkoutPlan | null>(null);
   const [allPlans, setAllPlans]    = useState<PlanSummary[]>([]);
@@ -79,6 +81,7 @@ export default function PlanPage() {
   const [selectedDayId, setSelectedDayId] = useState<number | null>(null);
   const [genStep, setGenStep]   = useState(0);
   const genStepRef              = useRef(0);
+  const [planSummary, setPlanSummary] = useState<string | null>(null);
 
   // Wizard state
   const [daysPerWeek, setDaysPerWeek] = useState(3);
@@ -101,7 +104,11 @@ export default function PlanPage() {
       if (hp) {
         setDaysPerWeek(hp.training_days_per_week ?? 3);
       }
-      setPhase(p ? "view" : hp ? "wizard_profile" : "wizard_days");
+      if (p && !forceWizard) {
+        router.replace("/workouts");
+      } else {
+        setPhase(hp ? "wizard_profile" : "wizard_days");
+      }
     });
   }, []);
 
@@ -208,11 +215,12 @@ export default function PlanPage() {
 
     try {
       const [newPlan] = await Promise.all([
-        api.post<WorkoutPlan>("/api/v1/workout_plan/regenerate", body),
+        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body),
         new Promise<void>((resolve) => setTimeout(resolve, GENERATION_STEPS.length * STEP_MS)),
       ]);
       clearInterval(interval);
       setPlan(newPlan);
+      setPlanSummary(newPlan.summary ?? null);
       trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: mod });
       trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: mod });
       setPhase("view");
@@ -263,6 +271,12 @@ export default function PlanPage() {
 
       {phase === "view" && plan && (
         <>
+          {planSummary && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+              <span className="mt-0.5 shrink-0">✨</span>
+              <span>{planSummary}</span>
+            </div>
+          )}
           <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} onToggleFavorite={handleToggleFavorite} />
           <button onClick={startWizard} className="mt-6 w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
             Replanejar

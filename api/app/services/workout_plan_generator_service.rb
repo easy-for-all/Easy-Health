@@ -7,7 +7,6 @@ class WorkoutPlanGeneratorService
     6 => [1, 2, 3, 4, 5, 6]
   }.freeze
 
-  # Used by ai_choice mode (based on number of strength days)
   STRENGTH_TEMPLATES = {
     1 => [
       { name: "Full Body",  muscle_groups: %w[chest back legs core] }
@@ -44,7 +43,6 @@ class WorkoutPlanGeneratorService
     ]
   }.freeze
 
-  # Explicit split base templates (cycled to fill training days)
   EXPLICIT_SPLITS = {
     "full_body"   => [
       { name: "Full Body", muscle_groups: %w[chest back legs core] }
@@ -90,6 +88,53 @@ class WorkoutPlanGeneratorService
 
   EXERCISES_PER_GROUP = 2
 
+  # Equipment types that work outdoors (no gym machines needed)
+  OUTDOOR_COMPATIBLE_EQUIPMENT = %w[bodyweight cardio].freeze
+
+  # Varied weekly schedules by cardio type — up to 6 days, sliced to fit training days
+  CARDIO_WEEK_SCHEDULES = {
+    "caminhada" => [
+      { name: "Caminhada Leve",           exercise_type: "caminhada", duration_minutes: 30, intensity: "leve" },
+      { name: "Fortalecimento Funcional", exercise_type: "funcional" },
+      { name: "Caminhada Intervalada",    exercise_type: "caminhada", duration_minutes: 25, intensity: "intenso" },
+      { name: "Caminhada Moderada",       exercise_type: "caminhada", duration_minutes: 35, intensity: "moderado" },
+      { name: "Caminhada Longa",          exercise_type: "caminhada", duration_minutes: 45, intensity: "moderado" },
+      { name: "Mobilidade e Recuperação", exercise_type: "funcional" }
+    ],
+    "corrida" => [
+      { name: "Corrida Leve",             exercise_type: "corrida", duration_minutes: 25, intensity: "leve" },
+      { name: "Fortalecimento Funcional", exercise_type: "funcional" },
+      { name: "Corrida Intervalada",      exercise_type: "corrida", duration_minutes: 20, intensity: "intenso" },
+      { name: "Corrida Moderada",         exercise_type: "corrida", duration_minutes: 30, intensity: "moderado" },
+      { name: "Corrida Longa",            exercise_type: "corrida", duration_minutes: 40, intensity: "moderado" },
+      { name: "Mobilidade e Recuperação", exercise_type: "funcional" }
+    ],
+    "hiit" => [
+      { name: "HIIT Básico",              exercise_type: "hiit", duration_minutes: 20, intensity: "intenso" },
+      { name: "Recuperação Ativa",        exercise_type: "caminhada", duration_minutes: 25, intensity: "leve" },
+      { name: "HIIT Avançado",            exercise_type: "hiit", duration_minutes: 20, intensity: "intenso" },
+      { name: "Funcional Leve",           exercise_type: "funcional" },
+      { name: "HIIT Intervalado",         exercise_type: "hiit", duration_minutes: 25, intensity: "intenso" },
+      { name: "Recuperação Completa",     exercise_type: "caminhada", duration_minutes: 20, intensity: "leve" }
+    ],
+    "natacao" => [
+      { name: "Natação Leve",             exercise_type: "natacao", duration_minutes: 30, intensity: "leve" },
+      { name: "Natação Moderada",         exercise_type: "natacao", duration_minutes: 35, intensity: "moderado" },
+      { name: "Natação Intervalada",      exercise_type: "natacao", duration_minutes: 25, intensity: "intenso" },
+      { name: "Natação Longa",            exercise_type: "natacao", duration_minutes: 45, intensity: "moderado" },
+      { name: "Recuperação Ativa",        exercise_type: "funcional" },
+      { name: "Natação de Recuperação",   exercise_type: "natacao", duration_minutes: 20, intensity: "leve" }
+    ],
+    "cardio" => [
+      { name: "Cardio Leve",              exercise_type: "cardio", duration_minutes: 30, intensity: "leve" },
+      { name: "Cardio Moderado",          exercise_type: "cardio", duration_minutes: 30, intensity: "moderado" },
+      { name: "Cardio Intervalado",       exercise_type: "cardio", duration_minutes: 25, intensity: "intenso" },
+      { name: "Cardio Moderado",          exercise_type: "cardio", duration_minutes: 35, intensity: "moderado" },
+      { name: "Cardio Longo",             exercise_type: "cardio", duration_minutes: 45, intensity: "moderado" },
+      { name: "Recuperação Ativa",        exercise_type: "cardio", duration_minutes: 20, intensity: "leve" }
+    ]
+  }.freeze
+
   def initialize(user, days_per_week: nil, activity_preferences: nil,
                  modality: nil, split_type: nil, cardio_type: nil,
                  cardio_format: nil, custom_splits: nil, training_location: nil)
@@ -133,12 +178,21 @@ class WorkoutPlanGeneratorService
         idx_exercise = 0
 
         if day_tmpl[:exercise_type]
-          exercises = exercise_scope(Exercise.where(exercise_type: day_tmpl[:exercise_type])).limit(EXERCISES_PER_GROUP * 2)
+          ex_type   = day_tmpl[:exercise_type]
+          exercises = exercise_scope(Exercise.where(exercise_type: ex_type)).limit(EXERCISES_PER_GROUP * 2)
           exercises.each do |ex|
-            day.workout_day_exercises.create!(
-              exercise: ex, sets: params[:sets], reps: params[:reps],
-              rest_seconds: params[:rest_seconds], order_index: idx_exercise
-            )
+            is_cardio = WorkoutDayExercise::CARDIO_TYPES.include?(ex.exercise_type)
+            attrs = { exercise: ex, order_index: idx_exercise }
+            if is_cardio
+              attrs[:duration_minutes] = day_tmpl[:duration_minutes] || 30
+              attrs[:intensity]        = day_tmpl[:intensity] || "moderado"
+              attrs[:rest_seconds]     = 0
+            else
+              attrs[:sets]         = params[:sets]
+              attrs[:reps]         = params[:reps]
+              attrs[:rest_seconds] = params[:rest_seconds]
+            end
+            day.workout_day_exercises.create!(**attrs)
             idx_exercise += 1
           end
         else
@@ -165,6 +219,25 @@ class WorkoutPlanGeneratorService
     end
   end
 
+  def plan_summary
+    wants_strength = @activity_preferences.include?("musculacao")
+    non_strength   = @activity_preferences - ["musculacao"]
+    primary_cardio = ACTIVITY_NAMES.fetch(non_strength.first || @cardio_type, "Cardio")
+
+    if @training_location == "outdoor" && !wants_strength
+      "Montamos um plano focado em #{primary_cardio.downcase} ao ar livre, com variações de intensidade para evoluir gradualmente."
+    elsif !wants_strength && non_strength.any?
+      "Montamos um plano de #{primary_cardio.downcase} com progressão de intensidade, complementado por fortalecimento funcional."
+    elsif @modality == "misto"
+      "Criamos um plano misto combinando musculação e #{primary_cardio.downcase} para equilíbrio entre força e condicionamento."
+    elsif @modality == "funcional"
+      "Criamos um plano funcional com peso corporal, mobilidade e exercícios que melhoram o desempenho no dia a dia."
+    else
+      split_name = @split_type == "ai_choice" ? "selecionada pela IA" : @split_type.upcase
+      "Como você escolheu musculação, criamos uma divisão #{split_name} para ganho de força e consistência."
+    end
+  end
+
   private
 
   def build_template
@@ -178,16 +251,13 @@ class WorkoutPlanGeneratorService
 
     case @modality
     when "cardio"
-      @days_per_week.times.map do |i|
-        { name: "#{ACTIVITY_NAMES.fetch(@cardio_type, "Cardio")} #{i + 1}", exercise_type: resolved_cardio_type }
-      end
+      build_cardio_week_template(resolved_cardio_type)
     when "misto"
-      strength_count = [(@days_per_week * 2 / 3.0).ceil, @days_per_week - 1].min
-      cardio_count   = @days_per_week - strength_count
-      strength_days  = base.cycle.take(strength_count)
-      cardio_days    = cardio_count.times.map do |i|
-        { name: "#{ACTIVITY_NAMES.fetch(@cardio_type, "Cardio")} #{i + 1}", exercise_type: resolved_cardio_type }
-      end
+      strength_count  = [(@days_per_week * 2 / 3.0).ceil, @days_per_week - 1].min
+      cardio_count    = @days_per_week - strength_count
+      strength_days   = base.cycle.take(strength_count)
+      cardio_schedule = CARDIO_WEEK_SCHEDULES[resolved_cardio_type] || CARDIO_WEEK_SCHEDULES["cardio"]
+      cardio_days     = cardio_schedule.first(cardio_count)
       strength_days + cardio_days
     else
       base.cycle.take(@days_per_week)
@@ -195,13 +265,29 @@ class WorkoutPlanGeneratorService
   end
 
   def build_ai_template
-    other_types    = (@activity_preferences - ["musculacao"]).uniq
-    strength_count = [[@days_per_week - other_types.size, 1].max, 6].min
+    non_strength   = (@activity_preferences - ["musculacao"]).uniq
+    wants_strength = @activity_preferences.include?("musculacao")
 
-    strength_days = (STRENGTH_TEMPLATES[strength_count] || STRENGTH_TEMPLATES[3]).dup
-    other_days    = other_types.map { |t| { name: ACTIVITY_NAMES.fetch(t, t.capitalize), exercise_type: t } }
+    # No strength preference → build cardio/functional plan
+    unless wants_strength
+      primary = non_strength.first || resolved_cardio_type
+      return build_cardio_week_template(primary)
+    end
 
+    # Mixed: strength as base + non-strength cardio/functional days
+    strength_count = [[@days_per_week - non_strength.size, 1].max, 6].min
+    strength_days  = (STRENGTH_TEMPLATES[strength_count] || STRENGTH_TEMPLATES[3]).dup
+    other_days     = non_strength.map do |t|
+      schedule = CARDIO_WEEK_SCHEDULES[t] || CARDIO_WEEK_SCHEDULES["cardio"]
+      schedule.first
+    end
     (strength_days + other_days).first(@days_per_week)
+  end
+
+  def build_cardio_week_template(cardio_key = nil)
+    key = cardio_key.presence || resolved_cardio_type
+    key = "cardio" unless CARDIO_WEEK_SCHEDULES.key?(key)
+    CARDIO_WEEK_SCHEDULES[key].first(@days_per_week)
   end
 
   def build_custom_template
@@ -216,11 +302,14 @@ class WorkoutPlanGeneratorService
   end
 
   def exercise_scope(relation)
-    rel = @training_location == "home" ? relation.where(home_compatible: true) : relation
+    rel = case @training_location
+          when "home"    then relation.where(home_compatible: true)
+          when "outdoor" then relation.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT)
+          else relation
+          end
     rel.order(Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END"), :id)
   end
 
-  # Resolve cardio_type to an exercise_type that exists in the DB
   def resolved_cardio_type
     case @cardio_type
     when "bicicleta", "eliptico", "escada", "remo" then "cardio"

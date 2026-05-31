@@ -81,6 +81,7 @@ function WorkoutTodayContent() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [day, setDay] = useState<WorkoutDay | null>(null);
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
   const [phase, setPhase] = useState<Phase>("choose");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
@@ -230,6 +231,15 @@ function WorkoutTodayContent() {
     if (timerRef.current) clearInterval(timerRef.current);
     if (cardioTimerRef.current) clearInterval(cardioTimerRef.current);
   }, []);
+
+  // Redirect to central hub when there is no active session and no day param
+  useEffect(() => {
+    if (!loading && phase === "choose") {
+      setRedirecting(true);
+      router.replace("/workouts");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, phase]);
 
   // Persist workout state so it can be restored if user navigates away mid-workout
   useEffect(() => {
@@ -501,7 +511,7 @@ function WorkoutTodayContent() {
     setPhase("exercising");
   }
 
-  if (loading) return <LoadingScreen />;
+  if (loading || redirecting) return <LoadingScreen />;
 
   if (!plan?.days?.length) {
     return (
