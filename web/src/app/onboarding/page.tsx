@@ -63,8 +63,8 @@ export default function OnboardingPage() {
   const [form, setForm] = useState<FormData>({
     goal: "",
     fitness_level: "",
-    age: "35",
-    weight_kg: "70",
+    age: "30",
+    weight_kg: "75",
     height_cm: "175",
     gender: "",
     activity_preferences: [],
