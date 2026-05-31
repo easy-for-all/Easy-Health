@@ -46,14 +46,14 @@ class ExamValidationService
     })
 
     raw  = response.dig("content", 0, "text").to_s.strip
-    json = JSON.parse(raw)
+    json = JSON.parse(raw.match(/\{.*\}/m)&.to_s || "{}")
 
     Result.new(
       valid:            json["is_health_exam"] == true,
       rejection_reason: json["rejection_reason"]
     )
   rescue => e
-    Rails.logger.error("ExamValidationService: #{e.message}")
+    Rails.logger.error("ExamValidationService error: #{e.message} | raw: #{raw.to_s.truncate(300)}")
     # Fail open for availability — allow the upload if AI is unavailable
     Result.new(valid: true, rejection_reason: nil)
   end

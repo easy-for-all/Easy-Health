@@ -64,7 +64,7 @@ class ExamDataExtractionService
     })
 
     raw  = response.dig("content", 0, "text").to_s.strip
-    json = JSON.parse(raw)
+    json = JSON.parse(raw.match(/\{.*\}/m)&.to_s || "{}")
     items = Array(json["extracted"])
 
     data_points = items.filter_map do |item|

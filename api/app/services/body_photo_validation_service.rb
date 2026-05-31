@@ -49,7 +49,7 @@ class BodyPhotoValidationService
     })
 
     raw  = response.dig("content", 0, "text").to_s.strip
-    json = JSON.parse(raw)
+    json = JSON.parse(raw.match(/\{.*\}/m)&.to_s || "{}")
 
     Result.new(
       has_human_body:   json["has_human_body"] == true,
@@ -58,7 +58,7 @@ class BodyPhotoValidationService
       rejection_reason: json["rejection_reason"]
     )
   rescue => e
-    Rails.logger.error("BodyPhotoValidationService: #{e.message}")
+    Rails.logger.error("BodyPhotoValidationService error: #{e.message} | raw: #{raw.to_s.truncate(300)}")
     # On error, allow the upload but skip face blur (fail open for availability)
     Result.new(has_human_body: true, has_face: false, face_bbox: nil, rejection_reason: nil)
   end

@@ -2,7 +2,7 @@ module Api
   module V1
     class UserFavoriteExercisesController < BaseController
       def create
-        exercise = Exercise.find(params[:exercise_id])
+        exercise = Exercise.find(params[:id])
         current_user.user_favorite_exercises.find_or_create_by!(exercise: exercise)
         render json: { favorited: true }
       rescue ActiveRecord::RecordNotFound
@@ -10,7 +10,7 @@ module Api
       end
 
       def destroy
-        fav = current_user.user_favorite_exercises.find_by(exercise_id: params[:exercise_id])
+        fav = current_user.user_favorite_exercises.find_by(exercise_id: params[:id])
         fav&.destroy
         render json: { favorited: false }
       end

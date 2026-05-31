@@ -109,6 +109,9 @@ class WorkoutPlanGeneratorService
 
   def call
     WorkoutPlan.transaction do
+      old_favorited_names = @user.active_workout_plan
+                              &.workout_days&.where(favorited: true)&.pluck(:name) || []
+
       @user.workout_plans.update_all(active: false)
       plan = @user.workout_plans.create!(active: true)
       @profile&.update_columns(
@@ -155,6 +158,8 @@ class WorkoutPlanGeneratorService
       raise "Workout plan was not generated" if plan.workout_days.empty?
       total_exercises = plan.workout_days.sum { |d| d.workout_day_exercises.count }
       raise "No exercises found — run db:seed in production" if total_exercises.zero?
+
+      plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
 
       plan
     end

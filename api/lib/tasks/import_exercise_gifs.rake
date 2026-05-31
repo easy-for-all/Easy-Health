@@ -29,7 +29,9 @@ namespace :exercises do
       "cardio"          => { muscle_group: nil,          exercise_type: "cardio"    }
     }
 
-    normalize = ->(s) { s.to_s.downcase.gsub(/[^a-z0-9\s]/, "").squeeze(" ").strip }
+    normalize = ->(s) do
+      s.to_s.unicode_normalize(:nfkd).encode("ASCII", replace: "").downcase.gsub(/[^a-z0-9\s]/, "").squeeze(" ").strip
+    end
 
     exercise_index = {}
     Exercise.all.each do |ex|
