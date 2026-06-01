@@ -594,9 +594,9 @@ export default function LandingPage() {
                 </span>
                 <h3 className="text-[19px] font-bold text-white mb-1.5">Pro Anual</h3>
                 <div className="text-[44px] font-extrabold tracking-tight text-white leading-none">
-                  R$ 118,80<span className="text-[16px] text-slate-400 font-semibold">/ano</span>
+                  R$ 9,90<span className="text-[16px] text-slate-400 font-semibold">/mês</span>
                 </div>
-                <div className="text-[14px] text-primary-400 font-bold mt-1 mb-5">≈ R$ 9,90/mês · economize ~50%</div>
+                <div className="text-[14px] text-primary-400 font-bold mt-1 mb-5">R$ 118,80/ano · economize ~50%</div>
                 <ul className="list-none p-0 m-0 flex flex-col gap-[11px] mb-6">
                   {["Tudo do Pro Mensal", "Metade do preço por mês", "7 dias grátis pra testar"].map((item) => (
                     <li key={item} className="flex gap-[10px] text-[15px] text-slate-400 items-start">

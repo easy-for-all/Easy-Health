@@ -4,24 +4,29 @@ import { SupportChat } from "./support-chat";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-white dark:bg-gray-950">
-      <header className="sticky top-0 z-10 border-b border-gray-100 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-950/90">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="Easy Health" className="h-10 w-auto" />
-            <span className="text-xl font-bold text-primary-600">Easy Health</span>
+    <div className="flex min-h-screen flex-col" style={{ background: "#0a0f1e" }}>
+      <header className="sticky top-0 z-50 border-b border-slate-800/70 backdrop-blur-xl" style={{ background: "rgba(10,15,30,0.82)" }}>
+        <div className="mx-auto flex max-w-[1180px] items-center justify-between h-[72px] px-6">
+          <Link href="/" className="flex items-center gap-[10px] font-extrabold text-[21px] tracking-tight text-white no-underline">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="EasyHealth" className="h-8 w-auto" />
+            EasyHealth
           </Link>
           <nav className="flex items-center gap-3">
-            <Link href="/precos" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+            <Link href="/precos" className="hidden sm:block text-[15px] font-semibold text-slate-400 hover:text-white transition-colors px-3 py-2 no-underline">
               Preços
             </Link>
-            <a href="mailto:suporte@easyhealth.com.br" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+            <a href="mailto:suporte@easyhealth.com.br" className="hidden sm:block text-[15px] font-semibold text-slate-400 hover:text-white transition-colors px-3 py-2 no-underline">
               Fale Conosco
             </a>
-            <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+            <Link href="/login" className="hidden sm:block text-[15px] font-semibold text-slate-400 hover:text-white transition-colors px-3 py-2 no-underline">
               Entrar
             </Link>
-            <Link href="/sign-up" className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600">
+            <Link
+              href="/sign-up"
+              className="rounded-full bg-primary-500 hover:bg-primary-600 text-white text-[15px] font-bold px-5 py-[10px] transition-all hover:-translate-y-0.5 no-underline"
+              style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 24px rgba(59,130,246,.3)" }}
+            >
               Criar conta
             </Link>
           </nav>
