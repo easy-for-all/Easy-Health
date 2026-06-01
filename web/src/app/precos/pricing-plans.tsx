@@ -48,27 +48,28 @@ export function PricingPlans() {
       {PLANS.map((plan) => (
         <div
           key={plan.name}
-          className={`relative rounded-2xl border p-8 ${
+          className="relative rounded-2xl border p-8"
+          style={
             plan.highlighted
-              ? "border-primary-400 bg-primary-50 shadow-lg"
-              : "border-gray-200 bg-white"
-          }`}
+              ? { borderColor: "#3b82f6", background: "#0f172a", boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 8px 40px rgba(59,130,246,.18)" }
+              : { borderColor: "#1e293b", background: "#0f172a" }
+          }
         >
           {plan.badge && (
             <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary-500 px-4 py-1 text-xs font-bold text-white">
               {plan.badge}
             </span>
           )}
-          <p className="text-lg font-bold text-gray-900">{plan.name}</p>
+          <p className="text-lg font-bold text-white">{plan.name}</p>
           <div className="mt-2 flex items-end gap-1">
-            <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-            <span className="mb-1 text-gray-500">{plan.period}</span>
+            <span className="text-4xl font-bold text-white">{plan.price}</span>
+            <span className="mb-1 text-slate-400">{plan.period}</span>
           </div>
-          <p className="mt-2 text-sm text-gray-500">{plan.description}</p>
+          <p className="mt-2 text-sm text-slate-400">{plan.description}</p>
           <ul className="mt-6 space-y-2">
             {plan.features.map((f) => (
-              <li key={f} className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="mt-0.5 text-primary-500">✓</span>
+              <li key={f} className="flex items-start gap-2 text-sm text-slate-300">
+                <span className="mt-0.5 text-primary-400">✓</span>
                 {f}
               </li>
             ))}
@@ -76,11 +77,12 @@ export function PricingPlans() {
           <Link
             href="/sign-up"
             onClick={() => trackEvent(EVENTS.CHECKOUT_STARTED, { plan: plan.id })}
-            className={`mt-8 block w-full rounded-xl py-3 text-center text-sm font-semibold transition-colors ${
+            className={`mt-8 block w-full rounded-full py-3 text-center text-sm font-semibold transition-colors ${
               plan.highlighted
                 ? "bg-primary-500 text-white hover:bg-primary-600"
-                : "border border-primary-500 text-primary-600 hover:bg-primary-50"
+                : "border border-slate-600 text-white hover:border-slate-400"
             }`}
+            style={plan.highlighted ? { boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 6px 20px rgba(59,130,246,.28)" } : {}}
           >
             {plan.cta}
           </Link>
