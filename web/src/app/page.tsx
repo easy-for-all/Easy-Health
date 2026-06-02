@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Footer } from "@/shared/components/footer";
 import { HeroCta } from "@/shared/components/hero-cta";
 import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
+import { CONVERSIONS } from "@/shared/lib/analytics";
 
 export const metadata: Metadata = {
   title: "EasyHealth — Treino inteligente com IA",
@@ -374,7 +375,7 @@ const STEPS = [
 export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col" style={{ background: "#0a0f1e", color: "#f0f4ff" }}>
-      <AnalyticsTracker eventName="landing_view" />
+      <AnalyticsTracker eventName="landing_view" conversionLabel={CONVERSIONS.PAGE_VIEW} />
       <AnalyticsTracker eventName="screen_view" params={{ screen_name: "home" }} />
 
       {/* ── NAV ── */}

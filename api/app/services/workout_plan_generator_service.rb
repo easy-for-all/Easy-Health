@@ -165,6 +165,7 @@ class WorkoutPlanGeneratorService
     WorkoutPlan.transaction do
       old_favorited_names = @user.active_workout_plan
                               &.workout_days&.where(favorited: true)&.pluck(:name) || []
+      fav_exercise_ids = @user.user_favorite_exercises.pluck(:exercise_id)
 
       @user.workout_plans.update_all(active: false)
       plan = @user.workout_plans.create!(active: true)
@@ -188,13 +189,14 @@ class WorkoutPlanGeneratorService
 
         if day_tmpl[:exercise_type]
           ex_type   = day_tmpl[:exercise_type]
-          exercises = exercise_scope(Exercise.where(exercise_type: ex_type)).limit(EXERCISES_PER_GROUP * 2)
+          exercises = exercise_scope(Exercise.where(exercise_type: ex_type), fav_exercise_ids).limit(EXERCISES_PER_GROUP * 2)
 
           # Outdoor funcional fallback: gym-equipment funcional exercises are filtered out,
           # so complement with HIIT bodyweight exercises
           if exercises.empty? && ex_type == "funcional" && @training_location == "outdoor"
             exercises = exercise_scope(
-              Exercise.where(exercise_type: %w[funcional hiit])
+              Exercise.where(exercise_type: %w[funcional hiit]),
+              fav_exercise_ids
             ).limit(EXERCISES_PER_GROUP * 2)
           end
 
@@ -215,7 +217,7 @@ class WorkoutPlanGeneratorService
           end
         else
           day_tmpl[:muscle_groups].each do |group|
-            exercise_scope(Exercise.where(exercise_type: "musculacao", muscle_group: group))
+            exercise_scope(Exercise.where(exercise_type: "musculacao", muscle_group: group), fav_exercise_ids)
                     .limit(EXERCISES_PER_GROUP).each do |ex|
               day.workout_day_exercises.create!(
                 exercise: ex, sets: params[:sets], reps: params[:reps],
@@ -382,13 +384,20 @@ class WorkoutPlanGeneratorService
     end
   end
 
-  def exercise_scope(relation)
+  def exercise_scope(relation, fav_ids = [])
     rel = case @training_location
           when "home"    then relation.where(home_compatible: true)
           when "outdoor" then relation.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT)
           else relation
           end
-    rel.order(Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END"), :id)
+
+    fav_priority = if fav_ids.any?
+      Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END")
+    else
+      Arel.sql("1")
+    end
+
+    rel.order(fav_priority, Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END"), :id)
   end
 
   def resolved_cardio_type

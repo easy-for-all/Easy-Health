@@ -34,7 +34,7 @@ export function DeleteAccountModal({ onClose, onSignOut }: DeleteAccountModalPro
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
       <div
-        className="w-full rounded-t-2xl bg-white px-5 pb-10 pt-5"
+        className="w-full rounded-t-2xl bg-white px-5 pb-10 pt-5 dark:bg-gray-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-200" />
@@ -43,9 +43,9 @@ export function DeleteAccountModal({ onClose, onSignOut }: DeleteAccountModalPro
           <span className="text-2xl">⚠️</span>
         </div>
 
-        <h2 className="mb-2 text-lg font-bold text-gray-900">Excluir Conta</h2>
+        <h2 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">Excluir Conta</h2>
 
-        <p className="mb-5 text-sm text-gray-600">
+        <p className="mb-5 text-sm text-gray-600 dark:text-gray-400">
           Esta ação é irreversível. Ao excluir sua conta, seu acesso será removido e seus dados
           pessoais serão apagados conforme permitido por lei. Alguns registros mínimos poderão ser
           mantidos para cumprimento de obrigações legais, fiscais, auditoria, antifraude ou

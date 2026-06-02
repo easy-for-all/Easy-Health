@@ -35,7 +35,7 @@ export function UpgradeBanner() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="max-w-sm w-full bg-white rounded-2xl border border-gray-200 p-8 text-center"
+        className="max-w-sm w-full bg-white rounded-2xl border border-gray-200 p-8 text-center dark:bg-gray-900 dark:border-gray-800"
         style={{ boxShadow: "var(--shadow-elevated)" }}
       >
         <motion.div
@@ -52,7 +52,7 @@ export function UpgradeBanner() {
           PRO
         </span>
 
-        <h2 className="text-xl font-bold text-gray-900 mb-2">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-2">
           Eleve seus treinos ao próximo nível
         </h2>
         <p className="text-gray-500 text-sm mb-6 leading-relaxed">

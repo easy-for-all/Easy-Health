@@ -10,13 +10,13 @@ import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-ses
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 
 const MUSCLE_COLORS: Record<string, string> = {
-  chest: "bg-red-100 text-red-700",
-  back: "bg-blue-100 text-blue-700",
-  shoulders: "bg-purple-100 text-purple-700",
-  biceps: "bg-yellow-100 text-yellow-700",
-  triceps: "bg-orange-100 text-orange-700",
-  legs: "bg-green-100 text-green-700",
-  core: "bg-teal-100 text-teal-700",
+  chest: "bg-red-500/20 text-red-300",
+  back: "bg-blue-500/20 text-blue-300",
+  shoulders: "bg-purple-500/20 text-purple-300",
+  biceps: "bg-yellow-500/20 text-yellow-300",
+  triceps: "bg-orange-500/20 text-orange-300",
+  legs: "bg-green-500/20 text-green-300",
+  core: "bg-teal-500/20 text-teal-300",
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -202,6 +202,7 @@ function WorkoutsContent() {
                 idx={idx}
                 sessions={sessions}
                 isRecommended={day.id === recommendedId}
+                onView={() => router.push(`/workout/today?day=${day.id}`)}
                 onStart={() => router.push(`/workout/today?day=${day.id}`)}
                 onToggleFavorite={() => toggleFavorite(day.id)}
               />
@@ -226,6 +227,7 @@ function WorkoutsContent() {
                   idx={idx}
                   sessions={sessions}
                   isRecommended={false}
+                  onView={() => router.push(`/workout/today?day=${day.id}`)}
                   onStart={() => router.push(`/workout/today?day=${day.id}`)}
                   onToggleFavorite={() => toggleFavorite(day.id)}
                 />
@@ -300,6 +302,7 @@ function WorkoutDayCard({
   idx,
   sessions,
   isRecommended,
+  onView,
   onStart,
   onToggleFavorite,
 }: {
@@ -307,6 +310,7 @@ function WorkoutDayCard({
   idx: number;
   sessions: WorkoutSession[];
   isRecommended: boolean;
+  onView: () => void;
   onStart: () => void;
   onToggleFavorite: () => void;
 }) {
@@ -314,7 +318,11 @@ function WorkoutDayCard({
 
   return (
     <div
-      className={`rounded-xl border p-4 ${
+      role="button"
+      tabIndex={0}
+      onClick={onView}
+      onKeyDown={(e) => e.key === "Enter" && onView()}
+      className={`cursor-pointer rounded-xl border p-4 transition-opacity active:opacity-70 ${
         isRecommended
           ? "border-primary-500/40 bg-primary-500/10"
           : "border-slate-800 bg-slate-900"
@@ -362,7 +370,10 @@ function WorkoutDayCard({
             {day.favorited ? "❤️" : "🤍"}
           </button>
           <button
-            onClick={onStart}
+            onClick={(e) => {
+              e.stopPropagation();
+              onStart();
+            }}
             className="rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-600 active:scale-95 transition-transform"
           >
             Iniciar

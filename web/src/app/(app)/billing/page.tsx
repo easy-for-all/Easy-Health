@@ -243,6 +243,30 @@ export default function BillingPage() {
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-gray-700 mb-3">Mudar de plano</h2>
             <div className="flex flex-col gap-3">
+              {/* Anual — primeiro */}
+              <div className={`bg-white rounded-2xl border-2 p-4 relative ${billing.plan === "pro_yearly" ? "border-primary-300 bg-primary-50" : "border-primary-200"}`}>
+                {billing.plan !== "pro_yearly" && (
+                  <span className="absolute -top-2.5 left-4 rounded-full bg-primary-500 px-2 py-0.5 text-xs font-bold text-white">Mais vantajoso</span>
+                )}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 text-sm">Pro Anual</h3>
+                    <p className="text-lg font-bold text-gray-900">R$ 9,90<span className="text-xs font-normal text-gray-500">/mês</span></p>
+                    <p className="text-xs text-gray-400">R$ 118,80/ano · economize ~50%</p>
+                  </div>
+                  {billing.plan === "pro_yearly" ? (
+                    <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700">Plano atual</span>
+                  ) : (
+                    <button
+                      onClick={() => handleChangePlan("pro_yearly")}
+                      disabled={actionLoading !== null}
+                      className="rounded-xl bg-primary-500 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 hover:bg-primary-600 transition"
+                    >
+                      {actionLoading === "change_pro_yearly" ? "..." : "Mudar para este"}
+                    </button>
+                  )}
+                </div>
+              </div>
               {/* Mensal */}
               <div className={`bg-white rounded-2xl border-2 p-4 ${billing.plan === "pro_monthly" ? "border-primary-300 bg-primary-50" : "border-gray-100"}`}>
                 <div className="flex items-center justify-between">
@@ -259,30 +283,6 @@ export default function BillingPage() {
                       className="rounded-xl bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 hover:bg-gray-700 transition"
                     >
                       {actionLoading === "change_pro_monthly" ? "..." : "Mudar para este"}
-                    </button>
-                  )}
-                </div>
-              </div>
-              {/* Anual */}
-              <div className={`bg-white rounded-2xl border-2 p-4 relative ${billing.plan === "pro_yearly" ? "border-primary-300 bg-primary-50" : "border-primary-200"}`}>
-                {billing.plan !== "pro_yearly" && (
-                  <span className="absolute -top-2.5 left-4 rounded-full bg-primary-500 px-2 py-0.5 text-xs font-bold text-white">Mais vantajoso</span>
-                )}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-sm">Pro Anual</h3>
-                    <p className="text-lg font-bold text-gray-900">R$ 118,80<span className="text-xs font-normal text-gray-500">/ano</span></p>
-                    <p className="text-xs text-green-600 font-medium">Economize ~50%</p>
-                  </div>
-                  {billing.plan === "pro_yearly" ? (
-                    <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700">Plano atual</span>
-                  ) : (
-                    <button
-                      onClick={() => handleChangePlan("pro_yearly")}
-                      disabled={actionLoading !== null}
-                      className="rounded-xl bg-primary-500 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 hover:bg-primary-600 transition"
-                    >
-                      {actionLoading === "change_pro_yearly" ? "..." : "Mudar para este"}
                     </button>
                   )}
                 </div>
@@ -333,6 +333,36 @@ export default function BillingPage() {
         {/* Cards de plano — só mostra se não tiver assinatura ativa */}
         {!isPaid && (
           <div className="flex flex-col gap-4 mb-6">
+            {/* Pro Anual — primeiro para chamar atenção */}
+            <div className="bg-white rounded-2xl border-2 border-primary-500 p-5 relative">
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                Mais vantajoso
+              </span>
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h2 className="font-semibold text-gray-900">Pro Anual</h2>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    R$ 9,90<span className="text-sm font-normal text-gray-500">/mês</span>
+                  </p>
+                  <p className="text-xs text-gray-500">R$ 118,80 cobrado por ano</p>
+                  <p className="text-xs text-green-600 font-semibold">Economize cerca de 50%</p>
+                </div>
+              </div>
+              <ul className="text-sm text-gray-600 space-y-1 mb-4">
+                <li>✓ Tudo do Pro Mensal</li>
+                <li>✓ Metade do preço por mês</li>
+                <li className="font-medium text-primary-700">✓ 7 dias grátis</li>
+              </ul>
+              <button
+                onClick={() => handleCheckout("pro_yearly")}
+                disabled={actionLoading !== null}
+                className="w-full bg-primary-500 text-white rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-primary-600 transition"
+              >
+                {actionLoading === "pro_yearly" ? "Aguarde..." : "Começar 7 dias grátis"}
+              </button>
+              <p className="text-xs text-gray-400 text-center mt-2">Cancele quando quiser</p>
+            </div>
+
             {/* Pro Mensal */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <div className="flex items-start justify-between mb-3">
@@ -356,36 +386,6 @@ export default function BillingPage() {
                 className="w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-gray-700 transition"
               >
                 {actionLoading === "pro_monthly" ? "Aguarde..." : "Começar 7 dias grátis"}
-              </button>
-              <p className="text-xs text-gray-400 text-center mt-2">Cancele quando quiser</p>
-            </div>
-
-            {/* Pro Anual */}
-            <div className="bg-white rounded-2xl border-2 border-primary-500 p-5 relative">
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                Mais vantajoso
-              </span>
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h2 className="font-semibold text-gray-900">Pro Anual</h2>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    R$ 118,80<span className="text-sm font-normal text-gray-500">/ano</span>
-                  </p>
-                  <p className="text-sm text-primary-600 font-medium">≈ R$ 9,90/mês</p>
-                  <p className="text-xs text-green-600 font-semibold">Economize cerca de 50%</p>
-                </div>
-              </div>
-              <ul className="text-sm text-gray-600 space-y-1 mb-4">
-                <li>✓ Tudo do Pro Mensal</li>
-                <li>✓ Metade do preço</li>
-                <li className="font-medium text-primary-700">✓ 7 dias grátis</li>
-              </ul>
-              <button
-                onClick={() => handleCheckout("pro_yearly")}
-                disabled={actionLoading !== null}
-                className="w-full bg-primary-500 text-white rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-primary-600 transition"
-              >
-                {actionLoading === "pro_yearly" ? "Aguarde..." : "Começar 7 dias grátis"}
               </button>
               <p className="text-xs text-gray-400 text-center mt-2">Cancele quando quiser</p>
             </div>
