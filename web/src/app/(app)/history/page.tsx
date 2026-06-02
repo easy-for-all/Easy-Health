@@ -53,13 +53,13 @@ function SessionDetailModal({ session, onClose }: { session: WorkoutSession; onC
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={onClose}>
       <div
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white pb-10"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white pb-10 dark:bg-gray-900"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle */}
-        <div className="sticky top-0 bg-white pt-3 pb-2 px-4 border-b border-gray-100">
+        <div className="sticky top-0 bg-white pt-3 pb-2 px-4 border-b border-gray-100 dark:bg-gray-900 dark:border-gray-800">
           <div className="mb-2 mx-auto h-1 w-10 rounded-full bg-gray-200" />
-          <h2 className="text-lg font-bold text-gray-900">{session.workout_day_name}</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50">{session.workout_day_name}</h2>
           <p className="text-xs text-gray-400 capitalize">{date} às {time}</p>
         </div>
 

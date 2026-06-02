@@ -18,6 +18,7 @@ export function trackEvent(eventName: string, params?: EventParams): void {
 // send_to labels: get from Google Ads → Conversions → select action → Tag setup
 export const CONVERSIONS = {
   SIGNUP:       "AW-17759537883/-FCPCJ7mkrAcENuVtJRC",
+  PAGE_VIEW:    "AW-17759537883/BIKACLyy67YcENuVtJRC",
   SUBSCRIPTION: "AW-17759537883/REPLACE_SUBSCRIPTION_LABEL",
 } as const;
 

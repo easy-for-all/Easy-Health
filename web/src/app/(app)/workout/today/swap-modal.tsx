@@ -191,11 +191,11 @@ export function SwapModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div
-        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4"
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4 dark:bg-gray-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
-        <h3 className="mb-3 mt-2 text-base font-bold text-gray-900">Escolha um substituto</h3>
+        <h3 className="mb-3 mt-2 text-base font-bold text-gray-900 dark:text-gray-50">Escolha um substituto</h3>
 
         {/* Upload IA */}
         <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">

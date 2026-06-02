@@ -126,12 +126,12 @@ export function ExerciseInfoModal({
       onClick={onClose}
     >
       <div
-        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5"
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5 dark:bg-gray-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
         <div className="mt-4 flex items-start justify-between gap-3">
-          <h3 className="text-xl font-bold text-gray-900">{exercise.name}</h3>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-50">{exercise.name}</h3>
           <button
             onClick={handleToggleFav}
             disabled={favLoading}
@@ -141,14 +141,14 @@ export function ExerciseInfoModal({
             {favState ? "❤️" : "🤍"}
           </button>
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-gray-600">{exercise.description}</p>
+        <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">{exercise.description}</p>
 
         {exercise.instructions && (
           <div className="mt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Como executar</p>
             <ol className="space-y-2">
               {exercise.instructions.split("\n").filter(Boolean).map((step, i) => (
-                <li key={i} className="flex gap-2 text-sm text-gray-700">
+                <li key={i} className="flex gap-2 text-sm text-gray-700 dark:text-gray-300">
                   <span className="flex-shrink-0 font-semibold text-primary-500">{i + 1}.</span>
                   {step}
                 </li>

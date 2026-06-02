@@ -1416,10 +1416,10 @@ function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
             className={`flex items-center gap-3 transition-all duration-500 ${idx <= step ? "opacity-100 translate-x-0" : "opacity-20"}`}
           >
             <div className={`h-2 w-2 flex-shrink-0 rounded-full transition-colors ${
-              idx < step ? "bg-primary-500" : idx === step ? "animate-pulse bg-primary-400" : "bg-gray-200"
+              idx < step ? "bg-primary-500" : idx === step ? "animate-pulse bg-primary-400" : "bg-gray-200 dark:bg-gray-700"
             }`} />
             <p className={`text-sm font-medium ${
-              idx < step ? "text-primary-700" : idx === step ? "text-gray-800" : "text-gray-400"
+              idx < step ? "text-primary-700 dark:text-primary-400" : idx === step ? "text-gray-800 dark:text-gray-100" : "text-gray-400"
             }`}>
               {msg}{idx < step && " ✓"}
             </p>

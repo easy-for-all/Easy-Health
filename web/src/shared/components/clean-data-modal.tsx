@@ -49,13 +49,13 @@ export function CleanDataModal({ onClose, onSuccess }: CleanDataModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
       <div
-        className="w-full rounded-t-2xl bg-white px-5 pb-10 pt-5"
+        className="w-full rounded-t-2xl bg-white px-5 pb-10 pt-5 dark:bg-gray-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-200" />
 
-        <h2 className="mb-2 text-lg font-bold text-gray-900">Limpar Meus Dados</h2>
-        <p className="mb-5 text-sm text-gray-500">
+        <h2 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">Limpar Meus Dados</h2>
+        <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">
           Selecione quais dados deseja apagar. Sua conta, assinatura e dados de pagamento não serão
           afetados.
         </p>
