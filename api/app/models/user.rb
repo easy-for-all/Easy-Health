@@ -10,6 +10,7 @@ class User < ApplicationRecord
   has_many :user_media, class_name: "UserMedia", dependent: :destroy
   has_many :health_data_points, dependent: :destroy
   has_many :ai_usage_logs, dependent: :destroy
+  has_many :ai_training_decision_logs, dependent: :destroy
   has_one_attached :avatar
   has_one :subscription, dependent: :destroy
 

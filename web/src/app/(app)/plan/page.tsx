@@ -99,7 +99,8 @@ export default function PlanPage() {
   const [selectedDayId, setSelectedDayId] = useState<number | null>(null);
   const [genStep, setGenStep]   = useState(0);
   const genStepRef              = useRef(0);
-  const [planSummary, setPlanSummary] = useState<string | null>(null);
+  const [planSummary, setPlanSummary]     = useState<string | null>(null);
+  const [planRationale, setPlanRationale] = useState<string | null>(null);
   const [generationSteps, setGenerationSteps] = useState<string[]>(buildGenerationSteps("musculacao", "gym"));
 
   // Wizard state
@@ -243,12 +244,13 @@ export default function PlanPage() {
 
     try {
       const [newPlan] = await Promise.all([
-        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body),
+        api.post<WorkoutPlan & { summary?: string; rationale?: string }>("/api/v1/workout_plan/regenerate", body),
         new Promise<void>((resolve) => setTimeout(resolve, steps.length * STEP_MS)),
       ]);
       clearInterval(interval);
       setPlan(newPlan);
       setPlanSummary(newPlan.summary ?? null);
+      setPlanRationale(newPlan.rationale ?? null);
       trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: mod });
       trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: mod });
       setPhase("view");
@@ -303,6 +305,12 @@ export default function PlanPage() {
             <div className="mb-4 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
               <span className="mt-0.5 shrink-0">✨</span>
               <span>{planSummary}</span>
+            </div>
+          )}
+          {planRationale && (
+            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 dark:border-violet-900 dark:bg-violet-950">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-500 dark:text-violet-400">Por que este plano?</p>
+              <p className="text-sm text-violet-800 dark:text-violet-200">{planRationale}</p>
             </div>
           )}
           <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} onToggleFavorite={handleToggleFavorite} />
