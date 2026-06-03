@@ -144,6 +144,8 @@ class WorkoutPlanGeneratorService
     { name: "Recuperação Ativa",     exercise_type: "caminhada", duration_minutes: 25, intensity: "leve" }
   ].freeze
 
+  attr_reader :plan_rationale
+
   def initialize(user, days_per_week: nil, activity_preferences: nil,
                  modality: nil, split_type: nil, cardio_type: nil,
                  cardio_format: nil, custom_splits: nil, training_location: nil)
@@ -159,6 +161,8 @@ class WorkoutPlanGeneratorService
     @training_location = training_location || @profile&.training_location || "gym"
     raw_prefs = Array(activity_preferences || @profile&.activity_preferences || [])
     @activity_preferences = raw_prefs.presence || ["musculacao"]
+    @plan_rationale    = nil
+    @ai_decision       = nil
   end
 
   def call
@@ -176,7 +180,7 @@ class WorkoutPlanGeneratorService
 
       template = build_template
       schedule = DAY_SCHEDULE[@days_per_week]
-      params   = SETS_REPS[@fitness_level]
+      params   = @ai_sets_reps || SETS_REPS[@fitness_level]
 
       template.each_with_index do |day_tmpl, idx|
         day = plan.workout_days.create!(
@@ -235,6 +239,9 @@ class WorkoutPlanGeneratorService
 
       plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
 
+      persist_ai_decision_log(plan) if @ai_decision
+      update_adherence_score
+
       plan
     end
   end
@@ -276,7 +283,52 @@ class WorkoutPlanGeneratorService
   def build_template
     return build_custom_template   if @split_type == "custom"
     return build_explicit_template if EXPLICIT_SPLITS.key?(@split_type)
-    build_ai_template
+    build_ai_driven_template || build_ai_template
+  end
+
+  def build_ai_driven_template
+    # Only use AI for musculacao/ai_choice modalities — rule-based handles cardio/funcional well
+    return nil unless %w[musculacao ai_choice].include?(@modality)
+
+    fav_ids    = @user.user_favorite_exercises.pluck(:exercise_id)
+    avail      = available_exercises_by_group
+
+    planner = AiAgents::WorkoutPlannerService.new(
+      @user,
+      days_per_week:       @days_per_week,
+      profile:             @profile,
+      fav_exercise_ids:    fav_ids,
+      available_exercises: avail
+    )
+
+    decision = planner.call
+    return nil unless decision
+
+    @ai_decision    = decision
+    @plan_rationale = decision[:rationale]
+
+    # Override sets/reps/rest with AI recommendation
+    ai_params = decision[:sets_reps]
+    if ai_params
+      @ai_sets_reps = {
+        sets:         ai_params[:sets].clamp(1, 6),
+        reps:         ai_params[:reps].clamp(1, 30),
+        rest_seconds: ai_params[:rest_seconds].clamp(0, 300)
+      }
+    end
+
+    decision[:week_structure].first(@days_per_week)
+  rescue => e
+    Rails.logger.error("[WorkoutPlanGeneratorService] AI template failed: #{e.message}")
+    nil
+  end
+
+  def available_exercises_by_group
+    scope = Exercise.where(exercise_type: "musculacao")
+    scope = scope.where(home_compatible: true)   if @training_location == "home"
+    scope = scope.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT) if @training_location == "outdoor"
+
+    scope.group(:muscle_group).count
   end
 
   def build_explicit_template
@@ -398,6 +450,45 @@ class WorkoutPlanGeneratorService
     end
 
     rel.order(fav_priority, Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END"), :id)
+  end
+
+  def persist_ai_decision_log(plan)
+    AiTrainingDecisionLog.create!(
+      user:                @user,
+      workout_plan:        plan,
+      training_method:     @ai_decision[:training_method],
+      rationale:           @ai_decision[:rationale],
+      progression_strategy: @ai_decision[:progression_strategy],
+      safety_notes:        @ai_decision[:safety_notes],
+      week_structure:      @ai_decision[:week_structure].map { |d| { name: d[:name], muscle_groups: d[:muscle_groups] } },
+      model_used:          AiConfig.for(:workout_planning)[:model],
+      input_summary:       {
+        fitness_level:     @fitness_level,
+        days_per_week:     @days_per_week,
+        modality:          @modality,
+        training_location: @training_location,
+        goal:              @profile&.goal
+      }
+    )
+  rescue => e
+    Rails.logger.error("[WorkoutPlanGeneratorService] Failed to persist AI decision log: #{e.message}")
+  end
+
+  def update_adherence_score
+    return unless @profile
+
+    sessions_last_30 = @user.workout_sessions
+      .where(completed_at: 30.days.ago..)
+      .count
+    expected = (@days_per_week * 4.3).round
+    score    = expected.positive? ? [(sessions_last_30.to_f / expected * 100).round(2), 100.0].min : nil
+
+    @profile.update_columns(
+      adherence_score:        score,
+      last_profile_review_at: Time.current
+    )
+  rescue => e
+    Rails.logger.error("[WorkoutPlanGeneratorService] Failed to update adherence score: #{e.message}")
   end
 
   def resolved_cardio_type

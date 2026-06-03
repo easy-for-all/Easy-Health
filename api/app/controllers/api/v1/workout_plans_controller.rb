@@ -52,7 +52,10 @@ module Api
           training_location:    training_location
         )
         plan = service.call
-        render json: serialize_plan(plan).merge(summary: service.plan_summary), status: :ok
+        render json: serialize_plan(plan).merge(
+          summary:  service.plan_summary,
+          rationale: service.plan_rationale
+        ), status: :ok
       rescue ActiveRecord::RecordInvalid => e
         render_error(e.record.errors.full_messages.to_sentence)
       end
