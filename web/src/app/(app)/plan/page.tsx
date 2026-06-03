@@ -245,13 +245,13 @@ export default function PlanPage() {
 
     try {
       const [newPlan] = await Promise.all([
-        api.post<WorkoutPlan & { summary?: string; rationale?: string }>("/api/v1/workout_plan/regenerate", body),
+        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body),
         new Promise<void>((resolve) => setTimeout(resolve, steps.length * STEP_MS)),
       ]);
       clearInterval(interval);
       setPlan(newPlan);
       setPlanSummary(newPlan.summary ?? null);
-      setPlanRationale(newPlan.rationale ?? null);
+      setPlanRationale(newPlan.ai_rationale ?? null);
       trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: mod });
       trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: mod });
       setPhase("view");
