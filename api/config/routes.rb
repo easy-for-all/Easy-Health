@@ -88,6 +88,38 @@ Rails.application.routes.draw do
         get :stats
       end
 
+      # Privacy & public profile
+      resource :privacy_settings, only: [:show, :update]
+      resource :public_profile, only: [:show, :update]
+
+      # User search (public profiles only)
+      resources :users, only: [:index, :show]
+
+      # Workout sharing
+      resources :shared_workouts, only: [:index, :create, :destroy]
+      post "workout_days/:workout_day_id/share", to: "shared_workouts#create"
+
+      # Public shared workout view (no auth required)
+      get "s/:token", to: "shared_workouts#show_by_token"
+
+      # Personal trainer account activation
+      post "personal/activate", to: "personal_accounts#activate"
+
+      # Personal trainer namespace
+      namespace :personal do
+        resource :dashboard, only: [:show]
+        post "invitations", to: "invitations#create"
+        resources :clients, only: [:index, :show, :destroy] do
+          member { post :assign_plan }
+        end
+      end
+
+      # Client accepting an invitation
+      post "invitations/:code/accept", to: "invitations#accept"
+
+      # Client permission management
+      resource :client_permissions, only: [:show, :update]
+
       # Debug routes — non-production only
       unless Rails.env.production?
         get "debug/sentry_test", to: "debug#sentry_test"

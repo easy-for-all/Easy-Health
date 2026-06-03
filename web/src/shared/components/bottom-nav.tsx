@@ -47,6 +47,17 @@ function CreditCardIcon() {
   );
 }
 
+function UsersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+      <circle cx="9" cy="7" r="3" />
+      <path d="M3 20c0-3 2.7-5 6-5s6 2 6 5" />
+      <circle cx="17" cy="7" r="3" />
+      <path d="M21 20c0-3-1.3-5-4-5" />
+    </svg>
+  );
+}
+
 export function BottomNav() {
   const pathname = usePathname();
   const t = useTranslations("nav");
@@ -54,6 +65,7 @@ export function BottomNav() {
   const ITEMS = [
     { href: "/profile",   label: t("profile"),      Icon: UserIcon },
     { href: "/workouts",  label: t("workouts"),      Icon: DumbbellIcon },
+    { href: "/users",     label: t("community"),     Icon: UsersIcon },
     { href: "/billing",   label: t("subscription"),  Icon: CreditCardIcon },
   ];
 
@@ -63,9 +75,11 @@ export function BottomNav() {
         {ITEMS.map(({ href, label, Icon }) => {
           const active =
             href === "/workouts"
-              ? pathname.startsWith("/workouts") ||
+              ? (pathname.startsWith("/workouts") && !pathname.startsWith("/workouts/shared")) ||
                 pathname.startsWith("/workout") ||
                 pathname.startsWith("/plan")
+              : href === "/users"
+              ? pathname.startsWith("/users") || pathname.startsWith("/workouts/shared")
               : pathname.startsWith(href);
           return (
             <Link

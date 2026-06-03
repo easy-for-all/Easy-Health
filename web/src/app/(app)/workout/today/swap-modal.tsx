@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/shared/lib/api";
 import type { WorkoutDayExercise } from "@/shared/types/workout";
+import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 
 type EquipmentIdentification = {
   equipment_name: string;
@@ -246,7 +247,7 @@ export function SwapModal({
               onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
               className="mb-2 mt-2 flex w-full gap-3 rounded-lg border border-primary-200 bg-white p-3 text-left hover:bg-primary-100"
             >
-              <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
+              <SmartImage src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
               <div>
                 <p className="font-medium text-gray-900">{alt.name}</p>
                 <p className="text-xs text-primary-500">{muscleLabel(alt.muscle_group, alt.exercise_type)} · sugerido por IA</p>
@@ -346,7 +347,7 @@ export function SwapModal({
                 onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
                 className="flex flex-1 gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
               >
-                <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
+                <SmartImage src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
                 <div>
                   <p className="font-medium text-gray-900">{alt.name}</p>
                   <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
