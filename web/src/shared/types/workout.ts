@@ -35,6 +35,8 @@ export interface WorkoutPlan {
   id: number;
   active: boolean;
   days: WorkoutDay[];
+  ai_rationale?: string | null;
+  ai_training_method?: string | null;
 }
 
 export interface WorkoutSession {

@@ -52,10 +52,7 @@ module Api
           training_location:    training_location
         )
         plan = service.call
-        render json: serialize_plan(plan).merge(
-          summary:  service.plan_summary,
-          rationale: service.plan_rationale
-        ), status: :ok
+        render json: serialize_plan(plan).merge(summary: service.plan_summary), status: :ok
       rescue ActiveRecord::RecordInvalid => e
         render_error(e.record.errors.full_messages.to_sentence)
       end
@@ -129,9 +126,12 @@ module Api
       end
 
       def serialize_plan(plan)
+        log = plan.ai_training_decision_log
         {
           id: plan.id,
           active: plan.active,
+          ai_rationale:       log&.rationale,
+          ai_training_method: log&.training_method,
           days: plan.workout_days.order(Arel.sql("COALESCE(position, day_of_week) ASC")).map { |d| serialize_day(d) }
         }
       end

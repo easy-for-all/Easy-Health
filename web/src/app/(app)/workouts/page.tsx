@@ -188,6 +188,16 @@ function WorkoutsContent() {
         </div>
       )}
 
+      {/* AI rationale card */}
+      {plan?.ai_rationale && (
+        <div className="mt-6 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-800 dark:bg-violet-950">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-500 dark:text-violet-400">
+            Por que este plano?
+          </p>
+          <p className="text-sm text-violet-800 dark:text-violet-200">{plan.ai_rationale}</p>
+        </div>
+      )}
+
       {/* Meu Plano section */}
       {plan && (
         <section className="mt-8">
