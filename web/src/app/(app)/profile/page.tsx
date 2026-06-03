@@ -369,6 +369,43 @@ export default function ProfilePage() {
         <span className="text-primary-400 text-lg">→</span>
       </Link>
 
+      {/* Privacidade e comunidade */}
+      <Link
+        href="/settings"
+        className="mb-4 flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-5 py-4 transition hover:bg-slate-800"
+      >
+        <div>
+          <p className="font-semibold text-white">Privacidade e comunidade</p>
+          <p className="text-xs text-gray-400">Visibilidade, código de indicação, feed</p>
+        </div>
+        <span className="text-gray-400 text-lg">→</span>
+      </Link>
+
+      {/* Personal Trainer / Permissões */}
+      {user?.account_type === "personal_trainer" ? (
+        <Link
+          href="/personal/dashboard"
+          className="mb-4 flex items-center justify-between rounded-2xl border border-blue-800/40 bg-blue-900/20 px-5 py-4 transition hover:bg-blue-900/30"
+        >
+          <div>
+            <p className="font-semibold text-blue-300">Painel do Personal Trainer</p>
+            <p className="text-xs text-blue-400/70">Alunos, convites e aderência</p>
+          </div>
+          <span className="text-blue-400 text-lg">→</span>
+        </Link>
+      ) : (
+        <Link
+          href="/personal"
+          className="mb-4 flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-5 py-4 transition hover:bg-slate-800"
+        >
+          <div>
+            <p className="font-semibold text-white">Sou Personal Trainer</p>
+            <p className="text-xs text-gray-400">Gerencie alunos e ganhe comissões</p>
+          </div>
+          <span className="text-gray-400 text-lg">→</span>
+        </Link>
+      )}
+
       {/* Fotos e Exames */}
       <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
         <div className="mb-4 flex items-center justify-between">

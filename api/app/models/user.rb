@@ -2,6 +2,9 @@ class User < ApplicationRecord
   devise :database_authenticatable, :registerable,
          :recoverable, :rememberable, :validatable
 
+  ACCOUNT_TYPES = %w[regular personal_trainer].freeze
+  PROFILE_VISIBILITIES = %w[private public_limited public].freeze
+
   has_one :health_profile, dependent: :destroy
   has_many :workout_plans, dependent: :destroy
   has_many :workout_sessions, dependent: :destroy
@@ -13,12 +16,45 @@ class User < ApplicationRecord
   has_many :ai_training_decision_logs, dependent: :destroy
   has_one_attached :avatar
   has_one :subscription, dependent: :destroy
+  has_one :public_profile, dependent: :destroy
+  has_many :shared_workouts, foreign_key: :owner_id, dependent: :destroy
+
+  # Personal trainer associations
+  has_many :personal_client_relationships,
+           foreign_key: :personal_id,
+           class_name: "PersonalClientRelationship",
+           dependent: :destroy
+  has_many :clients,
+           through: :personal_client_relationships,
+           source: :client
+
+  # Client associations
+  has_many :trainer_client_relationships,
+           foreign_key: :client_id,
+           class_name: "PersonalClientRelationship",
+           dependent: :destroy
+  has_many :personal_trainers,
+           through: :trainer_client_relationships,
+           source: :personal
+
+  after_create :create_public_profile_record
+  after_create :generate_referral_code
 
   delegate :pro_monthly?, :pro_yearly?, :pro?, :subscription_active?,
            to: :subscription, allow_nil: true
 
   validates :name, presence: true, length: { minimum: 2, maximum: 100 }
   validates :email, presence: true, uniqueness: { case_sensitive: false }
+  validates :account_type, inclusion: { in: ACCOUNT_TYPES }
+  validates :profile_visibility, inclusion: { in: PROFILE_VISIBILITIES }
+
+  def personal_trainer?
+    account_type == "personal_trainer"
+  end
+
+  def profile_public?
+    profile_visibility.in?(%w[public public_limited])
+  end
 
   def active_workout_plan
     workout_plans.active.first
@@ -44,6 +80,24 @@ class User < ApplicationRecord
     return true if paid_plan?
     !free_workout_used?
   end
+
+  private
+
+  def create_public_profile_record
+    create_public_profile(display_name: name)
+  end
+
+  def generate_referral_code
+    loop do
+      code = SecureRandom.alphanumeric(8).upcase
+      unless User.exists?(referral_code: code)
+        update_column(:referral_code, code)
+        break
+      end
+    end
+  end
+
+  public
 
   def billing_status
     if admin?

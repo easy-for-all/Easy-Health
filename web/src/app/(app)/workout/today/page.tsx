@@ -16,6 +16,7 @@ import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-ses
 import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared/components/motion";
 import { ShareButton } from "@/shared/components/workout-share/share-button";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -732,7 +733,7 @@ function WorkoutTodayContent() {
         className="flex flex-1 flex-col"
       >
         <div className="grid grid-cols-[1fr_104px] gap-3">
-          <SmartImage src={exercise.image_url} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
+          <SmartImage src={getGymSafeImageUrl(exercise) ?? exerciseFallback(exercise)} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
           <SmartImage src={exercise.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={exercise.muscle_group ?? "músculo"} className="h-48 w-full rounded-xl object-cover" />
         </div>
         <div className="mt-2 flex gap-2">
@@ -1258,7 +1259,7 @@ function OverviewScreen({
           return (
             <div key={ex.workout_day_exercise_id} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex gap-3">
-                <SmartImage src={ex.image_url} fallbackSrc={exerciseFallback(ex)} alt={ex.name} className="h-16 w-20 rounded-lg object-cover" />
+                <SmartImage src={getGymSafeImageUrl(ex) ?? exerciseFallback(ex)} fallbackSrc={exerciseFallback(ex)} alt={ex.name} className="h-16 w-20 rounded-lg object-cover" />
                 <SmartImage src={ex.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={ex.muscle_group ?? "músculo"} className="h-16 w-14 rounded-lg object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-white">{ex.name}</p>
@@ -1364,7 +1365,7 @@ function OverviewScreen({
             ) : (
               addAlternatives.map((alt) => (
                 <button key={alt.id} onClick={() => doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-slate-800 p-3 text-left hover:bg-slate-800">
-                  <SmartImage src={alt.image_url} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
+                  <SmartImage src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
                   <div>
                     <p className="font-medium text-white">{alt.name}</p>
                     <p className="text-xs text-slate-500">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>

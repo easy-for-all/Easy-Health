@@ -8,6 +8,7 @@ import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 
 function resolveImageSrc(src: string): string {
   return src;
@@ -1146,7 +1147,7 @@ function PlanDayDetailDrawer({
                 <div className="flex gap-3 mb-3">
                   {/* Exercise image */}
                   <img
-                    src={resolveImageSrc(ex.image_url)}
+                    src={getGymSafeImageUrl(ex) ?? `/exercise-images/${ex.exercise_type || "treino"}.svg`}
                     alt={ex.name}
                     className="h-16 w-20 rounded-lg object-cover flex-shrink-0"
                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `/exercise-images/${ex.exercise_type || "treino"}.svg`; }}
@@ -1391,7 +1392,7 @@ function PlanDayDetailDrawer({
                   className="mb-2 flex w-full gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
                 >
                   <img
-                    src={resolveImageSrc(opt.image_url)}
+                    src={getGymSafeImageUrl(opt) ?? `/exercise-images/${opt.exercise_type || "treino"}.svg`}
                     alt={opt.name}
                     className="h-12 w-16 rounded-md object-cover flex-shrink-0"
                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `/exercise-images/${opt.exercise_type || "treino"}.svg`; }}

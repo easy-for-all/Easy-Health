@@ -39,7 +39,11 @@ module Api
             admin: user.admin?,
             created_at: user.created_at,
             avatar_url: avatar_url,
-            billing_status: user.billing_status
+            billing_status: user.billing_status,
+            account_type: user.account_type,
+            profile_visibility: user.profile_visibility,
+            community_enabled: user.community_enabled,
+            referral_code: user.referral_code
           }
         end
       end
