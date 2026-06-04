@@ -7,7 +7,10 @@ import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
-import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
+import { AITrainerBubble } from "@/shared/components/ai-trainer";
+import { AgentOrb } from "@/shared/components/agent-orb";
+import { WorkoutRow } from "@/shared/components/workout/workout-row";
+import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 
 const MUSCLE_COLORS: Record<string, string> = {
@@ -137,12 +140,18 @@ function WorkoutsContent() {
   const recommended = todayDay ?? plan?.days.find((d) => d.id === recommendedId) ?? null;
 
   return (
-    <div className="min-h-screen px-4 py-6 pb-28" style={{ background: "#0a0f1e" }}>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Treinos</h1>
+    <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>Treinos</h1>
         <Link
           href="/workout/quick"
-          className="flex items-center gap-1.5 rounded-full bg-primary-500/15 px-3 py-1.5 text-xs font-semibold text-primary-400 hover:bg-primary-500/25"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            background: "var(--primary-soft)", color: "var(--primary)",
+            borderRadius: "var(--r-pill)", padding: "8px 14px",
+            fontSize: 13, fontWeight: 700, textDecoration: "none",
+            border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .25)",
+          }}
         >
           ⚡ Rápido
         </Link>
@@ -150,48 +159,46 @@ function WorkoutsContent() {
 
       {/* Active session card */}
       {hasActiveSession ? (
-        <div className="mt-4 rounded-2xl border border-primary-500/30 bg-primary-500/10 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white text-lg">
-              ▶
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-primary-400">Treino em andamento</p>
-              <p className="text-sm text-primary-500">
-                {activeDayName} · {formatElapsed(elapsedSeconds)}
-              </p>
+        <div style={{ marginBottom: 14, background: "var(--primary-soft)", border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .35)", borderRadius: "var(--r-lg)", padding: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--primary)", color: "var(--on-primary)", display: "grid", placeItems: "center", fontSize: 18, flexShrink: 0 }}>▶</div>
+            <div>
+              <p style={{ fontWeight: 700, color: "var(--primary)", margin: 0 }}>Treino em andamento</p>
+              <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{activeDayName} · {formatElapsed(elapsedSeconds)}</p>
             </div>
           </div>
           <button
             onClick={() => router.push("/workout/today")}
-            className="mt-3 w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600 active:scale-95 transition-transform"
-            style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 6px 20px rgba(59,130,246,.28)" }}
+            style={{
+              width: "100%", borderRadius: "var(--r-pill)", padding: "14px",
+              background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+              color: "var(--on-primary)", fontWeight: 700, fontSize: 15, border: 0,
+              cursor: "pointer", boxShadow: "var(--glow)",
+            }}
           >
             Continuar treino
           </button>
         </div>
       ) : recommended ? (
-        /* Recommended workout card */
-        <div className="mt-4 rounded-2xl border border-primary-500/30 bg-primary-500/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary-400">Treino de hoje</p>
-          <p className="mt-1 text-lg font-bold text-white">{recommended.name}</p>
-          <p className="text-sm text-slate-400">{recommended.exercise_count} exercícios</p>
+        <div style={{ marginBottom: 14, background: "var(--primary-soft)", border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .3)", borderRadius: "var(--r-lg)", padding: 18 }}>
+          <p className="eyebrow" style={{ color: "var(--primary)", marginBottom: 6 }}>Treino de hoje</p>
+          <p style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, margin: "0 0 4px", letterSpacing: "-0.015em" }}>{recommended.name}</p>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 10px" }}>{recommended.exercise_count} exercícios</p>
           {recommended.muscle_groups?.length ? (
-            <div className="mt-1.5 flex flex-wrap gap-1">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
               {recommended.muscle_groups.slice(0, 3).map((m) => (
-                <span
-                  key={m}
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-slate-700 text-slate-300"}`}
-                >
-                  {m}
-                </span>
+                <span key={m} className="tag-chip muscle">{m}</span>
               ))}
             </div>
           ) : null}
           <button
             onClick={() => router.push(`/workout/today?day=${recommended.id}`)}
-            className="mt-3 w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600 active:scale-95 transition-transform"
-            style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 6px 20px rgba(59,130,246,.28)" }}
+            style={{
+              width: "100%", borderRadius: "var(--r-pill)", padding: "14px",
+              background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+              color: "var(--on-primary)", fontWeight: 700, fontSize: 15, border: 0,
+              cursor: "pointer", boxShadow: "var(--glow)",
+            }}
           >
             Iniciar treino
           </button>
@@ -200,13 +207,13 @@ function WorkoutsContent() {
 
       {/* No plan state */}
       {!plan && (
-        <div className="mt-4 rounded-2xl border border-dashed border-slate-700 p-6 text-center">
-          <p className="text-2xl">🏋️</p>
-          <p className="mt-2 font-semibold text-white">Nenhum plano ativo</p>
-          <p className="mt-1 text-sm text-slate-400">Crie seu plano personalizado com IA</p>
+        <div style={{ border: "1.5px dashed var(--border)", borderRadius: "var(--r-lg)", padding: 24, textAlign: "center", marginBottom: 14 }}>
+          <p style={{ fontSize: 28, margin: "0 0 8px" }}>🏋️</p>
+          <p style={{ fontWeight: 700, margin: "0 0 4px" }}>Nenhum plano ativo</p>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 16px" }}>Crie seu plano personalizado com IA</p>
           <button
             onClick={() => router.push("/plan")}
-            className="mt-4 w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600"
+            style={{ width: "100%", borderRadius: "var(--r-pill)", padding: "14px", background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontWeight: 700, border: 0, cursor: "pointer" }}
           >
             Criar meu plano
           </button>
@@ -215,31 +222,27 @@ function WorkoutsContent() {
 
       {/* AI rationale card */}
       {plan?.ai_rationale && (
-        <div className="mt-6 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-800 dark:bg-violet-950">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-500 dark:text-violet-400">
-            Por que este plano?
-          </p>
-          <p className="text-sm text-violet-800 dark:text-violet-200">{plan.ai_rationale}</p>
+        <div style={{ background: "var(--primary-soft)", border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .28)", borderRadius: "var(--r-lg)", padding: "14px 18px", marginBottom: 14 }}>
+          <p className="eyebrow" style={{ color: "var(--primary)", marginBottom: 6 }}>Por que este plano?</p>
+          <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>{plan.ai_rationale}</p>
         </div>
       )}
 
       {/* Meu Plano section */}
       {plan && (
-        <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Meu Plano
-          </h2>
-          <div className="mt-3 space-y-3">
+        <section style={{ marginTop: 28 }}>
+          <p className="eyebrow" style={{ marginBottom: 10 }}>Meu Plano</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {plan.days.map((day, idx) => (
-              <WorkoutDayCard
+              <WorkoutRow
                 key={day.id}
-                day={day}
-                idx={idx}
-                sessions={sessions}
-                isRecommended={day.id === recommendedId}
-                onView={() => router.push(`/workout/today?day=${day.id}`)}
-                onStart={() => router.push(`/workout/today?day=${day.id}`)}
-                onToggleFavorite={() => toggleFavorite(day.id)}
+                badge={LETTERS[idx] ?? String(idx + 1)}
+                name={day.name}
+                sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
+                tags={day.muscle_groups?.slice(0, 2)}
+                favorited={day.favorited}
+                onFavorite={() => toggleFavorite(day.id)}
+                onClick={() => router.push(`/workout/today?day=${day.id}`)}
               />
             ))}
           </div>
@@ -247,12 +250,12 @@ function WorkoutsContent() {
       )}
 
       {/* Favoritos section — enhanced */}
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Favoritos & Mais Usados</h2>
+      <section style={{ marginTop: 28 }}>
+        <p className="eyebrow" style={{ marginBottom: 10 }}>Favoritos & Mais Usados</p>
 
         {favoriteDays.length === 0 && mostExecutedDays.length === 0 && lastExecutedDay === null ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-            <AITrainerAvatar mood="speaking" size="sm" />
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: 16 }}>
+            <AgentOrb size="card" glyph />
             <AITrainerBubble
               message="Marque treinos como favoritos para acessá-los rapidamente aqui. Após treinar, seus mais usados também aparecem."
               mood="speaking"
@@ -261,25 +264,24 @@ function WorkoutsContent() {
             />
           </div>
         ) : (
-          <div className="mt-3 space-y-5">
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {/* ⭐ Favoritos */}
             {favoriteDays.length > 0 && (
               <div>
-                <p className="mb-2 text-xs font-semibold text-slate-500">⭐ Favoritos</p>
-                <div className="space-y-2.5">
+                <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", marginBottom: 8 }}>⭐ Favoritos</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {favoriteDays.map((day) => {
                     const idx = plan!.days.findIndex((d) => d.id === day.id);
                     return (
-                      <WorkoutDayCard
+                      <WorkoutRow
                         key={day.id}
-                        day={day}
-                        idx={idx}
-                        sessions={sessions}
-                        isRecommended={false}
-                        onView={() => router.push(`/workout/today?day=${day.id}`)}
-                        onStart={() => router.push(`/workout/today?day=${day.id}`)}
-                        onToggleFavorite={() => toggleFavorite(day.id)}
-                        highlight
+                        badge={LETTERS[idx] ?? String(idx + 1)}
+                        name={day.name}
+                        sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
+                        tags={day.muscle_groups?.slice(0, 2)}
+                        favorited={day.favorited}
+                        onFavorite={() => toggleFavorite(day.id)}
+                        onClick={() => router.push(`/workout/today?day=${day.id}`)}
                       />
                     );
                   })}
@@ -290,20 +292,20 @@ function WorkoutsContent() {
             {/* 🔁 Mais executados */}
             {mostExecutedDays.length > 0 && (
               <div>
-                <p className="mb-2 text-xs font-semibold text-slate-500">🔁 Mais executados</p>
-                <div className="space-y-2.5">
+                <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", marginBottom: 8 }}>🔁 Mais executados</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {mostExecutedDays.map((day) => {
                     const idx = plan!.days.findIndex((d) => d.id === day.id);
                     return (
-                      <WorkoutDayCard
+                      <WorkoutRow
                         key={`freq-${day.id}`}
-                        day={day}
-                        idx={idx}
-                        sessions={sessions}
-                        isRecommended={false}
-                        onView={() => router.push(`/workout/today?day=${day.id}`)}
-                        onStart={() => router.push(`/workout/today?day=${day.id}`)}
-                        onToggleFavorite={() => toggleFavorite(day.id)}
+                        badge={LETTERS[idx] ?? String(idx + 1)}
+                        name={day.name}
+                        sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
+                        tags={day.muscle_groups?.slice(0, 2)}
+                        favorited={day.favorited}
+                        onFavorite={() => toggleFavorite(day.id)}
+                        onClick={() => router.push(`/workout/today?day=${day.id}`)}
                       />
                     );
                   })}
@@ -314,15 +316,15 @@ function WorkoutsContent() {
             {/* ⏱ Último executado */}
             {lastExecutedDay && (
               <div>
-                <p className="mb-2 text-xs font-semibold text-slate-500">⏱ Último executado</p>
-                <WorkoutDayCard
-                  day={lastExecutedDay}
-                  idx={plan!.days.findIndex((d) => d.id === lastExecutedDay.id)}
-                  sessions={sessions}
-                  isRecommended={false}
-                  onView={() => router.push(`/workout/today?day=${lastExecutedDay.id}`)}
-                  onStart={() => router.push(`/workout/today?day=${lastExecutedDay.id}`)}
-                  onToggleFavorite={() => toggleFavorite(lastExecutedDay.id)}
+                <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", marginBottom: 8 }}>⏱ Último executado</p>
+                <WorkoutRow
+                  badge={LETTERS[plan!.days.findIndex((d) => d.id === lastExecutedDay.id)] ?? "?"}
+                  name={lastExecutedDay.name}
+                  sub={lastExecutedDay.exercise_count ? `${lastExecutedDay.exercise_count} exercícios` : undefined}
+                  tags={lastExecutedDay.muscle_groups?.slice(0, 2)}
+                  favorited={lastExecutedDay.favorited}
+                  onFavorite={() => toggleFavorite(lastExecutedDay.id)}
+                  onClick={() => router.push(`/workout/today?day=${lastExecutedDay.id}`)}
                 />
               </div>
             )}
@@ -331,36 +333,30 @@ function WorkoutsContent() {
       </section>
 
       {/* Histórico section */}
-      <section className="mt-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Histórico
-          </h2>
-          <Link href="/history" className="text-xs font-medium text-primary-400 hover:text-primary-300">
-            Ver tudo →
-          </Link>
+      <section style={{ marginTop: 28 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <p className="eyebrow">Histórico recente</p>
+          <Link href="/history" style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)", textDecoration: "none" }}>Ver tudo →</Link>
         </div>
         {sessions.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">Nenhum treino realizado ainda.</p>
+          <p style={{ fontSize: 14, color: "var(--text-dim)" }}>Nenhum treino realizado ainda.</p>
         ) : (
-          <div className="mt-3 space-y-2">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {sessions.slice(0, 5).map((session) => (
               <div
                 key={session.id}
-                className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 p-4"
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "12px 14px" }}
               >
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-white">
-                    {session.workout_day_name}
-                  </p>
-                  <p className="text-xs text-slate-500">
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p style={{ fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.workout_day_name}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-dim)", margin: 0 }}>
                     {relativeDate(session.completed_at)} · {session.duration_minutes} min
                     {session.fatigue_level ? ` · cansaço ${session.fatigue_level}/5` : ""}
                   </p>
                 </div>
                 <button
                   onClick={() => router.push(`/workout/today?day=${session.workout_day_id}`)}
-                  className="ml-3 shrink-0 rounded-full bg-primary-500/15 px-3 py-1.5 text-xs font-semibold text-primary-400 hover:bg-primary-500/25"
+                  style={{ marginLeft: 12, flexShrink: 0, borderRadius: "var(--r-pill)", background: "var(--primary-soft)", color: "var(--primary)", border: 0, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
                 >
                   Repetir
                 </button>
@@ -371,19 +367,19 @@ function WorkoutsContent() {
       </section>
 
       {/* Actions */}
-      <section className="mt-8 space-y-3">
+      <section style={{ marginTop: 28 }}>
         <button
           onClick={() => router.push("/plan?wizard=1")}
-          className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900 p-4"
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: 16, cursor: "pointer", color: "var(--text)" }}
         >
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">✨</span>
-            <div className="text-left">
-              <p className="font-semibold text-white">Replanejar com IA</p>
-              <p className="text-xs text-slate-500">Gere um novo plano baseado no seu perfil</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 24 }}>✨</span>
+            <div style={{ textAlign: "left" }}>
+              <p style={{ fontWeight: 700, margin: 0 }}>Replanejar com IA</p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Gere um novo plano baseado no seu perfil</p>
             </div>
           </div>
-          <span className="text-lg text-slate-600">›</span>
+          <span style={{ color: "var(--text-dim)", fontSize: 20 }}>›</span>
         </button>
       </section>
     </div>

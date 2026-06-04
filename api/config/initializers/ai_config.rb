@@ -11,6 +11,7 @@ module AiConfig
     agent_personal_trainer: { model: "claude-haiku-4-5-20251001", max_tokens: 600  },
     agent_conditioning:     { model: "claude-haiku-4-5-20251001", max_tokens: 500  },
     body_composition:       { model: "claude-sonnet-4-6",         max_tokens: 1200 },
+    coach_chat:             { model: "claude-haiku-4-5-20251001", max_tokens: 400  },
   }.freeze
 
   def self.for(task)

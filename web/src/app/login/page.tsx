@@ -12,10 +12,10 @@ export default function LoginPage() {
   const { signIn } = useAuth();
   const router = useRouter();
   const t = useTranslations("auth");
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -32,51 +32,91 @@ export default function LoginPage() {
         );
         window.location.href = checkout_url;
       } else {
-        router.push("/profile");
+        router.push("/dashboard");
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else if (err instanceof TypeError) {
-        setError("Não foi possível conectar ao servidor. Tente novamente.");
-      } else {
-        setError(t("loginError"));
-      }
+      if (err instanceof ApiError)       setError(err.message);
+      else if (err instanceof TypeError) setError("Não foi possível conectar ao servidor. Tente novamente.");
+      else                               setError(t("loginError"));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4" style={{ background: "#0a0f1e" }}>
-      <div className="w-full max-w-sm">
-        {/* Brand */}
-        <div className="mb-8 flex flex-col items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="EasyHealth" className="h-10 w-auto" />
-          <span className="text-xl font-extrabold tracking-tight text-white">EasyHealth</span>
+    <div
+      style={{
+        display: "flex", minHeight: "100svh", alignItems: "center",
+        justifyContent: "center", padding: "24px 20px",
+        background: "var(--bg)",
+        backgroundImage: "radial-gradient(130% 90% at 50% -20%, oklch(0.30 0.06 258 / .35), transparent 60%)",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 360 }}>
+        {/* Brand glyph */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 40, gap: 12 }}>
+          <div
+            style={{
+              width: 64, height: 64, borderRadius: 20,
+              background: "linear-gradient(150deg, var(--primary), var(--primary-2))",
+              boxShadow: "var(--glow)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 32,
+              color: "var(--on-primary)", letterSpacing: "-0.03em",
+            }}
+          >
+            E
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, letterSpacing: "-0.02em", margin: 0 }}>
+              EasyHealth
+            </p>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: "4px 0 0" }}>
+              Seu personal trainer de IA
+            </p>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <p className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
-          )}
+        {/* Error */}
+        {error && (
+          <div style={{ background: "var(--hot-soft)", border: "1px solid oklch(0.70 0.19 28 / .35)", borderRadius: "var(--r-md)", padding: "12px 16px", fontSize: 14, color: "var(--hot)", marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
 
-          <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-400">{t("email")}</label>
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="field" style={{ gap: 7 }}>
+            <label htmlFor="email" style={{ fontSize: 14, color: "var(--text-muted)", fontWeight: 600 }}>
+              {t("email")}
+            </label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
               placeholder="seu@email.com"
+              style={{
+                border: "1.5px solid var(--border)", borderRadius: "var(--r-md)",
+                background: "var(--bg-2)", padding: "14px 16px",
+                fontFamily: "inherit", fontSize: 16, color: "var(--text)",
+                outline: "none", width: "100%",
+              }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary)"; }}
+              onBlur={(e)  => { e.target.style.borderColor = "var(--border)"; }}
             />
           </div>
 
-          <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-400">{t("password")}</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <label htmlFor="password" style={{ fontSize: 14, color: "var(--text-muted)", fontWeight: 600 }}>
+                {t("password")}
+              </label>
+              <Link href="/forgot-password" style={{ fontSize: 13, color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>
+                {t("forgotPassword")}
+              </Link>
+            </div>
             <input
               id="password"
               type="password"
@@ -85,30 +125,39 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
               placeholder="••••••••"
+              style={{
+                border: "1.5px solid var(--border)", borderRadius: "var(--r-md)",
+                background: "var(--bg-2)", padding: "14px 16px",
+                fontFamily: "inherit", fontSize: 16, color: "var(--text)",
+                outline: "none", width: "100%",
+              }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary)"; }}
+              onBlur={(e)  => { e.target.style.borderColor = "var(--border)"; }}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
-            style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 6px 20px rgba(59,130,246,.28)" }}
+            style={{
+              marginTop: 6, width: "100%", borderRadius: "var(--r-pill)",
+              padding: "16px", fontWeight: 700, fontSize: 16, border: 0,
+              cursor: loading ? "not-allowed" : "pointer",
+              background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+              color: "var(--on-primary)",
+              boxShadow: "var(--glow)",
+              opacity: loading ? 0.65 : 1,
+              transition: "opacity .15s, transform .12s",
+            }}
           >
             {loading ? t("signingIn") : t("signIn")}
           </button>
-
-          <p className="text-center">
-            <Link href="/forgot-password" className="text-sm text-primary-400 hover:underline">
-              {t("forgotPassword")}
-            </Link>
-          </p>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-500">
+        <p style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
           {t("noAccount")}{" "}
-          <Link href="/sign-up" className="font-medium text-primary-400 hover:underline">
+          <Link href="/sign-up" style={{ color: "var(--primary)", fontWeight: 700, textDecoration: "none" }}>
             {t("signUp")}
           </Link>
         </p>

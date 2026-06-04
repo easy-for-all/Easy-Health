@@ -281,19 +281,20 @@ export default function DetailedProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-6 pb-28">
+    <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
 
       {/* Header */}
-      <header className="mb-5 flex items-center gap-3">
+      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <button
           onClick={() => router.back()}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600"
+          aria-label="Voltar"
+          style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 }}
         >
-          ←
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}><polyline points="15 18 9 12 15 6" /></svg>
         </button>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Perfil Detalhado</h1>
-          <p className="text-xs text-gray-400">Evolução, composição e análises</p>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: "-0.015em" }}>Perfil Detalhado</h1>
+          <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>Evolução, composição e análises</p>
         </div>
       </header>
 

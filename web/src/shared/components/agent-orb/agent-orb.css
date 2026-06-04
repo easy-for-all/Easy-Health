@@ -1,0 +1,43 @@
+.agent-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: radial-gradient(
+    circle at 36% 30%,
+    oklch(0.88 0.10 var(--accent-h, 258)),
+    var(--primary, oklch(0.685 0.17 258)) 46%,
+    var(--primary-2, oklch(0.605 0.17 264)) 82%
+  );
+  box-shadow:
+    0 0 0 1px oklch(0.685 0.17 258 / 0.4),
+    0 0 22px oklch(0.685 0.17 258 / 0.55);
+  position: relative;
+}
+
+/* Pulse ring (FAB: 2.6s; avatar "thinking": 1.4s) */
+.agent-orb--pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 2px solid oklch(0.685 0.17 258 / 0.5);
+  animation: orb-pulse 2.6s var(--ease, cubic-bezier(.22,1,.36,1)) infinite;
+}
+
+.agent-orb--avatar.agent-orb--pulse::after {
+  animation-duration: 1.4s;
+}
+
+@keyframes orb-pulse {
+  0%        { transform: scale(1);    opacity: 0.6; }
+  70%, 100% { transform: scale(1.55); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-orb--pulse::after {
+    animation: none;
+  }
+}

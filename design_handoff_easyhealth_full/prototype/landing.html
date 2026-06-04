@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-dir="a" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EasyHealth — Treino inteligente com IA</title>
+<link rel="stylesheet" href="fonts.css" />
+<link rel="stylesheet" href="theme.css" />
+<style>
+/* ============================================================
+   LANDING — layout responsivo construído sobre theme.css
+   ============================================================ */
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gut); }
+.eyebrow {
+  font-family: var(--font-body);
+  font-size: 12.5px; font-weight: 800; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--primary);
+}
+.btn {
+  font-family: var(--font-body); font-weight: 700; font-size: 16px;
+  border: 0; border-radius: var(--r-pill); padding: 16px 26px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
+  transition: transform .18s var(--ease), box-shadow .25s var(--ease), background .2s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--primary); color: var(--primary-ink); box-shadow: var(--glow); }
+.btn-primary:hover { transform: translateY(-2px); }
+.btn-ghost { background: transparent; color: var(--text); border: 1.5px solid var(--border-strong); }
+.btn-ghost:hover { border-color: var(--text); transform: translateY(-2px); }
+.btn-lg { padding: 19px 34px; font-size: 17.5px; }
+
+/* ---------- NAV ---------- */
+header.nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(18px);
+  background: color-mix(in oklch, var(--bg) 78%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.nav-in { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+.brand { display: flex; align-items: center; gap: 11px; font-family: var(--font-display); font-weight: 800; font-size: 21px; letter-spacing: -0.01em; }
+.brand .glyph {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--primary); color: var(--primary-ink); font-size: 19px; font-weight: 900;
+  box-shadow: var(--glow);
+}
+.nav-links { display: flex; align-items: center; gap: 12px; }
+.nav-links a.txt { font-weight: 600; color: var(--text-muted); text-decoration: none; padding: 8px 12px; font-size: 15px; }
+.nav-links a.txt:hover { color: var(--text); }
+
+/* ---------- HERO ---------- */
+.hero { position: relative; overflow: hidden; background: var(--hero-bg); }
+.hero-in {
+  display: grid; grid-template-columns: 1.05fr .95fr; gap: clamp(30px, 5vw, 70px);
+  align-items: center; padding: clamp(48px, 7vw, 96px) 0 clamp(56px, 7vw, 104px);
+}
+.pill-announce {
+  display: inline-flex; align-items: center; gap: 9px; margin-bottom: 26px;
+  padding: 8px 15px 8px 9px; border-radius: var(--r-pill);
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 13px; font-weight: 600; color: var(--text-muted);
+}
+.pill-announce b { color: var(--text); font-weight: 700; }
+.pill-announce .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 30%, transparent); }
+.hero h1 {
+  margin: 0 0 22px; font-size: clamp(40px, 6.4vw, 78px);
+}
+.hero h1 .hl { color: var(--primary); }
+.hero p.lede { font-size: clamp(17px, 1.4vw, 21px); color: var(--text-muted); max-width: 30ch; margin: 0 0 32px; line-height: 1.5; }
+.hero-cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.hero-note { margin-top: 18px; font-size: 13.5px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+
+/* ---------- PHONE MOCKUP ---------- */
+.phone-stage { display: grid; place-items: center; position: relative; }
+.phone {
+  width: 310px; flex: none; border-radius: 46px; padding: 13px;
+  background: linear-gradient(160deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow), 0 50px 90px -50px rgba(0,0,0,.6);
+  position: relative; z-index: 2;
+}
+.phone-screen {
+  border-radius: 34px; overflow: hidden; background: var(--bg); position: relative;
+  aspect-ratio: 310 / 620; display: flex; flex-direction: column;
+}
+.phone-notch { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 96px; height: 24px; background: #06070a; border-radius: 999px; z-index: 6; }
+
+/* mini app dashboard recreation */
+.appbar { display: flex; align-items: center; justify-content: space-between; padding: 38px 18px 8px; }
+.appbar .hi { font-size: 12px; color: var(--text-dim); line-height: 1.2; }
+.appbar .hi b { display: block; font-family: var(--font-display); font-size: 19px; color: var(--text); font-weight: 800; letter-spacing: -0.01em; }
+.appbar .moon { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); display: grid; place-items: center; font-size: 13px; }
+.app-scroll { flex: 1; overflow: hidden; padding: 6px 14px 14px; display: flex; flex-direction: column; gap: 11px; }
+.train-card {
+  border-radius: 20px; padding: 17px; color: #fff;
+  background: linear-gradient(150deg, var(--primary), var(--primary-2));
+  position: relative; overflow: hidden;
+}
+[data-dir="a"] .train-card, [data-dir="c"] .train-card { color: var(--primary-ink); }
+.train-card .day { font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .85; }
+.train-card .big { font-family: var(--font-display); font-size: 25px; font-weight: 800; margin: 4px 0 3px; letter-spacing: -0.01em; }
+.train-card .sub { font-size: 12px; opacity: .82; margin-bottom: 13px; }
+.train-card .mini-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); color: var(--text); font-weight: 700; font-size: 12.5px; padding: 9px 14px; border-radius: 999px; }
+.streak {
+  border: 1px solid var(--border); border-radius: 16px; padding: 13px; background: var(--surface);
+}
+.streak .row1 { display: flex; align-items: center; justify-content: space-between; }
+.streak .row1 b { font-size: 13px; }
+.streak .row1 .frac { font-family: var(--font-display); font-weight: 800; color: var(--primary); font-size: 16px; }
+.streak .days { display: flex; justify-content: space-between; margin-top: 11px; }
+.streak .days span { width: 11px; height: 11px; border-radius: 50%; background: var(--bg-2); border: 1px solid var(--border); }
+.sect-label { font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); margin: 3px 2px -2px; }
+.wkt {
+  display: flex; align-items: center; gap: 11px; padding: 12px;
+  border: 1px solid var(--border); border-radius: 15px; background: var(--surface);
+}
+.wkt .badge { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 14px; background: color-mix(in oklch, var(--primary) 16%, var(--surface)); color: var(--primary); }
+.wkt .meta { flex: 1; }
+.wkt .meta b { display: block; font-size: 13.5px; font-weight: 700; }
+.wkt .meta small { font-size: 11px; color: var(--text-dim); }
+.wkt .go { font-size: 11px; font-weight: 800; color: var(--primary-ink); background: var(--primary); padding: 7px 12px; border-radius: 999px; }
+.tabbar { display: flex; justify-content: space-around; padding: 11px 8px 14px; border-top: 1px solid var(--border); background: var(--surface); }
+.tabbar .tab { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 9.5px; color: var(--text-dim); font-weight: 600; }
+.tabbar .tab.on { color: var(--primary); }
+.tabbar .tab .ic { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.glow-blob { position: absolute; width: 320px; height: 320px; border-radius: 50%; filter: blur(70px); opacity: .5; background: var(--primary); z-index: 1; }
+.glow-blob.b1 { top: -40px; right: -30px; }
+
+/* ---------- MARQUEE / STATS ---------- */
+.stats { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg-2); }
+.stats-in { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; padding: 34px 0; }
+.stat { text-align: center; }
+.stat b { display: block; font-family: var(--font-display); font-size: clamp(28px, 3.4vw, 42px); font-weight: 800; color: var(--text); letter-spacing: -0.02em; }
+.stat span { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+
+/* ---------- SECTION SHELL ---------- */
+section.band { padding: clamp(64px, 9vw, 120px) 0; }
+.sec-head { max-width: 38ch; margin-bottom: 52px; }
+.sec-head.center { margin-inline: auto; text-align: center; }
+.sec-head h2 { font-size: clamp(31px, 4.6vw, 54px); margin: 14px 0 0; }
+.sec-head p { color: var(--text-muted); font-size: 18px; margin: 16px 0 0; line-height: 1.5; }
+
+/* ---------- FEATURES ---------- */
+.feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.feat {
+  border: 1px solid var(--border); border-radius: var(--r-card); padding: 26px;
+  background: var(--surface); transition: transform .2s var(--ease), border-color .2s;
+}
+.feat:hover { transform: translateY(-4px); border-color: var(--border-strong); }
+.feat .ic-wrap { width: 48px; height: 48px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 18px; background: color-mix(in oklch, var(--primary) 15%, var(--surface)); }
+.feat .ic-wrap svg { width: 24px; height: 24px; stroke: var(--primary); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.feat h3 { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+.feat p { color: var(--text-muted); font-size: 15px; margin: 0; line-height: 1.5; }
+.feat.wide { grid-column: span 1; }
+
+/* ---------- COMO FUNCIONA (steps) ---------- */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; align-items: start; }
+.step { text-align: center; }
+.step .num { font-family: var(--font-display); font-size: 13px; font-weight: 800; color: var(--primary); letter-spacing: .12em; }
+.step h3 { font-family: var(--font-display); font-size: 22px; font-weight: 700; margin: 10px 0 8px; letter-spacing: -0.01em; }
+.step p { color: var(--text-muted); font-size: 14.5px; margin: 0 auto; max-width: 28ch; line-height: 1.5; }
+.step .mini-phone {
+  margin: 0 auto 24px; width: 224px; border-radius: 30px; padding: 9px;
+  background: linear-gradient(160deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border-strong); box-shadow: var(--shadow);
+}
+.step .mini-screen { border-radius: 23px; overflow: hidden; background: var(--bg); aspect-ratio: 224/372; display: flex; flex-direction: column; }
+
+/* onboarding mini */
+.ob { padding: 20px 15px; display: flex; flex-direction: column; gap: 11px; height: 100%; }
+.ob .prog { display: flex; gap: 5px; }
+.ob .prog i { height: 5px; flex: 1; border-radius: 9px; background: var(--bg-2); }
+.ob .prog i.on { background: var(--primary); }
+.ob h4 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin: 8px 0 0; }
+.ob .opt { border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; font-size: 12.5px; font-weight: 600; background: var(--surface); }
+.ob .opt small { display: block; color: var(--text-dim); font-size: 10.5px; font-weight: 500; margin-top: 2px; }
+.ob .opt.sel { border-color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, var(--surface)); color: var(--primary); }
+
+/* loading mini */
+.load { padding: 26px 18px; display: flex; flex-direction: column; gap: 13px; height: 100%; }
+.load .ring { width: 46px; height: 46px; border-radius: 50%; border: 4px solid var(--bg-2); border-top-color: var(--primary); margin: 14px auto 8px; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.load .ln { font-size: 12.5px; font-weight: 600; color: var(--primary); display: flex; align-items: center; gap: 7px; }
+.load .ln.todo { color: var(--text-dim); }
+.load .ln .ck { width: 15px; height: 15px; }
+
+/* active mini */
+.act { display: flex; flex-direction: column; height: 100%; }
+.act .photo { aspect-ratio: 16/10; background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 30%, var(--surface-2)), var(--surface-2)); display: grid; place-items: center; }
+.act .photo svg { width: 40px; height: 40px; stroke: var(--text-dim); fill: none; stroke-width: 1.5; }
+.act .body { padding: 14px; display: flex; flex-direction: column; gap: 11px; flex: 1; }
+.act .body h4 { font-family: var(--font-display); font-size: 17px; margin: 0; font-weight: 800; }
+.act .counters { display: flex; gap: 8px; }
+.act .ct { flex: 1; background: var(--bg-2); border-radius: 11px; padding: 9px; text-align: center; }
+.act .ct b { display: block; font-family: var(--font-display); font-size: 18px; font-weight: 800; }
+.act .ct span { font-size: 9px; color: var(--text-dim); }
+.act .done-btn { margin-top: auto; background: var(--primary); color: var(--primary-ink); text-align: center; font-weight: 800; font-size: 13px; padding: 13px; border-radius: 13px; box-shadow: var(--glow); }
+
+/* connector arrows between steps */
+.step-arrow { display: none; }
+
+/* ---------- TESTIMONIALS ---------- */
+.tst-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.tst { border: 1px solid var(--border); border-radius: var(--r-card); padding: 26px; background: var(--surface); }
+.tst .stars { color: var(--primary); letter-spacing: 2px; font-size: 15px; margin-bottom: 12px; }
+.tst p { font-size: 16px; line-height: 1.55; margin: 0 0 20px; }
+.tst .who { display: flex; align-items: center; gap: 12px; }
+.tst .ph { width: 44px; height: 44px; border-radius: 50%; background: var(--bg-2); border: 1px solid var(--border); flex: none; display: grid; place-items: center; font-size: 10px; color: var(--text-dim); text-align: center; font-weight: 600; line-height: 1.1; }
+.tst .who b { display: block; font-size: 14.5px; }
+.tst .who small { font-size: 12.5px; color: var(--text-dim); }
+.demo-tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); border: 1px dashed var(--border-strong); border-radius: 999px; padding: 3px 9px; margin-left: 8px; vertical-align: middle; }
+
+/* ---------- PRICING ---------- */
+.price-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; max-width: 760px; margin: 0 auto; }
+.price { border: 1px solid var(--border); border-radius: var(--r-card); padding: 30px; background: var(--surface); position: relative; }
+.price.best { border-color: var(--primary); box-shadow: var(--glow); }
+.price .tag { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); background: var(--primary); color: var(--primary-ink); font-size: 12px; font-weight: 800; padding: 6px 16px; border-radius: 999px; }
+.price h3 { font-family: var(--font-display); font-size: 19px; margin: 0 0 6px; font-weight: 700; }
+.price .amt { font-family: var(--font-display); font-size: 44px; font-weight: 800; letter-spacing: -0.02em; }
+.price .amt small { font-size: 16px; color: var(--text-dim); font-weight: 600; }
+.price .save { color: var(--primary); font-weight: 700; font-size: 14px; margin: 2px 0 4px; }
+.price ul { list-style: none; padding: 0; margin: 20px 0 24px; display: flex; flex-direction: column; gap: 11px; }
+.price li { display: flex; gap: 10px; font-size: 15px; color: var(--text-muted); align-items: flex-start; }
+.price li svg { width: 18px; height: 18px; stroke: var(--primary); fill: none; stroke-width: 2.4; flex: none; margin-top: 2px; }
+.price .btn { width: 100%; justify-content: center; }
+
+/* ---------- FINAL CTA ---------- */
+.final { text-align: center; }
+.final-card {
+  border-radius: var(--r-xl); padding: clamp(46px, 7vw, 88px) 30px;
+  background: linear-gradient(150deg, var(--primary), var(--primary-2));
+  color: #fff; position: relative; overflow: hidden;
+}
+[data-dir="a"] .final-card, [data-dir="c"] .final-card { color: var(--primary-ink); }
+.final-card h2 { font-size: clamp(30px, 4.6vw, 56px); margin: 0 0 16px; }
+.final-card p { font-size: 18px; opacity: .9; margin: 0 0 30px; }
+.final-card .btn { background: var(--bg); color: var(--text); }
+
+/* ---------- FOOTER ---------- */
+footer.ft { border-top: 1px solid var(--border); padding: 50px 0 60px; }
+.ft-in { display: flex; justify-content: space-between; gap: 30px; flex-wrap: wrap; align-items: center; }
+.ft-links { display: flex; gap: 22px; flex-wrap: wrap; }
+.ft-links a { color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+.ft-links a:hover { color: var(--text); }
+.ft .copy { font-size: 13px; color: var(--text-dim); }
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 900px) {
+  .hero-in { grid-template-columns: 1fr; text-align: center; padding-top: 40px; }
+  .hero p.lede { margin-inline: auto; }
+  .hero-cta { justify-content: center; }
+  .hero-note { justify-content: center; }
+  .phone-stage { order: -1; margin-bottom: 12px; }
+  .feat-grid { grid-template-columns: 1fr 1fr; }
+  .steps { grid-template-columns: 1fr; gap: 44px; }
+  .tst-grid { grid-template-columns: 1fr; }
+  .stats-in { grid-template-columns: 1fr 1fr; gap: 30px 20px; }
+}
+@media (max-width: 560px) {
+  .nav-links a.txt { display: none; }
+  .feat-grid { grid-template-columns: 1fr; }
+  .price-grid { grid-template-columns: 1fr; }
+  .hero h1 { font-size: clamp(34px, 11vw, 50px); }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="index.html" style="text-decoration:none">
+      <span class="glyph">E</span> EasyHealth
+    </a>
+    <nav class="nav-links">
+      <a class="txt" href="#funciona">Como funciona</a>
+      <a class="txt" href="#planos">Planos</a>
+      <a class="txt" href="app.html#login">Entrar</a>
+      <a class="btn btn-primary" href="app.html#onboarding" style="padding:11px 20px;font-size:15px">Criar conta</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap hero-in">
+    <div class="hero-copy">
+      <span class="pill-announce"><span class="dot"></span> <b>+300 treinos gerados</b> · Grátis por 7 dias</span>
+      <h1 class="display">Treino com IA pra você evoluir com <span class="hl">constância</span>.</h1>
+      <p class="lede">A EasyHealth monta seu plano, adapta a cada semana e te puxa pra treinar — do jeito que um personal faria, no seu bolso.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="app.html#onboarding">Começar grátis →</a>
+        <a class="btn btn-ghost btn-lg" href="#funciona">Ver como funciona</a>
+      </div>
+      <div class="hero-note">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        Sem cartão de crédito · Cancele quando quiser
+      </div>
+    </div>
+
+    <!-- PHONE MOCKUP: dashboard real recriado -->
+    <div class="phone-stage">
+      <div class="glow-blob b1"></div>
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="appbar">
+            <div class="hi">Olá,<b>MARCUS</b></div>
+            <div class="moon">☾</div>
+          </div>
+          <div class="app-scroll">
+            <div class="train-card">
+              <div class="day">Domingo</div>
+              <div class="big">Treinar agora</div>
+              <div class="sub">3 treinos no seu plano</div>
+              <span class="mini-btn">Escolher treino →</span>
+            </div>
+            <div class="streak">
+              <div class="row1"><b>🔥 Comece sua ofensiva</b><span class="frac">0/3</span></div>
+              <div class="days"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="sect-label">Seus treinos</div>
+            <div class="wkt"><span class="badge">A</span><div class="meta"><b>Full Body A</b><small>6 exercícios · peito, costas</small></div><span class="go">Treinar</span></div>
+            <div class="wkt"><span class="badge">B</span><div class="meta"><b>Full Body B</b><small>6 exercícios · ombros</small></div><span class="go">Treinar</span></div>
+          </div>
+          <div class="tabbar">
+            <div class="tab"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21c0-4 3-6 7-6s7 2 7 6"/></svg>Perfil</div>
+            <div class="tab on"><svg class="ic" viewBox="0 0 24 24"><path d="M6 8v8M18 8v8M4 10h2M18 10h2M6 12h12"/></svg>Treino</div>
+            <div class="tab"><svg class="ic" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/></svg>Treinos</div>
+            <div class="tab"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Plano</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATS ============ -->
+<section class="stats">
+  <div class="wrap stats-in">
+    <div class="stat"><b>+300</b><span>treinos gerados</span></div>
+    <div class="stat"><b>IA</b><span>adapta toda semana</span></div>
+    <div class="stat"><b>7 dias</b><span>grátis pra testar</span></div>
+    <div class="stat"><b>R$9,90<small style="font-size:15px">/mês</small></b><span>no plano anual</span></div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="band" id="recursos">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">O que a EasyHealth faz por você</span>
+      <h2 class="display">Um personal trainer que cabe no seu dia.</h2>
+    </div>
+    <div class="feat-grid">
+      <div class="feat">
+        <div class="ic-wrap"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg></div>
+        <h3>Treino com IA</h3>
+        <p>Responda algumas perguntas e a IA monta um plano sob medida pro seu objetivo, nível e rotina.</p>
+      </div>
+      <div class="feat">
+        <div class="ic-wrap"><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/><circle cx="4" cy="12" r="2"/><circle cx="20" cy="12" r="2"/></svg></div>
+        <h3>Personalizado de verdade</h3>
+        <p>Cada exercício considera seu equipamento, local de treino e o que você gosta de fazer.</p>
+      </div>
+      <div class="feat">
+        <div class="ic-wrap"><svg viewBox="0 0 24 24"><path d="M12 2c1 5 6 6 6 11a6 6 0 0 1-12 0c0-2 1-3 2-4 .5 2 2 2 2 0 0-3 1-5 2-7z"/></svg></div>
+        <h3>Engajamento que pega</h3>
+        <p>Ofensivas, sequências e metas semanais pra você não largar no terceiro dia.</p>
+      </div>
+      <div class="feat">
+        <div class="ic-wrap"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></div>
+        <h3>Treino em casa ou rua</h3>
+        <p>Academia, peso corporal, ar livre — o plano se adapta a onde você está hoje.</p>
+      </div>
+      <div class="feat">
+        <div class="ic-wrap"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg></div>
+        <h3>Análise de exames</h3>
+        <p>Suba fotos e exames e receba estimativas de IMC, peso ideal, TMB e mais — só pra acompanhar.</p>
+      </div>
+      <div class="feat">
+        <div class="ic-wrap"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <h3>Preço que cabe</h3>
+        <p>A partir de R$9,90/mês no plano anual. Comece com 7 dias grátis, sem compromisso.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COMO FUNCIONA ============ -->
+<section class="band" id="funciona" style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head center">
+      <span class="eyebrow">Como funciona na prática</span>
+      <h2 class="display">Três passos até o primeiro treino.</h2>
+    </div>
+    <div class="steps">
+      <!-- STEP 1: onboarding -->
+      <div class="step">
+        <div class="mini-phone"><div class="mini-screen">
+          <div class="ob">
+            <div class="prog"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+            <h4>Qual é o seu objetivo?</h4>
+            <div class="opt">Perder peso<small>Reduzir gordura corporal</small></div>
+            <div class="opt sel">Ganhar músculo<small>Aumentar massa muscular</small></div>
+            <div class="opt">Manter<small>Manter o peso atual</small></div>
+          </div>
+        </div></div>
+        <div class="num">PASSO 01</div>
+        <h3>Conte seu objetivo</h3>
+        <p>Objetivo, nível, dados físicos e o que você curte. Leva menos de um minuto.</p>
+      </div>
+      <!-- STEP 2: loading IA -->
+      <div class="step">
+        <div class="mini-phone"><div class="mini-screen">
+          <div class="load">
+            <div class="ring"></div>
+            <div class="ln"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Analisando seu perfil</div>
+            <div class="ln"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Definindo divisão semanal</div>
+            <div class="ln"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Selecionando exercícios</div>
+            <div class="ln todo">Ajustando intensidade…</div>
+          </div>
+        </div></div>
+        <div class="num">PASSO 02</div>
+        <h3>A IA monta seu plano</h3>
+        <p>Em segundos, a EasyHealth gera uma divisão semanal completa com os exercícios certos.</p>
+      </div>
+      <!-- STEP 3: treino ativo -->
+      <div class="step">
+        <div class="mini-phone"><div class="mini-screen">
+          <div class="act">
+            <div class="photo"><svg viewBox="0 0 24 24"><path d="M6 8v8M18 8v8M4 10h2M18 10h2M6 12h12"/></svg></div>
+            <div class="body">
+              <h4>Bench Press</h4>
+              <div class="counters">
+                <div class="ct"><b>4</b><span>SÉRIES</span></div>
+                <div class="ct"><b>10</b><span>REPS</span></div>
+                <div class="ct"><b>1</b><span>ATUAL</span></div>
+              </div>
+              <div class="done-btn">Feito — série 1/4</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="num">PASSO 03</div>
+        <h3>Treine e registre</h3>
+        <p>Acompanhe séries, reps, descanso e carga. No fim, veja seu resumo e ofensiva.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TESTIMONIALS ============ -->
+<section class="band">
+  <div class="wrap">
+    <div class="sec-head center">
+      <span class="eyebrow">Feito para quem quer evoluir de verdade <span class="demo-tag">exemplos</span></span>
+      <h2 class="display">Gente que parou de começar do zero.</h2>
+    </div>
+    <div class="tst-grid">
+      <div class="tst">
+        <div class="stars">★★★★★</div>
+        <p>"Eu vivia largando treino na segunda semana. Com a ofensiva da EasyHealth, fechei 3 meses seguidos."</p>
+        <div class="who"><div class="ph">FOTO<br>aqui</div><div><b>Larissa M.</b><small>Ganhou constância · exemplo fictício</small></div></div>
+      </div>
+      <div class="tst">
+        <div class="stars">★★★★★</div>
+        <p>"Treino em casa sem equipamento e o plano se adapta. Parece que tem um personal me acompanhando."</p>
+        <div class="who"><div class="ph">FOTO<br>aqui</div><div><b>Rafael T.</b><small>Treina em casa · exemplo fictício</small></div></div>
+      </div>
+      <div class="tst">
+        <div class="stars">★★★★★</div>
+        <p>"O resumo no fim de cada treino me motiva demais. Ver a evolução semana a semana muda o jogo."</p>
+        <div class="who"><div class="ph">FOTO<br>aqui</div><div><b>Bruna S.</b><small>3 meses no app · exemplo fictício</small></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section class="band" id="planos" style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head center">
+      <span class="eyebrow">Planos</span>
+      <h2 class="display">Comece grátis. Continue se valer a pena.</h2>
+    </div>
+    <div class="price-grid">
+      <div class="price">
+        <h3>Pro Mensal</h3>
+        <div class="amt">R$ 19,90<small>/mês</small></div>
+        <div style="color:var(--text-dim);font-size:13.5px;margin-top:4px">Depois de 7 dias grátis</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Acesso completo a todos os recursos</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Treinos personalizados por IA</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Histórico ilimitado</li>
+        </ul>
+        <a class="btn btn-ghost" href="app.html#onboarding">Começar 7 dias grátis</a>
+      </div>
+      <div class="price best">
+        <span class="tag">Mais vantajoso</span>
+        <h3>Pro Anual</h3>
+        <div class="amt">R$ 118,80<small>/ano</small></div>
+        <div class="save">≈ R$ 9,90/mês · economize ~50%</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Tudo do Pro Mensal</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Metade do preço por mês</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> 7 dias grátis pra testar</li>
+        </ul>
+        <a class="btn btn-primary" href="app.html#onboarding">Começar 7 dias grátis</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINAL CTA ============ -->
+<section class="band final">
+  <div class="wrap">
+    <div class="final-card">
+      <h2 class="display">Comece hoje com 7 dias grátis.</h2>
+      <p>Sem cartão de crédito pra começar. Cancele quando quiser.</p>
+      <a class="btn btn-lg" href="app.html#onboarding">Criar conta grátis →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="ft">
+  <div class="wrap ft-in">
+    <a class="brand" href="index.html" style="text-decoration:none"><span class="glyph">E</span> EasyHealth</a>
+    <nav class="ft-links">
+      <a href="#funciona">Como funciona</a>
+      <a href="#planos">Planos</a>
+      <a href="#">Termos de Uso</a>
+      <a href="#">Privacidade</a>
+      <a href="#">Fale Conosco</a>
+    </nav>
+    <div class="copy">© 2026 EasyHealth</div>
+  </div>
+</footer>
+
+<script src="theme.js"></script>
+</body>
+</html>

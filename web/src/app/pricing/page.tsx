@@ -13,18 +13,11 @@ const FEATURES = [
   "Treinos personalizados por IA",
   "Plano semanal adaptável",
   "Histórico ilimitado de treinos",
+  "Coach EasyHealth (IA conversacional)",
   "Troca de exercícios inteligente",
-  "Acompanhamento de evolução",
-  "Suporte a treinos em casa e academia",
+  "Evolução de carga e gráficos",
+  "Suporte academia e treino em casa",
 ];
-
-function CheckIcon() {
-  return (
-    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
 
 export default function PricingPage() {
   const { user } = useAuth();
@@ -64,111 +57,179 @@ export default function PricingPage() {
   return (
     <PublicLayout>
       {/* Hero */}
-      <section className="bg-white py-16 px-4 text-center border-b border-gray-100">
-        <div className="max-w-2xl mx-auto">
-          <span className="inline-block bg-primary-50 text-primary-700 text-xs font-semibold px-3 py-1 rounded-full mb-4">
-            7 dias grátis — sem cartão necessário
+      <section style={{ background: "var(--bg)", padding: "64px 20px 48px", textAlign: "center", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            background: "var(--primary-soft)", color: "var(--primary)",
+            border: "1px solid oklch(0.685 0.17 258 / .3)",
+            padding: "6px 14px", borderRadius: "var(--r-pill)",
+            fontSize: 13, fontWeight: 700, marginBottom: 20,
+          }}>
+            ✨ 7 dias grátis — sem cartão necessário
           </span>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Treine melhor com a EasyHealth
+
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 36, fontWeight: 700, letterSpacing: "-0.025em", margin: "0 0 16px", lineHeight: 1.06, color: "var(--text)" }}>
+            Treine melhor com a<br />EasyHealth Pro
           </h1>
-          <p className="text-gray-500 text-lg mb-8">
-            Monte sua rotina de treinos, acompanhe sua evolução e desbloqueie todos os recursos premium com 7 dias grátis.
+          <p style={{ fontSize: 17, color: "var(--text-muted)", margin: "0 0 32px", lineHeight: 1.55 }}>
+            Plano de treino personalizado por IA, Coach de bolso e evolução completa em um lugar só.
           </p>
+
           <a
             href="#planos"
-            className="inline-block bg-primary-500 text-white font-semibold px-8 py-3 rounded-xl hover:bg-primary-600 transition"
+            style={{
+              display: "inline-block",
+              background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+              color: "var(--on-primary)", fontWeight: 700, fontSize: 16,
+              padding: "16px 32px", borderRadius: "var(--r-pill)",
+              boxShadow: "var(--glow)", textDecoration: "none",
+            }}
           >
             Começar 7 dias grátis
           </a>
-          <p className="text-xs text-gray-400 mt-3">Cancele quando quiser. Sem compromisso.</p>
+          <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 10 }}>
+            Cancele quando quiser. Sem compromisso.
+          </p>
         </div>
       </section>
 
       {/* Plan cards */}
-      <section id="planos" className="max-w-3xl mx-auto px-4 py-14">
+      <section id="planos" style={{ maxWidth: 720, margin: "0 auto", padding: "48px 20px 64px" }}>
         {error && (
-          <div className="bg-red-50 text-red-700 rounded-xl px-4 py-3 text-sm mb-6 text-center">
+          <div style={{ background: "var(--hot-soft)", color: "var(--hot)", border: "1px solid oklch(0.70 0.19 28 / .35)", borderRadius: "var(--r-md)", padding: "12px 16px", fontSize: 14, marginBottom: 24, textAlign: "center" }}>
             {error}
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row gap-6">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Pro Mensal */}
-          <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-6 flex flex-col">
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Pro Mensal</h2>
-            <div className="mb-1">
-              <span className="text-3xl font-extrabold text-gray-900">R$ 19,90</span>
-              <span className="text-sm text-gray-500">/mês</span>
-            </div>
-            <p className="text-xs text-gray-400 mb-4">Depois de 7 dias grátis</p>
-
-            <ul className="space-y-2 mb-6 flex-1">
-              {FEATURES.map((f) => (
-                <li key={f} className="flex items-center gap-2 text-sm text-gray-600">
-                  <CheckIcon />
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            <p className="text-xs text-gray-400 mb-3 text-center">Cancele quando quiser</p>
-            <button
-              onClick={() => handleSelectPlan("pro_monthly")}
-              disabled={isLoading}
-              className="w-full bg-gray-800 text-white rounded-xl py-3 text-sm font-semibold hover:bg-gray-900 transition disabled:opacity-50"
-            >
-              {loadingPlan === "pro_monthly" ? "Aguarde..." : "Começar 7 dias grátis"}
-            </button>
-          </div>
+          <PlanCard
+            title="Pro Mensal"
+            price="R$ 19,90"
+            period="/mês"
+            sub="Depois de 7 dias grátis"
+            features={FEATURES}
+            onSelect={() => handleSelectPlan("pro_monthly")}
+            loading={loadingPlan === "pro_monthly"}
+            disabled={isLoading}
+            highlight={false}
+          />
 
           {/* Pro Anual */}
-          <div className="flex-1 bg-white rounded-2xl border-2 border-primary-500 p-6 flex flex-col relative">
-            <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-xs font-bold px-4 py-1 rounded-full">
-              Mais vantajoso
-            </span>
-
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Pro Anual</h2>
-            <div className="mb-1">
-              <span className="text-3xl font-extrabold text-gray-900">R$ 118,80</span>
-              <span className="text-sm text-gray-500">/ano</span>
-            </div>
-            <p className="text-sm text-primary-600 font-medium mb-0.5">≈ R$ 9,90/mês</p>
-            <p className="text-xs text-green-600 font-semibold mb-4">Economize cerca de 50%</p>
-
-            <ul className="space-y-2 mb-6 flex-1">
-              <li className="flex items-center gap-2 text-sm text-gray-600">
-                <CheckIcon />
-                Tudo do Pro Mensal
-              </li>
-              {FEATURES.slice(0, 4).map((f) => (
-                <li key={f} className="flex items-center gap-2 text-sm text-gray-600">
-                  <CheckIcon />
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            <p className="text-xs text-gray-400 mb-3 text-center">Cancele quando quiser</p>
-            <button
-              onClick={() => handleSelectPlan("pro_yearly")}
-              disabled={isLoading}
-              className="w-full bg-primary-500 text-white rounded-xl py-3 text-sm font-semibold hover:bg-primary-600 transition disabled:opacity-50"
-            >
-              {loadingPlan === "pro_yearly" ? "Aguarde..." : "Começar 7 dias grátis"}
-            </button>
-          </div>
+          <PlanCard
+            title="Pro Anual"
+            price="R$ 118,80"
+            period="/ano"
+            sub="≈ R$ 9,90/mês"
+            savings="Economize ~50%"
+            badge="Melhor valor"
+            features={["Tudo do Pro Mensal", ...FEATURES.slice(0, 4)]}
+            onSelect={() => handleSelectPlan("pro_yearly")}
+            loading={loadingPlan === "pro_yearly"}
+            disabled={isLoading}
+            highlight
+          />
         </div>
 
-        {/* Footer note */}
-        <p className="text-center text-xs text-gray-400 mt-8">
+        <p style={{ textAlign: "center", fontSize: 13, color: "var(--text-dim)", marginTop: 28 }}>
           Já tem conta?{" "}
-          <Link href="/login" className="text-primary-600 hover:underline">
+          <Link href="/login" style={{ color: "var(--primary)", fontWeight: 700, textDecoration: "none" }}>
             Entrar
           </Link>{" "}
           para gerenciar sua assinatura.
         </p>
       </section>
     </PublicLayout>
+  );
+}
+
+// ── Plan Card ─────────────────────────────────────────────────────────────────
+
+type PlanCardProps = {
+  title: string;
+  price: string;
+  period: string;
+  sub?: string;
+  savings?: string;
+  badge?: string;
+  features: string[];
+  onSelect: () => void;
+  loading: boolean;
+  disabled: boolean;
+  highlight: boolean;
+};
+
+function PlanCard({ title, price, period, sub, savings, badge, features, onSelect, loading, disabled, highlight }: PlanCardProps) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: highlight
+          ? "linear-gradient(140deg, var(--primary-soft), var(--surface))"
+          : "var(--surface)",
+        border: `1.5px solid ${highlight ? "oklch(0.685 0.17 258 / .45)" : "var(--border)"}`,
+        borderRadius: "var(--r-xl)",
+        padding: "28px 24px 24px",
+        boxShadow: highlight ? "var(--glow)" : "none",
+      }}
+    >
+      {/* Badge */}
+      {badge && (
+        <span style={{
+          position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)",
+          background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+          color: "var(--on-primary)", fontSize: 12, fontWeight: 700,
+          padding: "5px 16px", borderRadius: "var(--r-pill)",
+          boxShadow: "var(--glow)", whiteSpace: "nowrap",
+        }}>
+          ✦ {badge}
+        </span>
+      )}
+
+      {/* Header */}
+      <p style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, margin: "0 0 4px" }}>{title}</p>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
+        <span style={{ fontFamily: "var(--font-display)", fontSize: 36, fontWeight: 700, color: highlight ? "var(--primary)" : "var(--text)", letterSpacing: "-0.025em" }}>
+          {price}
+        </span>
+        <span style={{ fontSize: 14, color: "var(--text-muted)" }}>{period}</span>
+      </div>
+      {sub && <p style={{ fontSize: 14, color: highlight ? "var(--primary)" : "var(--text-muted)", margin: "0 0 2px", fontWeight: highlight ? 700 : 400 }}>{sub}</p>}
+      {savings && <p style={{ fontSize: 13, color: "var(--good)", fontWeight: 700, margin: "0 0 20px" }}>✓ {savings}</p>}
+      {!savings && <div style={{ marginBottom: 20 }} />}
+
+      {/* Features */}
+      <ul style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24, padding: 0, listStyle: "none" }}>
+        {features.map((f) => (
+          <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "var(--text-muted)" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--good)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16, flexShrink: 0, marginTop: 2 }}>
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+            {f}
+          </li>
+        ))}
+      </ul>
+
+      {/* CTA */}
+      <button
+        onClick={onSelect}
+        disabled={disabled}
+        style={{
+          width: "100%", borderRadius: "var(--r-pill)", padding: "16px",
+          fontWeight: 700, fontSize: 16, border: 0, cursor: disabled ? "not-allowed" : "pointer",
+          background: highlight
+            ? "linear-gradient(180deg, var(--primary), var(--primary-2))"
+            : "var(--bg-2)",
+          color: highlight ? "var(--on-primary)" : "var(--text)",
+          boxShadow: highlight ? "var(--glow)" : "none",
+          opacity: disabled ? 0.65 : 1,
+          transition: "opacity .15s",
+        }}
+      >
+        {loading ? "Aguarde..." : "Começar 7 dias grátis"}
+      </button>
+      <p style={{ textAlign: "center", fontSize: 12, color: "var(--text-dim)", marginTop: 10 }}>Cancele quando quiser</p>
+    </div>
   );
 }

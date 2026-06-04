@@ -1,288 +1,543 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
-import type { WorkoutSession, WorkoutPlan } from "@/shared/types/workout";
+import { InsightCard } from "@/shared/components/workout/insight-card";
+import "@/shared/components/workout/workout-ui.css";
+import type { WorkoutSession } from "@/shared/types/workout";
+
+// ── Chart helpers (ported from pro-charts.js) ────────────────────────────────
+
+function sparklineSvg(vals: number[], w = 72, h = 36): string {
+  if (vals.length < 2) return "";
+  const stroke = "var(--primary)";
+  const pad = 3;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const rng = max - min || 1;
+  const pts = vals.map((v, i) => ({
+    x: pad + (i / (vals.length - 1)) * (w - pad * 2),
+    y: h - pad - ((v - min) / rng) * (h - pad * 2),
+  }));
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const last = pts[pts.length - 1];
+  const id = `sg${Math.random().toString(36).slice(2, 7)}`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" fill="none">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${stroke}" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="${stroke}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${d} L${last.x.toFixed(1)} ${h} L${pts[0].x.toFixed(1)} ${h} Z" fill="url(#${id})"/>
+    <path d="${d}" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="2.6" fill="${stroke}"/>
+  </svg>`;
+}
+
+function lineChartSvg(vals: number[], w = 320, h = 150): string {
+  if (vals.length < 2) return "";
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const rng = max - min || 1;
+  const padX = 6, padTop = 14, padBot = 18;
+  const pts = vals.map((v, i) => ({
+    x: padX + (i / (vals.length - 1)) * (w - padX * 2),
+    y: padTop + (1 - (v - min) / rng) * (h - padTop - padBot),
+  }));
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const last = pts[pts.length - 1];
+  const area = `${d} L${last.x.toFixed(1)} ${h - padBot} L${pts[0].x.toFixed(1)} ${h - padBot} Z`;
+  const id = `lg${Math.random().toString(36).slice(2, 7)}`;
+  let grid = "";
+  for (let g = 0; g < 3; g++) {
+    const gy = padTop + (g / 2) * (h - padTop - padBot);
+    grid += `<line x1="${padX}" y1="${gy.toFixed(1)}" x2="${w - padX}" y2="${gy.toFixed(1)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 4"/>`;
+  }
+  const dots = pts.map((p, i) => {
+    const last = i === pts.length - 1;
+    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${last ? 4.5 : 3}" fill="${last ? "var(--primary)" : "var(--surface)"}" stroke="var(--primary)" stroke-width="2"/>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" fill="none">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--primary)" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="var(--primary)" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grid}
+    <path d="${area}" fill="url(#${id})"/>
+    <path d="${d}" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+  </svg>`;
+}
+
+// ── Data helpers ──────────────────────────────────────────────────────────────
+
+type ExerciseProgress = {
+  name: string;
+  muscleGroup: string | null;
+  weights: number[];
+  count: number; // number of records
+  maxKg: number;
+  trend: number; // % change vs prev
+};
+
+function getISOWeekKey(date: Date): string {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function computeWeeklyVolume(sessions: WorkoutSession[], weeks = 8): { label: string; vol: number }[] {
+  const now = new Date();
+  const buckets: { label: string; vol: number }[] = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const start = new Date(now);
+    start.setDate(start.getDate() - w * 7 - start.getDay());
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    const label = start.toLocaleDateString("pt-BR", { month: "short", day: "numeric" }).replace(".", "");
+    let vol = 0;
+    for (const s of sessions) {
+      const d = new Date(s.completed_at);
+      if (d >= start && d < end) {
+        for (const log of s.exercise_logs ?? []) {
+          const weights = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
+          const repsArr = Array.isArray(log.reps)
+            ? log.reps as number[]
+            : Array.from({ length: log.sets }, () => log.reps as number);
+          weights.forEach((wk, i) => { if (wk) vol += wk * (repsArr[i] ?? 0); });
+        }
+      }
+    }
+    buckets.push({ label, vol });
+  }
+  return buckets;
+}
+
+function computeMuscleBalance(sessions: WorkoutSession[]): { name: string; pct: number; sets: number }[] {
+  const counts: Record<string, number> = {};
+  for (const s of sessions) {
+    for (const log of s.exercise_logs ?? []) {
+      const mg = log.muscle_group ?? "outros";
+      counts[mg] = (counts[mg] ?? 0) + log.sets;
+    }
+  }
+  const max = Math.max(1, ...Object.values(counts));
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name, sets]) => ({ name, sets, pct: Math.round((sets / max) * 100) }));
+}
+
+function computeExerciseProgress(sessions: WorkoutSession[]): ExerciseProgress[] {
+  const map: Record<string, { name: string; muscleGroup: string | null; entries: { date: Date; maxKg: number }[] }> = {};
+  for (const s of sessions) {
+    const date = new Date(s.completed_at);
+    for (const log of s.exercise_logs ?? []) {
+      const key = log.name.toLowerCase();
+      if (!map[key]) map[key] = { name: log.name, muscleGroup: log.muscle_group ?? null, entries: [] };
+      const weights = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
+      const maxKg = Math.max(0, ...weights.filter((w): w is number => typeof w === "number" && w > 0));
+      if (maxKg > 0) map[key].entries.push({ date, maxKg });
+    }
+  }
+  return Object.values(map)
+    .filter((e) => e.entries.length >= 2)
+    .map((e) => {
+      const sorted = [...e.entries].sort((a, b) => a.date.getTime() - b.date.getTime());
+      const weights = sorted.map((x) => x.maxKg);
+      const maxKg = Math.max(...weights);
+      const prev = weights[weights.length - 2] ?? maxKg;
+      const trend = prev > 0 ? Math.round(((maxKg - prev) / prev) * 100) : 0;
+      return { name: e.name, muscleGroup: e.muscleGroup, weights, count: sorted.length, maxKg, trend };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 12);
+}
+
+function computeStreak(sessions: WorkoutSession[]): number {
+  if (!sessions.length) return 0;
+  const sorted = [...sessions].sort((a, b) =>
+    new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
+  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let streak = 0;
+  let cursor = new Date(today);
+  for (const s of sorted) {
+    const d = new Date(s.completed_at);
+    d.setHours(0, 0, 0, 0);
+    const diff = Math.round((cursor.getTime() - d.getTime()) / 86400000);
+    if (diff === 0 || diff === 1) {
+      streak++;
+      cursor = d;
+    } else break;
+  }
+  return streak;
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function HistoryPage() {
   return <UpgradeGate><HistoryContent /></UpgradeGate>;
 }
 
-const FEELING_LABELS: Record<string, string> = {
-  bem: "Bem", cansado: "Cansado", dolorido: "Dolorido", pesado: "Pesado", dor: "Com dor",
-};
-const FEELING_COLORS: Record<string, string> = {
-  bem: "text-green-600 bg-green-50 border-green-200",
-  cansado: "text-yellow-600 bg-yellow-50 border-yellow-200",
-  dolorido: "text-orange-600 bg-orange-50 border-orange-200",
-  pesado: "text-red-600 bg-red-50 border-red-200",
-  dor: "text-red-700 bg-red-100 border-red-300",
-};
+type Tab = "resumo" | "cargas" | "historico";
 
-function calcVolume(weights: Array<number | null>, reps: number[]): number {
-  return weights.reduce<number>((sum, w, i) => sum + (w ?? 0) * (reps[i] ?? 0), 0);
-}
+function HistoryContent() {
+  const router = useRouter();
+  const [sessions, setSessions] = useState<WorkoutSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>("resumo");
+  const [selected, setSelected] = useState<WorkoutSession | null>(null);
 
-function formatMinutes(totalSeconds: number): string {
-  if (!totalSeconds) return "—";
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return m > 0 ? `${m}min ${s}s` : `${s}s`;
-}
+  useEffect(() => {
+    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "historico" });
+    api
+      .get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions")
+      .then(({ sessions: s }) => setSessions(s))
+      .finally(() => setLoading(false));
+  }, []);
 
-function SessionDetailModal({ session, onClose }: { session: WorkoutSession; onClose: () => void }) {
-  const logs = session.exercise_logs ?? [];
-  const date = new Date(session.completed_at).toLocaleDateString("pt-BR", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-  const time = new Date(session.completed_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const weeklyVol = useMemo(() => computeWeeklyVolume(sessions), [sessions]);
+  const muscleBalance = useMemo(() => computeMuscleBalance(sessions), [sessions]);
+  const exerciseProgress = useMemo(() => computeExerciseProgress(sessions), [sessions]);
+  const streak = useMemo(() => computeStreak(sessions), [sessions]);
 
-  const totalVolume = logs.reduce((sum, log) => {
-    const weights = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
-    const repsArr = Array.isArray(log.reps) ? log.reps : Array.from({ length: log.sets }, () => log.reps as number);
-    return sum + calcVolume(weights, repsArr);
-  }, 0);
+  const totalVol = useMemo(
+    () =>
+      sessions.reduce((sum, s) =>
+        sum + (s.exercise_logs ?? []).reduce((sv, log) => {
+          const ws = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
+          const rs = Array.isArray(log.reps) ? (log.reps as number[]) : Array.from({ length: log.sets }, () => log.reps as number);
+          return sv + ws.reduce<number>((lv, w, i) => lv + (w ?? 0) * (rs[i] ?? 0), 0);
+        }, 0), 0),
+    [sessions]
+  );
 
-  const completedExercises = logs.filter((l) => l.sets > 0).length;
-  const skippedExercises = logs.filter((l) => l.planned_sets != null && l.sets < l.planned_sets).length;
+  const thisWeekSessions = useMemo(() => {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    return sessions.filter((s) => new Date(s.completed_at) >= weekStart).length;
+  }, [sessions]);
+
+  const maxWeekVol = Math.max(1, ...weeklyVol.map((w) => w.vol));
+
+  if (loading) return <LoadingScreen />;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={onClose}>
-      <div
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white pb-10 dark:bg-gray-900"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Handle */}
-        <div className="sticky top-0 bg-white pt-3 pb-2 px-4 border-b border-gray-100 dark:bg-gray-900 dark:border-gray-800">
-          <div className="mb-2 mx-auto h-1 w-10 rounded-full bg-gray-200" />
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50">{session.workout_day_name}</h2>
-          <p className="text-xs text-gray-400 capitalize">{date} às {time}</p>
-        </div>
+    <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
+      {/* Header */}
+      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>
+          Progresso
+        </h1>
+        <span style={{ fontSize: 13, color: "var(--text-dim)" }}>{sessions.length} treinos</span>
+      </header>
 
-        {/* Summary stats */}
-        <div className={`px-4 pt-3 pb-3 grid gap-2 ${session.calories_estimated ? "grid-cols-4" : "grid-cols-3"}`}>
-          <div className="rounded-xl bg-primary-50 p-3 text-center">
-            <p className="text-xl font-bold text-primary-600">{session.duration_minutes}</p>
-            <p className="text-xs text-primary-400 mt-0.5">minutos</p>
+      {/* Tabs */}
+      <div className="seg-tabs" style={{ marginBottom: 20 }}>
+        {(["resumo", "cargas", "historico"] as Tab[]).map((t) => (
+          <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
+            {t === "resumo" ? "Resumo" : t === "cargas" ? "Cargas" : "Histórico"}
+          </button>
+        ))}
+      </div>
+
+      {/* ── RESUMO ── */}
+      {tab === "resumo" && (
+        <motion.div
+          key="resumo"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22 }}
+          style={{ display: "flex", flexDirection: "column", gap: 14 }}
+        >
+          {/* Metrics */}
+          <div className="metric-grid">
+            <div className="metric">
+              <p className="mk">🏋️ Treinos</p>
+              <p className="mv primary">{sessions.length}<small> total</small></p>
+              <p className="mtrend up">↑ {thisWeekSessions} esta semana</p>
+            </div>
+            <div className="metric">
+              <p className="mk">🔥 Ofensiva</p>
+              <p className="mv good">{streak}<small> dias</small></p>
+              <p className="mtrend">{streak > 0 ? "em sequência" : "sem sequência"}</p>
+            </div>
+            <div className="metric">
+              <p className="mk">⚖️ Volume total</p>
+              <p className="mv">{totalVol >= 1000 ? `${(totalVol / 1000).toFixed(1)}` : totalVol}<small> {totalVol >= 1000 ? "t" : "kg"}</small></p>
+            </div>
+            <div className="metric">
+              <p className="mk">📅 Esta semana</p>
+              <p className="mv">{thisWeekSessions}<small> treinos</small></p>
+            </div>
           </div>
-          <div className="rounded-xl bg-green-50 p-3 text-center">
-            <p className="text-xl font-bold text-green-600">{totalVolume > 0 ? `${(totalVolume / 1000).toFixed(1)}t` : "—"}</p>
-            <p className="text-xs text-green-400 mt-0.5">volume</p>
-          </div>
-          <div className="rounded-xl bg-gray-50 p-3 text-center">
-            <p className="text-xl font-bold text-gray-700">{completedExercises}</p>
-            <p className="text-xs text-gray-400 mt-0.5">exercícios</p>
-          </div>
-          {session.calories_estimated != null && session.calories_estimated > 0 && (
-            <div className="rounded-xl bg-orange-50 p-3 text-center">
-              <p className="text-xl font-bold text-orange-500">~{session.calories_estimated}</p>
-              <p className="text-xs text-orange-400 mt-0.5">kcal</p>
+
+          {/* Weekly volume bar chart */}
+          {weeklyVol.some((w) => w.vol > 0) && (
+            <div className="chart-card">
+              <div className="chead">
+                <div>
+                  <p className="eyebrow">Volume semanal</p>
+                  <p className="cv" style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26 }}>
+                    {weeklyVol[weeklyVol.length - 1].vol > 0
+                      ? `${Math.round(weeklyVol[weeklyVol.length - 1].vol)} kg`
+                      : "—"}
+                    <small style={{ fontSize: 14, color: "var(--text-dim)", fontWeight: 600 }}> última semana</small>
+                  </p>
+                </div>
+              </div>
+              <div className="bars">
+                {weeklyVol.map((w, i) => (
+                  <div key={i} className="bar">
+                    <motion.div
+                      className={`bcol ${w.vol === 0 ? "muted" : ""}`}
+                      initial={{ height: 0 }}
+                      animate={{ height: w.vol > 0 ? `${Math.max(8, (w.vol / maxWeekVol) * 100)}%` : "8%" }}
+                      transition={{ duration: 0.5, delay: i * 0.06, ease: "easeOut" }}
+                    />
+                    <span className="blab">{w.label.split(" ")[1] ?? w.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-        </div>
 
-        {session.fatigue_level && (
-          <div className="mx-4 mb-3 flex items-center gap-2">
-            <span className="text-xs text-gray-500">Cansaço geral:</span>
-            <div className="flex gap-1">
-              {[1,2,3,4,5].map((n) => (
-                <div key={n} className={`h-2 w-6 rounded-full ${n <= session.fatigue_level! ? "bg-orange-400" : "bg-gray-100"}`} />
-              ))}
-            </div>
-            <span className="text-xs font-medium text-orange-500">{session.fatigue_level}/5</span>
-          </div>
-        )}
-
-        {skippedExercises > 0 && (
-          <div className="mx-4 mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-            {skippedExercises} exercício(s) com séries puladas
-          </div>
-        )}
-
-        {session.notes && (
-          <p className="mx-4 mb-3 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600 italic">"{session.notes}"</p>
-        )}
-
-        {/* Exercise list */}
-        <div className="px-4 space-y-3">
-          {logs.map((log, idx) => {
-            const skipped = log.planned_sets != null && log.sets < log.planned_sets;
-            const weights = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
-            const repsArr = Array.isArray(log.reps) ? log.reps : Array.from({ length: log.sets }, () => log.reps as number);
-            const exVolume = calcVolume(weights, repsArr);
-            const feelingColor = log.feeling ? FEELING_COLORS[log.feeling] ?? "text-gray-500 bg-white border-gray-200" : null;
-
-            return (
-              <div key={`${session.id}-${log.workout_day_exercise_id}`} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                {/* Header */}
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600">
-                      {idx + 1}
-                    </span>
-                    <p className="text-sm font-semibold text-gray-900">{log.name}</p>
+          {/* Muscle balance */}
+          {muscleBalance.length > 0 && (
+            <div className="chart-card">
+              <p className="eyebrow" style={{ marginBottom: 14 }}>Equilíbrio muscular</p>
+              <div className="mbar">
+                {muscleBalance.map(({ name, pct }) => (
+                  <div key={name} className="mb">
+                    <span className="mbn">{name}</span>
+                    <div className="mbt">
+                      <motion.i
+                        className={pct < 30 ? "low" : ""}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.6, ease: "easeOut" }}
+                      />
+                    </div>
+                    <span className="mbv">{pct}%</span>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {log.feeling && log.feeling !== "nao_informado" && feelingColor && (
-                      <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${feelingColor}`}>
-                        {FEELING_LABELS[log.feeling] ?? log.feeling}
-                      </span>
-                    )}
-                    {exVolume > 0 && (
-                      <span className="text-xs text-gray-400">{exVolume} kg vol.</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Skipped notice */}
-                {skipped && (
-                  <div className="mb-2 flex items-center gap-1.5 text-xs text-amber-600">
-                    <span>⚠</span>
-                    <span>{log.sets} de {log.planned_sets} séries realizadas</span>
-                  </div>
-                )}
-
-                {/* Set chips */}
-                <div className="flex flex-wrap gap-1.5">
-                  {Array.from({ length: log.sets }, (_, i) => (
-                    <span key={i} className="rounded-lg bg-white border border-gray-200 px-2 py-1.5 text-xs text-gray-700">
-                      <span className="font-semibold text-primary-600">S{i + 1}</span>
-                      {" "}
-                      {weights[i] ? `${weights[i]} kg` : "—"}
-                      {" × "}
-                      {repsArr[i] ?? "—"}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Rest time */}
-                {log.rest_seconds ? (
-                  <p className="mt-1.5 text-xs text-gray-400">Descanso: {formatMinutes(log.rest_seconds)}</p>
-                ) : null}
+                ))}
               </div>
-            );
-          })}
-        </div>
-      </div>
+            </div>
+          )}
+
+          {/* AI Insight */}
+          {sessions.length >= 3 && (
+            <InsightCard
+              text={`Você treinou <b>${thisWeekSessions}x esta semana</b>. ${
+                streak > 1
+                  ? `Sua ofensiva de <b>${streak} dias</b> está ativa!`
+                  : "Continue para manter a consistência."
+              } ${muscleBalance[0] ? `Grupo mais trabalhado: <b>${muscleBalance[0].name}</b>.` : ""}`}
+            />
+          )}
+        </motion.div>
+      )}
+
+      {/* ── CARGAS ── */}
+      {tab === "cargas" && (
+        <motion.div
+          key="cargas"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22 }}
+          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          {exerciseProgress.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <p style={{ fontSize: 32 }}>📊</p>
+              <p style={{ color: "var(--text-muted)", marginTop: 12 }}>
+                Faça pelo menos 2 treinos com o mesmo exercício para ver a evolução de carga.
+              </p>
+            </div>
+          ) : (
+            exerciseProgress.map((ex) => (
+              <button
+                key={ex.name}
+                className="exprog"
+                onClick={() => router.push(`/history/exercise?name=${encodeURIComponent(ex.name)}`)}
+              >
+                <div className="epi">
+                  <b>{ex.name}</b>
+                  <div className="epm">{ex.muscleGroup ?? "exercício"} · {ex.count} reg.</div>
+                </div>
+                <div
+                  className="epspark"
+                  dangerouslySetInnerHTML={{ __html: sparklineSvg(ex.weights) }}
+                />
+                <div className="epval">
+                  <b>{ex.maxKg} kg</b>
+                  {ex.trend !== 0 && (
+                    <span style={{ color: ex.trend > 0 ? "var(--good)" : "var(--hot)" }}>
+                      {ex.trend > 0 ? "↑" : "↓"}{Math.abs(ex.trend)}%
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))
+          )}
+        </motion.div>
+      )}
+
+      {/* ── HISTÓRICO ── */}
+      {tab === "historico" && (
+        <motion.div
+          key="historico"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22 }}
+        >
+          {sessions.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <p style={{ fontSize: 32 }}>📋</p>
+              <p style={{ color: "var(--text-muted)", marginTop: 12 }}>Nenhum treino registrado ainda.</p>
+            </div>
+          ) : (
+            <div className="timeline">
+              {sessions.map((s, i) => {
+                const d = new Date(s.completed_at);
+                const dateStr = d.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" });
+                return (
+                  <button
+                    key={s.id}
+                    className="tl-item"
+                    style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "0 0 18px", width: "100%" }}
+                    onClick={() => setSelected(s)}
+                  >
+                    <div className="tdot done">
+                      <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
+                    </div>
+                    <div className="tbody">
+                      <div className="tt">
+                        <b>{s.workout_day_name}</b>
+                        <span className="tdate">{dateStr}</span>
+                      </div>
+                      <div className="tmeta">
+                        {s.duration_minutes} min
+                        {s.exercise_logs?.length ? ` · ${s.exercise_logs.length} exercícios` : ""}
+                        {s.fatigue_level ? ` · cansaço ${s.fatigue_level}/5` : ""}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* Session detail modal */}
+      {selected && (
+        <SessionSheet session={selected} onClose={() => setSelected(null)} />
+      )}
     </div>
   );
 }
 
-function HistoryContent() {
-  const [sessions, setSessions] = useState<WorkoutSession[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<WorkoutSession | null>(null);
-  const [favoritedDayIds, setFavoritedDayIds] = useState<Set<number>>(new Set());
-  const [onlyFavorites, setOnlyFavorites] = useState(false);
+// ── Session detail bottom sheet ───────────────────────────────────────────────
 
-  useEffect(() => {
-    trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "historico" });
-  }, []);
+function SessionSheet({ session, onClose }: { session: WorkoutSession; onClose: () => void }) {
+  const logs = session.exercise_logs ?? [];
+  const date = new Date(session.completed_at).toLocaleDateString("pt-BR", {
+    weekday: "long", day: "numeric", month: "long",
+  });
 
-  useEffect(() => {
-    Promise.all([
-      api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions"),
-      api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-    ]).then(([{ sessions: s, total: t }, plan]) => {
-      setSessions(s);
-      setTotal(t);
-      if (plan) {
-        setFavoritedDayIds(new Set(plan.days.filter((d) => d.favorited).map((d) => d.id)));
-      }
-    }).finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <LoadingScreen />;
-
-  const filtered = onlyFavorites
-    ? sessions.filter((s) => favoritedDayIds.has(s.workout_day_id))
-    : sessions;
+  const totalVol = logs.reduce((sum, log) => {
+    const ws = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
+    const rs = Array.isArray(log.reps) ? (log.reps as number[]) : Array.from({ length: log.sets }, () => log.reps as number);
+    return sum + ws.reduce<number>((sv, w, i) => sv + (w ?? 0) * (rs[i] ?? 0), 0);
+  }, 0);
 
   return (
-    <div className="min-h-screen px-4 py-6">
-      <div className="mb-4 flex items-center gap-3">
-        <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-600">←</Link>
-        <h1 className="text-xl font-bold text-gray-900">Histórico</h1>
-        <span className="ml-auto text-sm text-gray-400">{total} treinos</span>
-      </div>
-
-      {favoritedDayIds.size > 0 && (
-        <div className="mb-4 flex gap-2">
-          <button
-            onClick={() => setOnlyFavorites(false)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${!onlyFavorites ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600"}`}
-          >
-            Todos
-          </button>
-          <button
-            onClick={() => setOnlyFavorites(true)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${onlyFavorites ? "bg-red-400 text-white" : "bg-gray-100 text-gray-600"}`}
-          >
-            ❤️ Favoritos
-          </button>
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)" }}
+      onClick={onClose}
+    >
+      <motion.div
+        style={{
+          position: "absolute", bottom: 0, left: 0, right: 0,
+          maxHeight: "88svh", overflowY: "auto",
+          background: "var(--bg-2)",
+          borderRadius: "var(--r-xl) var(--r-xl) 0 0",
+          paddingBottom: 32,
+        }}
+        onClick={(e) => e.stopPropagation()}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+        role="dialog"
+        aria-label={session.workout_day_name}
+      >
+        {/* Grabber */}
+        <div style={{ padding: "12px 0 0", display: "flex", justifyContent: "center" }}>
+          <div style={{ width: 40, height: 4, borderRadius: 9, background: "var(--border-strong)" }} />
         </div>
-      )}
 
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-4xl">📋</p>
-          <p className="mt-3 text-gray-500">
-            {onlyFavorites ? "Nenhum treino favorito registrado." : "Nenhum treino registrado ainda."}
-          </p>
-          {!onlyFavorites && (
-            <Link href="/workout/today" className="mt-4 text-sm font-medium text-primary-600 hover:underline">
-              Fazer meu primeiro treino
-            </Link>
-          )}
+        {/* Header */}
+        <div style={{ padding: "14px 20px 16px", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>
+            {session.workout_day_name}
+          </h2>
+          <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0, textTransform: "capitalize" }}>{date}</p>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSelected(s)}
-              className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left active:bg-gray-50"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {favoritedDayIds.has(s.workout_day_id) && (
-                    <span className="text-sm leading-none">❤️</span>
-                  )}
-                  <div>
-                    <p className="font-semibold text-gray-900">{s.workout_day_name}</p>
-                    <p className="text-sm text-gray-400">
-                      {new Date(s.completed_at).toLocaleDateString("pt-BR", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600">
-                    {s.duration_minutes} min
-                  </span>
-                  <span className="text-gray-300 text-sm">›</span>
-                </div>
-              </div>
-              {s.fatigue_level && (
-                <p className="mt-2 text-xs font-medium text-orange-500">Cansaço {s.fatigue_level}/5</p>
-              )}
-              {s.exercise_logs?.length ? (
-                <p className="mt-1 text-xs text-gray-400">{s.exercise_logs.length} exercícios</p>
-              ) : null}
-            </button>
+
+        {/* Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, padding: "14px 20px" }}>
+          {[
+            { label: "minutos", val: String(session.duration_minutes), cls: "primary" },
+            { label: "volume",  val: totalVol > 0 ? `${(totalVol / 1000).toFixed(1)}t` : "—", cls: "good" },
+            { label: "exercícios", val: String(logs.filter((l) => l.sets > 0).length), cls: "" },
+          ].map(({ label, val, cls }) => (
+            <div key={label} className="dstat" style={cls === "primary" ? { background: "var(--primary-soft)" } : cls === "good" ? { background: "var(--good-soft)" } : { background: "var(--bg-2)" }}>
+              <b style={{ color: cls === "primary" ? "var(--primary)" : cls === "good" ? "var(--good)" : "var(--text)" }}>{val}</b>
+              <span>{label}</span>
+            </div>
           ))}
         </div>
-      )}
 
-      {selected && <SessionDetailModal session={selected} onClose={() => setSelected(null)} />}
+        {/* Exercise list */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 20px" }}>
+          {logs.map((log, idx) => {
+            const ws = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
+            const rs = Array.isArray(log.reps) ? (log.reps as number[]) : Array.from({ length: log.sets }, () => log.reps as number);
+            return (
+              <div key={`${session.id}-${log.workout_day_exercise_id}`} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--primary-soft)", color: "var(--primary)", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                    {idx + 1}
+                  </span>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{log.name}</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {Array.from({ length: log.sets }, (_, i) => (
+                    <span key={i} style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "4px 10px", fontSize: 12 }}>
+                      <b style={{ color: "var(--primary)" }}>S{i + 1}</b>{" "}
+                      {ws[i] ? `${ws[i]} kg` : "—"} × {rs[i] ?? "—"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
     </div>
   );
 }

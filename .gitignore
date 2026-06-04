@@ -38,11 +38,15 @@ api/config/master.key
 # DOCKER
 # =========================
 docker-data/
+backups/
 
 # =========================
 # DOCS / STRATEGY (private — do not expose publicly)
 # =========================
 docs/
+!docs/
+!docs/production-deploy.md
+!docs/production-backup-and-restore.md
 
 # =========================
 # CLAUDE / LOCAL (internal AI tooling — not for public tracking)

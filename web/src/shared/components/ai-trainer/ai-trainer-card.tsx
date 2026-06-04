@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
-import { AITrainerAvatar } from "./ai-trainer-avatar";
 import { AITrainerBubble } from "./ai-trainer-bubble";
+import { AgentOrb } from "@/shared/components/agent-orb";
 
 interface PersonalTrainerRec {
   exercise: string;
@@ -68,9 +68,9 @@ export function AITrainerCard({ message: staticMessage, staticOnly = false, clas
 
   return (
     <div className={`flex items-start gap-3 ${className}`}>
-      <div className="shrink-0">
-        <AITrainerAvatar mood="speaking" size="md" />
-        <p className="mt-1 text-center text-[10px] font-semibold tracking-wide text-primary-500 uppercase">
+      <div className="shrink-0 flex flex-col items-center gap-1">
+        <AgentOrb size="card" glyph />
+        <p className="text-center text-[10px] font-semibold tracking-wide text-primary-500 uppercase">
           Coach IA
         </p>
       </div>

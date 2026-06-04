@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EasyHealth Pro — Treino Inteligente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="pro.css" />
+<link rel="stylesheet" href="pro-screens.css" />
+<link rel="stylesheet" href="coach.css" />
+</head>
+<body>
+<div class="stage">
+  <div class="desk-hint">
+    <b>EasyHealth Pro</b>
+    Protótipo navegável. Toque pra avançar pelos fluxos como num app. Use o painel de Tweaks pra ajustar acento, fonte e cantos.
+  </div>
+
+  <div class="device">
+    <div class="screen-frame">
+      <!-- STATUS BAR -->
+      <div class="statusbar">
+        <span id="sb-time">9:41</span>
+        <span class="dynisland"></span>
+        <span class="sb-right">
+          <svg viewBox="0 0 24 24"><path d="M2 17h2v-5H2v5zm4 0h2V9H6v8zm4 0h2V5h-2v12zm4 0h2v-9h-2v9zm4 0h2v-3h-2v3z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12 6c3.5 0 6.7 1.3 9 3.5l-2 2C17.3 9.8 14.8 9 12 9s-5.3.8-7 2.5l-2-2C5.3 7.3 8.5 6 12 6zm0 6c1.7 0 3.2.6 4.5 1.7l-2 2c-.7-.5-1.6-.7-2.5-.7s-1.8.2-2.5.7l-2-2C8.8 12.6 10.3 12 12 12zm0 6l2-2c-.5-.4-1.2-.6-2-.6s-1.5.2-2 .6l2 2z"/></svg>
+          <svg viewBox="0 0 24 24"><rect x="3" y="9" width="16" height="6" rx="1.6"/><path d="M21 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </span>
+      </div>
+
+      <div class="viewport" id="viewport">
+
+        <!-- ============ DASHBOARD ============ -->
+        <section class="screen" data-screen="dashboard" data-screen-label="Dashboard" data-chrome="full" data-tab="hoje">
+          <div class="screen-pad">
+            <div class="topbar">
+              <div>
+                <span class="dim" style="font-size:14px">Domingo, 2 jun</span>
+                <h2 class="h-lg" style="margin-top:1px">Olá, Marcus</h2>
+              </div>
+              <button class="icon-btn" data-go="profile" aria-label="Perfil" id="db-avatar"></button>
+            </div>
+
+            <div class="hero">
+              <div class="ring-deco"></div>
+              <div class="hero-top">
+                <span class="day">Próximo treino</span>
+                <span class="ready-pill" id="db-ready"></span>
+              </div>
+              <h2>Upper · Força</h2>
+              <p class="hsub">Dia A do seu plano Upper / Lower</p>
+              <div class="hmeta">
+                <div class="m"><b>6</b><span>exercícios</span></div>
+                <div class="m"><b>~52</b><span>minutos</span></div>
+                <div class="m"><b>Médio</b><span>intensidade</span></div>
+              </div>
+              <button class="cta" data-go="day" id="db-start"></button>
+            </div>
+
+            <button class="insight" data-go="history" style="text-align:left;cursor:pointer;width:100%;color:var(--text)">
+              <div class="ihead">
+                <span class="iavatar" id="ic-brain"></span>
+                <b>Coach EasyHealth</b>
+                <span class="tag">Hoje</span>
+              </div>
+              <p id="db-insight"></p>
+            </button>
+
+            <div class="streak">
+              <div class="stop">
+                <span class="sflame"><span class="fi" id="ic-flame"></span> Sequência da semana</span>
+                <span class="frac">3<em>/4</em></span>
+              </div>
+              <div class="muted" style="font-size:13px;margin-top:7px">Falta 1 treino pra fechar a meta 🎯</div>
+              <div class="week" id="db-week"></div>
+            </div>
+
+            <div class="row between center">
+              <span class="eyebrow">Seu plano</span>
+              <span class="link" data-go="plan" style="font-size:13px">Ver completo</span>
+            </div>
+            <div id="db-today-list" class="stack-sm"></div>
+
+            <button class="btn btn-ghost" data-go="create-goal" id="db-create"></button>
+          </div>
+        </section>
+
+        <!-- ============ CRIAR — OBJETIVO ============ -->
+        <section class="screen" data-screen="create-goal" data-screen-label="Criar · objetivo" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="cur"></i><i></i><i></i><i></i></div>
+            <button class="back" data-go="dashboard" id="cg-back"></button>
+            <div><span class="eyebrow accent">Passo 1 de 4</span><h1 class="h-lg" style="margin-top:8px">Qual é o seu objetivo?</h1><p class="lede" style="margin-top:6px">A IA monta a estratégia toda em volta disso.</p></div>
+            <div class="opts" data-single="goal" id="cg-opts"></div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="create-place">Continuar <span id="cg-arr"></span></button>
+          </div>
+        </section>
+
+        <!-- ============ CRIAR — LOCAL / EQUIPAMENTOS ============ -->
+        <section class="screen" data-screen="create-place" data-screen-label="Criar · local" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i class="cur"></i><i></i><i></i></div>
+            <button class="back" data-go="create-goal" id="cp-back"></button>
+            <div><span class="eyebrow accent">Passo 2 de 4</span><h1 class="h-lg" style="margin-top:8px">Onde você vai treinar?</h1><p class="lede" style="margin-top:6px">Isso define os equipamentos disponíveis.</p></div>
+            <div class="opts" data-single="place" id="cp-place"></div>
+            <span class="eyebrow" style="margin-top:4px">Equipamentos <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:600">· opcional</span></span>
+            <div class="opt-grid" data-multi="equip" id="cp-equip"></div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="create-method">Continuar →</button>
+          </div>
+        </section>
+
+        <!-- ============ CRIAR — MÉTODO / ESTILO ============ -->
+        <section class="screen" data-screen="create-method" data-screen-label="Criar · método" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></div>
+            <button class="back" data-go="create-place" id="cm-back"></button>
+            <div><span class="eyebrow accent">Passo 3 de 4</span><h1 class="h-lg" style="margin-top:8px">Estilo de treino</h1><p class="lede" style="margin-top:6px">Sem certeza? Deixe a IA escolher por você.</p></div>
+            <button class="opt sel" id="cm-auto" style="border-color:var(--primary)">
+              <span class="oicon" id="cm-auto-ic"></span>
+              <div class="otxt"><b>Deixar a IA decidir</b><small>Recomendado pro seu perfil e histórico</small></div>
+              <span class="chk" id="cm-auto-chk"></span>
+            </button>
+            <span class="eyebrow" style="margin-top:2px">Ou escolha um método</span>
+            <div class="opt-grid" data-single="method" id="cm-methods"></div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="create-time">Continuar →</button>
+          </div>
+        </section>
+
+        <!-- ============ CRIAR — TEMPO / FREQUÊNCIA ============ -->
+        <section class="screen" data-screen="create-time" data-screen-label="Criar · tempo" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="cur"></i></div>
+            <button class="back" data-go="create-method" id="ct-back"></button>
+            <div><span class="eyebrow accent">Passo 4 de 4</span><h1 class="h-lg" style="margin-top:8px">Tempo e frequência</h1><p class="lede" style="margin-top:6px">Quanto você consegue se dedicar?</p></div>
+            <div class="card">
+              <div class="slide-row">
+                <div class="lab"><span>Dias por semana</span><b id="ct-days-v">4<em>dias</em></b></div>
+                <input type="range" min="2" max="6" value="4" id="ct-days" />
+                <div class="ends"><span>2</span><span>6</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="slide-row">
+                <div class="lab"><span>Tempo por treino</span><b id="ct-min-v">50<em>min</em></b></div>
+                <input type="range" min="20" max="90" step="5" value="50" id="ct-min" />
+                <div class="ends"><span>20</span><span>90</span></div>
+              </div>
+            </div>
+            <div>
+              <span class="eyebrow" style="margin-bottom:10px;display:block">Intensidade desejada</span>
+              <div class="seg" data-single="intensity">
+                <button data-val="Leve">Leve</button>
+                <button class="sel" data-val="Média">Média</button>
+                <button data-val="Alta">Alta</button>
+              </div>
+            </div>
+            <div class="field"><label>Alguma restrição ou lesão? (opcional)</label><input type="text" placeholder="Ex: poupar joelho, ombro sensível…" /></div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="generating">Gerar meu plano <span id="ct-spark"></span></button>
+          </div>
+        </section>
+
+        <!-- ============ GERANDO (IA) ============ -->
+        <section class="screen" data-screen="generating" data-screen-label="IA gerando" data-chrome="none">
+          <div class="gen-stage">
+            <div class="ai-orb"></div>
+            <div class="center-col" style="gap:6px">
+              <h1 class="h-lg">Montando seu plano</h1>
+              <p class="lede">Seu coach está desenhando a estratégia perfeita pra você.</p>
+            </div>
+            <div class="gen-steps" id="gen-steps">
+              <div class="gen-ln" data-step><span class="gck"></span> Analisando seu perfil</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Olhando seus treinos anteriores</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Considerando seus favoritos</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Montando a estratégia</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Validando a segurança</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Criando a progressão</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ RESULTADO DO PLANO ============ -->
+        <section class="screen" data-screen="plan" data-screen-label="Plano gerado" data-chrome="full" data-tab="plano">
+          <div class="screen-pad">
+            <div class="topbar">
+              <div><span class="eyebrow accent">Seu plano · pronto</span><h1 class="h-lg" style="margin-top:6px" id="pl-name">Upper / Lower · 4 dias</h1></div>
+              <span class="ai-pill" id="pl-pill"></span>
+            </div>
+
+            <div class="card" style="padding:16px 18px">
+              <div class="row" style="flex-wrap:wrap;gap:14px 22px">
+                <div><div class="eyebrow">Objetivo</div><div class="h-sm" style="margin-top:3px" id="pl-goal">Hipertrofia</div></div>
+                <div><div class="eyebrow">Método</div><div class="h-sm" style="margin-top:3px" id="pl-method">Upper / Lower</div></div>
+                <div><div class="eyebrow">Nível</div><div class="h-sm" style="margin-top:3px" id="pl-level">Intermediário</div></div>
+                <div><div class="eyebrow">Duração</div><div class="h-sm" style="margin-top:3px" id="pl-weeks">6 semanas</div></div>
+              </div>
+            </div>
+
+            <!-- explicação IA -->
+            <div class="explain">
+              <div class="ehead"><span class="iavatar" id="ex-brain"></span><b>Por que este treino foi criado assim?</b></div>
+              <div class="reasons" id="pl-reasons"></div>
+            </div>
+
+            <span class="eyebrow">Sua semana</span>
+            <div class="week-strip" id="pl-week"></div>
+
+            <span class="eyebrow">Dias de treino</span>
+            <div id="pl-days" class="stack-sm"></div>
+
+            <div class="row">
+              <button class="btn btn-ghost" data-go="create-goal" id="pl-redo"></button>
+              <button class="btn btn-primary" data-go="day">Ver treino de hoje →</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ DETALHE DO DIA ============ -->
+        <section class="screen" data-screen="day" data-screen-label="Detalhe do dia" data-chrome="full" data-tab="plano">
+          <div class="screen-pad">
+            <div class="topbar">
+              <button class="back" data-go="plan" id="dy-back"></button>
+              <div class="row" style="gap:8px">
+                <button class="icon-btn" data-toast="Treino favoritado ❤️" id="dy-fav" aria-label="Favoritar"></button>
+                <button class="icon-btn" data-toast="Treino duplicado" id="dy-dup" aria-label="Duplicar"></button>
+              </div>
+            </div>
+            <div>
+              <span class="eyebrow accent">Dia A · Upper · Força</span>
+              <h1 class="h-lg" style="margin-top:6px">Peito, costas e ombro</h1>
+              <div class="chip-row" style="margin-top:10px">
+                <span class="tag-chip">6 exercícios</span>
+                <span class="tag-chip">~52 min</span>
+                <span class="tag-chip">Descanso 75s</span>
+              </div>
+            </div>
+
+            <div class="insight" style="background:linear-gradient(150deg,var(--primary-soft),var(--surface));border-color:oklch(0.685 var(--accent-c) var(--accent-h) / .28)">
+              <div class="ihead"><span class="iavatar" id="dy-brain"></span><b>Nota do coach</b></div>
+              <p id="dy-note"></p>
+            </div>
+
+            <div class="row between center">
+              <span class="eyebrow">Exercícios</span>
+              <button class="link" id="dy-reorder" style="font-size:13px;display:inline-flex;align-items:center;gap:5px"></button>
+            </div>
+            <div id="dy-ex" class="stack-sm"></div>
+            <button class="btn btn-ghost" style="border-style:dashed" data-toast="Selecione um exercício pra adicionar"><span id="dy-add-ic"></span> Adicionar exercício</button>
+
+            <button class="btn btn-primary" data-go="exec">Iniciar treino →</button>
+          </div>
+        </section>
+
+        <!-- ============ EXECUÇÃO ============ -->
+        <section class="screen" data-screen="exec" data-screen-label="Treino ativo" data-chrome="none">
+          <div class="screen-pad">
+            <div class="exec-head">
+              <span class="ecount" id="ex-count">Exercício 1 de 6</span>
+              <span class="eclock" id="ex-clock"><span id="ex-clock-ic"></span> 00:00</span>
+              <button class="eend" data-go="done">Encerrar</button>
+            </div>
+            <div class="exec-bar"><i id="ex-bar" style="width:8%"></i></div>
+
+            <div class="exec-media">
+              <div class="exec-photo media-ph"><span class="mlab" id="ex-media-lab"></span></div>
+              <div class="muscle-map" id="ex-map"><div class="ml" id="ex-map-lab">PEITO</div></div>
+            </div>
+            <div class="exec-actions">
+              <button class="eachip" data-toast="Vídeo em breve"><span data-ic="play"></span> Vídeo</button>
+              <button class="eachip" data-toast="Detalhes do exercício"><span data-ic="info"></span> Como fazer</button>
+              <button class="eachip warn" data-coach="swap" id="ex-swap"><span data-ic="swap"></span> Trocar</button>
+            </div>
+
+            <div>
+              <div class="row between center">
+                <h1 class="h-lg" id="ex-name">Supino reto com barra</h1>
+                <button class="icon-btn" id="ex-fav" aria-label="Favoritar exercício" data-toast="Favoritado ❤️"></button>
+              </div>
+              <p class="muted" style="margin-top:6px;font-size:13.5px">Banco reto, pegada na largura dos ombros. Desça controlando até o peito e empurre.</p>
+            </div>
+
+            <div class="loadcmp">
+              <div class="lc prev"><span>Última carga</span><b id="ex-prev">20 kg</b><small>por lado · 8 reps</small></div>
+              <div class="lc sug"><span>Sugestão de hoje</span><b id="ex-sug">22 kg</b><small id="ex-sug-tip">+1 rep no topo</small></div>
+            </div>
+
+            <div class="row">
+              <div class="stepper-row" style="flex:1"><span class="slab">Carga</span><button class="stepper" data-dec="load">−</button><span class="sv"><span id="ex-load">22</span><em>kg</em></span><button class="stepper" data-inc="load">+</button></div>
+            </div>
+            <div class="row">
+              <div class="stepper-row" style="flex:1"><span class="slab">Reps</span><button class="stepper" data-dec="reps">−</button><span class="sv" id="ex-reps">10</span><button class="stepper" data-inc="reps">+</button></div>
+            </div>
+
+            <span class="eyebrow">Séries</span>
+            <div class="sets-track" id="ex-sets"></div>
+
+            <div>
+              <span class="eyebrow" style="display:block;margin-bottom:8px">Como foi essa série?</span>
+              <div class="rpe" data-single="rpe">
+                <button class="easy" data-val="easy"><span class="rface">😎</span><span class="rname">Fácil</span></button>
+                <button class="ok sel" data-val="ok"><span class="rface">💪</span><span class="rname">Ok</span></button>
+                <button class="hard" data-val="hard"><span class="rface">🥵</span><span class="rname">Pesado</span></button>
+              </div>
+            </div>
+
+            <div class="spacer"></div>
+            <button class="btn btn-primary" id="set-done">Concluir série 1 de 4</button>
+          </div>
+
+          <!-- rest overlay -->
+          <div class="rest-sheet" id="rest-sheet">
+            <span class="eyebrow accent">Descanso</span>
+            <div class="rest-ring" id="rest-ring"><div class="rtimer" id="rest-time">75</div></div>
+            <p class="muted" style="text-align:center;max-width:240px">Respire fundo. Próxima série em instantes — hidrate-se.</p>
+            <div class="row" style="width:100%;max-width:300px">
+              <button class="btn btn-ghost" id="rest-add">+20s</button>
+              <button class="btn btn-primary" id="rest-skip">Pular descanso</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ CONCLUÍDO ============ -->
+        <section class="screen" data-screen="done" data-screen-label="Treino concluído" data-chrome="none">
+          <div class="confetti" id="confetti"></div>
+          <div class="screen-pad">
+            <div class="center-col" style="gap:10px;padding-top:14px">
+              <div style="width:72px;height:72px;border-radius:22px;display:grid;place-items:center;background:var(--good-soft);color:var(--good)" id="done-ic"></div>
+              <h1 class="h-xl">Treino concluído!</h1>
+              <p class="muted">Upper · Força · Dia A</p>
+            </div>
+            <div class="done-stats">
+              <div class="dstat primary"><b>52</b><span>minutos</span></div>
+              <div class="dstat good"><b>6,1t</b><span>volume total</span></div>
+              <div class="dstat neutral"><b>6</b><span>exercícios</span></div>
+              <div class="dstat warn"><b>+4%</b><span>vs. última vez</span></div>
+            </div>
+
+            <div class="insight" style="background:linear-gradient(150deg,var(--good-soft),var(--surface));border-color:oklch(0.78 0.16 158 / .28)">
+              <div class="ihead"><span class="iavatar" id="done-brain"></span><b>O que o coach registrou</b></div>
+              <p>Você <b>subiu a carga no supino</b> e manteve as reps — vou guardar isso e sugerir um próximo passo no próximo Upper. As pernas seguem leves essa semana; amanhã é dia de Lower.</p>
+            </div>
+
+            <span class="eyebrow">Resumo por exercício</span>
+            <div class="card" style="padding:6px 16px" id="done-summary"></div>
+
+            <div class="card">
+              <span class="eyebrow" style="display:block;margin-bottom:10px">Nível geral de cansaço</span>
+              <div class="rpe" data-single="fatigue">
+                <button class="easy" data-val="easy"><span class="rface">😎</span><span class="rname">Tranquilo</span></button>
+                <button class="ok sel" data-val="ok"><span class="rface">💪</span><span class="rname">No ponto</span></button>
+                <button class="hard" data-val="hard"><span class="rface">🥵</span><span class="rname">Exausto</span></button>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" data-go="dashboard">Ir para o início →</button>
+          </div>
+        </section>
+
+        <!-- ============ PROGRESSO / HISTÓRICO ============ -->
+        <section class="screen" data-screen="history" data-screen-label="Progresso" data-chrome="full" data-tab="progresso">
+          <div class="screen-pad">
+            <div class="topbar"><h1 class="h-lg">Progresso</h1><span class="ai-pill" id="hi-pill"></span></div>
+
+            <div class="seg-tabs" id="hi-tabs">
+              <button class="on" data-pane="resumo">Resumo</button>
+              <button data-pane="cargas">Cargas</button>
+              <button data-pane="historico">Histórico</button>
+            </div>
+
+            <!-- pane: resumo -->
+            <div data-pane-body="resumo" class="stack">
+              <div class="metric-grid">
+                <div class="metric"><div class="mk"><span data-ic="check" style="color:var(--good)"></span> Aderência</div><div class="mv good">88<small>%</small></div><div class="mtrend up"><span data-ic="trendUp"></span> +6% no mês</div></div>
+                <div class="metric"><div class="mk"><span data-ic="flame" style="color:var(--hot)"></span> Sequência</div><div class="mv">12<small> sem</small></div><div class="dim" style="font-size:11.5px;margin-top:4px">recorde: 14</div></div>
+                <div class="metric"><div class="mk"><span data-ic="dumbbell"></span> Treinos</div><div class="mv">27</div><div class="dim" style="font-size:11.5px;margin-top:4px">últimos 8 sem.</div></div>
+                <div class="metric"><div class="mk"><span data-ic="scale"></span> Volume/sem</div><div class="mv">21<small>t</small></div><div class="mtrend up"><span data-ic="trendUp"></span> +12%</div></div>
+              </div>
+
+              <div class="chart-card">
+                <div class="chead"><div><span class="eyebrow">Frequência semanal</span><div class="cv" style="margin-top:4px">3,4<small> treinos/sem</small></div></div></div>
+                <div class="bars" id="hi-bars"></div>
+              </div>
+
+              <div class="card">
+                <div class="row between center" style="margin-bottom:14px"><span class="eyebrow">Equilíbrio muscular</span><span class="tag-chip">últimos 30 dias</span></div>
+                <div class="mbar" id="hi-balance"></div>
+                <div class="insight" style="margin-top:14px;background:var(--warn-soft);border-color:oklch(0.82 0.15 78 / .3)">
+                  <p style="font-size:13px"><b>Pernas e core</b> ficaram pra trás. Seu próximo plano vai dar mais atenção a eles pra equilibrar o corpo.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- pane: cargas -->
+            <div data-pane-body="cargas" class="stack" style="display:none">
+              <p class="lede">Toque num exercício pra ver a evolução completa e a sugestão da IA.</p>
+              <div id="hi-loads" class="stack-sm"></div>
+            </div>
+
+            <!-- pane: historico -->
+            <div data-pane-body="historico" class="stack" style="display:none">
+              <div class="metric-grid">
+                <div class="metric"><div class="mk">Concluídos</div><div class="mv good" id="hi-done">—</div></div>
+                <div class="metric"><div class="mk">Pulados</div><div class="mv" id="hi-skip">—</div></div>
+              </div>
+              <div class="timeline" id="hi-timeline"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ EVOLUÇÃO DE CARGA (detalhe) ============ -->
+        <section class="screen" data-screen="progress-detail" data-screen-label="Evolução de carga" data-chrome="full" data-tab="progresso">
+          <div class="screen-pad">
+            <div class="topbar"><button class="back" data-go="history" id="pd-back"></button><span class="ai-pill" id="pd-pill"></span></div>
+            <div><span class="eyebrow accent" id="pd-muscle">PEITO</span><h1 class="h-lg" style="margin-top:6px" id="pd-name">Supino reto</h1></div>
+
+            <div class="chart-card">
+              <div class="chead">
+                <div><span class="eyebrow">Carga máxima</span><div class="cv" style="margin-top:4px"><span id="pd-last">20</span><small> kg/lado</small></div></div>
+                <div style="text-align:right"><span class="eyebrow">Evolução</span><div class="cv" style="margin-top:4px;color:var(--good)" id="pd-delta">+25%</div></div>
+              </div>
+              <div id="pd-chart"></div>
+              <div class="row between" style="margin-top:6px;font-size:11px;color:var(--text-dim)"><span>6 semanas atrás</span><span>hoje</span></div>
+            </div>
+
+            <div class="metric-grid">
+              <div class="metric"><div class="mk">Última carga</div><div class="mv" id="pd-cur">20<small> kg</small></div></div>
+              <div class="metric"><div class="mk">Melhor marca</div><div class="mv good" id="pd-best">24<small> kg</small></div></div>
+              <div class="metric"><div class="mk">Reps recentes</div><div class="mv">8<small> reps</small></div></div>
+              <div class="metric"><div class="mk">Frequência</div><div class="mv">2<small>x/sem</small></div></div>
+            </div>
+
+            <div class="explain">
+              <div class="ehead"><span class="iavatar" id="pd-brain"></span><b>Sugestão pro próximo treino</b></div>
+              <div class="reasons">
+                <div class="reason"><span class="ri"><span data-ic="target"></span></span><div class="rt" id="pd-suggest"></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ FAVORITOS ============ -->
+        <section class="screen" data-screen="favorites" data-screen-label="Favoritos" data-chrome="full" data-tab="favoritos">
+          <div class="screen-pad">
+            <div class="topbar"><h1 class="h-lg">Favoritos</h1></div>
+
+            <div class="fav-hero">
+              <div class="fh"><span class="fi" id="fv-ic"></span><div><b style="font-size:15px">A IA usa seus favoritos</b><div class="dim" style="font-size:12.5px;margin-top:2px">pra montar cada novo treino</div></div></div>
+              <p>Os exercícios que você favorita entram com <b>prioridade</b> nos próximos planos. Os que estão no plano atual aparecem marcados.</p>
+            </div>
+
+            <span class="eyebrow">Exercícios favoritos</span>
+            <div id="fv-ex" class="stack-sm"></div>
+
+            <span class="eyebrow" style="margin-top:4px">Treinos favoritos</span>
+            <div id="fv-wk" class="stack-sm"></div>
+          </div>
+        </section>
+
+        <!-- ============ PERFIL FITNESS ============ -->
+        <section class="screen" data-screen="profile" data-screen-label="Perfil" data-chrome="full" data-tab="perfil">
+          <div class="screen-pad">
+            <div class="topbar"><h1 class="h-lg">Perfil fitness</h1><span class="link" data-toast="Saindo…">Sair</span></div>
+
+            <div class="profile-head">
+              <div class="av">M</div>
+              <div class="grow"><b>Marcus</b><small>marcus@email.com</small></div>
+              <div class="ring-wrap" id="pr-ring"><div class="rlabel"><b id="pr-ready">82</b><span>pronto</span></div></div>
+            </div>
+
+            <div class="mini-stats">
+              <div class="mini-stat"><b>27</b><span>treinos</span></div>
+              <div class="mini-stat"><b>🔥 12</b><span>semanas</span></div>
+              <div class="mini-stat"><b>+18%</b><span>carga média</span></div>
+            </div>
+
+            <div class="card">
+              <div class="row between center" style="margin-bottom:6px"><b class="h-sm">Seu DNA de treino</b><span class="link" data-toast="Editar perfil">Editar</span></div>
+              <div class="muted" style="font-size:12.5px;margin-bottom:6px">A IA usa isso pra calibrar cada plano.</div>
+              <div class="dna" id="pr-dna"></div>
+            </div>
+
+            <button class="insight" data-go="plan" style="text-align:left;cursor:pointer;width:100%;color:var(--text);background:linear-gradient(150deg,var(--primary-soft),var(--surface));border-color:oklch(0.685 var(--accent-c) var(--accent-h) / .28)">
+              <div class="ihead"><span class="iavatar" id="pr-brain"></span><b>Plano ativo</b><span class="tag">Upper / Lower</span></div>
+              <p>Você está na <b>semana 4 de 6</b>. A IA revisa o plano automaticamente ao fim do ciclo — ou quando seu desempenho mudar bastante.</p>
+            </button>
+
+            <div class="list-card" id="pr-list"></div>
+            <div class="list-card">
+              <button class="li danger"><span class="lic" data-ic="trash"></span><span class="lt">Excluir conta</span></button>
+            </div>
+          </div>
+        </section>
+
+
+      </div><!-- /viewport -->
+
+      <!-- FAB COACH -->
+      <button class="fab" id="fab"><span id="fab-ic"></span> <span class="fab-label">Coach</span></button>
+
+      <!-- TAB BAR -->
+      <nav class="tabbar" id="tabbar">
+        <button class="tab" data-target="dashboard" data-tab="hoje"><span class="ti" data-ic="bolt"></span>Hoje</button>
+        <button class="tab" data-target="plan" data-tab="plano"><span class="ti" data-ic="layers"></span>Plano</button>
+        <button class="tab" data-target="history" data-tab="progresso"><span class="ti" data-ic="chart"></span>Progresso</button>
+        <button class="tab" data-target="favorites" data-tab="favoritos"><span class="ti" data-ic="heart"></span>Favoritos</button>
+        <button class="tab" data-target="profile" data-tab="perfil"><span class="ti" data-ic="user"></span>Perfil</button>
+      </nav>
+
+      <div class="toast" id="toast"></div>
+
+      <!-- ============ COACH EASYHEALTH (agente conversacional) ============ -->
+      <div class="coach-scrim" id="coach-scrim"></div>
+      <div class="coach-sheet" id="coach-sheet" role="dialog" aria-label="Coach EasyHealth" data-screen-label="Coach EasyHealth">
+        <div class="coach-head">
+          <span class="coach-orb lg" aria-hidden="true"></span>
+          <div class="ctitle">
+            <b>Coach EasyHealth</b>
+            <span class="cstatus"><span class="live"></span> IA · responde em tempo real</span>
+          </div>
+          <button class="coach-close" id="coach-close" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          </button>
+        </div>
+        <div class="coach-body" id="coach-body"></div>
+        <div class="coach-ctx" id="coach-ctx"></div>
+        <div class="coach-quick" id="coach-quick"></div>
+        <div class="coach-input">
+          <div class="cwrap"><textarea id="coach-text" rows="1" placeholder="Pergunte ao seu coach…"></textarea></div>
+          <button class="coach-send" id="coach-send" aria-label="Enviar" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"></path></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="eh-tweaks-root"></div>
+
+<script src="pro-data.js"></script>
+<script src="pro-charts.js"></script>
+<script src="pro-app.js"></script>
+<script src="coach-data.js"></script>
+<script src="coach.js"></script>
+
+<!-- Tweaks (painel React montado em ilha própria) -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="pro-tweaks.jsx"></script>
+</body>
+</html>

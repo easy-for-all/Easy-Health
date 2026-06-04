@@ -85,6 +85,10 @@ Rails.application.routes.draw do
         get :conditioning
       end
 
+      namespace :coach do
+        post :messages
+      end
+
       namespace :admin do
         get :stats
       end
