@@ -28,6 +28,7 @@ Rails.application.routes.draw do
       get  "workout_plan/today",        to: "workout_plans#today"
       get  "workout_days/:id",          to: "workout_plans#day"
       post "workout_plan/regenerate",   to: "workout_plans#regenerate"
+      post "quick_workouts",            to: "quick_workouts#create"
       post "workout_days/:id/duplicate",       to: "workout_plans#duplicate_day"
       patch "workout_days/:id/toggle_favorite", to: "workout_days#toggle_favorite"
 

@@ -8,7 +8,7 @@ import { useTheme } from "@/features/theme/theme-context";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { LoadingScreen } from "@/shared/components/loading-screen";
-import { AiRecommendationsCard } from "@/shared/components/ai-recommendations-card";
+import { AITrainerCard } from "@/shared/components/ai-trainer";
 import type { WorkoutPlan, WorkoutDay } from "@/shared/types/workout";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -75,6 +75,10 @@ export default function DashboardPage() {
 
       <StreakCard streak={streak} weeklySessions={weeklySessions} weeklyGoal={weeklyGoal} />
 
+      <section className="mt-4 rounded-2xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900" style={{ boxShadow: "var(--shadow-card)" }}>
+        <AITrainerCard />
+      </section>
+
       <section className="mt-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Seus treinos</h2>
         {plan?.days?.length ? (
@@ -93,12 +97,17 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="mt-6">
-        <AiRecommendationsCard />
-      </section>
-
       <div className="mt-4 flex gap-3">
-        <Link href="/history" className="flex-1 rounded-lg border border-gray-200 py-3 text-center text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
+        <Link
+          href="/workout/quick"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-50 py-3 text-sm font-semibold text-primary-600 hover:bg-primary-100 dark:bg-primary-950 dark:text-primary-400 dark:hover:bg-primary-900"
+        >
+          ⚡ Treino Rápido
+        </Link>
+        <Link
+          href="/history"
+          className="flex flex-1 items-center justify-center rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+        >
           Histórico
         </Link>
       </div>

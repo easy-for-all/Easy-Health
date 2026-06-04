@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
+import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 
 const MUSCLE_COLORS: Record<string, string> = {
@@ -117,11 +118,35 @@ function WorkoutsContent() {
   const recommendedId = plan ? recommendedDayId(plan, sessions) : null;
   const activeDayName = plan?.days.find((d) => d.id === activeWorkoutDayId)?.name ?? "Treino";
 
+  const mostExecutedDays = useMemo(() => {
+    if (!plan?.days || !sessions.length) return [];
+    const freq: Record<number, number> = {};
+    sessions.forEach((s) => { freq[s.workout_day_id] = (freq[s.workout_day_id] ?? 0) + 1; });
+    return [...plan.days]
+      .filter((d) => (freq[d.id] ?? 0) > 0)
+      .sort((a, b) => (freq[b.id] ?? 0) - (freq[a.id] ?? 0))
+      .slice(0, 3);
+  }, [plan?.days, sessions]);
+
+  const lastExecutedDay = useMemo(() => {
+    if (!plan?.days || !sessions.length) return null;
+    const lastSession = [...sessions].sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())[0];
+    return plan.days.find((d) => d.id === lastSession?.workout_day_id) ?? null;
+  }, [plan?.days, sessions]);
+
   const recommended = todayDay ?? plan?.days.find((d) => d.id === recommendedId) ?? null;
 
   return (
     <div className="min-h-screen px-4 py-6 pb-28" style={{ background: "#0a0f1e" }}>
-      <h1 className="text-2xl font-bold text-white">Treinos</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Treinos</h1>
+        <Link
+          href="/workout/quick"
+          className="flex items-center gap-1.5 rounded-full bg-primary-500/15 px-3 py-1.5 text-xs font-semibold text-primary-400 hover:bg-primary-500/25"
+        >
+          ⚡ Rápido
+        </Link>
+      </div>
 
       {/* Active session card */}
       {hasActiveSession ? (
@@ -221,31 +246,89 @@ function WorkoutsContent() {
         </section>
       )}
 
-      {/* Favoritos section */}
-      {favoriteDays.length > 0 && (
-        <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Favoritos ❤️
-          </h2>
-          <div className="mt-3 space-y-3">
-            {favoriteDays.map((day) => {
-              const idx = plan!.days.findIndex((d) => d.id === day.id);
-              return (
+      {/* Favoritos section — enhanced */}
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Favoritos & Mais Usados</h2>
+
+        {favoriteDays.length === 0 && mostExecutedDays.length === 0 && lastExecutedDay === null ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+            <AITrainerAvatar mood="speaking" size="sm" />
+            <AITrainerBubble
+              message="Marque treinos como favoritos para acessá-los rapidamente aqui. Após treinar, seus mais usados também aparecem."
+              mood="speaking"
+              show
+              side="left"
+            />
+          </div>
+        ) : (
+          <div className="mt-3 space-y-5">
+            {/* ⭐ Favoritos */}
+            {favoriteDays.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-500">⭐ Favoritos</p>
+                <div className="space-y-2.5">
+                  {favoriteDays.map((day) => {
+                    const idx = plan!.days.findIndex((d) => d.id === day.id);
+                    return (
+                      <WorkoutDayCard
+                        key={day.id}
+                        day={day}
+                        idx={idx}
+                        sessions={sessions}
+                        isRecommended={false}
+                        onView={() => router.push(`/workout/today?day=${day.id}`)}
+                        onStart={() => router.push(`/workout/today?day=${day.id}`)}
+                        onToggleFavorite={() => toggleFavorite(day.id)}
+                        highlight
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 🔁 Mais executados */}
+            {mostExecutedDays.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-500">🔁 Mais executados</p>
+                <div className="space-y-2.5">
+                  {mostExecutedDays.map((day) => {
+                    const idx = plan!.days.findIndex((d) => d.id === day.id);
+                    return (
+                      <WorkoutDayCard
+                        key={`freq-${day.id}`}
+                        day={day}
+                        idx={idx}
+                        sessions={sessions}
+                        isRecommended={false}
+                        onView={() => router.push(`/workout/today?day=${day.id}`)}
+                        onStart={() => router.push(`/workout/today?day=${day.id}`)}
+                        onToggleFavorite={() => toggleFavorite(day.id)}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ⏱ Último executado */}
+            {lastExecutedDay && (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-500">⏱ Último executado</p>
                 <WorkoutDayCard
-                  key={day.id}
-                  day={day}
-                  idx={idx}
+                  day={lastExecutedDay}
+                  idx={plan!.days.findIndex((d) => d.id === lastExecutedDay.id)}
                   sessions={sessions}
                   isRecommended={false}
-                  onView={() => router.push(`/workout/today?day=${day.id}`)}
-                  onStart={() => router.push(`/workout/today?day=${day.id}`)}
-                  onToggleFavorite={() => toggleFavorite(day.id)}
+                  onView={() => router.push(`/workout/today?day=${lastExecutedDay.id}`)}
+                  onStart={() => router.push(`/workout/today?day=${lastExecutedDay.id}`)}
+                  onToggleFavorite={() => toggleFavorite(lastExecutedDay.id)}
                 />
-              );
-            })}
+              </div>
+            )}
           </div>
-        </section>
-      )}
+        )}
+      </section>
 
       {/* Histórico section */}
       <section className="mt-8">
@@ -315,6 +398,7 @@ function WorkoutDayCard({
   onView,
   onStart,
   onToggleFavorite,
+  highlight = false,
 }: {
   day: WorkoutDay;
   idx: number;
@@ -323,6 +407,7 @@ function WorkoutDayCard({
   onView: () => void;
   onStart: () => void;
   onToggleFavorite: () => void;
+  highlight?: boolean;
 }) {
   const lastSession = lastSessionForDay(sessions, day.id);
 
@@ -335,6 +420,8 @@ function WorkoutDayCard({
       className={`cursor-pointer rounded-xl border p-4 transition-opacity active:opacity-70 ${
         isRecommended
           ? "border-primary-500/40 bg-primary-500/10"
+          : highlight
+          ? "border-primary-800/60 bg-slate-900"
           : "border-slate-800 bg-slate-900"
       }`}
     >
@@ -377,7 +464,7 @@ function WorkoutDayCard({
             className="text-xl leading-none transition-transform active:scale-90"
             aria-label={day.favorited ? "Remover dos favoritos" : "Adicionar aos favoritos"}
           >
-            {day.favorited ? "❤️" : "🤍"}
+            {day.favorited ? "⭐" : "☆"}
           </button>
           <button
             onClick={(e) => {

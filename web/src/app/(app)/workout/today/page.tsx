@@ -17,6 +17,7 @@ import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared
 import { ShareButton } from "@/shared/components/workout-share/share-button";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
+import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -123,6 +124,28 @@ function WorkoutTodayContent() {
 
   useEffect(() => {
     const dayIdParam = searchParams.get("day");
+    const quickParam = searchParams.get("quick");
+
+    // Handle quick workout: day data was pre-generated and stored in sessionStorage
+    if (quickParam === "1") {
+      const raw = sessionStorage.getItem("wk_quick_day");
+      if (raw) {
+        try {
+          const quickDay: WorkoutDay = JSON.parse(raw);
+          sessionStorage.removeItem("wk_quick_day");
+          const runtime = Object.fromEntries((quickDay.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
+          setPlan(null);
+          setSessions([]);
+          setDay(quickDay);
+          setExerciseRuntime(runtime);
+          setCurrentIndex(0);
+          setCurrentSet(1);
+          setPhase("warmup");
+          setLoading(false);
+          return;
+        } catch { /* fall through */ }
+      }
+    }
 
     // Pre-start rest interval immediately (accurate countdown regardless of API latency)
     const restEnd = getRestEnd();
@@ -639,9 +662,20 @@ function WorkoutTodayContent() {
 
               <p className="mt-6 text-sm text-slate-400">Próximo: <span className="font-semibold text-slate-300">{exercise.name}</span></p>
 
+              {/* AI Trainer tip during rest */}
+              <div className="mt-5 flex items-start gap-3 max-w-xs">
+                <AITrainerAvatar mood="idle" size="sm" />
+                <AITrainerBubble
+                  message={`Boa série! Respire fundo e prepare-se para ${exercise.name}.`}
+                  mood="speaking"
+                  show
+                  side="left"
+                />
+              </div>
+
               <PressButton
                 onClick={skipRest}
-                className="mt-8 rounded-xl border border-slate-700 px-6 py-3 text-sm font-medium text-slate-400 hover:bg-slate-800"
+                className="mt-6 rounded-xl border border-slate-700 px-6 py-3 text-sm font-medium text-slate-400 hover:bg-slate-800"
               >
                 Pular descanso
               </PressButton>
@@ -732,24 +766,62 @@ function WorkoutTodayContent() {
         transition={{ duration: 0.18, ease: "easeOut" }}
         className="flex flex-1 flex-col"
       >
-        <div className="grid grid-cols-[1fr_104px] gap-3">
-          <SmartImage src={getGymSafeImageUrl(exercise) ?? exerciseFallback(exercise)} fallbackSrc={exerciseFallback(exercise)} alt={exercise.name} className="h-48 w-full rounded-xl object-cover" />
-          <SmartImage src={exercise.muscle_image_url} fallbackSrc="/muscle-images/cardio.svg" alt={exercise.muscle_group ?? "músculo"} className="h-48 w-full rounded-xl object-cover" />
-        </div>
+        {/* Exercise media — large GIF when available */}
+        {exercise.gif_url ? (
+          <div
+            className="relative w-full cursor-pointer overflow-hidden rounded-2xl"
+            style={{ maxHeight: 280 }}
+            onClick={() => setGifModalExercise(exercise)}
+          >
+            <img
+              src={exercise.gif_url}
+              alt={exercise.name}
+              className="h-64 w-full object-cover rounded-2xl"
+              style={{ maxHeight: 280 }}
+            />
+            <div className="absolute inset-0 flex items-end justify-between rounded-2xl bg-gradient-to-t from-black/60 via-transparent to-transparent px-3 pb-3">
+              {exercise.muscle_group && (
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${MUSCLE_COLORS[exercise.muscle_group] ?? "bg-gray-100 text-gray-600"}`}>
+                  {exercise.muscle_group}
+                </span>
+              )}
+              <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                ▶ Ver completo
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-[1fr_96px] gap-2">
+            <SmartImage
+              src={getGymSafeImageUrl(exercise) ?? exerciseFallback(exercise)}
+              fallbackSrc={exerciseFallback(exercise)}
+              alt={exercise.name}
+              className="h-44 w-full rounded-2xl object-cover"
+            />
+            <SmartImage
+              src={exercise.muscle_image_url}
+              fallbackSrc="/muscle-images/cardio.svg"
+              alt={exercise.muscle_group ?? "músculo"}
+              className="h-44 w-full rounded-2xl object-cover"
+            />
+          </div>
+        )}
+
+        {/* Action chips */}
         <div className="mt-2 flex gap-2">
-          {(exercise.gif_url || exercise.image_url) && (
+          {!exercise.gif_url && (exercise.image_url) && (
             <button
               onClick={() => setGifModalExercise(exercise)}
               className="flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 active:bg-primary-100"
             >
-              ▶ Ver vídeo
+              ▶ Ver
             </button>
           )}
           <button
             onClick={() => setInfoModalExercise(exercise)}
             className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-400 active:bg-slate-700"
           >
-            ℹ Mais informações
+            ℹ Info
           </button>
           <button
             onClick={() => setShowSwapModal(true)}
@@ -758,8 +830,10 @@ function WorkoutTodayContent() {
             ⇄ Trocar
           </button>
         </div>
-        <div className="mt-4">
-          <h2 className="text-3xl font-bold text-white">{exercise.name}</h2>
+
+        {/* Exercise name */}
+        <div className="mt-3">
+          <h2 className="text-2xl font-bold text-white leading-tight">{exercise.name}</h2>
         </div>
         {(() => {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
@@ -779,8 +853,6 @@ function WorkoutTodayContent() {
           }
           return null;
         })()}
-        <p className="mt-2 text-slate-400">{exercise.description}</p>
-
         {isCardio(exercise) ? (
           /* ── Cardio exercise panel ───────────────────────── */
           <div className="mt-6 flex flex-col items-center gap-4">
@@ -1557,8 +1629,10 @@ function DoneScreen({
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
       >
-        <p className="text-4xl mb-2">🎉</p>
-        <h1 className="text-2xl font-bold text-white">Treino concluído!</h1>
+        <div className="flex justify-center">
+          <AITrainerAvatar mood="celebrating" size="lg" />
+        </div>
+        <h1 className="mt-2 text-2xl font-bold text-white">Treino concluído!</h1>
         <p className="mt-1 text-slate-400">{day.name}</p>
         {saving && <p className="mt-2 text-xs text-primary-500">Salvando...</p>}
       </motion.div>

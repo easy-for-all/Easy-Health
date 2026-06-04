@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/shared/lib/api";
 import type { WorkoutDayExercise } from "@/shared/types/workout";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
+import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 
 type EquipmentIdentification = {
   equipment_name: string;
@@ -33,6 +34,22 @@ const MUSCLE_LABELS: Record<string, string> = {
   chest: "Peito", back: "Costas", shoulders: "Ombros",
   biceps: "Bíceps", triceps: "Tríceps", legs: "Pernas", core: "Core",
 };
+
+const MUSCLE_COLORS: Record<string, string> = {
+  chest: "bg-red-100 text-red-700",
+  back: "bg-blue-100 text-blue-700",
+  shoulders: "bg-purple-100 text-purple-700",
+  biceps: "bg-yellow-100 text-yellow-700",
+  triceps: "bg-orange-100 text-orange-700",
+  legs: "bg-green-100 text-green-700",
+  core: "bg-teal-100 text-teal-700",
+};
+
+function contextLabel(current: WorkoutDayExercise, alt: ExerciseOption): string | null {
+  if (alt.exercise_type !== current.exercise_type && !alt.muscle_group) return "Modalidade diferente";
+  if (alt.muscle_group === current.muscle_group) return "Mesmo músculo principal";
+  return null;
+}
 
 const TYPE_LABELS: Record<string, string> = {
   musculacao: "Musculação", cardio: "Cardio", natacao: "Natação",
@@ -80,6 +97,7 @@ export function SwapModal({
   const [aiError, setAiError] = useState<string | null>(null);
   const [searchLang, setSearchLang] = useState<"pt" | "en">("pt");
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openSwapFetch = useCallback(async (wde: WorkoutDayExercise) => {
@@ -87,6 +105,7 @@ export function SwapModal({
     const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
     const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${excludeIds}`);
     setAlternatives(data);
+    setInitialLoading(false);
   }, [allWorkoutExerciseIds]);
 
   useEffect(() => {
@@ -196,7 +215,40 @@ export function SwapModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
-        <h3 className="mb-3 mt-2 text-base font-bold text-gray-900 dark:text-gray-50">Escolha um substituto</h3>
+
+        {/* AI Trainer header */}
+        <div className="mb-4 mt-2 flex items-start gap-3">
+          <AITrainerAvatar mood={initialLoading ? "thinking" : "speaking"} size="sm" />
+          <AITrainerBubble
+            message={
+              initialLoading
+                ? "Buscando exercícios compatíveis..."
+                : `${exercise.name} trabalha ${MUSCLE_LABELS[exercise.muscle_group ?? ""] || exercise.muscle_group || exercise.exercise_type}. Aqui estão as melhores alternativas.`
+            }
+            mood={initialLoading ? "thinking" : "speaking"}
+            show
+            side="left"
+          />
+        </div>
+
+        {/* Current exercise mini-card */}
+        <div className="mb-3 flex items-center gap-3 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/50">
+          <SmartImage
+            src={getGymSafeImageUrl(exercise) ?? exerciseFallback(exercise)}
+            fallbackSrc={exerciseFallback(exercise)}
+            alt={exercise.name}
+            className="h-10 w-14 rounded-lg object-cover opacity-60"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-gray-400">Substituindo</p>
+            <p className="truncate text-sm font-semibold text-gray-700 dark:text-gray-300">{exercise.name}</p>
+          </div>
+          {exercise.muscle_group && (
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[exercise.muscle_group] ?? "bg-gray-100 text-gray-600"}`}>
+              {MUSCLE_LABELS[exercise.muscle_group] ?? exercise.muscle_group}
+            </span>
+          )}
+        </div>
 
         {/* Upload IA */}
         <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3">
@@ -291,20 +343,21 @@ export function SwapModal({
           </button>
         </div>
 
-        {/* Chips de filtro por músculo/tipo */}
+        {/* Chips de filtro por músculo/tipo — com cores */}
         <div className="mb-3 flex flex-wrap gap-1.5">
           {Object.entries(MUSCLE_LABELS).map(([key, label]) => {
             const isCompatible = exercise.muscle_group === key;
+            const isActive = swapFilter?.muscle_group === key;
             return (
               <button
                 key={key}
                 onClick={() => fetchByFilter({ muscle_group: key })}
                 disabled={!isCompatible}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                  swapFilter?.muscle_group === key
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  isActive
                     ? "bg-primary-500 text-white"
                     : isCompatible
-                    ? "bg-gray-100 text-gray-600 hover:bg-primary-100"
+                    ? `${MUSCLE_COLORS[key] ?? "bg-gray-100 text-gray-600"} hover:opacity-80`
                     : "cursor-not-allowed bg-gray-50 text-gray-300"
                 }`}
               >
@@ -335,33 +388,63 @@ export function SwapModal({
 
         {/* Lista de alternativas */}
         {searchLoading ? (
-          <p className="rounded-lg bg-gray-50 p-3 text-center text-sm text-gray-400">Buscando...</p>
+          <div className="space-y-2.5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-gray-100 p-3 dark:border-gray-700">
+                <div className="h-16 w-20 shrink-0 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                  <div className="h-3 w-1/3 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : displayedAlternatives.length === 0 ? (
           <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
             {onlyFavorites ? "Nenhum favorito encontrado para este grupo." : "Nenhuma alternativa encontrada."}
           </p>
         ) : (
-          displayedAlternatives.map((alt) => (
-            <div key={alt.id} className="mb-2 flex w-full items-center gap-1">
-              <button
-                onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
-                className="flex flex-1 gap-3 rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50"
-              >
-                <SmartImage src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
-                <div>
-                  <p className="font-medium text-gray-900">{alt.name}</p>
-                  <p className="text-xs text-gray-400">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
-                </div>
-              </button>
-              <button
-                onClick={() => toggleFavorite(alt.id, !!alt.is_favorite)}
-                className="flex-shrink-0 px-2 py-3 text-lg"
-                title={alt.is_favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-              >
-                {alt.is_favorite ? "❤️" : "🤍"}
-              </button>
-            </div>
-          ))
+          displayedAlternatives.map((alt) => {
+            const ctx = contextLabel(exercise, alt);
+            const muscleColor = alt.muscle_group ? MUSCLE_COLORS[alt.muscle_group] : null;
+            return (
+              <div key={alt.id} className="mb-2.5 flex w-full items-center gap-1">
+                <button
+                  onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
+                  className="flex flex-1 gap-3 rounded-xl border border-gray-100 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  <SmartImage
+                    src={alt.gif_url ?? getGymSafeImageUrl(alt) ?? exerciseFallback(alt)}
+                    fallbackSrc={exerciseFallback(alt)}
+                    alt={alt.name}
+                    className="h-16 w-20 shrink-0 rounded-xl object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-gray-900 dark:text-gray-50 leading-tight">{alt.name}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {alt.muscle_group && (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${muscleColor ?? "bg-gray-100 text-gray-600"}`}>
+                          {MUSCLE_LABELS[alt.muscle_group] ?? alt.muscle_group}
+                        </span>
+                      )}
+                      {ctx && (
+                        <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-600">
+                          {ctx}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => toggleFavorite(alt.id, !!alt.is_favorite)}
+                  className="shrink-0 px-2 py-3 text-lg"
+                  title={alt.is_favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                >
+                  {alt.is_favorite ? "❤️" : "🤍"}
+                </button>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
