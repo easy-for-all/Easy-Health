@@ -40,6 +40,11 @@ api/config/master.key
 docker-data/
 
 # =========================
+# DOCS / STRATEGY (private — do not expose publicly)
+# =========================
+docs/
+
+# =========================
 # CLAUDE / LOCAL
 # =========================
 .claude/settings.local.json
