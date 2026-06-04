@@ -5,6 +5,7 @@ type ExerciseForImage = {
   exercise_type?: string | null;
   equipment_type?: string | null;
   image_url?: string | null;
+  gif_url?: string | null;
 };
 
 export function isGymExercise(exercise: Pick<ExerciseForImage, "exercise_type" | "equipment_type">): boolean {
@@ -17,7 +18,7 @@ export function isGymExercise(exercise: Pick<ExerciseForImage, "exercise_type" |
 // Returns the image URL only if it is from the official Git-versioned source.
 // For gym/musculacao exercises, external URLs are blocked and null is returned instead.
 export function getGymSafeImageUrl(exercise: ExerciseForImage): string | null {
-  const url = exercise.image_url;
+  const url = isGymExercise(exercise) ? exercise.gif_url || exercise.image_url : exercise.image_url;
   if (!url) return null;
   if (!isGymExercise(exercise)) return url;
   return OFFICIAL_IMAGE_PREFIXES.some((prefix) => url.startsWith(prefix)) ? url : null;

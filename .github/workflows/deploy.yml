@@ -30,44 +30,50 @@ jobs:
         env:
           GIT_COMMIT: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -o ConnectTimeout=30 \
-            -o ServerAliveInterval=30 \
-            -o ServerAliveCountMax=3 \
-            -o PreferredAuthentications=publickey \
-            easy@177.7.58.46 "
-            cd /home/easy/Easy-Health &&
-            sed -i '/^GIT_COMMIT=/d' .env 2>/dev/null || true &&
-            echo 'GIT_COMMIT=${{ github.sha }}' >> .env &&
-            git fetch origin main &&
-            git reset --hard origin/main &&
-            git submodule update --init --recursive || true &&
-            bash -c '
-              set -e
-              dest=api/public/exercise-images/db
-              src=external/free-exercise-db/exercises
-              if [ -d \"\$src\" ]; then
-                for slug in \$(ls \"\$src\"); do
-                  [ -f \"\$src/\$slug/0.jpg\" ] || continue
-                  mkdir -p \"\$dest/\$slug\"
-                  cp -u \"\$src/\$slug/0.jpg\" \"\$dest/\$slug/0.jpg\"
-                done
-                echo \"Exercise images copied to \$dest\"
-              else
-                echo \"external/free-exercise-db not found, skipping image copy\"
-              fi
-            ' &&
-            docker compose -f docker-compose.prod.yml down &&
-            docker builder prune -af &&
-            docker compose -f docker-compose.prod.yml build --no-cache &&
-            docker compose -f docker-compose.prod.yml up -d &&
-            sleep 15 &&
-            docker compose -f docker-compose.prod.yml exec -T api bin/rails db:migrate &&
-            docker compose -f docker-compose.prod.yml exec -T api bin/rails exercises:import_local_images &&
-            docker compose -f docker-compose.prod.yml run --rm \
-              -v /home/easy/Easy-Health/external/free-exercise-db/exercises:/external/free-exercise-db/exercises \
-              api bin/rails exercises:import_all || true
-          "
+          for attempt in 1 2 3; do
+            echo "SSH attempt $attempt/3..."
+            ssh -i ~/.ssh/id_ed25519 \
+              -o ConnectTimeout=30 \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=3 \
+              -o PreferredAuthentications=publickey \
+              easy@177.7.58.46 "
+                cd /home/easy/Easy-Health &&
+                sed -i '/^GIT_COMMIT=/d' .env 2>/dev/null || true &&
+                echo 'GIT_COMMIT=${{ github.sha }}' >> .env &&
+                git fetch origin main &&
+                git reset --hard origin/main &&
+                git submodule update --init --recursive || true &&
+                bash -c '
+                  set -e
+                  dest=api/public/exercise-images/db
+                  src=external/free-exercise-db/exercises
+                  if [ -d \"\$src\" ]; then
+                    for slug in \$(ls \"\$src\"); do
+                      [ -f \"\$src/\$slug/0.jpg\" ] || continue
+                      mkdir -p \"\$dest/\$slug\"
+                      cp -u \"\$src/\$slug/0.jpg\" \"\$dest/\$slug/0.jpg\"
+                    done
+                    echo \"Exercise images copied to \$dest\"
+                  else
+                    echo \"external/free-exercise-db not found, skipping image copy\"
+                  fi
+                ' &&
+                docker compose -f docker-compose.prod.yml down &&
+                docker builder prune -af &&
+                docker compose -f docker-compose.prod.yml build --no-cache &&
+                docker compose -f docker-compose.prod.yml up -d &&
+                sleep 15 &&
+                docker compose -f docker-compose.prod.yml exec -T api bin/rails db:migrate &&
+                docker compose -f docker-compose.prod.yml exec -T api bin/rails exercises:import_local_images &&
+                docker compose -f docker-compose.prod.yml run --rm \
+                  -v /home/easy/Easy-Health/external/free-exercise-db/exercises:/external/free-exercise-db/exercises \
+                  api bin/rails exercises:import_all || true
+              " && break || {
+              echo "Attempt $attempt failed."
+              [ $attempt -lt 3 ] && sleep 15 || { echo "All SSH attempts failed."; exit 1; }
+            }
+          done
 
       - name: Check TLS certificate expiry
         run: bash scripts/check_cert_expiry.sh easyhealth.art 30 || echo "::warning::TLS certificate for easyhealth.art is expiring soon — renew it!"
