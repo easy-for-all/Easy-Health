@@ -111,13 +111,6 @@ function WorkoutsContent() {
     }
   }
 
-  if (loading) return <LoadingScreen />;
-
-  const hasActiveSession = !!activeWorkoutDayId && !!activePhase;
-  const favoriteDays = plan?.days.filter((d) => d.favorited) ?? [];
-  const recommendedId = plan ? recommendedDayId(plan, sessions) : null;
-  const activeDayName = plan?.days.find((d) => d.id === activeWorkoutDayId)?.name ?? "Treino";
-
   const mostExecutedDays = useMemo(() => {
     if (!plan?.days || !sessions.length) return [];
     const freq: Record<number, number> = {};
@@ -133,6 +126,13 @@ function WorkoutsContent() {
     const lastSession = [...sessions].sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())[0];
     return plan.days.find((d) => d.id === lastSession?.workout_day_id) ?? null;
   }, [plan?.days, sessions]);
+
+  if (loading) return <LoadingScreen />;
+
+  const hasActiveSession = !!activeWorkoutDayId && !!activePhase;
+  const favoriteDays = plan?.days.filter((d) => d.favorited) ?? [];
+  const recommendedId = plan ? recommendedDayId(plan, sessions) : null;
+  const activeDayName = plan?.days.find((d) => d.id === activeWorkoutDayId)?.name ?? "Treino";
 
   const recommended = todayDay ?? plan?.days.find((d) => d.id === recommendedId) ?? null;
 
