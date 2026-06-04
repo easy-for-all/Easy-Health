@@ -11,7 +11,7 @@ module ExerciseImageHelper
 
   def exercise_image_url(exercise)
     if gym_exercise?(exercise)
-      official = [exercise.image_url, exercise.gif_url].find { |u| official_local_url?(u) }
+      official = [exercise.gif_url, exercise.image_url].find { |u| official_local_url?(u) }
       official || "/exercise-images/#{exercise.exercise_type || 'treino'}.svg"
     else
       exercise.image_url.presence || exercise.gif_url.presence ||
