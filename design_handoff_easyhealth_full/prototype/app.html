@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-dir="a" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EasyHealth — App</title>
+<link rel="stylesheet" href="fonts.css" />
+<link rel="stylesheet" href="theme.css" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<div class="stage">
+  <div class="desk-hint">
+    <b>Protótipo EasyHealth</b>
+    Navegue como no celular. Use o seletor ⚙ no canto pra trocar entre as 3 direções e dark/light.
+  </div>
+
+  <div class="device">
+    <div class="screen-frame">
+      <!-- STATUS BAR -->
+      <div class="statusbar">
+        <span id="sb-time">9:41</span>
+        <span class="dynisland"></span>
+        <span class="sb-right">
+          <svg viewBox="0 0 24 24"><path d="M2 17h2v-5H2v5zm4 0h2V9H6v8zm4 0h2V5h-2v12zm4 0h2v-9h-2v9zm4 0h2v-3h-2v3z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12 6c3.5 0 6.7 1.3 9 3.5l-2 2C17.3 9.8 14.8 9 12 9s-5.3.8-7 2.5l-2-2C5.3 7.3 8.5 6 12 6zm0 6c1.7 0 3.2.6 4.5 1.7l-2 2c-.7-.5-1.6-.7-2.5-.7s-1.8.2-2.5.7l-2-2C8.8 12.6 10.3 12 12 12zm0 6l2-2c-.5-.4-1.2-.6-2-.6s-1.5.2-2 .6l2 2z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M4 8h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm17 3h1v2h-1z" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="5" y="9.5" width="11" height="5" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="viewport" id="viewport">
+
+        <!-- ===================== LOGIN / WELCOME ===================== -->
+        <section class="screen" data-screen="login" data-screen-label="Login" data-chrome="none">
+          <div class="screen-pad center" style="gap:22px">
+            <div class="center-col" style="gap:18px">
+              <div style="width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:var(--primary);color:var(--primary-ink);font-family:var(--font-display);font-weight:900;font-size:34px;box-shadow:var(--glow)">E</div>
+              <div>
+                <h1 class="h-xl">Bem-vindo de volta.</h1>
+                <p class="lede" style="margin-top:8px">Entre pra continuar evoluindo com a EasyHealth.</p>
+              </div>
+            </div>
+            <div class="field"><label>E-mail</label><input type="email" placeholder="voce@email.com" value="marcus@email.com" /></div>
+            <div class="field"><label>Senha</label><input type="password" placeholder="••••••••" value="senha123" /></div>
+            <button class="btn btn-primary" data-go="dashboard">Entrar →</button>
+            <div style="text-align:center" class="muted">Novo por aqui? <span class="link" data-go="ob-goal">Criar conta grátis</span></div>
+          </div>
+        </section>
+
+        <!-- ===================== ONBOARDING 1 — OBJETIVO ===================== -->
+        <section class="screen" data-screen="ob-goal" data-screen-label="Onboarding objetivo" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+            <button class="back" data-go="login">← Voltar</button>
+            <div><h1 class="h-lg">Qual é o seu objetivo?</h1><p class="lede" style="margin-top:8px">Isso define seu plano de treino.</p></div>
+            <div class="opts" data-single="goal">
+              <button class="opt" data-val="Perder peso"><div class="otxt"><b>Perder peso</b><small>Reduzir gordura corporal</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt sel" data-val="Ganhar músculo"><div class="otxt"><b>Ganhar músculo</b><small>Aumentar massa muscular</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt" data-val="Manter"><div class="otxt"><b>Manter</b><small>Manter o peso atual</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt" data-val="Saúde geral"><div class="otxt"><b>Saúde geral</b><small>Melhorar qualidade de vida</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="ob-level">Continuar →</button>
+          </div>
+        </section>
+
+        <!-- ===================== ONBOARDING 2 — NÍVEL ===================== -->
+        <section class="screen" data-screen="ob-level" data-screen-label="Onboarding nível" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+            <button class="back" data-go="ob-goal">← Voltar</button>
+            <div><h1 class="h-lg">Seu nível de condicionamento?</h1><p class="lede" style="margin-top:8px">Seja honesto — isso ajusta a intensidade.</p></div>
+            <div class="opts" data-single="level">
+              <button class="opt" data-val="Iniciante"><div class="otxt"><b>Iniciante</b><small>Menos de 6 meses de treino</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt sel" data-val="Intermediário"><div class="otxt"><b>Intermediário</b><small>6 meses a 2 anos</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt" data-val="Avançado"><div class="otxt"><b>Avançado</b><small>Mais de 2 anos de treino</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="ob-body">Continuar →</button>
+          </div>
+        </section>
+
+        <!-- ===================== ONBOARDING 3 — DADOS FÍSICOS ===================== -->
+        <section class="screen" data-screen="ob-body" data-screen-label="Onboarding dados" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+            <button class="back" data-go="ob-level">← Voltar</button>
+            <div><h1 class="h-lg">Seus dados físicos</h1><p class="lede" style="margin-top:8px">Usados para personalizar sua experiência.</p></div>
+            <div>
+              <div class="label-sm" style="margin-bottom:10px">Como você se identifica?</div>
+              <div class="seg" data-single="gender">
+                <button class="sel" data-val="Homem">Homem</button>
+                <button data-val="Mulher">Mulher</button>
+                <button data-val="—">Prefiro não dizer</button>
+              </div>
+            </div>
+            <div class="slide-row">
+              <div class="lab"><span>Idade</span><b id="age-v">30<em>anos</em></b></div>
+              <input type="range" min="14" max="90" value="30" id="age" />
+              <div class="ends"><span>14 anos</span><span>90 anos</span></div>
+            </div>
+            <div class="slide-row">
+              <div class="lab"><span>Peso</span><b id="wt-v">75<em>kg</em></b></div>
+              <input type="range" min="35" max="180" value="75" id="wt" />
+              <div class="ends"><span>35 kg</span><span>180 kg</span></div>
+            </div>
+            <div class="slide-row">
+              <div class="lab"><span>Altura</span><b id="ht-v">175<em>cm</em></b></div>
+              <input type="range" min="120" max="220" value="175" id="ht" />
+              <div class="ends"><span>120 cm</span><span>220 cm</span></div>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="ob-activities">Continuar →</button>
+          </div>
+        </section>
+
+        <!-- ===================== ONBOARDING 4 — ATIVIDADES ===================== -->
+        <section class="screen" data-screen="ob-activities" data-screen-label="Onboarding atividades" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+            <button class="back" data-go="ob-body">← Voltar</button>
+            <div><h1 class="h-lg">O que você gosta de fazer?</h1><p class="lede" style="margin-top:8px">Selecione pelo menos uma atividade.</p></div>
+            <div class="opt-grid" data-multi="activities">
+              <button class="opt sel" data-val="Musculação"><span class="emo">🏋️</span><div class="otxt"><b>Musculação</b></div></button>
+              <button class="opt" data-val="Cardio"><span class="emo">❤️</span><div class="otxt"><b>Cardio</b></div></button>
+              <button class="opt" data-val="Natação"><span class="emo">🏊</span><div class="otxt"><b>Natação</b></div></button>
+              <button class="opt" data-val="Corrida"><span class="emo">🏃</span><div class="otxt"><b>Corrida</b></div></button>
+              <button class="opt" data-val="Funcional"><span class="emo">⚡</span><div class="otxt"><b>Funcional</b></div></button>
+              <button class="opt sel" data-val="Caminhada"><span class="emo">🚶</span><div class="otxt"><b>Caminhada</b></div></button>
+              <button class="opt" data-val="HIIT"><span class="emo">🔥</span><div class="otxt"><b>HIIT</b></div></button>
+              <button class="opt" data-val="Yoga"><span class="emo">🧘</span><div class="otxt"><b>Yoga</b></div></button>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="ob-place">Continuar →</button>
+          </div>
+        </section>
+
+        <!-- ===================== ONBOARDING 5 — LOCAL ===================== -->
+        <section class="screen" data-screen="ob-place" data-screen-label="Onboarding local" data-chrome="none">
+          <div class="screen-pad">
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+            <button class="back" data-go="ob-activities">← Voltar</button>
+            <div><h1 class="h-lg">Onde você vai treinar?</h1><p class="lede" style="margin-top:8px">Isso adapta os exercícios do seu plano.</p></div>
+            <div class="opts" data-single="place">
+              <button class="opt sel" data-val="Academia"><span class="emo">🏋️</span><div class="otxt"><b>Academia</b><small>Aparelhos, barras e halteres</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt" data-val="Em casa"><span class="emo">🏠</span><div class="otxt"><b>Em casa</b><small>Peso corporal, sem equipamentos</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt" data-val="Ao ar livre"><span class="emo">🌳</span><div class="otxt"><b>Ao ar livre</b><small>Parques, ruas e quadras</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+              <button class="opt" data-val="Varia"><span class="emo">🔄</span><div class="otxt"><b>Varia</b><small>Depende do dia</small></div><span class="chk"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span></button>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="generating">Gerar meu plano →</button>
+          </div>
+        </section>
+
+        <!-- ===================== GERANDO PLANO (IA) ===================== -->
+        <section class="screen" data-screen="generating" data-screen-label="Gerando plano" data-chrome="none">
+          <div class="screen-pad center" style="gap:26px">
+            <div class="center-col">
+              <div class="ai-orb"></div>
+              <h1 class="h-lg">Montando seu plano</h1>
+              <p class="lede">A IA está analisando seu perfil pra criar a divisão perfeita.</p>
+            </div>
+            <div id="gen-steps" style="display:flex;flex-direction:column;gap:16px;width:100%;max-width:300px;margin:0 auto">
+              <div class="gen-ln" data-step><span class="gck"></span> Analisando seu perfil</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Definindo a divisão semanal</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Selecionando exercícios</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Ajustando intensidade</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Configurando descanso</div>
+              <div class="gen-ln" data-step><span class="gck"></span> Finalizando planejamento</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== DASHBOARD ===================== -->
+        <section class="screen" data-screen="dashboard" data-screen-label="Dashboard" data-chrome="full" data-tab="treino">
+          <div class="screen-pad">
+            <div class="topbar">
+              <div><span class="dim" style="font-size:14px">Olá,</span><h2 class="h-lg" style="margin-top:2px">MARCUS</h2></div>
+              <button class="ai-pill" data-mode-toggle>☾</button>
+            </div>
+            <div class="train-hero">
+              <div class="ring-bg"></div>
+              <div class="day">Domingo</div>
+              <h2>Treinar agora</h2>
+              <p>3 treinos no seu plano</p>
+              <button class="cta" data-go="list">Escolher treino →</button>
+            </div>
+            <div class="streak-card">
+              <div class="top"><b>🔥 Sua ofensiva</b><span class="frac">0<em>/3</em></span></div>
+              <div class="muted" style="font-size:13px;margin-top:6px">Faltam 3 treinos para sua meta da semana</div>
+              <div class="week">
+                <div class="d"><span class="dot"></span><small>S</small></div>
+                <div class="d"><span class="dot"></span><small>T</small></div>
+                <div class="d"><span class="dot"></span><small>Q</small></div>
+                <div class="d"><span class="dot"></span><small>Q</small></div>
+                <div class="d"><span class="dot"></span><small>S</small></div>
+                <div class="d"><span class="dot"></span><small>S</small></div>
+                <div class="d"><span class="dot"></span><small>D</small></div>
+              </div>
+            </div>
+            <div class="label-sm" style="margin-top:4px">Seus treinos</div>
+            <button class="wkt-row" data-go="detail"><span class="badge">A</span><div class="info"><b>Full Body A</b><div class="tags"><span class="tag-chip muscle">chest</span><span class="tag-chip muscle">back</span><span class="tag-chip">6 exercícios</span></div></div><span class="btn btn-primary sm">Treinar</span></button>
+            <button class="wkt-row" data-go="detail"><span class="badge">B</span><div class="info"><b>Full Body B</b><div class="tags"><span class="tag-chip muscle">shoulders</span><span class="tag-chip muscle">triceps</span><span class="tag-chip">6 exercícios</span></div></div><span class="btn btn-primary sm">Treinar</span></button>
+            <button class="wkt-row" data-go="detail"><span class="badge">C</span><div class="info"><b>Caminhada</b><div class="tags"><span class="tag-chip">2 exercícios</span></div></div><span class="btn btn-primary sm">Treinar</span></button>
+            <div class="card card-soft" style="margin-top:2px">
+              <div class="row" style="align-items:center;gap:10px"><span style="font-size:22px">🤖</span><div><b style="font-size:15px">Personal IA</b><div class="muted" style="font-size:13px">Análise baseada no seu histórico</div></div></div>
+              <p class="muted" style="font-size:13.5px;font-style:italic;margin:12px 0 0">Treine mais alguns dias para receber recomendações personalizadas.</p>
+            </div>
+            <button class="btn btn-ghost" data-go="list">Histórico</button>
+          </div>
+        </section>
+
+        <!-- ===================== LISTA — ESCOLHA SEU TREINO ===================== -->
+        <section class="screen" data-screen="list" data-screen-label="Escolha treino" data-chrome="full" data-tab="treino">
+          <div class="screen-pad">
+            <div class="topbar"><button class="back" data-go="dashboard">← Voltar</button><span class="ai-pill">✨ Dicas IA</span></div>
+            <div><h1 class="h-lg">Escolha seu treino</h1><p class="lede" style="margin-top:8px">Faça A, B, C ou qualquer outro que fizer sentido hoje.</p></div>
+            <div class="row">
+              <button class="btn btn-primary sm" style="flex:0 0 auto">Todos</button>
+              <button class="btn btn-ghost sm" style="flex:0 0 auto">❤️ Favoritos</button>
+            </div>
+            <button class="wkt-row" data-go="detail"><span class="badge">A</span><div class="info"><b>Full Body A</b><div class="tags"><span class="tag-chip muscle">chest</span><span class="tag-chip muscle">back</span><span class="tag-chip muscle">legs</span></div></div><span style="font-size:20px">🤍</span></button>
+            <button class="wkt-row" data-go="detail"><span class="badge">B</span><div class="info"><b>Full Body B</b><div class="tags"><span class="tag-chip muscle">shoulders</span><span class="tag-chip muscle">biceps</span></div></div><span style="font-size:20px">🤍</span></button>
+            <button class="wkt-row" data-go="detail"><span class="badge">C</span><div class="info"><b>Full Body C</b><div class="tags"><span class="tag-chip muscle">chest</span><span class="tag-chip muscle">core</span></div></div><span style="font-size:20px">🤍</span></button>
+            <button class="wkt-row" data-go="detail"><span class="badge">D</span><div class="info"><b>Caminhada</b><div class="tags"><span class="tag-chip">2 exercícios</span></div></div><span style="font-size:20px">🤍</span></button>
+            <div class="label-sm" style="margin-top:6px">Últimos 7 dias</div>
+            <div class="card"><p class="muted" style="margin:0;font-size:14px">Nenhum treino registrado nesse período.</p></div>
+          </div>
+        </section>
+
+        <!-- ===================== DETALHE — FULL BODY A ===================== -->
+        <section class="screen" data-screen="detail" data-screen-label="Detalhe treino" data-chrome="full" data-tab="treino">
+          <div class="screen-pad">
+            <div class="topbar"><button class="back" data-go="list">← Escolher outro</button><span class="ai-pill">✨ Dicas IA</span></div>
+            <div><h1 class="h-lg">Full Body A</h1><p class="muted" style="margin-top:4px;font-size:14px">6 exercícios</p></div>
+            <div class="card"><div class="kv" style="padding:0"><span class="k">Descanso entre séries</span><span class="v">75 s</span></div></div>
+            <div id="detail-ex"></div>
+            <button class="btn btn-ghost" style="border-style:dashed">+ Adicionar exercício</button>
+            <button class="btn btn-primary" data-go="warmup">Iniciar treino</button>
+          </div>
+        </section>
+
+        <!-- ===================== AQUECIMENTO ===================== -->
+        <section class="screen" data-screen="warmup" data-screen-label="Aquecimento" data-chrome="none">
+          <div class="screen-pad">
+            <div style="padding-top:6px"><span class="label-sm" style="color:var(--primary)">Aquecimento</span><h1 class="h-lg" style="margin-top:6px">Prepare o corpo</h1><p class="lede" style="margin-top:8px">Execute os movimentos abaixo antes de começar.</p></div>
+            <div class="opts">
+              <div class="opt" style="cursor:default"><span class="badge" style="width:30px;height:30px;border-radius:50%;font-size:13px">1</span><div class="otxt"><b>Rotação de pescoço</b><small style="color:var(--primary)">30s cada lado</small></div></div>
+              <div class="opt" style="cursor:default"><span class="badge" style="width:30px;height:30px;border-radius:50%;font-size:13px">2</span><div class="otxt"><b>Circundução de ombros</b><small style="color:var(--primary)">10 círculos</small></div></div>
+              <div class="opt" style="cursor:default"><span class="badge" style="width:30px;height:30px;border-radius:50%;font-size:13px">3</span><div class="otxt"><b>Rotação de quadril</b><small style="color:var(--primary)">10 círculos</small></div></div>
+              <div class="opt" style="cursor:default"><span class="badge" style="width:30px;height:30px;border-radius:50%;font-size:13px">4</span><div class="otxt"><b>Agachamento livre</b><small style="color:var(--primary)">15 reps</small></div></div>
+              <div class="opt" style="cursor:default"><span class="badge" style="width:30px;height:30px;border-radius:50%;font-size:13px">5</span><div class="otxt"><b>Polichinelo</b><small style="color:var(--primary)">30s</small></div></div>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" data-go="active">Estou pronto →</button>
+          </div>
+        </section>
+
+        <!-- ===================== TREINO ATIVO ===================== -->
+        <section class="screen" data-screen="active" data-screen-label="Treino ativo" data-chrome="none">
+          <div class="screen-pad">
+            <div class="wtimer">
+              <span class="cnt" id="ex-count">1/6</span>
+              <span class="clock" id="ex-clock">⏱ 00:05</span>
+              <span class="end" data-go="done">Encerrar</span>
+            </div>
+            <div class="wprog"><i id="ex-bar" style="width:16%"></i></div>
+            <div class="ex-media">
+              <div class="ex-photo"><div class="ph"><svg viewBox="0 0 24 24"><path d="M6 8v8M18 8v8M3 10h3M18 10h3M6 12h12"/></svg></div></div>
+              <div class="muscle-map">
+                <svg viewBox="0 0 60 80"><path d="M30 4a7 7 0 0 1 7 7c0 3-2 5-2 7l8 4c3 2 4 5 4 9v10c0 2-3 2-3 0l-1-8-2 1v22c0 3-5 3-5 0l-1-15h-8l-1 15c0 3-5 3-5 0V41l-2-1-1 8c0 2-3 2-3 0V38c0-4 1-7 4-9l8-4c0-2-2-4-2-7a7 7 0 0 1 7-7z" fill="var(--border-strong)"/><ellipse cx="30" cy="26" rx="11" ry="8" fill="oklch(0.62 0.2 25)"/></svg>
+                <div class="ml">Peitoral</div>
+              </div>
+            </div>
+            <div class="ex-actions">
+              <button class="chip">▶ Ver vídeo</button>
+              <button class="chip">ⓘ Mais info</button>
+              <button class="chip warn">⇄ Trocar</button>
+            </div>
+            <div><h1 class="h-lg" id="ex-name">Bench Press</h1><p class="muted" style="margin-top:6px;font-size:14px" id="ex-desc">Deite no banco, segure a barra na largura dos ombros e empurre controlando a descida.</p></div>
+            <div class="counters">
+              <div class="counter"><div class="crow"><button class="stepper" data-dec="sets">−</button><b id="c-sets">4</b><button class="stepper" data-inc="sets">+</button></div><span>séries</span></div>
+              <div class="counter"><div class="crow"><button class="stepper" data-dec="reps">−</button><b id="c-reps">10</b><button class="stepper" data-inc="reps">+</button></div><span>reps série 1</span></div>
+              <div class="counter now"><b id="c-cur">1</b><span>série atual</span></div>
+            </div>
+            <div class="field"><label>Peso (kg)</label><input type="number" placeholder="kg" /></div>
+            <div class="field"><label>Descanso (s)</label><input type="number" value="75" /></div>
+            <div class="spacer"></div>
+            <button class="btn btn-primary" id="set-done" style="box-shadow:0 0 0 2px color-mix(in oklch,oklch(0.7 0.18 150) 60%,transparent),var(--glow)">Feito — série 1/4</button>
+          </div>
+        </section>
+
+        <!-- ===================== TREINO CONCLUÍDO ===================== -->
+        <section class="screen" data-screen="done" data-screen-label="Treino concluído" data-chrome="none">
+          <div class="confetti" id="confetti"></div>
+          <div class="screen-pad">
+            <div class="center-col" style="gap:8px;padding-top:8px"><div style="font-size:46px">🎉</div><h1 class="h-xl">Treino concluído!</h1><p class="muted">Full Body A</p></div>
+            <div class="done-stats">
+              <div class="dstat blue"><b>32</b><span>minutos</span></div>
+              <div class="dstat green"><b>4.2k</b><span>kg volume</span></div>
+              <div class="dstat gray"><b>6</b><span>exercícios</span></div>
+              <div class="dstat orange"><b>~280</b><span>kcal est.</span></div>
+            </div>
+            <div class="label-sm" style="margin-top:6px">Resumo por exercício</div>
+            <div class="card" style="padding:4px 18px">
+              <div class="summary-row"><div><b>Bench Press</b><small>Reps: 10, 10, 10, 10</small></div></div>
+              <div class="summary-row"><div><b>Clock Push-Up</b><small>Reps: 10, 10, 10, 10</small></div></div>
+              <div class="summary-row" style="border:0"><div><b>Chin-Up</b><small>Reps: 10, 10, 10, 10</small></div></div>
+            </div>
+            <div class="card">
+              <div class="label-sm" style="margin-bottom:12px">Nível geral de cansaço</div>
+              <div class="rate" data-single="fatigue"><button data-val="1">1</button><button data-val="2">2</button><button class="sel" data-val="3">3</button><button data-val="4">4</button><button data-val="5">5</button></div>
+            </div>
+            <div class="field"><textarea rows="2" placeholder="Alguma anotação? (opcional)"></textarea></div>
+            <button class="btn btn-ghost">🎯 Compartilhar treino</button>
+            <button class="btn btn-primary" data-go="dashboard">Ir para o dashboard →</button>
+          </div>
+        </section>
+
+        <!-- ===================== PERFIL ===================== -->
+        <section class="screen" data-screen="profile" data-screen-label="Perfil" data-chrome="full" data-tab="perfil">
+          <div class="screen-pad">
+            <div class="topbar"><h1 class="h-lg">Perfil</h1><span class="link" data-go="login">Sair</span></div>
+            <div class="profile-head"><div class="av">M</div><div><b>MARCUS</b><small>marcus@email.com</small></div></div>
+            <div class="mini-stats">
+              <div class="mini-stat"><b>1</b><span>treino</span></div>
+              <div class="mini-stat"><b>🔥 1</b><span>dias seguidos</span></div>
+            </div>
+            <div class="card">
+              <div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:16px">Dados físicos</b><span class="link">Editar</span></div>
+              <div style="margin-top:8px">
+                <div class="kv"><span class="k">Objetivo</span><span class="v">Ganhar músculo</span></div>
+                <div class="kv"><span class="k">Nível</span><span class="v">Intermediário</span></div>
+                <div class="kv"><span class="k">Idade</span><span class="v">30 anos</span></div>
+                <div class="kv"><span class="k">Peso</span><span class="v">75,0 kg</span></div>
+                <div class="kv"><span class="k">Altura</span><span class="v">175 cm</span></div>
+              </div>
+            </div>
+            <button class="card card-soft" data-go="profile-detail" style="text-align:left;cursor:pointer;border:1px solid color-mix(in oklch, var(--primary) 22%, var(--border))">
+              <div class="row" style="justify-content:space-between;align-items:center"><div><b style="color:var(--primary);font-size:15px">Ver perfil detalhado</b><div class="muted" style="font-size:13px;margin-top:2px">Análises, exames e evolução corporal</div></div><span style="color:var(--primary)">→</span></div>
+            </button>
+            <div class="list-card">
+              <div class="li"><span>Idioma</span><span class="v">🇧🇷 Português</span></div>
+              <div class="li" data-mode-toggle><span>Aparência</span><span class="v" id="appearance-label">☾ Modo escuro</span></div>
+              <div class="li"><span>Termos de Uso</span><span class="chev">›</span></div>
+              <div class="li"><span>Política de Privacidade</span><span class="chev">›</span></div>
+              <div class="li"><span>Fale Conosco</span><span class="chev">›</span></div>
+            </div>
+            <div class="list-card">
+              <div class="li danger"><span>Excluir Conta</span><span class="chev">›</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== PERFIL DETALHADO ===================== -->
+        <section class="screen" data-screen="profile-detail" data-screen-label="Perfil detalhado" data-chrome="full" data-tab="perfil">
+          <div class="screen-pad">
+            <div class="topbar"><button class="back" data-go="profile">←</button></div>
+            <div><h1 class="h-lg">Perfil Detalhado</h1><p class="muted" style="margin-top:4px;font-size:14px">Evolução, composição e análises</p></div>
+            <div class="card">
+              <b style="font-size:16px">Análise Detalhada</b>
+              <div class="muted" style="font-size:13px;margin:4px 0 14px">Estimativas com base nos seus dados físicos</div>
+              <div class="an-grid">
+                <div class="an-cell"><div class="k">IMC</div><div class="v good">24.5</div><div class="dim" style="font-size:12px">Peso normal</div></div>
+                <div class="an-cell"><div class="k">Peso Ideal</div><div class="v">56.7–76.3<small> kg</small></div></div>
+                <div class="an-cell"><div class="k">TMB Estimada</div><div class="v">~1694<small> kcal</small></div></div>
+                <div class="an-cell"><div class="k">Água Corporal</div><div class="v">~45<small> L</small></div></div>
+              </div>
+              <p class="dim" style="font-size:12.5px;margin:14px 0 0">Valores estimados para acompanhamento. Consulte um profissional para avaliação precisa.</p>
+            </div>
+            <div class="card">
+              <b style="font-size:16px">Fotos e Exames</b>
+              <div class="muted" style="font-size:13px;margin:4px 0 14px">Adicione fotos e exames para receber recomendações personalizadas.</div>
+              <button class="btn btn-ghost sm" style="width:100%">+ Adicionar foto ou exame</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== ASSINATURA ===================== -->
+        <section class="screen" data-screen="plan" data-screen-label="Assinatura" data-chrome="full" data-tab="plano">
+          <div class="screen-pad">
+            <div><h1 class="h-lg">Meu Plano</h1><p class="lede" style="margin-top:8px">Gerencie sua assinatura EasyHealth.</p></div>
+            <div class="card"><b style="font-size:15px">Sem assinatura</b><div class="muted" style="font-size:13.5px;margin-top:4px">Você ainda não possui uma assinatura ativa.</div></div>
+            <div class="plan">
+              <h3>Pro Mensal</h3>
+              <div class="amt">R$ 19,90<small>/mês</small></div>
+              <div class="dim" style="font-size:13px;margin-top:2px">Depois de 7 dias grátis</div>
+              <ul>
+                <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Acesso completo a todos os recursos</li>
+                <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Treinos personalizados por IA</li>
+                <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Histórico ilimitado</li>
+              </ul>
+              <button class="btn btn-dark" data-toast="7 dias grátis ativados! 🎉">Começar 7 dias grátis</button>
+              <div class="dim" style="text-align:center;font-size:12.5px;margin-top:10px">Cancele quando quiser</div>
+            </div>
+            <div class="plan best">
+              <span class="tag">Mais vantajoso</span>
+              <h3>Pro Anual</h3>
+              <div class="amt">R$ 118,80<small>/ano</small></div>
+              <div class="save">≈ R$ 9,90/mês · economize ~50%</div>
+              <ul>
+                <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Tudo do Pro Mensal</li>
+                <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Metade do preço por mês</li>
+                <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> 7 dias grátis pra testar</li>
+              </ul>
+              <button class="btn btn-primary" data-toast="7 dias grátis ativados! 🎉">Começar 7 dias grátis</button>
+              <div class="dim" style="text-align:center;font-size:12.5px;margin-top:10px">Cancele quando quiser</div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- AI CHAT FAB -->
+      <button class="fab" id="fab" data-toast="Personal IA em breve 🤖"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.6-.8L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z"/></svg></button>
+
+      <!-- TAB BAR -->
+      <nav class="tabbar" id="tabbar">
+        <button class="tab" data-tab-go="perfil" data-target="profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21c0-4 3-6 7-6s7 2 7 6"/></svg>Perfil</button>
+        <button class="tab" data-tab-go="treino" data-target="dashboard"><svg viewBox="0 0 24 24"><path d="M6 8v8M18 8v8M3 10h3M18 10h3M6 12h12"/></svg>Treino do Dia<span class="dot"></span></button>
+        <button class="tab" data-tab-go="treinos" data-target="list"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 7h4"/></svg>Treinos</button>
+        <button class="tab" data-tab-go="plano" data-target="plan"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Assinatura</button>
+      </nav>
+
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+</div>
+
+<script src="theme.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

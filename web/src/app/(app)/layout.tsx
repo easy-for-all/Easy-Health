@@ -1,16 +1,20 @@
 import { BottomNav } from "@/shared/components/bottom-nav";
-import { SupportChat } from "@/shared/components/support-chat";
 import { PageTransition } from "@/shared/components/page-transition";
 import { WorkoutSessionProvider } from "@/features/workout/workout-session-context";
+import { CoachProvider } from "@/features/coach/coach-context";
+import { CoachFab, CoachSheet } from "@/shared/components/coach-sheet";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <WorkoutSessionProvider>
-      <div className="pb-20">
-        <PageTransition>{children}</PageTransition>
-        <BottomNav />
-        <SupportChat />
-      </div>
+      <CoachProvider>
+        <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)" }}>
+          <PageTransition>{children}</PageTransition>
+          <BottomNav />
+          <CoachFab />
+          <CoachSheet />
+        </div>
+      </CoachProvider>
     </WorkoutSessionProvider>
   );
 }

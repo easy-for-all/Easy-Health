@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist_Mono, Bricolage_Grotesque, Hanken_Grotesk } from "next/font/google";
 import { getLocale, getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
 import Script from "next/script";
@@ -11,7 +11,21 @@ const GTAG_ID = "G-FG3BDM75T1";
 const GADS_ID = "AW-17759537883";
 const CLARITY_ID = "wwdmi83dip";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-bricolage",
+  display: "swap",
+});
+
+const hanken = Hanken_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-hanken",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Easy Health",
@@ -34,7 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={`${geist.variable} h-full antialiased`}>
+    <html lang={locale} className={`${bricolage.variable} ${hanken.variable} ${geistMono.variable} h-full antialiased`}>
       <head>
         {/* Apply saved theme before first paint to prevent flash */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');})();` }} />
@@ -62,7 +76,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           })(window,document,"clarity","script","${CLARITY_ID}");
         `}</Script>
       </head>
-      <body className="min-h-full bg-gray-50 dark:bg-gray-950 font-sans">
+      <body className="min-h-full bg-[var(--bg)] text-[var(--text)] font-sans" style={{ fontFamily: "var(--font-body)" }}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
             <AuthProvider>{children}</AuthProvider>

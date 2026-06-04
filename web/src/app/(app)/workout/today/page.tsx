@@ -18,6 +18,9 @@ import { ShareButton } from "@/shared/components/workout-share/share-button";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
+import { useCoach } from "@/features/coach/coach-context";
+import { AgentOrb } from "@/shared/components/agent-orb";
+import "@/shared/components/workout/workout-ui.css";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -79,6 +82,7 @@ export default function WorkoutTodayPage() {
 function WorkoutTodayContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { setScreen, registerExec, open } = useCoach();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [day, setDay] = useState<WorkoutDay | null>(null);
@@ -121,6 +125,34 @@ function WorkoutTodayContent() {
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "treino" });
   }, []);
+
+  // Register coach exec context whenever the exercising phase or current exercise changes
+  useEffect(() => {
+    if (phase === "exercising" && day?.exercises) {
+      const ex = day.exercises[currentIndex];
+      if (ex) {
+        setScreen("exec");
+        registerExec(
+          {
+            exerciseId: ex.exercise_id,
+            workoutDayExerciseId: ex.workout_day_exercise_id,
+            exerciseName: ex.name,
+            muscleGroup: ex.muscle_group,
+            currentIndex,
+            setInfo: `Série ${currentSet} de ${runtimeFor(exerciseRuntime, ex).planned_sets}`,
+          },
+          (wdeId, newExerciseId) => swapDuringExercise(wdeId, newExerciseId)
+        );
+      }
+    } else if (phase === "overview" || phase === "warmup") {
+      setScreen("day");
+      registerExec(null, null);
+    } else if (phase === "done" || phase === "choose") {
+      setScreen("dashboard");
+      registerExec(null, null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, currentIndex, currentSet, day?.exercises]);
 
   useEffect(() => {
     const dayIdParam = searchParams.get("day");
@@ -612,8 +644,8 @@ function WorkoutTodayContent() {
     const dashOffset = circumference * (1 - progress);
 
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-4 bg-[#0a0f1e]">
-        <p className="text-xs font-semibold tabular-nums text-primary-600 bg-primary-50 px-3 py-1 rounded-full mb-8">
+      <div style={{ display: "flex", minHeight: "100svh", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 20px", background: "var(--bg)" }}>
+        <p style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--primary)", background: "var(--primary-soft)", padding: "6px 14px", borderRadius: "var(--r-pill)", marginBottom: 32 }}>
           ⏱ {formatElapsed(elapsedSeconds)}
         </p>
 
@@ -635,36 +667,32 @@ function WorkoutTodayContent() {
               <p className="mt-2 text-3xl">💪</p>
             </motion.div>
           ) : (
-            <motion.div key="timer" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-6">Descanso</p>
+            <motion.div key="timer" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <p className="eyebrow" style={{ marginBottom: 24 }}>Descanso</p>
 
-              <div className="relative">
-                <svg width="200" height="200" className="-rotate-90">
-                  <circle cx="100" cy="100" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="8" />
+              <div className="rest-ring">
+                <svg width="200" height="200" style={{ transform: "rotate(-90deg)" }}>
+                  <circle cx="100" cy="100" r={radius} fill="none" stroke="var(--border)" strokeWidth="8" />
                   <motion.circle
                     cx="100" cy="100" r={radius}
                     fill="none"
-                    stroke={strokeColor}
+                    stroke={isUrgent ? "var(--hot)" : "var(--primary)"}
                     strokeWidth="8"
                     strokeLinecap="round"
                     strokeDasharray={circumference}
                     animate={{ strokeDashoffset: dashOffset }}
                     transition={{ duration: 0.9, ease: "easeOut" }}
-                    style={{ filter: `drop-shadow(0 0 8px ${strokeColor})` }}
+                    style={{ filter: isUrgent ? "drop-shadow(0 0 8px oklch(0.70 0.19 28))" : "drop-shadow(0 0 8px oklch(0.685 0.17 258))" }}
                   />
                 </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <p className={`text-5xl font-bold tabular-nums ${isUrgent ? "text-orange-500" : "text-primary-500"}`}>
-                    {restLeft}s
-                  </p>
-                </div>
+                <p className={`rest-timer ${isUrgent ? "alert" : ""}`}>{restLeft}s</p>
               </div>
 
-              <p className="mt-6 text-sm text-slate-400">Próximo: <span className="font-semibold text-slate-300">{exercise.name}</span></p>
+              <p style={{ marginTop: 24, fontSize: 14, color: "var(--text-muted)" }}>Próximo: <strong style={{ color: "var(--text)" }}>{exercise.name}</strong></p>
 
               {/* AI Trainer tip during rest */}
-              <div className="mt-5 flex items-start gap-3 max-w-xs">
-                <AITrainerAvatar mood="idle" size="sm" />
+              <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
+                <AgentOrb size="card" glyph />
                 <AITrainerBubble
                   message={`Boa série! Respire fundo e prepare-se para ${exercise.name}.`}
                   mood="speaking"
@@ -675,11 +703,11 @@ function WorkoutTodayContent() {
 
               <PressButton
                 onClick={skipRest}
-                className="mt-6 rounded-xl border border-slate-700 px-6 py-3 text-sm font-medium text-slate-400 hover:bg-slate-800"
+                style={{ marginTop: 24, border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "12px 24px", fontSize: 14, fontWeight: 600, color: "var(--text-muted)", background: "var(--surface)", cursor: "pointer" }}
               >
                 Pular descanso
               </PressButton>
-              <button onClick={() => setPhase("done")} className="mt-3 text-sm font-medium text-red-400">
+              <button onClick={() => setPhase("done")} style={{ marginTop: 12, fontSize: 13, fontWeight: 600, color: "var(--hot)", background: "none", border: 0, cursor: "pointer" }}>
                 Encerrar treino agora
               </button>
             </motion.div>
@@ -721,35 +749,35 @@ function WorkoutTodayContent() {
 
   return (
     <>
-    <div className="flex min-h-screen flex-col bg-[#0a0f1e]">
-      {/* Sticky premium header */}
-      <div className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/60 px-4 pt-3 pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-500">{currentIndex + 1}/{exercises.length}</span>
+    <div style={{ display: "flex", minHeight: "100svh", flexDirection: "column", background: "var(--bg)", color: "var(--text)" }}>
+      {/* Sticky header */}
+      <div style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-2)", borderBottom: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: "12px 16px 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)" }}>{currentIndex + 1}/{exercises.length}</span>
             <button
               onClick={() => setShowReorderModal(true)}
-              className="text-xs text-slate-500 hover:text-slate-300"
+              style={{ fontSize: 13, color: "var(--text-dim)", background: "none", border: 0, cursor: "pointer" }}
               aria-label="Reordenar exercícios"
             >
               ⇅
             </button>
           </div>
-          <span className="text-xs font-semibold tabular-nums text-primary-400 bg-primary-500/15 px-2.5 py-1 rounded-full">
+          <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--primary)", background: "var(--primary-soft)", padding: "6px 12px", borderRadius: "var(--r-pill)" }}>
             ⏱ {formatElapsed(elapsedSeconds)}
           </span>
-          <button onClick={() => setPhase("done")} className="text-xs font-medium text-red-400">Encerrar</button>
+          <button onClick={() => setPhase("done")} style={{ fontSize: 13, fontWeight: 700, color: "var(--hot)", background: "none", border: 0, cursor: "pointer" }}>Encerrar</button>
         </div>
-        <div className="mt-2 flex items-center gap-3">
-          <div className="flex-1 h-1.5 rounded-full bg-slate-800">
+        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="exec-bar" style={{ flex: 1 }}>
             <motion.div
-              className="h-1.5 rounded-full bg-primary-500"
+              className="exec-bar-fill"
               animate={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }}
               transition={{ duration: 0.4, ease: "easeOut" }}
             />
           </div>
           {sessionVolume > 0 && (
-            <p className="shrink-0 text-xs font-bold tabular-nums text-slate-500">
+            <p style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--text-dim)" }}>
               <AnimatedCounter value={sessionVolume} />kg
             </p>
           )}
@@ -807,27 +835,24 @@ function WorkoutTodayContent() {
           </div>
         )}
 
-        {/* Action chips */}
-        <div className="mt-2 flex gap-2">
-          {!exercise.gif_url && (exercise.image_url) && (
-            <button
-              onClick={() => setGifModalExercise(exercise)}
-              className="flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 active:bg-primary-100"
-            >
-              ▶ Ver
+        {/* Action chips — Lumen style */}
+        <div className="exec-actions" style={{ marginTop: 8 }}>
+          {!exercise.gif_url && exercise.image_url && (
+            <button onClick={() => setGifModalExercise(exercise)} className="exec-chip">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Ver
             </button>
           )}
-          <button
-            onClick={() => setInfoModalExercise(exercise)}
-            className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-400 active:bg-slate-700"
-          >
-            ℹ Info
+          <button onClick={() => setInfoModalExercise(exercise)} className="exec-chip">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Info
           </button>
           <button
-            onClick={() => setShowSwapModal(true)}
-            className="flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-600 active:bg-orange-100"
+            onClick={() => { open({ intent: "swap" }); }}
+            className="exec-chip warn"
           >
-            ⇄ Trocar
+            <svg viewBox="0 0 24 24"><path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+            Trocar
           </button>
         </div>
 

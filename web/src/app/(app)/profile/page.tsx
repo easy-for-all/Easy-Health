@@ -14,6 +14,7 @@ import { DeleteAccountModal } from "@/shared/components/delete-account-modal";
 import { CleanDataModal } from "@/shared/components/clean-data-modal";
 import { setLocale } from "@/app/actions";
 import type { HealthProfile, Goal, FitnessLevel } from "@/shared/types/health-profile";
+import "@/shared/components/workout/workout-ui.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -248,92 +249,108 @@ export default function ProfilePage() {
     : "?";
 
   return (
-    <div className="min-h-screen px-4 py-6 pb-28" style={{ background: "#0a0f1e" }}>
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">{t("title")}</h1>
-        <button onClick={handleSignOut} className="text-sm text-slate-500 hover:text-red-400">
+    <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
+      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>{t("title")}</h1>
+        <button
+          onClick={handleSignOut}
+          style={{ fontSize: 13, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer" }}
+        >
           {t("signOut")}
         </button>
       </header>
 
-      {/* Usuário + Avatar */}
-      <div className="mb-4 rounded-2xl bg-primary-500 px-5 py-6 text-white">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => avatarInputRef.current?.click()}
-            disabled={uploadingAvatar}
-            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-400 text-xl font-bold text-white hover:bg-primary-300 disabled:opacity-60"
-          >
-            {user?.avatar_url?.startsWith("/") ? (
-              <img src={`${API_URL}${user.avatar_url}`} alt="Avatar" className="h-full w-full object-cover" />
-            ) : (
-              initials
-            )}
-            {uploadingAvatar && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs">...</div>
-            )}
-          </button>
-          <div className="min-w-0">
-            <p className="text-2xl font-bold">{user?.name}</p>
-            <p className="mt-1 text-sm text-primary-100">{user?.email}</p>
-            <p className="mt-1 text-xs text-primary-200">{t("tapAvatarHint")}</p>
-          </div>
+      {/* Profile head */}
+      <div className="profile-head" style={{ marginBottom: 14 }}>
+        <button
+          onClick={() => avatarInputRef.current?.click()}
+          disabled={uploadingAvatar}
+          className="ph-av"
+          aria-label={t("tapAvatarHint")}
+        >
+          {user?.avatar_url?.startsWith("/") ? (
+            <img src={`${API_URL}${user.avatar_url}`} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            initials
+          )}
+          {uploadingAvatar && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11 }}>…</div>
+          )}
+        </button>
+        <div style={{ minWidth: 0 }}>
+          <b>{user?.name}</b>
+          <small>{user?.email}</small>
         </div>
       </div>
       <input ref={avatarInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
       {avatarError && (
-        <p className="mb-3 rounded-xl border border-red-800 bg-red-950/40 px-4 py-2 text-sm text-red-400">{avatarError}</p>
+        <p style={{ marginBottom: 12, borderRadius: "var(--r-md)", border: "1px solid var(--hot)", background: "var(--hot-soft)", padding: "10px 14px", fontSize: 13, color: "var(--hot)" }}>{avatarError}</p>
       )}
 
       {/* Stats */}
       {stats && (
-        <div className="mb-4 space-y-3">
-          <div className="flex gap-3">
-            <div className="flex-1 rounded-xl border border-slate-800 bg-slate-900 p-4 text-center">
-              <p className="text-2xl font-bold text-white">{stats.total_sessions}</p>
-              <p className="text-xs text-slate-400">{t("workouts")}</p>
-            </div>
-            <div className="flex-1 rounded-xl border border-slate-800 bg-slate-900 p-4 text-center">
-              <p className="text-2xl font-bold text-orange-400">🔥 {stats.streak}</p>
-              <p className="text-xs text-slate-400">{t("streak")}</p>
-            </div>
+        <div className="mini-stats" style={{ marginBottom: 14 }}>
+          <div className="mini-stat">
+            <b style={{ color: "var(--primary)" }}>{stats.total_sessions}</b>
+            <span>{t("workouts")}</span>
           </div>
-          {(stats.best_streak != null || stats.last_activity_at) && (
-            <div className="rounded-xl border border-orange-900/50 bg-orange-950/30 p-4">
-              <div className="flex items-center justify-between">
-                {stats.best_streak != null && stats.best_streak > 0 && (
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-orange-400">🏆 {stats.best_streak}</p>
-                    <p className="text-xs text-orange-500/70">Melhor sequência</p>
-                  </div>
-                )}
-                {stats.last_activity_at && (
-                  <div className="text-center">
-                    <p className="text-sm font-semibold text-slate-300">
-                      {new Date(stats.last_activity_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
-                    </p>
-                    <p className="text-xs text-slate-500">Último treino</p>
-                  </div>
-                )}
-              </div>
+          <div className="mini-stat">
+            <b style={{ color: "var(--hot)" }}>🔥 {stats.streak}</b>
+            <span>{t("streak")}</span>
+          </div>
+          {stats.best_streak != null && stats.best_streak > 0 ? (
+            <div className="mini-stat">
+              <b>🏆 {stats.best_streak}</b>
+              <span>Melhor sequência</span>
+            </div>
+          ) : stats.last_activity_at ? (
+            <div className="mini-stat">
+              <b style={{ fontSize: 16 }}>{new Date(stats.last_activity_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}</b>
+              <span>Último treino</span>
+            </div>
+          ) : (
+            <div className="mini-stat">
+              <b style={{ color: "var(--text-dim)" }}>—</b>
+              <span>Sem dados</span>
             </div>
           )}
         </div>
       )}
 
+      {/* DNA de treino */}
+      {profile && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "16px 18px", marginBottom: 14 }}>
+          <p className="eyebrow" style={{ marginBottom: 12 }}>DNA de treino</p>
+          <div className="dna">
+            {[
+              { k: "Objetivo",       v: goalLabels[profile.goal] },
+              { k: "Nível",          v: levelLabels[profile.fitness_level] },
+              { k: "Dias / semana",  v: profile.training_days_per_week ? `${profile.training_days_per_week}×` : "—" },
+              { k: "Peso",           v: profile.weight_kg ? `${profile.weight_kg} kg` : "—" },
+              { k: "Altura",         v: profile.height_cm ? `${profile.height_cm} cm` : "—" },
+            ].map(({ k, v }) => (
+              <div key={k} className="attr">
+                <span className="ak">{k}</span>
+                <span className="av2"><span className="pip" />{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Dados físicos */}
-      <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-white">{t("physicalData")}</h2>
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "16px 18px", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <p style={{ fontWeight: 700, margin: 0 }}>{t("physicalData")}</p>
           {!editing && (
-            <button onClick={() => setEditing(true)} className="text-sm text-primary-400 hover:underline">
+            <button onClick={() => setEditing(true)} style={{ fontSize: 13, color: "var(--primary)", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>
               {t("edit")}
             </button>
           )}
         </div>
 
         {!profile ? (
-          <p className="text-sm text-slate-500">{t("noProfile")}</p>
+          <p style={{ fontSize: 14, color: "var(--text-muted)" }}>{t("noProfile")}</p>
         ) : editing ? (
           <EditForm
             form={form}
@@ -357,54 +374,41 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* CTA Perfil Detalhado */}
-      <Link
-        href="/profile/detailed"
-        className="mb-4 flex items-center justify-between rounded-2xl border border-primary-500/30 bg-primary-500/10 px-5 py-4 transition hover:bg-primary-500/15"
-      >
-        <div>
-          <p className="font-semibold text-primary-400">Ver perfil detalhado</p>
-          <p className="text-xs text-primary-500/70">Análises, exames e evolução corporal</p>
-        </div>
-        <span className="text-primary-400 text-lg">→</span>
-      </Link>
-
-      {/* Privacidade e comunidade */}
-      <Link
-        href="/settings"
-        className="mb-4 flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-5 py-4 transition hover:bg-slate-800"
-      >
-        <div>
-          <p className="font-semibold text-white">Privacidade e comunidade</p>
-          <p className="text-xs text-gray-400">Visibilidade, código de indicação, feed</p>
-        </div>
-        <span className="text-gray-400 text-lg">→</span>
-      </Link>
-
-      {/* Personal Trainer / Permissões */}
-      {user?.account_type === "personal_trainer" ? (
-        <Link
-          href="/personal/dashboard"
-          className="mb-4 flex items-center justify-between rounded-2xl border border-blue-800/40 bg-blue-900/20 px-5 py-4 transition hover:bg-blue-900/30"
-        >
-          <div>
-            <p className="font-semibold text-blue-300">Painel do Personal Trainer</p>
-            <p className="text-xs text-blue-400/70">Alunos, convites e aderência</p>
-          </div>
-          <span className="text-blue-400 text-lg">→</span>
+      {/* Navegação — list-card */}
+      <div className="list-card" style={{ marginBottom: 14 }}>
+        <Link href="/profile/detailed" className="li">
+          <span className="lic">
+            <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </span>
+          <span className="lt">
+            <span style={{ fontWeight: 700 }}>Perfil detalhado</span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>IMC, água corporal, exames</span>
+          </span>
+          <span className="lv">›</span>
         </Link>
-      ) : (
-        <Link
-          href="/personal"
-          className="mb-4 flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-5 py-4 transition hover:bg-slate-800"
-        >
-          <div>
-            <p className="font-semibold text-white">Sou Personal Trainer</p>
-            <p className="text-xs text-gray-400">Gerencie alunos e ganhe comissões</p>
-          </div>
-          <span className="text-gray-400 text-lg">→</span>
+        <Link href="/settings" className="li">
+          <span className="lic">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+          </span>
+          <span className="lt">
+            <span style={{ fontWeight: 700 }}>Privacidade e comunidade</span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>Visibilidade, convites, feed</span>
+          </span>
+          <span className="lv">›</span>
         </Link>
-      )}
+        <Link href={user?.account_type === "personal_trainer" ? "/personal/dashboard" : "/personal"} className="li">
+          <span className="lic">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </span>
+          <span className="lt">
+            <span style={{ fontWeight: 700 }}>{user?.account_type === "personal_trainer" ? "Painel Personal Trainer" : "Sou Personal Trainer"}</span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>
+              {user?.account_type === "personal_trainer" ? "Alunos, convites e aderência" : "Gerencie alunos e ganhe comissões"}
+            </span>
+          </span>
+          <span className="lv">›</span>
+        </Link>
+      </div>
 
       {/* Fotos e Exames */}
       <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
@@ -653,117 +657,68 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* Idioma */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h2 className="mb-4 font-semibold text-white">{t("language")}</h2>
-        <div className="flex gap-3">
-          <button
-            onClick={() => handleLocaleChange("pt-BR")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-full border py-3 text-sm font-semibold transition ${
-              locale === "pt-BR"
-                ? "border-primary-500 bg-primary-500/12 text-primary-400"
-                : "border-slate-800 text-slate-500 hover:border-slate-600"
-            }`}
-          >
-            🇧🇷 Português
-          </button>
-          <button
-            onClick={() => handleLocaleChange("en-US")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-full border py-3 text-sm font-semibold transition ${
-              locale === "en-US"
-                ? "border-primary-500 bg-primary-500/12 text-primary-400"
-                : "border-slate-800 text-slate-500 hover:border-slate-600"
-            }`}
-          >
-            🇺🇸 English
-          </button>
+      {/* Preferências */}
+      <div className="list-card" style={{ marginBottom: 14 }}>
+        <p className="eyebrow" style={{ padding: "12px 17px 0" }}>{t("language")}</p>
+        <div style={{ display: "flex", gap: 10, padding: "12px 17px" }}>
+          {(["pt-BR", "en-US"] as const).map((loc) => (
+            <button
+              key={loc}
+              onClick={() => handleLocaleChange(loc)}
+              style={{
+                flex: 1, borderRadius: "var(--r-pill)", padding: "10px",
+                border: locale === loc ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
+                background: locale === loc ? "var(--primary-soft)" : "var(--surface)",
+                color: locale === loc ? "var(--primary)" : "var(--text-muted)",
+                fontWeight: 700, fontSize: 13, cursor: "pointer",
+              }}
+            >
+              {loc === "pt-BR" ? "🇧🇷 Português" : "🇺🇸 English"}
+            </button>
+          ))}
         </div>
-      </div>
-
-      {/* Aparência */}
-      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h2 className="mb-4 font-semibold text-white">Aparência</h2>
-        <button
-          onClick={toggleTheme}
-          className="flex w-full items-center justify-between rounded-xl border border-slate-800 px-4 py-3 hover:bg-slate-800"
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-xl">{theme === "dark" ? "🌙" : "☀️"}</span>
-            <span className="text-sm text-slate-400">
-              {theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"}
-            </span>
-          </div>
-          <span className="text-xs text-primary-400 font-semibold">
-            {theme === "dark" ? "Usar claro" : "Usar escuro"}
-          </span>
+        <button className="li" onClick={toggleTheme} style={{ width: "100%", textAlign: "left" }}>
+          <span className="lic"><span style={{ fontSize: 18 }}>{theme === "dark" ? "🌙" : "☀️"}</span></span>
+          <span className="lt">{theme === "dark" ? "Modo escuro" : "Modo claro"}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--primary)" }}>{theme === "dark" ? "Usar claro" : "Usar escuro"}</span>
         </button>
       </div>
 
       {/* Legal */}
-      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h2 className="mb-4 font-semibold text-white">Legal</h2>
-        <div className="flex flex-col gap-2">
-          <a
-            href="/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
-          >
-            <span>Termos de Uso</span>
-            <span className="text-slate-600">›</span>
-          </a>
-          <a
-            href="/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
-          >
-            <span>Política de Privacidade</span>
-            <span className="text-slate-600">›</span>
-          </a>
-          <a
-            href="mailto:suporte@easyhealth.com.br"
-            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
-          >
-            <span>Fale Conosco</span>
-            <span className="text-slate-600">›</span>
-          </a>
-        </div>
+      <div className="list-card" style={{ marginBottom: 14 }}>
+        <a href="/terms" target="_blank" rel="noopener noreferrer" className="li">
+          <span className="lt">Termos de Uso</span><span className="lv">›</span>
+        </a>
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="li">
+          <span className="lt">Política de Privacidade</span><span className="lv">›</span>
+        </a>
+        <a href="mailto:suporte@easyhealth.com.br" className="li">
+          <span className="lt">Fale Conosco</span><span className="lv">›</span>
+        </a>
       </div>
 
       {/* Admin */}
       {user?.admin && (
         <Link
           href="/admin"
-          className="mt-4 flex items-center justify-between rounded-2xl border border-primary-500/30 bg-primary-500/10 px-5 py-4 transition hover:bg-primary-500/15"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, background: "var(--primary-soft)", border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .3)", borderRadius: "var(--r-lg)", padding: "14px 18px", textDecoration: "none" }}
         >
           <div>
-            <p className="font-semibold text-primary-400">Painel Administrativo</p>
-            <p className="text-xs text-primary-500/70">Estatísticas da plataforma</p>
+            <p style={{ fontWeight: 700, color: "var(--primary)", margin: 0 }}>Painel Administrativo</p>
+            <p style={{ fontSize: 12, color: "var(--text-dim)", margin: 0 }}>Estatísticas da plataforma</p>
           </div>
-          <span className="text-lg text-primary-400">→</span>
+          <span style={{ color: "var(--primary)", fontSize: 18 }}>→</span>
         </Link>
       )}
 
       {/* Conta */}
-      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h2 className="mb-4 font-semibold text-white">Conta</h2>
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={() => setCleanDataOpen(true)}
-            className="flex items-center justify-between rounded-xl border border-slate-800 px-4 py-3 text-sm text-slate-400 hover:bg-slate-800"
-          >
-            <span>Limpar Meus Dados</span>
-            <span className="text-slate-600">›</span>
-          </button>
-          <button
-            onClick={() => setDeleteAccountOpen(true)}
-            className="flex items-center justify-between rounded-xl border border-red-900/50 px-4 py-3 text-sm text-red-400 hover:bg-red-950/30"
-          >
-            <span>Excluir Conta</span>
-            <span className="text-red-700">›</span>
-          </button>
-        </div>
+      <div className="list-card">
+        <button className="li" onClick={() => setCleanDataOpen(true)} style={{ width: "100%", textAlign: "left" }}>
+          <span className="lt">Limpar Meus Dados</span><span className="lv">›</span>
+        </button>
+        <button className="li danger" onClick={() => setDeleteAccountOpen(true)} style={{ width: "100%", textAlign: "left" }}>
+          <span className="lt">Excluir Conta</span><span className="lv" style={{ color: "var(--hot)" }}>›</span>
+        </button>
       </div>
 
       {/* ─── Photo History Bottom Sheet ──────────────────────────────────────── */}

@@ -1,0 +1,455 @@
+/* ─── Scrim ─────────────────────────────────────────────────────────────────── */
+.coach-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: oklch(0.12 0.02 262 / 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ─── Sheet ──────────────────────────────────────────────────────────────────── */
+.coach-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 51;
+  height: 88%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 32px 32px 0 0;
+  border-top: 1px solid oklch(0.40 0.032 262);
+  background: oklch(0.185 0.026 262);
+  box-shadow: 0 -20px 60px -10px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+/* ─── Grabber ────────────────────────────────────────────────────────────────── */
+.coach-grabber {
+  width: 38px;
+  height: 4px;
+  background: oklch(0.40 0.032 262);
+  border-radius: 999px;
+  margin: 12px auto 0;
+  flex-shrink: 0;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────────── */
+.coach-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  flex-shrink: 0;
+}
+
+.coach-head-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coach-head-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: oklch(0.975 0.008 258);
+  letter-spacing: -0.02em;
+}
+
+.coach-head-sub {
+  font-size: 12px;
+  color: oklch(0.755 0.018 262);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.coach-status-dot {
+  width: 7px;
+  height: 7px;
+  background: oklch(0.78 0.16 158);
+  border-radius: 50%;
+  box-shadow: 0 0 6px oklch(0.78 0.16 158 / 0.6);
+}
+
+.coach-close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid oklch(0.315 0.026 262);
+  background: transparent;
+  color: oklch(0.755 0.018 262);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.coach-close-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.coach-close-btn:hover {
+  background: oklch(0.255 0.030 262);
+  color: oklch(0.975 0.008 258);
+}
+
+/* ─── Context badge ──────────────────────────────────────────────────────────── */
+.coach-ctx-badge {
+  margin: 0 16px 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: oklch(0.685 0.17 258 / 0.14);
+  border: 1px solid oklch(0.685 0.17 258 / 0.25);
+  font-size: 12px;
+  color: oklch(0.755 0.018 262);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.coach-ctx-dot {
+  width: 6px;
+  height: 6px;
+  background: oklch(0.685 0.17 258);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ─── Message body ───────────────────────────────────────────────────────────── */
+.coach-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.315 0.026 262) transparent;
+}
+
+.coach-msg {
+  display: flex;
+  gap: 8px;
+  animation: coach-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.coach-msg--ai {
+  align-items: flex-start;
+}
+
+.coach-msg--user {
+  justify-content: flex-end;
+}
+
+.coach-bubble-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.coach-bubble {
+  max-width: min(80%, 360px);
+  padding: 10px 14px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.coach-bubble--ai {
+  background: oklch(0.213 0.028 262);
+  border: 1px solid oklch(0.315 0.026 262);
+  border-radius: 20px;
+  border-bottom-left-radius: 7px;
+  color: oklch(0.975 0.008 258);
+}
+
+.coach-bubble--user {
+  background: linear-gradient(
+    135deg,
+    oklch(0.685 0.17 258),
+    oklch(0.605 0.17 264)
+  );
+  border-radius: 20px;
+  border-bottom-right-radius: 7px;
+  color: oklch(0.985 0.01 258);
+  box-shadow: 0 0 0 1px oklch(0.685 0.17 258 / 0.35),
+              0 12px 40px -10px oklch(0.685 0.17 258 / 0.45);
+}
+
+/* Typing dots */
+.coach-dots {
+  display: flex;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.coach-dots span {
+  width: 6px;
+  height: 6px;
+  background: oklch(0.755 0.018 262);
+  border-radius: 50%;
+  animation: coach-blink 1.2s ease-in-out infinite;
+}
+
+.coach-dots span:nth-child(2) { animation-delay: 0.2s; }
+.coach-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes coach-blink {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40%            { opacity: 1;   transform: scale(1);   }
+}
+
+@keyframes coach-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ─── Alternative cards ──────────────────────────────────────────────────────── */
+.coach-alts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.coach-alt-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: oklch(0.213 0.028 262);
+  border: 1px solid oklch(0.315 0.026 262);
+  border-radius: 16px;
+  transition: border-color 0.2s, opacity 0.2s;
+}
+
+.coach-alt-card--applied {
+  border-color: oklch(0.78 0.16 158);
+  background: oklch(0.78 0.16 158 / 0.08);
+}
+
+.coach-alt-card--dimmed {
+  opacity: 0.38;
+}
+
+.coach-alt-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  background: oklch(0.155 0.022 262);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.coach-alt-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.coach-alt-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.coach-alt-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: oklch(0.975 0.008 258);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.coach-alt-desc {
+  font-size: 12px;
+  color: oklch(0.755 0.018 262);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.coach-alt-tag {
+  font-size: 11px;
+  color: oklch(0.685 0.17 258);
+  background: oklch(0.685 0.17 258 / 0.14);
+  padding: 2px 8px;
+  border-radius: 999px;
+  align-self: flex-start;
+  text-transform: capitalize;
+}
+
+.coach-alt-apply {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: oklch(0.685 0.17 258);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.coach-alt-apply svg {
+  width: 14px;
+  height: 14px;
+}
+
+.coach-alt-card--applied .coach-alt-apply {
+  background: oklch(0.78 0.16 158);
+}
+
+.coach-alt-apply:disabled {
+  cursor: default;
+}
+
+.coach-alt-apply:not(:disabled):hover {
+  transform: scale(1.08);
+}
+
+.coach-see-workout-btn {
+  align-self: flex-start;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: oklch(0.685 0.17 258 / 0.18);
+  border: 1px solid oklch(0.685 0.17 258 / 0.35);
+  color: oklch(0.685 0.17 258);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.coach-see-workout-btn:hover {
+  background: oklch(0.685 0.17 258 / 0.28);
+}
+
+/* ─── Quick chips ────────────────────────────────────────────────────────────── */
+.coach-quick {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.coach-quick::-webkit-scrollbar { display: none; }
+
+.coach-chip {
+  white-space: nowrap;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid oklch(0.315 0.026 262);
+  background: transparent;
+  color: oklch(0.755 0.018 262);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.coach-chip:hover:not(:disabled) {
+  border-color: oklch(0.685 0.17 258);
+  color: oklch(0.975 0.008 258);
+  background: oklch(0.685 0.17 258 / 0.08);
+}
+
+.coach-chip--primary {
+  border-color: oklch(0.685 0.17 258 / 0.5);
+  background: oklch(0.685 0.17 258 / 0.12);
+  color: oklch(0.685 0.17 258);
+  font-weight: 700;
+}
+
+.coach-chip--primary:hover:not(:disabled) {
+  border-color: oklch(0.685 0.17 258);
+  background: oklch(0.685 0.17 258 / 0.22);
+  color: oklch(0.975 0.008 258);
+}
+
+.coach-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ─── Input bar ──────────────────────────────────────────────────────────────── */
+.coach-input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+  border-top: 1px solid oklch(0.255 0.030 262);
+  flex-shrink: 0;
+  background: oklch(0.185 0.026 262);
+}
+
+.coach-textarea {
+  flex: 1;
+  resize: none;
+  background: oklch(0.213 0.028 262);
+  border: 1px solid oklch(0.315 0.026 262);
+  border-radius: 22px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: oklch(0.975 0.008 258);
+  line-height: 1.4;
+  max-height: 92px;
+  overflow-y: auto;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+
+.coach-textarea::placeholder {
+  color: oklch(0.585 0.020 262);
+}
+
+.coach-textarea:focus {
+  border-color: oklch(0.685 0.17 258 / 0.7);
+}
+
+.coach-send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 1;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.coach-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.coach-send-btn:not(:disabled):hover {
+  transform: scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coach-msg { animation: none; }
+  .coach-dots span { animation: none; opacity: 1; }
+}

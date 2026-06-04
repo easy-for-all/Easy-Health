@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { OptionCard } from "@/shared/components/ui/option-card";
+import "@/shared/components/ui/ui.css";
 import type { Goal, FitnessLevel, ActivityType, Gender } from "@/shared/types/health-profile";
 
 type TrainingLocation = "gym" | "home" | "outdoor" | "any";
@@ -19,17 +21,17 @@ interface FormData {
   training_location: TrainingLocation | "";
 }
 
-const GOALS: { value: Goal; label: string; desc: string }[] = [
-  { value: "lose_weight", label: "Perder peso",    desc: "Reduzir gordura corporal" },
-  { value: "gain_muscle", label: "Ganhar músculo", desc: "Aumentar massa muscular" },
-  { value: "maintain",    label: "Manter",         desc: "Manter o peso atual" },
-  { value: "health",      label: "Saúde geral",    desc: "Melhorar qualidade de vida" },
+const GOALS: { value: Goal; label: string; desc: string; icon: string }[] = [
+  { value: "lose_weight", label: "Emagrecimento",  desc: "Reduzir gordura corporal",          icon: "🔥" },
+  { value: "gain_muscle", label: "Hipertrofia",    desc: "Ganhar massa muscular",              icon: "💪" },
+  { value: "maintain",    label: "Manutenção",     desc: "Manter peso e composição",           icon: "⚖️" },
+  { value: "health",      label: "Saúde geral",    desc: "Melhorar qualidade de vida",         icon: "❤️" },
 ];
 
-const LEVELS: { value: FitnessLevel; label: string; desc: string }[] = [
-  { value: "beginner",     label: "Iniciante",     desc: "Menos de 6 meses de treino" },
-  { value: "intermediate", label: "Intermediário", desc: "6 meses a 2 anos" },
-  { value: "advanced",     label: "Avançado",      desc: "Mais de 2 anos de treino" },
+const LEVELS: { value: FitnessLevel; label: string; desc: string; icon: string }[] = [
+  { value: "beginner",     label: "Iniciante",     desc: "Menos de 6 meses de treino", icon: "🌱" },
+  { value: "intermediate", label: "Intermediário", desc: "6 meses a 2 anos",           icon: "🎯" },
+  { value: "advanced",     label: "Avançado",      desc: "Mais de 2 anos de treino",   icon: "⚡" },
 ];
 
 const ACTIVITIES: { value: ActivityType; label: string; icon: string }[] = [
@@ -49,23 +51,55 @@ const GENDERS: { value: Gender; label: string }[] = [
 ];
 
 const LOCATIONS: { value: TrainingLocation; label: string; desc: string; icon: string }[] = [
-  { value: "gym",     label: "Academia",            desc: "Aparelhos, barras e halteres",    icon: "🏋️" },
-  { value: "home",    label: "Em casa",             desc: "Sem equipamentos, peso corporal", icon: "🏠" },
-  { value: "outdoor", label: "Ao ar livre",         desc: "Parques, ruas e quadras",         icon: "🌳" },
-  { value: "any",     label: "Varia",               desc: "Depende do dia",                   icon: "🔄" },
+  { value: "gym",     label: "Academia",    desc: "Aparelhos, barras e halteres",    icon: "🏋️" },
+  { value: "home",    label: "Em casa",     desc: "Peso corporal, sem equipamentos", icon: "🏠" },
+  { value: "outdoor", label: "Ao ar livre", desc: "Parques, ruas e quadras",         icon: "🌳" },
+  { value: "any",     label: "Varia",       desc: "Depende do dia",                  icon: "🔄" },
 ];
+
+// ── Shared layout ─────────────────────────────────────────────────────────────
+
+function Screen({ step, total, children }: { step: number; total: number; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "flex", flexDirection: "column", minHeight: "100svh",
+        background: "var(--bg)", color: "var(--text)",
+        padding: "52px 20px 32px",
+      }}
+    >
+      {/* Progress */}
+      <div className="progress-dots" style={{ marginBottom: 28 }}>
+        {Array.from({ length: total }, (_, i) => (
+          <i key={i} className={i < step ? "on" : i === step - 1 ? "cur" : ""} />
+        ))}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function BackBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="wizard-back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+      Voltar
+    </button>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [error, setError] = useState("");
+  const [step, setStep]     = useState(1);
+  const [error, setError]   = useState("");
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState<FormData>({
-    goal: "",
-    fitness_level: "",
-    age: "30",
-    weight_kg: "75",
-    height_cm: "175",
+  const [form, setForm]     = useState<FormData>({
+    goal: "", fitness_level: "",
+    age: "30", weight_kg: "75", height_cm: "175",
     gender: "",
     activity_preferences: [],
     training_location: "",
@@ -77,20 +111,21 @@ export default function OnboardingPage() {
   }, []);
 
   function set<K extends keyof FormData>(key: K, value: FormData[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((p) => ({ ...p, [key]: value }));
   }
 
   function toggleActivity(act: ActivityType) {
-    const current = form.activity_preferences;
-    set(
-      "activity_preferences",
-      current.includes(act) ? current.filter((a) => a !== act) : [...current, act]
-    );
+    const curr = form.activity_preferences;
+    set("activity_preferences", curr.includes(act) ? curr.filter((a) => a !== act) : [...curr, act]);
+  }
+
+  function goToStep(n: number) {
+    setStep(n);
+    trackEvent(EVENTS.ONBOARDING_STEP, { step: n });
   }
 
   async function handleFinish(location?: TrainingLocation) {
-    setError("");
-    setLoading(true);
+    setError(""); setLoading(true);
     try {
       await api.post("/api/v1/health_profile", {
         goal: form.goal,
@@ -111,336 +146,180 @@ export default function OnboardingPage() {
     }
   }
 
-  const STEP_LABELS = ["goal", "level", "body", "activities", "location"];
+  const TOTAL = 5;
 
-  function goToStep(n: number) {
-    setStep(n);
-    trackEvent(EVENTS.ONBOARDING_STEP, { step: n, label: STEP_LABELS[n - 1] });
-  }
-
-  const TOTAL_STEPS = 5;
-
-  return (
-    <div className="flex min-h-screen flex-col px-4 py-8" style={{ background: "#0a0f1e" }}>
-      <div className="mb-8 flex gap-1">
-        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
-          <div
-            key={n}
-            className={`h-1 flex-1 rounded-full transition-colors ${
-              n <= step ? "bg-primary-500" : "bg-slate-800"
-            }`}
+  if (step === 1) return (
+    <Screen step={1} total={TOTAL}>
+      <h2 className="wizard-title">Qual é o seu objetivo?</h2>
+      <p className="wizard-sub">Isso define seu plano de treino personalizado.</p>
+      <div className="opts">
+        {GOALS.map((g) => (
+          <OptionCard
+            key={g.value}
+            icon={g.icon}
+            label={g.label}
+            description={g.desc}
+            selected={form.goal === g.value}
+            onClick={() => { set("goal", g.value); goToStep(2); }}
           />
         ))}
       </div>
-
-      {step === 1 && (
-        <StepGoal
-          selected={form.goal}
-          onSelect={(v) => { set("goal", v); goToStep(2); }}
-        />
-      )}
-
-      {step === 2 && (
-        <StepLevel
-          selected={form.fitness_level}
-          onSelect={(v) => { set("fitness_level", v); goToStep(3); }}
-          onBack={() => goToStep(1)}
-        />
-      )}
-
-      {step === 3 && (
-        <StepBody
-          form={form}
-          onChange={set}
-          onNext={() => goToStep(4)}
-          onBack={() => goToStep(2)}
-        />
-      )}
-
-      {step === 4 && (
-        <StepActivities
-          selected={form.activity_preferences}
-          onToggle={toggleActivity}
-          onNext={() => goToStep(5)}
-          onBack={() => goToStep(3)}
-        />
-      )}
-
-      {step === 5 && (
-        <StepLocation
-          selected={form.training_location}
-          error={error}
-          loading={loading}
-          onSelect={(v) => { set("training_location", v); handleFinish(v); }}
-          onBack={() => goToStep(4)}
-        />
-      )}
-    </div>
+    </Screen>
   );
-}
 
-function StepGoal({ selected, onSelect }: { selected: string; onSelect: (v: Goal) => void }) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <h2 className="mb-2 text-xl font-bold text-white">Qual é o seu objetivo?</h2>
-      <p className="mb-6 text-sm text-slate-400">Isso define seu plano de treino.</p>
-      <div className="space-y-3">
-        {GOALS.map((g) => (
-          <button
-            key={g.value}
-            onClick={() => onSelect(g.value)}
-            className={`w-full rounded-xl border-2 p-4 text-left transition ${
-              selected === g.value
-                ? "border-primary-500 bg-primary-500/12"
-                : "border-slate-800 bg-slate-900 hover:border-slate-600"
-            }`}
-          >
-            <p className="font-semibold text-white">{g.label}</p>
-            <p className="text-sm text-gray-500">{g.desc}</p>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StepLevel({
-  selected,
-  onSelect,
-  onBack,
-}: {
-  selected: string;
-  onSelect: (v: FitnessLevel) => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
-        ← Voltar
-      </button>
-      <h2 className="mb-2 text-xl font-bold text-white">Seu nível de condicionamento?</h2>
-      <p className="mb-6 text-sm text-slate-400">Seja honesto — isso ajusta a intensidade.</p>
-      <div className="space-y-3">
+  if (step === 2) return (
+    <Screen step={2} total={TOTAL}>
+      <BackBtn onClick={() => goToStep(1)} />
+      <h2 className="wizard-title">Seu nível de condicionamento?</h2>
+      <p className="wizard-sub">Seja honesto — isso ajusta a intensidade.</p>
+      <div className="opts">
         {LEVELS.map((l) => (
-          <button
+          <OptionCard
             key={l.value}
-            onClick={() => onSelect(l.value)}
-            className={`w-full rounded-xl border-2 p-4 text-left transition ${
-              selected === l.value
-                ? "border-primary-500 bg-primary-500/12"
-                : "border-slate-800 bg-slate-900 hover:border-slate-600"
-            }`}
-          >
-            <p className="font-semibold text-white">{l.label}</p>
-            <p className="text-sm text-gray-500">{l.desc}</p>
-          </button>
+            icon={l.icon}
+            label={l.label}
+            description={l.desc}
+            selected={form.fitness_level === l.value}
+            onClick={() => { set("fitness_level", l.value); goToStep(3); }}
+          />
         ))}
       </div>
-    </div>
+    </Screen>
   );
-}
 
-function StepBody({
-  form,
-  onChange,
-  onNext,
-  onBack,
-}: {
-  form: FormData;
-  onChange: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  const valid = !!form.gender;
+  if (step === 3) return (
+    <Screen step={3} total={TOTAL}>
+      <BackBtn onClick={() => goToStep(2)} />
+      <h2 className="wizard-title">Seus dados físicos</h2>
+      <p className="wizard-sub">Usados para personalizar sua experiência.</p>
 
-  const sliders: { label: string; key: "age" | "weight_kg" | "height_cm"; unit: string; min: number; max: number }[] = [
-    { label: "Idade",  key: "age",       unit: "anos", min: 14,  max: 90  },
-    { label: "Peso",   key: "weight_kg", unit: "kg",   min: 35,  max: 180 },
-    { label: "Altura", key: "height_cm", unit: "cm",   min: 120, max: 220 },
-  ];
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
-        ← Voltar
-      </button>
-      <h2 className="mb-2 text-xl font-bold text-white">Seus dados físicos</h2>
-      <p className="mb-6 text-sm text-slate-400">Usados para personalizar sua experiência.</p>
-
-      <div className="space-y-6">
-        <div>
-          <label className="mb-3 block text-sm font-medium text-slate-400">
-            Como você se identifica?
-          </label>
-          <div className="flex gap-2">
-            {GENDERS.map((g) => (
-              <button
-                key={g.value}
-                onClick={() => onChange("gender", g.value)}
-                className={`flex-1 rounded-xl border-2 px-2 py-3 text-center text-sm font-medium transition ${
-                  form.gender === g.value
-                    ? "border-primary-500 bg-primary-500/12 text-primary-400"
-                    : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600"
-                }`}
-              >
-                {g.label}
-              </button>
-            ))}
-          </div>
+      {/* Gender segmented */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+        <span style={{ fontSize: 14, color: "var(--text-muted)", fontWeight: 600 }}>Como você se identifica?</span>
+        <div className="segmented">
+          {GENDERS.map((g) => (
+            <button
+              key={g.value}
+              className={form.gender === g.value ? "sel" : ""}
+              onClick={() => set("gender", g.value)}
+            >
+              {g.label}
+            </button>
+          ))}
         </div>
-
-        {sliders.map(({ label, key, unit, min, max }) => {
-          const value = Number(form[key]);
-          return (
-            <div key={key}>
-              <div className="mb-2 flex items-baseline justify-between">
-                <label className="text-sm font-medium text-slate-400">{label}</label>
-                <span className="text-2xl font-bold text-primary-500">
-                  {value}
-                  <span className="ml-1 text-sm font-normal text-slate-400">{unit}</span>
-                </span>
-              </div>
-              <input
-                type="range"
-                min={min}
-                max={max}
-                step={1}
-                value={form[key]}
-                onChange={(e) => onChange(key, e.target.value)}
-                className="w-full cursor-pointer"
-                style={{ accentColor: "var(--color-primary-500)" }}
-              />
-              <div className="mt-1 flex justify-between text-xs text-slate-600">
-                <span>{min} {unit}</span>
-                <span>{max} {unit}</span>
-              </div>
-            </div>
-          );
-        })}
       </div>
+
+      {/* Sliders */}
+      {(["age", "weight_kg", "height_cm"] as const).map((key) => {
+        const meta = {
+          age:       { label: "Idade",  unit: "anos", min: 14,  max: 90  },
+          weight_kg: { label: "Peso",   unit: "kg",   min: 35,  max: 180 },
+          height_cm: { label: "Altura", unit: "cm",   min: 120, max: 220 },
+        }[key];
+        const value = Number(form[key]);
+        return (
+          <div key={key} className="slide-row">
+            <div className="lab">
+              <span>{meta.label}</span>
+              <b>{value}<em>{meta.unit}</em></b>
+            </div>
+            <input
+              type="range"
+              min={meta.min}
+              max={meta.max}
+              step={1}
+              value={form[key]}
+              onChange={(e) => set(key, e.target.value)}
+            />
+            <div className="ends">
+              <span>{meta.min} {meta.unit}</span>
+              <span>{meta.max} {meta.unit}</span>
+            </div>
+          </div>
+        );
+      })}
 
       <button
-        onClick={onNext}
-        disabled={!valid}
-        className="mt-8 w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+        onClick={() => goToStep(4)}
+        disabled={!form.gender}
+        className="wizard-cta"
+        style={{ marginTop: 32 }}
       >
         Continuar →
       </button>
-    </div>
+    </Screen>
   );
-}
 
-function StepActivities({
-  selected,
-  onToggle,
-  onNext,
-  onBack,
-}: {
-  selected: ActivityType[];
-  onToggle: (v: ActivityType) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  const [attempted, setAttempted] = useState(false);
+  if (step === 4) return (
+    <Screen step={4} total={TOTAL}>
+      <BackBtn onClick={() => goToStep(3)} />
+      <h2 className="wizard-title">O que você gosta de fazer?</h2>
+      <p className="wizard-sub">Selecione pelo menos uma atividade.</p>
 
-  function handleNext() {
-    if (selected.length === 0) { setAttempted(true); return; }
-    onNext();
-  }
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
-        ← Voltar
-      </button>
-      <h2 className="mb-2 text-xl font-bold text-white">O que você gosta de fazer?</h2>
-      <p className="mb-6 text-sm text-slate-400">Selecione pelo menos uma atividade.</p>
-
-      <div className="grid grid-cols-2 gap-3">
+      <div className="opt-grid">
         {ACTIVITIES.map((a) => {
-          const isSelected = selected.includes(a.value);
+          const sel = form.activity_preferences.includes(a.value);
           return (
             <button
               key={a.value}
-              onClick={() => { onToggle(a.value); setAttempted(false); }}
-              className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
-                isSelected
-                  ? "border-primary-500 bg-primary-500/12"
-                  : "border-slate-800 bg-slate-900 hover:border-slate-600"
-              }`}
+              className={`opt${sel ? " sel" : ""}`}
+              onClick={() => toggleActivity(a.value)}
+              style={{ flexDirection: "column", alignItems: "flex-start", gap: 8, padding: 14, position: "relative" }}
             >
-              <span className="text-xl leading-none">{a.icon}</span>
-              <span className="text-sm font-medium text-white">{a.label}</span>
+              <span className="oicon" style={{ width: 36, height: 36, fontSize: 18 }}>{a.icon}</span>
+              <span className="otxt"><b style={{ fontSize: 14 }}>{a.label}</b></span>
+              <span className="chk" style={{ position: "absolute", top: 10, right: 10, width: 20, height: 20 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </span>
             </button>
           );
         })}
       </div>
 
-      {attempted && selected.length === 0 && (
-        <p className="mt-4 text-sm text-red-400">Selecione pelo menos uma atividade para continuar.</p>
-      )}
-
       <button
-        onClick={handleNext}
-        className="mt-8 w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600"
+        onClick={() => { if (form.activity_preferences.length > 0) goToStep(5); }}
+        disabled={form.activity_preferences.length === 0}
+        className="wizard-cta"
+        style={{ marginTop: 24 }}
       >
         Continuar →
       </button>
-    </div>
+    </Screen>
   );
-}
 
-function StepLocation({
-  selected,
-  onSelect,
-  error,
-  loading,
-  onBack,
-}: {
-  selected: TrainingLocation | "";
-  onSelect: (v: TrainingLocation) => void;
-  error: string;
-  loading: boolean;
-  onBack: () => void;
-}) {
+  // Step 5 — location
   return (
-    <div className="flex flex-1 flex-col">
-      <button onClick={onBack} className="mb-4 text-sm text-slate-500 hover:text-slate-300">
-        ← Voltar
-      </button>
-      <h2 className="mb-2 text-xl font-bold text-white">Onde você costuma treinar?</h2>
-      <p className="mb-6 text-sm text-slate-400">Isso adapta os exercícios do seu plano.</p>
+    <Screen step={5} total={TOTAL}>
+      <BackBtn onClick={() => goToStep(4)} />
+      <h2 className="wizard-title">Onde você costuma treinar?</h2>
+      <p className="wizard-sub">Isso adapta os exercícios do seu plano.</p>
 
       {error && (
-        <p className="mb-4 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
+        <div style={{ background: "var(--hot-soft)", border: "1px solid oklch(0.70 0.19 28 / .35)", borderRadius: "var(--r-md)", padding: "12px 16px", fontSize: 14, color: "var(--hot)", marginBottom: 16 }}>
+          {error}
+        </div>
       )}
 
-      <div className="space-y-3">
+      <div className="opts">
         {LOCATIONS.map((l) => (
-          <button
+          <OptionCard
             key={l.value}
-            onClick={() => onSelect(l.value)}
-            disabled={loading}
-            className={`w-full rounded-xl border-2 p-4 text-left transition disabled:opacity-70 ${
-              selected === l.value
-                ? "border-primary-500 bg-primary-500/12"
-                : "border-slate-800 bg-slate-900 hover:border-slate-600"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-xl leading-none">{l.icon}</span>
-              <div>
-                <p className="font-semibold text-white">{l.label}</p>
-                <p className="text-sm text-gray-500">{l.desc}</p>
-              </div>
-            </div>
-          </button>
+            icon={l.icon}
+            label={l.label}
+            description={l.desc}
+            selected={form.training_location === l.value}
+            onClick={() => { if (!loading) { set("training_location", l.value); handleFinish(l.value); }}}
+          />
         ))}
       </div>
 
       {loading && (
-        <p className="mt-4 text-center text-sm text-slate-400">Criando seu plano...</p>
+        <div style={{ textAlign: "center", marginTop: 24, color: "var(--text-muted)", fontSize: 14 }}>
+          Criando seu plano... ✨
+        </div>
       )}
-    </div>
+    </Screen>
   );
 }

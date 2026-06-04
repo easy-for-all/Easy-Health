@@ -10,7 +10,10 @@ import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
-import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
+import { AITrainerBubble } from "@/shared/components/ai-trainer";
+import { AgentOrb } from "@/shared/components/agent-orb";
+import { OptionCard } from "@/shared/components/ui/option-card";
+import "@/shared/components/ui/ui.css";
 
 function resolveImageSrc(src: string): string {
   return src;
@@ -278,39 +281,39 @@ export default function PlanPage() {
   const showProgress = wizardStep >= 0 && phase !== "wizard_generating";
 
   return (
-    <div className="min-h-screen bg-white px-4 py-6 dark:bg-gray-950">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">Planejamento de Treinos</h1>
-        {phase === "view" && (
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-600 hover:bg-primary-100 dark:bg-primary-950 dark:text-primary-400 dark:hover:bg-primary-900"
-          >
-            ✨ Dicas IA
-          </button>
-        )}
-      </header>
+    <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
+      {phase !== "wizard_generating" && (
+        <header style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>
+            {phase === "view" ? "Seu Plano" : "Criar Plano"}
+          </h1>
+          {phase === "view" && (
+            <button
+              onClick={() => router.push("/dashboard")}
+              style={{ background: "var(--primary-soft)", color: "var(--primary)", border: "none", borderRadius: "var(--r-pill)", padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+            >
+              ✨ Dicas IA
+            </button>
+          )}
+        </header>
+      )}
 
       {showProgress && (
-        <div className="mb-6 flex gap-1">
-          {WIZARD_ORDERED.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 flex-1 rounded-full transition-colors ${i <= wizardStep ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-800"}`}
-            />
-          ))}
+        <div className="progress-dots" style={{ marginBottom: 24 }}>
+          {WIZARD_ORDERED.map((_, i) => {
+            const cls = i < wizardStep ? "on" : i === wizardStep ? "cur" : "";
+            return <i key={i} className={cls} />;
+          })}
         </div>
       )}
 
       {phase === "view" && plan && (
         <>
           {(planSummary || planRationale) && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <div className="shrink-0">
-                <AITrainerAvatar mood="speaking" size="sm" />
-                <p className="mt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-primary-500">Coach IA</p>
-              </div>
-              <div className="flex-1 pt-1">
+            <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 12, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "16px 18px" }}>
+              <AgentOrb size="card" glyph />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 14.5, fontWeight: 700, margin: "0 0 6px" }}>Coach EasyHealth</p>
                 <AITrainerBubble
                   message={planSummary ?? planRationale ?? "Seu plano está pronto!"}
                   mood="speaking"
@@ -321,8 +324,11 @@ export default function PlanPage() {
             </div>
           )}
           <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} onToggleFavorite={handleToggleFavorite} />
-          <button onClick={startWizard} className="mt-6 w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
-            Replanejar
+          <button
+            onClick={startWizard}
+            style={{ marginTop: 16, width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "14px", color: "var(--text-muted)", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+          >
+            ↺ Replanejar
           </button>
           {allPlans.length > 1 && (
             <div className="mt-6">
@@ -439,27 +445,13 @@ function SelectionCard<T extends string>({
   option, selected, onSelect,
 }: { option: CardOption<T>; selected: boolean; onSelect: (v: T) => void }) {
   return (
-    <button
+    <OptionCard
+      icon={option.icon}
+      label={option.label}
+      description={option.description}
+      selected={selected}
       onClick={() => onSelect(option.value)}
-      className={`w-full rounded-2xl border-2 p-4 text-left transition ${
-        selected
-          ? "border-primary-500 bg-primary-50 shadow-sm dark:bg-primary-950/40"
-          : "border-gray-200 bg-white hover:border-primary-200 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary-700"
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <span className="text-2xl leading-none">{option.icon}</span>
-        <div>
-          <p className="font-semibold text-gray-900 dark:text-gray-50">{option.label}</p>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{option.description}</p>
-        </div>
-        {selected && (
-          <div className="ml-auto flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary-500">
-            <span className="text-xs text-white">✓</span>
-          </div>
-        )}
-      </div>
-    </button>
+    />
   );
 }
 
@@ -467,12 +459,15 @@ function WizardHeader({ title, subtitle, onBack }: { title: string; subtitle: st
   return (
     <>
       {onBack && (
-        <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-          ← Voltar
+        <button onClick={onBack} className="wizard-back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Voltar
         </button>
       )}
-      <h2 className="mb-1 text-lg font-bold text-gray-900 dark:text-gray-50">{title}</h2>
-      <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
+      <h2 className="wizard-title">{title}</h2>
+      <p className="wizard-sub">{subtitle}</p>
     </>
   );
 }
@@ -826,26 +821,25 @@ function WizardProfile({
   return (
     <div>
       {onCancel && (
-        <button onClick={onCancel} className="mb-4 text-sm text-gray-400 hover:text-gray-600">← Cancelar</button>
+        <button onClick={onCancel} className="wizard-back">← Cancelar</button>
       )}
-      <h2 className="mb-2 text-lg font-bold text-gray-900">Seu perfil de treino</h2>
-      <p className="mb-4 text-sm text-gray-500">Vamos usar esses dados para montar seu planejamento.</p>
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 space-y-3">
-        <ProfileRow label="Nível"    value={LEVEL_LABELS[profile.fitness_level]} />
-        <ProfileRow label="Objetivo" value={GOAL_LABELS[profile.goal]} />
+      <h2 className="wizard-title">Seu perfil de treino</h2>
+      <p className="wizard-sub">Vamos usar esses dados para montar seu planejamento.</p>
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: 18 }}>
+        <ProfileRow label="Nível"    value={LEVEL_LABELS[profile.fitness_level] ?? profile.fitness_level} />
+        <ProfileRow label="Objetivo" value={GOAL_LABELS[profile.goal] ?? profile.goal} />
       </div>
-      <button onClick={onNext} className="mt-6 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600">
-        Continuar →
-      </button>
+      <button onClick={onNext} className="wizard-cta">Continuar →</button>
     </div>
   );
 }
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-medium text-gray-900">{value}</span>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: "1px solid var(--border)" }}
+      className="last:border-0">
+      <span style={{ fontSize: 14.5, color: "var(--text-muted)" }}>{label}</span>
+      <span style={{ fontSize: 14.5, fontWeight: 700 }}>{value}</span>
     </div>
   );
 }
@@ -855,26 +849,33 @@ function WizardDays({
 }: { selected: number; onSelect: (n: number) => void; onNext: () => void; onBack: () => void }) {
   return (
     <div>
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Voltar</button>
-      <h2 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">Quantos dias por semana?</h2>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Escolha com base na sua disponibilidade.</p>
-      <div className="flex justify-center gap-3">
+      <button onClick={onBack} className="wizard-back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}><polyline points="15 18 9 12 15 6" /></svg>
+        Voltar
+      </button>
+      <h2 className="wizard-title">Quantos dias por semana?</h2>
+      <p className="wizard-sub">Escolha com base na sua disponibilidade.</p>
+      <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
         {[2, 3, 4, 5, 6].map((n) => (
           <button
             key={n}
             onClick={() => onSelect(n)}
-            className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold transition ${
-              selected === n ? "bg-primary-500 text-white shadow-md" : "border-2 border-gray-200 text-gray-600 hover:border-primary-300 dark:border-gray-700 dark:text-gray-300"
-            }`}
+            style={{
+              width: 56, height: 56, borderRadius: "50%",
+              fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700,
+              cursor: "pointer", transition: "all .16s",
+              background: selected === n ? "linear-gradient(180deg, var(--primary), var(--primary-2))" : "var(--surface)",
+              color: selected === n ? "var(--on-primary)" : "var(--text-muted)",
+              border: selected === n ? "none" : "1.5px solid var(--border)",
+              boxShadow: selected === n ? "var(--glow)" : "none",
+            }}
           >
             {n}
           </button>
         ))}
       </div>
-      <p className="mt-3 text-center text-xs text-gray-400">dias por semana</p>
-      <button onClick={onNext} className="mt-8 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600">
-        Continuar →
-      </button>
+      <p style={{ marginTop: 10, textAlign: "center", fontSize: 12, color: "var(--text-dim)" }}>dias por semana</p>
+      <button onClick={onNext} className="wizard-cta">Continuar →</button>
     </div>
   );
 }
@@ -891,33 +892,20 @@ function WizardLocation({
 }: { selected: TrainingLocation; onSelect: (v: TrainingLocation) => void; onNext: () => void; onBack: () => void }) {
   return (
     <div>
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Voltar</button>
-      <h2 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">Onde você vai treinar?</h2>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">Isso adapta os exercícios disponíveis no seu plano.</p>
-      <div className="space-y-3">
+      <WizardHeader title="Onde você vai treinar?" subtitle="Isso adapta os exercícios disponíveis no seu plano." onBack={onBack} />
+      <div className="opts">
         {LOCATION_OPTIONS.map((opt) => (
-          <button
+          <OptionCard
             key={opt.value}
+            icon={opt.icon}
+            label={opt.label}
+            description={opt.description}
+            selected={selected === opt.value}
             onClick={() => onSelect(opt.value)}
-            className={`w-full rounded-2xl border-2 p-4 text-left transition ${
-              selected === opt.value
-                ? "border-primary-500 bg-primary-50 shadow-sm"
-                : "border-gray-200 bg-white hover:border-primary-200 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary-700"
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <span className="text-2xl leading-none">{opt.icon}</span>
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-gray-50">{opt.label}</p>
-                <p className="mt-0.5 text-xs text-gray-500">{opt.description}</p>
-              </div>
-            </div>
-          </button>
+          />
         ))}
       </div>
-      <button onClick={onNext} className="mt-8 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white hover:bg-primary-600">
-        Continuar →
-      </button>
+      <button onClick={onNext} className="wizard-cta">Continuar →</button>
     </div>
   );
 }
@@ -1421,33 +1409,42 @@ function PlanDayDetailDrawer({
 }
 
 function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
-  const currentMsg = steps[step] ?? steps[steps.length - 1] ?? "Gerando seu plano...";
   return (
-    <div className="flex flex-col items-center py-10 text-center">
-      <AITrainerAvatar mood="thinking" size="lg" />
-      <p className="mt-3 text-lg font-bold text-gray-900 dark:text-gray-50">Criando seu plano...</p>
-      <div className="mt-4 flex justify-center">
-        <AITrainerBubble message={currentMsg} mood="thinking" show side="right" />
+    <div className="gen-stage" style={{ margin: "-52px -20px 0", minHeight: "100svh" }}>
+      {/* Large pulsing orb */}
+      <div className="ai-orb-lg">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
+          style={{ width: 40, height: 40, position: "relative", zIndex: 1 }}>
+          <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
+          <path d="M19 14l.7 1.9L21.6 17l-1.9.7L19 19.6l-.7-1.9L16.4 17l1.9-.7L19 14z" />
+        </svg>
       </div>
-      <div className="mt-8 w-full space-y-3">
-        {steps.map((msg, idx) => (
-          <motion.div
-            key={idx}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: idx <= step ? 1 : 0.25, x: 0 }}
-            transition={{ delay: idx * 0.15, duration: 0.3 }}
-            className="flex items-center gap-3"
-          >
-            <div className={`h-2 w-2 shrink-0 rounded-full transition-colors ${
-              idx < step ? "bg-primary-500" : idx === step ? "animate-pulse bg-primary-400" : "bg-gray-200 dark:bg-gray-700"
-            }`} />
-            <p className={`text-sm font-medium text-left ${
-              idx < step ? "text-primary-600 dark:text-primary-400" : idx === step ? "text-gray-800 dark:text-gray-100" : "text-gray-400"
-            }`}>
-              {msg}{idx < step && " ✓"}
-            </p>
-          </motion.div>
-        ))}
+
+      <div>
+        <h2 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, margin: "0 0 6px", letterSpacing: "-0.015em" }}>
+          Criando seu plano...
+        </h2>
+        <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
+          {steps[step] ?? "Finalizando..."}
+        </p>
+      </div>
+
+      <div className="gen-steps">
+        {steps.map((msg, idx) => {
+          const cls = idx < step ? "gen-ln complete" : idx === step ? "gen-ln active" : "gen-ln";
+          return (
+            <motion.div
+              key={idx}
+              className={cls}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: idx * 0.08, duration: 0.25 }}
+            >
+              <span className="gck" />
+              {msg}
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );

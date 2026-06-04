@@ -50,6 +50,7 @@ export interface WorkoutSession {
     workout_day_exercise_id: number;
     exercise_id: number;
     name: string;
+    muscle_group?: string | null;
     weight_kg: number | null;
     weight_by_set?: Array<number | null>;
     planned_sets?: number;
