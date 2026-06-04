@@ -45,9 +45,10 @@ docker-data/
 docs/
 
 # =========================
-# CLAUDE / LOCAL
+# CLAUDE / LOCAL (internal AI tooling — not for public tracking)
 # =========================
-.claude/settings.local.json
+.claude/
+.agents/
 
 # =========================
 # EDITORS
