@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
 import { ApiError, api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
@@ -9,6 +10,7 @@ import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
+import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 
 function resolveImageSrc(src: string): string {
   return src;
@@ -302,16 +304,20 @@ export default function PlanPage() {
 
       {phase === "view" && plan && (
         <>
-          {planSummary && (
-            <div className="mb-4 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
-              <span className="mt-0.5 shrink-0">✨</span>
-              <span>{planSummary}</span>
-            </div>
-          )}
-          {planRationale && (
-            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 dark:border-violet-900 dark:bg-violet-950">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-500 dark:text-violet-400">Por que este plano?</p>
-              <p className="text-sm text-violet-800 dark:text-violet-200">{planRationale}</p>
+          {(planSummary || planRationale) && (
+            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <div className="shrink-0">
+                <AITrainerAvatar mood="speaking" size="sm" />
+                <p className="mt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-primary-500">Coach IA</p>
+              </div>
+              <div className="flex-1 pt-1">
+                <AITrainerBubble
+                  message={planSummary ?? planRationale ?? "Seu plano está pronto!"}
+                  mood="speaking"
+                  show
+                  side="left"
+                />
+              </div>
             </div>
           )}
           <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} onToggleFavorite={handleToggleFavorite} />
@@ -1415,24 +1421,32 @@ function PlanDayDetailDrawer({
 }
 
 function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
+  const currentMsg = steps[step] ?? steps[steps.length - 1] ?? "Gerando seu plano...";
   return (
-    <div className="flex flex-col items-center py-12">
-      <div className="mb-10 h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
-      <div className="w-full space-y-4">
+    <div className="flex flex-col items-center py-10 text-center">
+      <AITrainerAvatar mood="thinking" size="lg" />
+      <p className="mt-3 text-lg font-bold text-gray-900 dark:text-gray-50">Criando seu plano...</p>
+      <div className="mt-4 flex justify-center">
+        <AITrainerBubble message={currentMsg} mood="thinking" show side="right" />
+      </div>
+      <div className="mt-8 w-full space-y-3">
         {steps.map((msg, idx) => (
-          <div
+          <motion.div
             key={idx}
-            className={`flex items-center gap-3 transition-all duration-500 ${idx <= step ? "opacity-100 translate-x-0" : "opacity-20"}`}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: idx <= step ? 1 : 0.25, x: 0 }}
+            transition={{ delay: idx * 0.15, duration: 0.3 }}
+            className="flex items-center gap-3"
           >
-            <div className={`h-2 w-2 flex-shrink-0 rounded-full transition-colors ${
+            <div className={`h-2 w-2 shrink-0 rounded-full transition-colors ${
               idx < step ? "bg-primary-500" : idx === step ? "animate-pulse bg-primary-400" : "bg-gray-200 dark:bg-gray-700"
             }`} />
-            <p className={`text-sm font-medium ${
-              idx < step ? "text-primary-700 dark:text-primary-400" : idx === step ? "text-gray-800 dark:text-gray-100" : "text-gray-400"
+            <p className={`text-sm font-medium text-left ${
+              idx < step ? "text-primary-600 dark:text-primary-400" : idx === step ? "text-gray-800 dark:text-gray-100" : "text-gray-400"
             }`}>
               {msg}{idx < step && " ✓"}
             </p>
-          </div>
+          </motion.div>
         ))}
       </div>
     </div>

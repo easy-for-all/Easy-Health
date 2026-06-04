@@ -15,7 +15,18 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
 export const metadata: Metadata = {
   title: "Easy Health",
-  description: "Seu treino diário simplificado",
+  description: "Seu personal trainer digital inteligente",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Easy Health",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "msapplication-TileColor": "#0a0f1e",
+    "msapplication-TileImage": "/icons/icon-144x144.png",
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -27,6 +38,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         {/* Apply saved theme before first paint to prevent flash */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');})();` }} />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png" />
+        <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GTAG_ID}`}
           strategy="afterInteractive"
