@@ -17,209 +17,353 @@ export type BodyCompositionData = {
   regions: BodyRegion[];
 };
 
+// ── Constants ─────────────────────────────────────────────
+
 const REGION_LABELS: Record<string, string> = {
-  chest:       "Peito",
-  abdomen:     "Abdômen",
-  shoulders:   "Ombros",
-  biceps:      "Bíceps",
-  triceps:     "Tríceps",
-  back:        "Costas",
-  glutes:      "Glúteos",
-  quadriceps:  "Quadríceps",
-  hamstrings:  "Posteriores",
-  calves:      "Panturrilhas",
+  chest:      "Peito",
+  abdomen:    "Abdômen",
+  shoulders:  "Ombros",
+  biceps:     "Bíceps",
+  triceps:    "Tríceps",
+  back:       "Costas",
+  glutes:     "Glúteos",
+  quadriceps: "Quadríceps",
+  hamstrings: "Posteriores",
+  calves:     "Panturrilhas",
 };
 
-function regionFill(muscleLevel: number, fatLevel: number): string {
-  const score = muscleLevel - fatLevel;
-  if (score >= 2)  return "#22c55e";
-  if (score >= 1)  return "#84cc16";
-  if (score >= 0)  return "#f59e0b";
-  if (score >= -1) return "#f97316";
-  return "#ef4444";
+const REGION_SIDE: Record<string, "front" | "back"> = {
+  shoulders:  "front",
+  chest:      "front",
+  biceps:     "front",
+  abdomen:    "front",
+  quadriceps: "front",
+  back:       "back",
+  triceps:    "back",
+  glutes:     "back",
+  hamstrings: "back",
+  calves:     "back",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  otimo:   "var(--status-otimo)",
+  bom:     "var(--status-bom)",
+  medio:   "var(--status-medio)",
+  atencao: "var(--status-atencao)",
+  critico: "var(--status-critico)",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  otimo:   "Ótimo",
+  bom:     "Bom",
+  medio:   "Médio",
+  atencao: "Atenção",
+  critico: "Crítico",
+};
+
+const FRONT_ORDER = ["shoulders", "chest", "biceps", "abdomen", "quadriceps"];
+const BACK_ORDER  = ["back", "triceps", "glutes", "hamstrings", "calves"];
+
+// ── Helpers ───────────────────────────────────────────────
+
+function regionStatus(r: BodyRegion): string {
+  const s = r.muscleLevel - r.fatLevel;
+  if (s >= 2)  return "otimo";
+  if (s >= 1)  return "bom";
+  if (s >= 0)  return "medio";
+  if (s >= -1) return "atencao";
+  return "critico";
 }
 
-function getRegion(regions: BodyRegion[], name: string) {
-  return regions.find((r) => r.name === name);
+function colorOf(regions: BodyRegion[], name: string): string {
+  const r = regions.find((x) => x.name === name);
+  if (!r) return "var(--surface-3)";
+  return STATUS_COLORS[regionStatus(r)] ?? "var(--surface-3)";
 }
 
-function regionProps(regions: BodyRegion[], name: string) {
-  const r = getRegion(regions, name);
-  if (!r) return { fill: "#d1d5db", fillOpacity: 0.3 };
-  return {
-    fill:        regionFill(r.muscleLevel, r.fatLevel),
-    fillOpacity: 0.25 + r.confidence * 0.55,
-  };
-}
+// ── SVG Body Map ─────────────────────────────────────────
 
-const GRAY = "#d1d5db";
-const SW   = "1";
-
-function FrontView({ regions }: { regions: BodyRegion[] }) {
-  const rp = (name: string) => regionProps(regions, name);
+function BodyFigure({ regions, side }: { regions: BodyRegion[]; side: "front" | "back" }) {
+  const c = (name: string) => colorOf(regions, name);
+  const BODY = "var(--surface-2)";
 
   return (
-    <svg viewBox="0 0 80 160" style={{ width: 80, height: 160 }} xmlns="http://www.w3.org/2000/svg">
-      {/* Head */}
-      <ellipse cx="40" cy="13" rx="11" ry="12" fill={GRAY} fillOpacity={0.4} stroke={GRAY} strokeWidth={SW} />
-      {/* Neck */}
-      <rect x="34" y="24" width="12" height="8" fill={GRAY} fillOpacity={0.4} stroke={GRAY} strokeWidth={SW} />
+    <svg
+      className="bodyfig"
+      viewBox="0 0 120 300"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      {/* Silhouette base — always visible */}
+      <ellipse cx="60" cy="26" rx="17" ry="18" fill={BODY} />
+      <rect x="52" y="40" width="16" height="11" rx="5" fill={BODY} />
+      <rect x="33" y="48" width="54" height="74" rx="20" fill={BODY} />
+      <rect x="37" y="110" width="46" height="30" rx="15" fill={BODY} />
+      <rect x="14" y="52" width="16" height="108" rx="8" fill={BODY} />
+      <rect x="90" y="52" width="16" height="108" rx="8" fill={BODY} />
+      <rect x="38" y="130" width="20" height="80" rx="10" fill={BODY} />
+      <rect x="62" y="130" width="20" height="80" rx="10" fill={BODY} />
+      <rect x="40" y="200" width="16" height="86" rx="8" fill={BODY} />
+      <rect x="64" y="200" width="16" height="86" rx="8" fill={BODY} />
 
-      {/* Shoulders */}
-      <ellipse cx="15" cy="33" rx="9" ry="5" {...rp("shoulders")} stroke={GRAY} strokeWidth={SW} />
-      <ellipse cx="65" cy="33" rx="9" ry="5" {...rp("shoulders")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Chest — upper torso */}
-      <path d="M18 31 Q17 46 16 60 L64 60 Q63 46 62 31 Q52 33 40 33 Q28 33 18 31 Z" {...rp("chest")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Abdomen — lower torso */}
-      <path d="M16 60 L64 60 L65 88 L15 88 Z" {...rp("abdomen")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Biceps — upper arms */}
-      <path d="M18 33 Q11 46 11 60 Q14 62 17 60 Q18 48 21 35 Z" {...rp("biceps")} stroke={GRAY} strokeWidth={SW} />
-      <path d="M62 33 Q69 46 69 60 Q66 62 63 60 Q62 48 59 35 Z" {...rp("biceps")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Forearms — gray, no tracked region */}
-      <path d="M11 60 Q9 68 11 77 Q15 79 19 77 Q19 67 17 60 Z" fill={GRAY} fillOpacity={0.2} stroke={GRAY} strokeWidth={SW} />
-      <path d="M69 60 Q71 68 69 77 Q65 79 61 77 Q61 67 63 60 Z" fill={GRAY} fillOpacity={0.2} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Quadriceps — upper legs */}
-      <path d="M15 88 Q12 108 13 120 L30 120 Q31 108 33 88 Z" {...rp("quadriceps")} stroke={GRAY} strokeWidth={SW} />
-      <path d="M65 88 Q68 108 67 120 L50 120 Q49 108 47 88 Z" {...rp("quadriceps")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Lower legs — gray */}
-      <path d="M13 120 Q12 133 14 145 Q22 147 28 145 Q29 133 30 120 Z" fill={GRAY} fillOpacity={0.2} stroke={GRAY} strokeWidth={SW} />
-      <path d="M67 120 Q68 133 66 145 Q58 147 52 145 Q51 133 50 120 Z" fill={GRAY} fillOpacity={0.2} stroke={GRAY} strokeWidth={SW} />
+      {side === "front" ? (
+        <>
+          <ellipse cx="33" cy="56" rx="13" ry="12" fill={c("shoulders")} />
+          <ellipse cx="87" cy="56" rx="13" ry="12" fill={c("shoulders")} />
+          <rect x="40" y="56" width="19" height="21" rx="8" fill={c("chest")} />
+          <rect x="61" y="56" width="19" height="21" rx="8" fill={c("chest")} />
+          <rect x="14" y="64" width="16" height="32" rx="8" fill={c("biceps")} />
+          <rect x="90" y="64" width="16" height="32" rx="8" fill={c("biceps")} />
+          <rect x="45" y="80" width="30" height="35" rx="9" fill={c("abdomen")} />
+          <rect x="38" y="134" width="20" height="54" rx="10" fill={c("quadriceps")} />
+          <rect x="62" y="134" width="20" height="54" rx="10" fill={c("quadriceps")} />
+        </>
+      ) : (
+        <>
+          <ellipse cx="33" cy="56" rx="13" ry="12" fill={c("shoulders")} />
+          <ellipse cx="87" cy="56" rx="13" ry="12" fill={c("shoulders")} />
+          <rect x="40" y="56" width="19" height="40" rx="9" fill={c("back")} />
+          <rect x="61" y="56" width="19" height="40" rx="9" fill={c("back")} />
+          <rect x="14" y="64" width="16" height="32" rx="8" fill={c("triceps")} />
+          <rect x="90" y="64" width="16" height="32" rx="8" fill={c("triceps")} />
+          <rect x="39" y="112" width="20" height="25" rx="10" fill={c("glutes")} />
+          <rect x="61" y="112" width="20" height="25" rx="10" fill={c("glutes")} />
+          <rect x="38" y="140" width="20" height="52" rx="10" fill={c("hamstrings")} />
+          <rect x="62" y="140" width="20" height="52" rx="10" fill={c("hamstrings")} />
+          <rect x="40" y="206" width="16" height="48" rx="8" fill={c("calves")} />
+          <rect x="64" y="206" width="16" height="48" rx="8" fill={c("calves")} />
+        </>
+      )}
     </svg>
   );
 }
 
-function BackView({ regions }: { regions: BodyRegion[] }) {
-  const rp = (name: string) => regionProps(regions, name);
+// ── Pips meter ────────────────────────────────────────────
 
+function Pips({ count, kind }: { count: number; kind: "mus" | "fat" }) {
   return (
-    <svg viewBox="0 0 80 160" style={{ width: 80, height: 160 }} xmlns="http://www.w3.org/2000/svg">
-      {/* Head */}
-      <ellipse cx="40" cy="13" rx="11" ry="12" fill={GRAY} fillOpacity={0.4} stroke={GRAY} strokeWidth={SW} />
-      {/* Neck */}
-      <rect x="34" y="24" width="12" height="8" fill={GRAY} fillOpacity={0.4} stroke={GRAY} strokeWidth={SW} />
+    <span className="pips">
+      {Array.from({ length: 5 }, (_, i) => (
+        <i key={i} className={i < count ? `on ${kind}` : ""} />
+      ))}
+    </span>
+  );
+}
 
-      {/* Shoulder caps */}
-      <ellipse cx="15" cy="33" rx="9" ry="5" {...rp("shoulders")} stroke={GRAY} strokeWidth={SW} />
-      <ellipse cx="65" cy="33" rx="9" ry="5" {...rp("shoulders")} stroke={GRAY} strokeWidth={SW} />
+// ── Icons ─────────────────────────────────────────────────
 
-      {/* Back — torso */}
-      <path d="M18 31 Q14 60 15 88 L65 88 Q66 60 62 31 Q52 33 40 33 Q28 33 18 31 Z" {...rp("back")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Triceps — upper arms */}
-      <path d="M18 33 Q11 46 11 60 Q14 62 17 60 Q18 48 21 35 Z" {...rp("triceps")} stroke={GRAY} strokeWidth={SW} />
-      <path d="M62 33 Q69 46 69 60 Q66 62 63 60 Q62 48 59 35 Z" {...rp("triceps")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Forearms — gray */}
-      <path d="M11 60 Q9 68 11 77 Q15 79 19 77 Q19 67 17 60 Z" fill={GRAY} fillOpacity={0.2} stroke={GRAY} strokeWidth={SW} />
-      <path d="M69 60 Q71 68 69 77 Q65 79 61 77 Q61 67 63 60 Z" fill={GRAY} fillOpacity={0.2} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Glutes — upper leg */}
-      <path d="M15 88 Q12 100 13 107 L30 107 Q31 100 33 88 Z" {...rp("glutes")} stroke={GRAY} strokeWidth={SW} />
-      <path d="M65 88 Q68 100 67 107 L50 107 Q49 100 47 88 Z" {...rp("glutes")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Hamstrings — mid leg */}
-      <path d="M13 107 Q12 114 13 120 L30 120 Q31 114 30 107 Z" {...rp("hamstrings")} stroke={GRAY} strokeWidth={SW} />
-      <path d="M67 107 Q68 114 67 120 L50 120 Q49 114 50 107 Z" {...rp("hamstrings")} stroke={GRAY} strokeWidth={SW} />
-
-      {/* Calves — lower leg */}
-      <path d="M13 120 Q12 133 14 145 Q22 147 28 145 Q29 133 30 120 Z" {...rp("calves")} stroke={GRAY} strokeWidth={SW} />
-      <path d="M67 120 Q68 133 66 145 Q58 147 52 145 Q51 133 50 120 Z" {...rp("calves")} stroke={GRAY} strokeWidth={SW} />
+function IconDumbbell() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 6.5h11M6.5 17.5h11M3 12h18M3 9.5v5M21 9.5v5M6.5 6.5v11M17.5 6.5v11" />
     </svg>
   );
 }
 
-export function BodyCompositionMap({ data }: { data: BodyCompositionData }) {
-  const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
+function IconDroplet() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+    </svg>
+  );
+}
 
-  const frontRegions  = ["shoulders", "chest", "biceps", "abdomen", "quadriceps"];
-  const backRegions   = ["back", "triceps", "glutes", "hamstrings", "calves"];
-  const orderedRegions = [...frontRegions, ...backRegions];
-  const displayRegions = orderedRegions
+function IconChevronDown() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+function IconSparkles() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
+      <path d="M19 14l.7 1.9L21.6 17l-1.9.7L19 19.6l-.7-1.9L16.4 17l1.9-.7L19 14z" />
+    </svg>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────
+
+type Props = {
+  data: BodyCompositionData;
+  onReanalyze?: () => void;
+  reanalyzing?: boolean;
+  reanalyzeError?: string | null;
+  canReanalyze?: boolean;
+};
+
+export function BodyCompositionMap({
+  data,
+  onReanalyze,
+  reanalyzing = false,
+  reanalyzeError = null,
+  canReanalyze = false,
+}: Props) {
+  const [side, setSide] = useState<"front" | "back">("front");
+  const [openRegion, setOpenRegion] = useState<string | null>(null);
+
+  const visibleRegions = (side === "front" ? FRONT_ORDER : BACK_ORDER)
+    .map((name) => data.regions.find((r) => r.name === name))
+    .filter(Boolean) as BodyRegion[];
+
+  const allRegions = [...FRONT_ORDER, ...BACK_ORDER]
     .map((name) => data.regions.find((r) => r.name === name))
     .filter(Boolean) as BodyRegion[];
 
   return (
     <div>
-      {/* Summary row */}
+      {/* Fat badge + summary */}
       {(data.estimatedBodyFatPercentage != null || data.summary) && (
-        <div className="mb-4 flex items-start gap-3">
+        <div className="map-top">
           {data.estimatedBodyFatPercentage != null && (
-            <div className="shrink-0 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2 text-center">
-              <p className="text-2xl font-bold text-gray-900">{data.estimatedBodyFatPercentage}%</p>
-              <p className="text-xs text-gray-400">gordura est.</p>
+            <div className="fat-badge">
+              <b>
+                {data.estimatedBodyFatPercentage}
+                <small>%</small>
+              </b>
+              <span>gordura est.</span>
               {data.confidence != null && (
-                <p className="text-xs text-gray-400">{Math.round(data.confidence * 100)}% conf.</p>
+                <em>{Math.round(data.confidence * 100)}% conf.</em>
               )}
             </div>
           )}
           {data.summary && (
-            <p className="flex-1 text-sm leading-relaxed text-gray-600">{data.summary}</p>
+            <p className="map-summary">{data.summary}</p>
           )}
         </div>
       )}
 
-      {/* Front + Back body views */}
-      <div className="flex items-start justify-center gap-8 mb-4">
-        <div className="flex flex-col items-center gap-1">
-          <p className="text-xs font-medium text-gray-400">Frente</p>
-          <FrontView regions={data.regions} />
-        </div>
-        <div className="flex flex-col items-center gap-1">
-          <p className="text-xs font-medium text-gray-400">Costas</p>
-          <BackView regions={data.regions} />
-        </div>
+      {/* Toggle Frente / Costas */}
+      <div className="bm-toggle" role="group" aria-label="Selecionar vista do mapa corporal">
+        <button
+          className={side === "front" ? "active" : ""}
+          onClick={() => setSide("front")}
+          aria-pressed={side === "front"}
+        >
+          Frente
+        </button>
+        <button
+          className={side === "back" ? "active" : ""}
+          onClick={() => setSide("back")}
+          aria-pressed={side === "back"}
+        >
+          Costas
+        </button>
+      </div>
+
+      {/* SVG figure */}
+      <div className="bodyfig-wrap">
+        <BodyFigure regions={data.regions} side={side} />
       </div>
 
       {/* Legend */}
-      <div className="mb-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
-        {[
-          { color: "#22c55e", label: "Ótimo" },
-          { color: "#84cc16", label: "Bom" },
-          { color: "#f59e0b", label: "Médio" },
-          { color: "#f97316", label: "Atenção" },
-          { color: "#ef4444", label: "Crítico" },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1">
-            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-            <span className="text-xs text-gray-500">{label}</span>
-          </div>
+      <div className="bm-legend" aria-label="Legenda de status muscular">
+        {Object.entries(STATUS_LABELS).map(([key, label]) => (
+          <span key={key} className="lg">
+            <span className="dot" style={{ background: STATUS_COLORS[key] }} />
+            {label}
+          </span>
         ))}
       </div>
 
-      {/* Region breakdown */}
-      <div className="space-y-1">
-        {displayRegions.map((region) => {
-          const color   = regionFill(region.muscleLevel, region.fatLevel);
-          const isOpen  = expandedRegion === region.name;
+      {/* Region list — shows all regions, grouped by visible side */}
+      <div className="region-list" role="list">
+        {allRegions.map((region) => {
+          const status = regionStatus(region);
+          const color  = STATUS_COLORS[status];
+          const isOpen = openRegion === region.name;
+          const sideOf = REGION_SIDE[region.name] ?? "front";
+
           return (
             <button
               key={region.name}
-              onClick={() => setExpandedRegion(isOpen ? null : region.name)}
-              className="w-full rounded-xl px-3 py-2.5 text-left transition hover:bg-gray-50 active:bg-gray-100"
+              className={`region-row${isOpen ? " open" : ""}`}
+              onClick={() => setOpenRegion(isOpen ? null : region.name)}
+              aria-expanded={isOpen}
+              role="listitem"
             >
-              <div className="flex items-center gap-3">
-                <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                <span className="flex-1 text-sm text-gray-700">
+              <span className="rr-head">
+                <span
+                  className="rdot"
+                  style={{ background: color }}
+                  aria-hidden="true"
+                />
+                <span className="rname">
                   {REGION_LABELS[region.name] ?? region.name}
+                  {sideOf !== side && (
+                    <span
+                      style={{ fontSize: 10, color: "var(--text-faint)", marginLeft: 5, fontWeight: 500 }}
+                      aria-hidden="true"
+                    >
+                      {sideOf === "back" ? "costas" : "frente"}
+                    </span>
+                  )}
                 </span>
-                <span className="text-xs text-gray-400">
-                  💪 {region.muscleLevel}/5 · 🔵 {region.fatLevel}/5
+                <span className="meters" aria-label={`Músculo ${region.muscleLevel}/5, Gordura ${region.fatLevel}/5`}>
+                  <span className="meter">
+                    <span className="mlbl" aria-label="Músculo">
+                      <IconDumbbell />
+                    </span>
+                    <Pips count={region.muscleLevel} kind="mus" />
+                  </span>
+                  <span className="meter">
+                    <span className="mlbl" aria-label="Gordura">
+                      <IconDroplet />
+                    </span>
+                    <Pips count={region.fatLevel} kind="fat" />
+                  </span>
                 </span>
-                <span className="text-xs text-gray-300">{isOpen ? "▲" : "▼"}</span>
-              </div>
-              {isOpen && region.note && (
-                <p className="mt-1.5 pl-5 text-xs text-gray-500 leading-relaxed">{region.note}</p>
+                <span className="rchev" aria-hidden="true">
+                  <IconChevronDown />
+                </span>
+              </span>
+              {region.note && (
+                <span className="rr-note" aria-hidden={!isOpen}>
+                  <p>{region.note}</p>
+                </span>
               )}
             </button>
           );
         })}
       </div>
+
+      {/* Reanalyze button */}
+      {onReanalyze && (
+        <div>
+          {reanalyzeError && (
+            <p style={{ marginBottom: 8, padding: "8px 12px", borderRadius: "var(--r-sm)", background: "var(--hot-soft)", color: "var(--hot)", fontSize: 13 }}>
+              {reanalyzeError}
+            </p>
+          )}
+          <button
+            className="btn-reanalyze"
+            onClick={onReanalyze}
+            disabled={reanalyzing || !canReanalyze}
+          >
+            {reanalyzing ? "Analisando foto..." : "↺ Reanalisar foto mais recente"}
+          </button>
+          {!canReanalyze && !reanalyzing && (
+            <p style={{ marginTop: 6, fontSize: 12, color: "var(--text-dim)", textAlign: "center" }}>
+              Adicione uma foto corporal para usar esta função.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Empty body map state — no data yet */}
+      {data.regions.length === 0 && (
+        <div className="empty-card">
+          <div className="ei">
+            <IconSparkles />
+          </div>
+          <b>Mapa corporal não gerado ainda</b>
+          <p>Adicione uma foto corporal para a IA gerar o mapa muscular personalizado.</p>
+        </div>
+      )}
     </div>
   );
 }

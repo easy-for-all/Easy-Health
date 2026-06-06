@@ -787,7 +787,7 @@ function WorkoutTodayContent() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-y-auto px-4 pt-4">
+      <div className="flex flex-1 flex-col overflow-y-auto px-4 pt-4 min-h-0">
       <AnimatePresence mode="wait">
       <motion.div
         key={currentIndex}
@@ -956,7 +956,7 @@ function WorkoutTodayContent() {
       </AnimatePresence>
       </div>
 
-      <div className="px-4" style={{ paddingBottom: "max(24px, env(safe-area-inset-bottom))" }}>
+      <div className="px-4" style={{ paddingTop: 8, paddingBottom: "max(24px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
       {isCardio(exercise) ? (
         <PressButton onClick={() => finishExercise("bem")} className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white">
           Concluir cardio
