@@ -30,7 +30,7 @@ export default function FavoritesPage() {
       api.get<FavoriteExercise[]>("/api/v1/exercises/favorites").catch(() => []),
     ]).then(([p, exs]) => {
       setPlan(p);
-      setExercises(exs ?? []);
+      setExercises(Array.isArray(exs) ? exs : []);
     }).finally(() => setLoading(false));
   }, []);
 

@@ -1,6 +1,8 @@
 module Api
   module V1
     class UserFavoriteExercisesController < BaseController
+      include ExerciseImageHelper
+
       def create
         exercise = Exercise.find(params[:id])
         current_user.user_favorite_exercises.find_or_create_by!(exercise: exercise)
@@ -16,8 +18,11 @@ module Api
       end
 
       def index
-        ids = current_user.user_favorite_exercises.pluck(:exercise_id)
-        render json: { favorite_exercise_ids: ids }
+        favorites = current_user.user_favorite_exercises.includes(:exercise)
+        render json: favorites.map { |fav|
+          ex = fav.exercise
+          { id: ex.id, name: ex.name, muscle_group: ex.muscle_group, image_url: exercise_image_url(ex) }
+        }
       end
     end
   end

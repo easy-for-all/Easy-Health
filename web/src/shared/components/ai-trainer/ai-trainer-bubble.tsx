@@ -78,7 +78,7 @@ export function AITrainerBubble({
                 ))}
               </div>
             ) : (
-              <p className="text-xs leading-relaxed text-gray-700 dark:text-gray-200">
+              <p className="text-xs leading-relaxed text-gray-700 dark:text-white">
                 {displayText}
                 {isTyping && (
                   <motion.span

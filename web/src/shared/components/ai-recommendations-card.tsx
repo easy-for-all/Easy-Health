@@ -39,9 +39,9 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 const PRIORITY_STYLE: Record<string, string> = {
-  high: "border-l-orange-400 bg-orange-50",
-  medium: "border-l-primary-400 bg-primary-50",
-  low: "border-l-gray-300 bg-gray-50",
+  high:   "border-l-[var(--hot)] bg-[var(--hot-soft)]",
+  medium: "border-l-[var(--primary)] bg-[var(--primary-soft)]",
+  low:    "border-l-[var(--border-strong)] bg-[var(--surface-2)]",
 };
 
 export function AiRecommendationsCard() {
@@ -79,10 +79,10 @@ export function AiRecommendationsCard() {
         <span className="text-lg">🤖</span>
         <div className="flex-1">
           <p className="text-sm font-bold text-gray-900 dark:text-gray-50">Personal IA</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">Análise baseada no seu histórico</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400">Análise baseada no seu histórico</p>
         </div>
         {highPriority.length > 0 && (
-          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-600">
+          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-600 dark:bg-orange-950/40 dark:text-orange-400">
             {highPriority.length} urgente{highPriority.length > 1 ? "s" : ""}
           </span>
         )}
@@ -102,9 +102,9 @@ export function AiRecommendationsCard() {
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 text-base font-bold text-primary-600">{ACTION_ICONS[r.action] ?? "→"}</span>
                   <div>
-                    <p className="text-xs font-semibold text-gray-700">{r.exercise}</p>
-                    <p className="text-sm font-bold text-gray-900">{r.suggestion}</p>
-                    <p className="mt-0.5 text-xs text-gray-500">{r.reason}</p>
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">{r.exercise}</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">{r.suggestion}</p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{r.reason}</p>
                   </div>
                 </div>
               </div>
@@ -116,8 +116,8 @@ export function AiRecommendationsCard() {
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 text-base">{CATEGORY_ICONS[r.category] ?? "💪"}</span>
                   <div>
-                    <p className="text-sm font-bold text-gray-900">{r.suggestion}</p>
-                    <p className="mt-0.5 text-xs text-gray-500">{r.reason}</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">{r.suggestion}</p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{r.reason}</p>
                   </div>
                 </div>
               </div>
