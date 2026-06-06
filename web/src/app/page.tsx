@@ -234,7 +234,8 @@ export default function LandingPage() {
       <header style={{ position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", background: "oklch(0.155 0.022 262 / .82)", borderBottom: "1px solid var(--border)" }}>
         <div style={{ margin: "0 auto", maxWidth: 1180, display: "flex", alignItems: "center", justifyContent: "space-between", height: 72, padding: "0 clamp(16px, 4vw, 32px)" }}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 21, letterSpacing: "-0.01em", color: "var(--text)", textDecoration: "none" }}>
-            <span style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontSize: 19, fontWeight: 900, boxShadow: "var(--glow)" }}>E</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="EasyHealth" style={{ width: 34, height: 34, borderRadius: 10 }} />
             EasyHealth
           </Link>
           <nav style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -365,9 +366,6 @@ export default function LandingPage() {
                       <b style={{ display: "block", fontSize: 14.5 }}>{t.name}</b>
                       <small style={{ fontSize: 12.5, color: "var(--text-dim)" }}>{t.role}</small>
                     </div>
-                    <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-dim)", border: "1px dashed var(--border-strong)", borderRadius: 999, padding: "3px 9px" }}>
-                      demo
-                    </span>
                   </div>
                 </div>
               ))}

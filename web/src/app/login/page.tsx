@@ -55,18 +55,8 @@ export default function LoginPage() {
       <div style={{ width: "100%", maxWidth: 360 }}>
         {/* Brand glyph */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 40, gap: 12 }}>
-          <div
-            style={{
-              width: 64, height: 64, borderRadius: 20,
-              background: "linear-gradient(150deg, var(--primary), var(--primary-2))",
-              boxShadow: "var(--glow)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 32,
-              color: "var(--on-primary)", letterSpacing: "-0.03em",
-            }}
-          >
-            E
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="EasyHealth" style={{ width: 64, height: 64, borderRadius: 20 }} />
           <div style={{ textAlign: "center" }}>
             <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, letterSpacing: "-0.02em", margin: 0 }}>
               EasyHealth
