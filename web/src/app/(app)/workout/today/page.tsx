@@ -28,12 +28,14 @@ type ExerciseOption = {
   name: string;
   muscle_group: string | null;
   exercise_type: string;
+  equipment_type?: string | null;
   description: string;
   instructions?: string | null;
   image_url: string;
   gif_url?: string | null;
   video_url?: string | null;
   muscle_image_url: string;
+  is_favorite?: boolean;
 };
 type ExerciseRuntime = {
   planned_sets: number;
@@ -99,6 +101,7 @@ function WorkoutTodayContent() {
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
   const [weightError, setWeightError] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [showSwapChoice, setShowSwapChoice] = useState(false);
   const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [showReorderModal, setShowReorderModal] = useState(false);
@@ -216,7 +219,7 @@ function WorkoutTodayContent() {
         if (target) {
           try {
             const { day: loaded } = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${target.id}`);
-            const runtime = Object.fromEntries((loaded.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
+            const runtime = Object.fromEntries((loaded.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex, lastUsedWeight(history.sessions ?? [], ex.exercise_id))]));
             setDay(loaded);
             setExerciseRuntime(runtime);
             setCurrentIndex(0);
@@ -248,7 +251,7 @@ function WorkoutTodayContent() {
             }
 
             // Build runtime: defaults merged with saved state
-            const defaultRuntime = Object.fromEntries(exercises.map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
+            const defaultRuntime = Object.fromEntries(exercises.map((ex) => [ex.workout_day_exercise_id, createRuntime(ex, lastUsedWeight(history.sessions ?? [], ex.exercise_id))]));
             const storedRuntimeRaw = sessionStorage.getItem("wk_exercise_runtime");
             let restoredRuntime = defaultRuntime;
             if (storedRuntimeRaw) {
@@ -341,7 +344,7 @@ function WorkoutTodayContent() {
       const data = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${workoutDay.id}`);
       const runtime = Object.fromEntries((data.day.exercises ?? []).map((exercise) => [
         exercise.workout_day_exercise_id,
-        createRuntime(exercise),
+        createRuntime(exercise, lastUsedWeight(sessions, exercise.exercise_id)),
       ]));
       setDay(data.day);
       setExerciseRuntime(runtime);
@@ -598,7 +601,7 @@ function WorkoutTodayContent() {
             ...prev,
             ...Object.fromEntries((nextDay.exercises ?? []).filter((exercise) => !prev[exercise.workout_day_exercise_id]).map((exercise) => [
               exercise.workout_day_exercise_id,
-              createRuntime(exercise),
+              createRuntime(exercise, lastUsedWeight(sessions, exercise.exercise_id)),
             ])),
           }));
         }}
@@ -749,7 +752,7 @@ function WorkoutTodayContent() {
 
   return (
     <>
-    <div style={{ display: "flex", minHeight: "100svh", flexDirection: "column", background: "var(--bg)", color: "var(--text)" }}>
+    <div style={{ display: "flex", height: "100svh", flexDirection: "column", overflow: "hidden", background: "var(--bg)", color: "var(--text)" }}>
       {/* Sticky header */}
       <div style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-2)", borderBottom: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: "12px 16px 10px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -784,7 +787,7 @@ function WorkoutTodayContent() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col px-4 pt-4">
+      <div className="flex flex-1 flex-col overflow-y-auto px-4 pt-4">
       <AnimatePresence mode="wait">
       <motion.div
         key={currentIndex}
@@ -798,14 +801,14 @@ function WorkoutTodayContent() {
         {exercise.gif_url ? (
           <div
             className="relative w-full cursor-pointer overflow-hidden rounded-2xl"
-            style={{ maxHeight: 280 }}
+            style={{ maxHeight: "clamp(160px, 38svh, 280px)" }}
             onClick={() => setGifModalExercise(exercise)}
           >
             <img
               src={exercise.gif_url}
               alt={exercise.name}
-              className="h-64 w-full object-cover rounded-2xl"
-              style={{ maxHeight: 280 }}
+              className="w-full object-cover rounded-2xl"
+              style={{ height: "clamp(160px, 38svh, 280px)" }}
             />
             <div className="absolute inset-0 flex items-end justify-between rounded-2xl bg-gradient-to-t from-black/60 via-transparent to-transparent px-3 pb-3">
               {exercise.muscle_group && (
@@ -848,7 +851,7 @@ function WorkoutTodayContent() {
             Info
           </button>
           <button
-            onClick={() => { open({ intent: "swap" }); }}
+            onClick={() => setShowSwapChoice(true)}
             className="exec-chip warn"
           >
             <svg viewBox="0 0 24 24"><path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
@@ -857,7 +860,7 @@ function WorkoutTodayContent() {
         </div>
 
         {/* Exercise name */}
-        <div className="mt-3">
+        <div className="mt-2">
           <h2 className="text-2xl font-bold text-white leading-tight">{exercise.name}</h2>
         </div>
         {(() => {
@@ -895,14 +898,14 @@ function WorkoutTodayContent() {
         ) : (
           /* ── Strength exercise panel ─────────────────────── */
           <>
-            <div className="mt-6 grid grid-cols-3 gap-3">
+            <div className="mt-4 grid grid-cols-3 gap-3">
               <AdjustBox label="séries" value={runtime.planned_sets} onMinus={() => changePlannedSets(exercise, runtime.planned_sets - 1)} onPlus={() => changePlannedSets(exercise, runtime.planned_sets + 1)} />
               <AdjustBox label={`reps série ${currentSet}`} value={runtime.reps_by_set[currentSet - 1] ?? exercise.reps} onMinus={() => updateCurrentSetReps(exercise, Math.max(1, (runtime.reps_by_set[currentSet - 1] ?? exercise.reps) - 1))} onPlus={() => updateCurrentSetReps(exercise, (runtime.reps_by_set[currentSet - 1] ?? exercise.reps) + 1)} />
               <Metric label="série atual" value={currentSet} highlight />
             </div>
 
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-slate-400">
+            <div className="mt-3 flex gap-3">
+              <label className="flex-1 text-sm font-medium text-slate-400">
                 Peso (kg)
                 <input
                   type="number"
@@ -912,23 +915,22 @@ function WorkoutTodayContent() {
                   value={runtime.weight_by_set[currentSet - 1] ?? ""}
                   onChange={(event) => { setWeightError(false); updateCurrentSetWeight(exercise, event.target.value); }}
                   placeholder="kg"
-                  className={`mt-2 w-36 rounded-xl border bg-slate-900 text-white px-4 py-3 text-sm focus:outline-none ${weightError ? "border-red-500 focus:border-red-400" : "border-slate-700 focus:border-primary-500"}`}
+                  className={`mt-1.5 w-full rounded-xl border bg-slate-900 text-white px-3 py-2.5 text-sm focus:outline-none ${weightError ? "border-red-500 focus:border-red-400" : "border-slate-700 focus:border-primary-500"}`}
                 />
               </label>
-              {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
+              <label className="flex-1 text-sm font-medium text-slate-400">
+                Descanso (s)
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={runtime.rest_seconds}
+                  onChange={(event) => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
+                  className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 text-white px-3 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
+                />
+              </label>
             </div>
-
-            <label className="mt-4 block text-sm font-medium text-slate-400">
-              Descanso (s)
-              <input
-                type="number"
-                min="0"
-                step="5"
-                value={runtime.rest_seconds}
-                onChange={(event) => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
-                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900 text-white px-4 py-3 text-sm focus:border-primary-500 focus:outline-none"
-              />
-            </label>
+            {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
           </>
         )}
 
@@ -954,7 +956,7 @@ function WorkoutTodayContent() {
       </AnimatePresence>
       </div>
 
-      <div className="px-4 pb-6">
+      <div className="px-4" style={{ paddingBottom: "max(24px, env(safe-area-inset-bottom))" }}>
       {isCardio(exercise) ? (
         <PressButton onClick={() => finishExercise("bem")} className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white">
           Concluir cardio
@@ -1011,6 +1013,37 @@ function WorkoutTodayContent() {
         onSwap={swapDuringExercise}
         onClose={() => setShowSwapModal(false)}
       />
+    )}
+
+    {showSwapChoice && (
+      <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={() => setShowSwapChoice(false)}>
+        <div className="w-full rounded-t-2xl bg-slate-900 px-4 pb-10 pt-4" onClick={(e) => e.stopPropagation()}>
+          <div className="mb-3 mx-auto h-1 w-10 rounded-full bg-slate-700" />
+          <h3 className="mb-4 text-base font-bold text-white">Como quer trocar?</h3>
+
+          <button
+            onClick={() => { setShowSwapChoice(false); setShowSwapModal(true); }}
+            className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800 px-4 py-4 text-left active:bg-slate-700"
+          >
+            <span className="text-2xl">🔍</span>
+            <div>
+              <p className="font-semibold text-white">Escolher por conta própria</p>
+              <p className="text-xs text-slate-400">Buscar e filtrar exercícios manualmente</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => { setShowSwapChoice(false); open({ intent: "swap" }); }}
+            className="flex w-full items-center gap-3 rounded-2xl border border-primary-800/40 bg-primary-950/40 px-4 py-4 text-left active:bg-primary-900/40"
+          >
+            <span className="text-2xl">✦</span>
+            <div>
+              <p className="font-semibold text-primary-300">Sugerir com Personal IA</p>
+              <p className="text-xs text-slate-400">IA sugere alternativas baseadas no seu histórico</p>
+            </div>
+          </button>
+        </div>
+      </div>
     )}
 
     {showReorderModal && (
@@ -1245,6 +1278,9 @@ function OverviewScreen({
   const [addAlternatives, setAddAlternatives] = useState<ExerciseOption[]>([]);
   const [addSearch, setAddSearch] = useState("");
   const [addLoading, setAddLoading] = useState(false);
+  const [addMuscleFilter, setAddMuscleFilter] = useState<string | null>(null);
+  const [addFavoritesOnly, setAddFavoritesOnly] = useState(false);
+  const [addDupeMsg, setAddDupeMsg] = useState<string | null>(null);
   const [infoModal, setInfoModal] = useState<WorkoutDayExercise | null>(null);
   const [gifModal, setGifModal] = useState<WorkoutDayExercise | null>(null);
   const exercises = day.exercises ?? [];
@@ -1252,13 +1288,12 @@ function OverviewScreen({
   const addSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function openAdd() {
-    const groups = new Set(exercises.map((e) => e.muscle_group).filter(Boolean));
-    const types = new Set(exercises.map((e) => e.exercise_type));
     const allIds = exercises.map((e) => e.exercise_id).join(",");
     const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?exclude_ids=${allIds}`);
-    setAddAlternatives(data.filter((exercise) => (
-      (exercise.muscle_group && groups.has(exercise.muscle_group)) || types.has(exercise.exercise_type)
-    )));
+    setAddAlternatives(data);
+    setAddMuscleFilter(null);
+    setAddFavoritesOnly(false);
+    setAddDupeMsg(null);
     setAddMode(true);
     setSwapMode(null);
   }
@@ -1266,12 +1301,22 @@ function OverviewScreen({
   function handleAddSearchChange(value: string) {
     setAddSearch(value);
     if (addSearchTimerRef.current) clearTimeout(addSearchTimerRef.current);
+    const allIds = exercises.map((e) => e.exercise_id).join(",");
     if (value.trim().length >= 2) {
-      const allIds = exercises.map((e) => e.exercise_id).join(",");
       addSearchTimerRef.current = setTimeout(async () => {
         setAddLoading(true);
         try {
           const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?name=${encodeURIComponent(value.trim())}&exclude_ids=${allIds}`);
+          setAddAlternatives(data);
+        } finally {
+          setAddLoading(false);
+        }
+      }, 300);
+    } else if (value.trim().length === 0) {
+      addSearchTimerRef.current = setTimeout(async () => {
+        setAddLoading(true);
+        try {
+          const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?exclude_ids=${allIds}`);
           setAddAlternatives(data);
         } finally {
           setAddLoading(false);
@@ -1292,10 +1337,15 @@ function OverviewScreen({
   }
 
   async function doAdd(exerciseId: number) {
-    const created = await api.post<WorkoutDayExercise>(`/api/v1/workout_days/${day.id}/exercises`, { exercise_id: exerciseId });
-    onChangeDay({ ...day, exercises: [...exercises, created] });
-    setAddMode(false);
-    setAddSearch("");
+    setAddDupeMsg(null);
+    try {
+      const created = await api.post<WorkoutDayExercise>(`/api/v1/workout_days/${day.id}/exercises`, { exercise_id: exerciseId });
+      onChangeDay({ ...day, exercises: [...exercises, created] });
+      setAddMode(false);
+      setAddSearch("");
+    } catch {
+      setAddDupeMsg("Exercício já está no treino.");
+    }
   }
 
   async function handleMove(id: number, direction: "up" | "down") {
@@ -1439,40 +1489,109 @@ function OverviewScreen({
         />
       )}
 
-      {addMode && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => { setAddMode(false); setAddSearch(""); }}>
-          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-slate-900 px-4 pb-24 pt-4" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />
-            <h3 className="mb-3 mt-2 text-base font-bold text-white">Adicionar exercício</h3>
+      {addMode && (() => {
+        const muscleGroups = Array.from(new Set(addAlternatives.filter(e => e.muscle_group).map(e => e.muscle_group as string)));
+        const filteredAdd = addAlternatives.filter(ex =>
+          (!addFavoritesOnly || ex.is_favorite) &&
+          (!addMuscleFilter || ex.muscle_group === addMuscleFilter)
+        );
+        return (
+          <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => { setAddMode(false); setAddSearch(""); }}>
+            <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-slate-900" onClick={(e) => e.stopPropagation()}>
+              {/* Drag handle */}
+              <div className="flex-shrink-0 px-4 pt-3 pb-2">
+                <div className="mb-3 mx-auto h-1 w-10 rounded-full bg-slate-700" />
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-white">Adicionar exercício</h3>
+                  <button onClick={() => { setAddMode(false); setAddSearch(""); }} className="text-slate-400 text-lg leading-none">✕</button>
+                </div>
+              </div>
 
-            {/* Campo de busca */}
-            <input
-              type="text"
-              placeholder="Buscar por nome..."
-              value={addSearch}
-              onChange={(e) => handleAddSearchChange(e.target.value)}
-              className="mb-3 w-full rounded-xl border border-slate-700 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
-            />
+              {/* Search input */}
+              <div className="flex-shrink-0 px-4 pb-2">
+                <input
+                  type="text"
+                  placeholder="Buscar por nome..."
+                  value={addSearch}
+                  onChange={(e) => handleAddSearchChange(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
+                />
+              </div>
 
-            {/* Lista de alternativas */}
-            {addLoading ? (
-              <p className="rounded-lg bg-slate-900/60 p-3 text-center text-sm text-slate-500">Buscando...</p>
-            ) : addAlternatives.length === 0 ? (
-              <p className="rounded-lg bg-slate-900/60 p-3 text-sm text-slate-400">Nenhuma alternativa encontrada.</p>
-            ) : (
-              addAlternatives.map((alt) => (
-                <button key={alt.id} onClick={() => doAdd(alt.id)} className="mb-2 flex w-full gap-3 rounded-lg border border-slate-800 p-3 text-left hover:bg-slate-800">
-                  <SmartImage src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
-                  <div>
-                    <p className="font-medium text-white">{alt.name}</p>
-                    <p className="text-xs text-slate-500">{muscleLabel(alt.muscle_group, alt.exercise_type)}</p>
-                  </div>
-                </button>
-              ))
-            )}
+              {/* Filter bar */}
+              <div className="flex-shrink-0 overflow-x-auto px-4 pb-2">
+                <div className="flex gap-2 min-w-max">
+                  <button
+                    onClick={() => setAddFavoritesOnly(f => !f)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${addFavoritesOnly ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/40" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                  >
+                    ⭐ Favoritos
+                  </button>
+                  {muscleGroups.map(mg => (
+                    <button
+                      key={mg}
+                      onClick={() => setAddMuscleFilter(f => f === mg ? null : mg)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${addMuscleFilter === mg ? "bg-primary-500/20 text-primary-300 border-primary-500/40" : "bg-slate-800 text-slate-400 border-slate-700"}`}
+                    >
+                      {MUSCLE_LABELS[mg] ?? mg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dupe warning */}
+              {addDupeMsg && (
+                <p className="flex-shrink-0 mx-4 mb-2 rounded-lg bg-yellow-900/40 border border-yellow-700/40 px-3 py-2 text-xs text-yellow-400">{addDupeMsg}</p>
+              )}
+
+              {/* Exercise list */}
+              <div className="flex-1 overflow-y-auto px-4 pb-8">
+                {addLoading ? (
+                  <p className="p-4 text-center text-sm text-slate-500">Buscando...</p>
+                ) : filteredAdd.length === 0 ? (
+                  <p className="p-4 text-sm text-slate-400">Nenhum exercício encontrado.</p>
+                ) : (
+                  filteredAdd.map((alt) => (
+                    <button
+                      key={alt.id}
+                      onClick={() => doAdd(alt.id)}
+                      className="mb-2 flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-800/60 p-3 text-left active:bg-slate-700"
+                    >
+                      <SmartImage
+                        src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)}
+                        fallbackSrc={exerciseFallback(alt)}
+                        alt={alt.name}
+                        className="h-14 w-14 flex-shrink-0 rounded-lg object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-white">{alt.name}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {alt.muscle_group && (
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[alt.muscle_group] ?? "bg-slate-700 text-slate-300"}`}>
+                              {MUSCLE_LABELS[alt.muscle_group] ?? alt.muscle_group}
+                            </span>
+                          )}
+                          {alt.equipment_type && alt.equipment_type !== "bodyweight" && (
+                            <span className="text-xs text-slate-500 capitalize">{alt.equipment_type}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                        {alt.is_favorite && (
+                          <svg viewBox="0 0 24 24" className="h-4 w-4 fill-yellow-400 stroke-yellow-400 stroke-[1.5]">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                          </svg>
+                        )}
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-500/20 text-primary-400 text-sm font-bold">+</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <button onClick={onStart} className="mt-auto w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white hover:bg-primary-600">Iniciar treino</button>
     </div>
@@ -1884,6 +2003,19 @@ function lastExerciseLog(sessions: WorkoutSession[], exerciseId: number) {
   return null;
 }
 
+function lastUsedWeight(sessions: WorkoutSession[], exerciseId: number): string | undefined {
+  const result = lastExerciseLog(sessions, exerciseId);
+  if (!result) return undefined;
+  const log = result.log;
+  const bySet = log.weight_by_set;
+  if (Array.isArray(bySet) && bySet.length > 0) {
+    const last = bySet[bySet.length - 1];
+    if (last && Number(last) > 0) return String(last);
+  }
+  if (log.weight_kg && log.weight_kg > 0) return String(log.weight_kg);
+  return undefined;
+}
+
 const MUSCLE_LABELS: Record<string, string> = {
   chest: "Peito", back: "Costas", shoulders: "Ombros",
   biceps: "Bíceps", triceps: "Tríceps", legs: "Pernas", core: "Core",
@@ -1912,11 +2044,11 @@ function categoryIcon(exerciseType: string, muscleGroup: string | null): string 
   return typeIcons[exerciseType] ?? "🏋️";
 }
 
-function createRuntime(exercise: WorkoutDayExercise): ExerciseRuntime {
+function createRuntime(exercise: WorkoutDayExercise, lastWeight?: string): ExerciseRuntime {
   return {
     planned_sets: exercise.sets,
     reps_by_set: Array.from({ length: exercise.sets }, () => exercise.reps),
-    weight_by_set: Array.from({ length: exercise.sets }, () => ""),
+    weight_by_set: Array.from({ length: exercise.sets }, () => lastWeight ?? ""),
     rest_seconds: exercise.rest_seconds,
     feeling: "",
     duration_minutes: exercise.duration_minutes ?? undefined,

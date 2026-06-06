@@ -1,0 +1,63 @@
+/* ============================================================
+   AIInlineMessage — static AI hint/note card
+   Variants: default | tip | warn | hot
+   Uses tokens from globals.css — no dark: overrides needed.
+   Dark mode is handled automatically via CSS variable inheritance.
+   ============================================================ */
+
+.ai-inline-msg {
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.ai-inline-msg[data-variant="tip"] {
+  background: var(--primary-soft);
+  border-color: oklch(0.585 var(--accent-c) var(--accent-h) / 0.22);
+}
+
+.ai-inline-msg[data-variant="warn"] {
+  background: var(--warn-soft);
+  border-color: oklch(0.70 0.14 78 / 0.30);
+}
+
+.ai-inline-msg[data-variant="hot"] {
+  background: var(--hot-soft);
+  border-color: oklch(0.60 0.19 28 / 0.30);
+}
+
+.ai-inline-msg .aim-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ai-inline-msg .aim-head b {
+  font-size: 14.5px;
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+}
+
+.ai-inline-msg .aim-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.ai-inline-msg p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.ai-inline-msg p b {
+  color: var(--text);
+  font-weight: 700;
+}
