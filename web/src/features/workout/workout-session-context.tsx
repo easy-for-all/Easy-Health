@@ -11,7 +11,7 @@ interface WorkoutSessionState {
   startTime: Date | null;
   activeWorkoutDayId: number | null;
   elapsedSeconds: number;
-  beginSession: (dayId: number) => void;
+  beginSession: (dayId: number | null) => void;
   endSession: () => void;
   saveRestEnd: (timestampMs: number | null) => void;
   getRestEnd: () => number | null;
@@ -68,11 +68,11 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [startTime]);
 
-  const beginSession = useCallback((dayId: number) => {
+  const beginSession = useCallback((dayId: number | null) => {
     const now = new Date();
     try {
       sessionStorage.setItem(KEY_START_TS, now.toISOString());
-      sessionStorage.setItem(KEY_DAY_ID, String(dayId));
+      if (dayId !== null) sessionStorage.setItem(KEY_DAY_ID, String(dayId));
     } catch { /* storage unavailable */ }
     setStartTime(now);
     setActiveWorkoutDayId(dayId);

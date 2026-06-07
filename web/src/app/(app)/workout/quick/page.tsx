@@ -61,6 +61,7 @@ export default function QuickWorkoutPage() {
   const [location, setLocation] = useState<Location | null>(null);
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
 
   function next() {
     setStep((s) => s + 1);
@@ -69,6 +70,7 @@ export default function QuickWorkoutPage() {
   async function generate() {
     if (!duration || !difficulty || !location) return;
     setGenerating(true);
+    setError("");
 
     const chosen = MUSCLE_OPTIONS.find((m) => m.value === (muscleGroup ?? "full_body"));
     const muscle_groups = chosen?.groups ?? [];
@@ -84,6 +86,7 @@ export default function QuickWorkoutPage() {
       router.push("/workout/today?quick=1");
     } catch {
       setGenerating(false);
+      setError("Não foi possível gerar o treino. Tente novamente.");
     }
   }
 
@@ -98,7 +101,7 @@ export default function QuickWorkoutPage() {
     step === 4;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button onClick={() => (step > 1 ? setStep(step - 1) : router.back())} className="text-slate-400 text-sm">
@@ -199,6 +202,11 @@ export default function QuickWorkoutPage() {
 
       {/* CTA */}
       <div className="mt-auto pt-6">
+        {error && (
+          <p className="mb-3 rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-400 text-center">
+            {error}
+          </p>
+        )}
         {step < 4 ? (
           <motion.button
             onClick={next}
