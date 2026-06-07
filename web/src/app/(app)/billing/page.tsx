@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { BillingStatus } from "@/shared/types/subscription";
+import { trackCheckoutStarted } from "@/shared/lib/analytics";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -123,6 +124,7 @@ export default function BillingPage() {
   const handleCheckout = useCallback(async (plan: "pro_monthly" | "pro_yearly") => {
     setActionLoading(plan);
     setError(null);
+    trackCheckoutStarted(plan, "billing");
     try {
       const { checkout_url } = await api.post<{ checkout_url: string }>(
         "/api/v1/billing/checkout",

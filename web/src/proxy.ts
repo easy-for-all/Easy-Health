@@ -8,7 +8,7 @@ const PUBLIC_PATHS = [
 ];
 const AUTH_REDIRECT_PATHS = ["/login", "/sign-up"];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublic = PUBLIC_PATHS.some((p) =>

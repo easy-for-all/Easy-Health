@@ -83,24 +83,28 @@
 
 ### [MEDIUM] Certificado TLS expira em 74 dias
 
-**Monitoramento implementado** via script + GitHub Actions a cada deploy.
+**Monitoramento implementado** via script + GitHub Actions a cada deploy para `easyhealth.art` e `api.easyhealth.art`.
 
 ```bash
 # scripts/check_cert_expiry.sh
 DOMAIN="${1:-easyhealth.art}"
-WARN_DAYS="${2:-30}"
-# Verifica openssl e alerta se < WARN_DAYS dias
+WARN_DAYS="${2:-45}"
+# Verifica openssl e alerta se qualquer dominio tiver < WARN_DAYS dias
 ```
 
 ```yaml
 # .github/workflows/deploy.yml — step final
 - name: Check TLS certificate expiry
-  run: bash scripts/check_cert_expiry.sh easyhealth.art 30 ||
-       echo "::warning::TLS certificate for easyhealth.art is expiring soon — renew it!"
+  run: bash scripts/check_cert_expiry.sh easyhealth.art 45 api.easyhealth.art ||
+       echo "::warning::TLS certificate for EasyHealth is expiring soon - renew it!"
 ```
 
-> **Ação pendente:** configurar auto-renovação no servidor (certbot `--deploy-hook` ou cron `certbot renew`).  
-> O script monitora, mas a renovação é manual.
+> **Ação operacional na VPS:** configurar auto-renovação no servidor, por exemplo com cron/systemd timer para `certbot renew --quiet` e deploy hook para recarregar o proxy (`nginx -s reload`, `systemctl reload nginx` ou equivalente do proxy usado).  
+> O repositório monitora e alerta; a renovação efetiva depende da configuração TLS do servidor.
+
+### [LOW] Header Server expõe software do servidor
+
+**Ação operacional na VPS/proxy:** remover ou reduzir o header no proxy que termina TLS. Em Nginx, usar `server_tokens off;` e, se houver módulo apropriado, limpar `Server`. Em Cloudflare/CDN, aplicar regra equivalente no edge. Rails/Next não conseguem remover de forma confiável um header adicionado pelo proxy externo.
 
 ---
 

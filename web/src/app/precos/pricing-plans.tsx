@@ -2,9 +2,22 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { setPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
+import { trackCheckoutStarted, trackEvent, EVENTS } from "@/shared/lib/analytics";
 
-const PLANS = [
+type PricingPlan = {
+  id: PendingPlan;
+  name: string;
+  price: string;
+  period: string;
+  badge?: string;
+  description: string;
+  features: string[];
+  cta: string;
+  highlighted: boolean;
+};
+
+const PLANS: PricingPlan[] = [
   {
     id: "pro_monthly",
     name: "Pro Mensal",
@@ -23,7 +36,7 @@ const PLANS = [
     highlighted: false,
   },
   {
-    id: "pro_annual",
+    id: "pro_yearly",
     name: "Pro Anual",
     price: "R$ 9,90",
     period: "/mês",
@@ -76,7 +89,10 @@ export function PricingPlans() {
           </ul>
           <Link
             href="/sign-up"
-            onClick={() => trackEvent(EVENTS.CHECKOUT_STARTED, { plan: plan.id })}
+            onClick={() => {
+              setPendingPlan(plan.id);
+              trackCheckoutStarted(plan.id, "precos");
+            }}
             className={`mt-8 block w-full rounded-full py-3 text-center text-sm font-semibold transition-colors ${
               plan.highlighted
                 ? "bg-primary-500 text-white hover:bg-primary-600"

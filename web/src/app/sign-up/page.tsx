@@ -5,8 +5,25 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
-import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
-import { trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
+import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
+import { trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
+
+const PLAN_COPY: Record<PendingPlan, {
+  label: string;
+  price: string;
+  note: string;
+}> = {
+  pro_monthly: {
+    label: "Pro Mensal",
+    price: "R$ 19,90/mês",
+    note: "7 dias grátis antes da cobrança",
+  },
+  pro_yearly: {
+    label: "Pro Anual",
+    price: "R$ 118,80/ano",
+    note: "Equivale a R$ 9,90/mês",
+  },
+};
 
 export default function SignUpPage() {
   const { signUp } = useAuth();
@@ -17,6 +34,7 @@ export default function SignUpPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
 
   useEffect(() => {
     trackEvent(EVENTS.SIGNUP_STARTED);
@@ -33,6 +51,7 @@ export default function SignUpPage() {
       const pending = getPendingPlan();
       if (pending) {
         clearPendingPlan();
+        trackCheckoutStarted(pending, "signup_pending_plan");
         const { checkout_url } = await api.post<{ checkout_url: string }>(
           "/api/v1/billing/checkout",
           { plan: pending }
@@ -55,17 +74,34 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4" style={{ background: "#0a0f1e" }}>
+    <div className="flex min-h-svh items-center justify-center px-4 py-5" style={{ background: "#0a0f1e" }}>
       <div className="w-full max-w-sm">
         {/* Brand */}
-        <div className="mb-6 flex flex-col items-center gap-3">
+        <div className="mb-5 flex flex-col items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="EasyHealth" className="h-10 w-auto" />
+          <img src="/logo.png" alt="EasyHealth" className="h-9 w-auto" />
           <div className="text-center">
             <h1 className="text-xl font-extrabold tracking-tight text-white">Criar conta</h1>
-            <p className="mt-1 text-sm text-slate-500">Comece sua jornada de saúde</p>
+            <p className="mt-1 text-sm text-slate-400">Treino personalizado em poucos minutos</p>
           </div>
         </div>
+
+        {pendingPlan && (
+          <div className="mb-4 rounded-2xl border border-primary-500/30 bg-primary-500/10 px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">{PLAN_COPY[pendingPlan].label}</p>
+                <p className="mt-0.5 text-xs text-slate-300">{PLAN_COPY[pendingPlan].note}</p>
+              </div>
+              <p className="shrink-0 text-right text-sm font-bold text-primary-300">{PLAN_COPY[pendingPlan].price}</p>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-medium text-slate-300">
+              <span className="rounded-full bg-slate-900/70 px-2 py-1">IA</span>
+              <span className="rounded-full bg-slate-900/70 px-2 py-1">Histórico</span>
+              <span className="rounded-full bg-slate-900/70 px-2 py-1">Coach</span>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (

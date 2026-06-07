@@ -20,8 +20,10 @@ tmp/
 # =========================
 # NODE / NEXT
 # =========================
+node_modules/
 web/node_modules
 web/.next
+ga4-test/node_modules/
 
 # =========================
 # RAILS

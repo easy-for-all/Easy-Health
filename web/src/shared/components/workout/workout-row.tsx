@@ -24,7 +24,7 @@ export function WorkoutRow({
   onClick,
 }: WorkoutRowProps) {
   return (
-    <button className="workout-row" onClick={onClick}>
+    <div className="workout-row" role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => e.key === "Enter" && onClick?.()}>
       <div className={`wr-badge ${isRest ? "rest" : ""}`}>{badge}</div>
       <div className="wr-info">
         <b>{name}</b>
@@ -53,6 +53,6 @@ export function WorkoutRow({
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </span>
-    </button>
+    </div>
   );
 }

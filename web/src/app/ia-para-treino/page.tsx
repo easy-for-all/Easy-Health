@@ -13,11 +13,11 @@ export default function IaParaTreino() {
     <PublicLayout>
       <LandingHero
         title="IA para treino: personalize sua rotina fitness com inteligência artificial"
-        subtitle="Chega de treinos genéricos que não respeitam sua evolução. A EasyHealth usa IA para criar e ajustar seu planejamento de treino de forma inteligente."
-        ctaText="Começar gratuitamente"
-        ctaHref="/sign-up"
-        secondaryText="Ver planos"
-        secondaryHref="/precos"
+        subtitle="Chega de treinos genéricos. Comece com 7 dias grátis e continue no Pro a partir de R$ 9,90/mês no plano anual."
+        ctaText="Ver planos e começar"
+        ctaHref="/precos"
+        secondaryText="Criar conta"
+        secondaryHref="/sign-up"
       />
 
       {/* Problema */}

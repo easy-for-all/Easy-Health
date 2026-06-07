@@ -67,12 +67,13 @@ export default function QuickWorkoutPage() {
     setStep((s) => s + 1);
   }
 
-  async function generate() {
+  async function generate(muscleGroupOverride?: MuscleGroup | null) {
     if (!duration || !difficulty || !location) return;
     setGenerating(true);
     setError("");
 
-    const chosen = MUSCLE_OPTIONS.find((m) => m.value === (muscleGroup ?? "full_body"));
+    const mg = muscleGroupOverride !== undefined ? muscleGroupOverride : muscleGroup;
+    const chosen = MUSCLE_OPTIONS.find((m) => m.value === (mg ?? "full_body"));
     const muscle_groups = chosen?.groups ?? [];
 
     try {
@@ -93,12 +94,6 @@ export default function QuickWorkoutPage() {
   if (generating) {
     return <GeneratingScreen difficulty={difficulty ?? "moderado"} />;
   }
-
-  const canAdvance =
-    (step === 1 && duration !== null) ||
-    (step === 2 && difficulty !== null) ||
-    (step === 3 && location !== null) ||
-    step === 4;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
@@ -144,7 +139,7 @@ export default function QuickWorkoutPage() {
                 <SelectCard
                   key={opt.value}
                   selected={duration === opt.value}
-                  onClick={() => { setDuration(opt.value); }}
+                  onClick={() => { setDuration(opt.value); next(); }}
                   label={opt.label}
                   sub={opt.sub}
                   icon={null}
@@ -159,7 +154,7 @@ export default function QuickWorkoutPage() {
                 <SelectCard
                   key={opt.value}
                   selected={difficulty === opt.value}
-                  onClick={() => { setDifficulty(opt.value); }}
+                  onClick={() => { setDifficulty(opt.value); next(); }}
                   label={opt.label}
                   sub={opt.sub}
                   icon={opt.emoji}
@@ -175,7 +170,7 @@ export default function QuickWorkoutPage() {
                 <SelectCard
                   key={opt.value}
                   selected={location === opt.value}
-                  onClick={() => { setLocation(opt.value); }}
+                  onClick={() => { setLocation(opt.value); next(); }}
                   label={opt.label}
                   icon={opt.emoji}
                 />
@@ -189,7 +184,11 @@ export default function QuickWorkoutPage() {
                 <SelectCard
                   key={opt.value}
                   selected={muscleGroup === opt.value || (opt.value === "full_body" && !muscleGroup)}
-                  onClick={() => setMuscleGroup(opt.value === "full_body" ? null : opt.value)}
+                  onClick={() => {
+                    const mg = opt.value === "full_body" ? null : opt.value as MuscleGroup;
+                    setMuscleGroup(mg);
+                    generate(mg);
+                  }}
                   label={opt.label}
                   icon={opt.emoji}
                   horizontal
@@ -200,32 +199,14 @@ export default function QuickWorkoutPage() {
         </motion.div>
       </AnimatePresence>
 
-      {/* CTA */}
-      <div className="mt-auto pt-6">
-        {error && (
-          <p className="mb-3 rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-400 text-center">
+      {/* Error feedback */}
+      {error && (
+        <div className="mt-auto pt-6">
+          <p className="rounded-xl bg-red-500/15 px-4 py-3 text-sm text-red-400 text-center">
             {error}
           </p>
-        )}
-        {step < 4 ? (
-          <motion.button
-            onClick={next}
-            disabled={!canAdvance}
-            whileTap={{ scale: 0.97 }}
-            className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white disabled:opacity-40"
-          >
-            Continuar →
-          </motion.button>
-        ) : (
-          <motion.button
-            onClick={generate}
-            whileTap={{ scale: 0.97 }}
-            className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
-          >
-            ⚡ Gerar meu treino
-          </motion.button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
