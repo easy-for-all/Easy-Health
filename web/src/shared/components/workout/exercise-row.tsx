@@ -17,7 +17,7 @@ export function ExerciseRow({ name, sub, imageUrl, favorited, onFavorite, childr
     <div className="exercise-row">
       <div className="er-thumb">
         {imageUrl ? (
-          <Image src={imageUrl} alt={name} fill sizes="54px" style={{ objectFit: "cover" }} />
+          <Image src={imageUrl} alt={name} fill sizes="54px" style={{ objectFit: "cover" }} unoptimized />
         ) : (
           <div className="media-ph" style={{ width: "100%", height: "100%" }}>
             <span className="mph-label">foto</span>

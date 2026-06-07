@@ -65,7 +65,7 @@ export function AITrainerBubble({
             }`}
           />
 
-          <div className="rounded-2xl border border-primary-100 bg-primary-50 px-3 py-2.5 shadow-sm dark:border-primary-800 dark:bg-primary-950">
+          <div className="rounded-2xl border border-primary-100 bg-primary-50 px-3 py-2.5 shadow-sm dark:border-primary-800 dark:bg-primary-900">
             {isTyping && displayText.length === 0 ? (
               <div className="flex items-center gap-1 py-0.5">
                 {[0, 1, 2].map((i) => (

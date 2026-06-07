@@ -11,7 +11,7 @@ module ExerciseImageHelper
 
   def exercise_image_url(exercise)
     if gym_exercise?(exercise)
-      official = [exercise.gif_url, exercise.image_url].find { |u| official_local_url?(u) }
+      official = [exercise.gif_url, exercise.image_url].find { |u| official_local_url?(u) && local_file_exists?(u) }
       official || "/exercise-images/#{exercise.exercise_type || 'treino'}.svg"
     else
       exercise.image_url.presence || exercise.gif_url.presence ||
@@ -33,5 +33,10 @@ module ExerciseImageHelper
 
   def official_local_url?(url)
     url.present? && OFFICIAL_IMAGE_PREFIXES.any? { |prefix| url.start_with?(prefix) }
+  end
+
+  def local_file_exists?(url)
+    path = Rails.root.join("public", url.delete_prefix("/"))
+    File.exist?(path)
   end
 end

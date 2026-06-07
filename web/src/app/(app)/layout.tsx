@@ -8,7 +8,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <WorkoutSessionProvider>
       <CoachProvider>
-        <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)" }}>
+        <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", paddingBottom: "var(--nav-pb)" }}>
           <PageTransition>{children}</PageTransition>
           <BottomNav />
           <CoachFab />

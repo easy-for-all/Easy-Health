@@ -58,28 +58,28 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8">
+    <div className="min-h-screen bg-[var(--bg)] px-4 py-8">
       <div className="mx-auto max-w-2xl">
         <div className="mb-8 flex items-center gap-3">
           <span className="text-2xl">📊</span>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Painel Administrativo</h1>
-            <p className="text-sm text-gray-500">Visão geral da plataforma</p>
+            <h1 className="text-xl font-bold text-[var(--text)]">Painel Administrativo</h1>
+            <p className="text-sm text-[var(--text-muted)]">Visão geral da plataforma</p>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="mb-6 rounded-xl bg-[var(--hot-soft)] px-4 py-3 text-sm text-[var(--hot)]">{error}</div>
         )}
 
         <div className="grid grid-cols-2 gap-3">
           {cards.map((card) => (
-            <div key={card.label} className="rounded-2xl border border-gray-100 bg-white p-4">
+            <div key={card.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <p className="text-3xl font-bold text-primary-600">
                 {card.value?.toLocaleString("pt-BR") ?? "—"}
               </p>
-              <p className="mt-1 text-sm font-semibold text-gray-800">{card.label}</p>
-              <p className="mt-0.5 text-xs text-gray-400">{card.description}</p>
+              <p className="mt-1 text-sm font-semibold text-[var(--text)]">{card.label}</p>
+              <p className="mt-0.5 text-xs text-[var(--text-dim)]">{card.description}</p>
             </div>
           ))}
         </div>

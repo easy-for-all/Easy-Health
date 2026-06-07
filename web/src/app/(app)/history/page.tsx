@@ -84,41 +84,20 @@ type ExerciseProgress = {
   trend: number; // % change vs prev
 };
 
-function getISOWeekKey(date: Date): string {
-  const d = new Date(date);
-  d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-
-function computeWeeklyVolume(sessions: WorkoutSession[], weeks = 8): { label: string; vol: number }[] {
+function computeDailyMinutes(sessions: WorkoutSession[], days = 7): { label: string; mins: number }[] {
   const now = new Date();
-  const buckets: { label: string; vol: number }[] = [];
-  for (let w = weeks - 1; w >= 0; w--) {
-    const start = new Date(now);
-    start.setDate(start.getDate() - w * 7 - start.getDay());
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 7);
-    const label = start.toLocaleDateString("pt-BR", { month: "short", day: "numeric" }).replace(".", "");
-    let vol = 0;
-    for (const s of sessions) {
-      const d = new Date(s.completed_at);
-      if (d >= start && d < end) {
-        for (const log of s.exercise_logs ?? []) {
-          const weights = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
-          const repsArr = Array.isArray(log.reps)
-            ? log.reps as number[]
-            : Array.from({ length: log.sets }, () => log.reps as number);
-          weights.forEach((wk, i) => { if (wk) vol += wk * (repsArr[i] ?? 0); });
-        }
-      }
-    }
-    buckets.push({ label, vol });
-  }
-  return buckets;
+  const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  return Array.from({ length: days }, (_, i) => {
+    const day = new Date(now);
+    day.setDate(day.getDate() - (days - 1 - i));
+    day.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(day);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const mins = sessions
+      .filter((s) => { const d = new Date(s.completed_at); return d >= day && d < dayEnd; })
+      .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+    return { label: dayNames[day.getDay()], mins };
+  });
 }
 
 function computeMuscleBalance(sessions: WorkoutSession[]): { name: string; pct: number; sets: number }[] {
@@ -206,7 +185,7 @@ function HistoryContent() {
       .finally(() => setLoading(false));
   }, []);
 
-  const weeklyVol = useMemo(() => computeWeeklyVolume(sessions), [sessions]);
+  const dailyMins = useMemo(() => computeDailyMinutes(sessions), [sessions]);
   const muscleBalance = useMemo(() => computeMuscleBalance(sessions), [sessions]);
   const exerciseProgress = useMemo(() => computeExerciseProgress(sessions), [sessions]);
   const streak = useMemo(() => computeStreak(sessions), [sessions]);
@@ -230,7 +209,7 @@ function HistoryContent() {
     return sessions.filter((s) => new Date(s.completed_at) >= weekStart).length;
   }, [sessions]);
 
-  const maxWeekVol = Math.max(1, ...weeklyVol.map((w) => w.vol));
+  const maxDayMins = Math.max(1, ...dailyMins.map((d) => d.mins));
 
   if (loading) return <LoadingScreen />;
 
@@ -284,30 +263,30 @@ function HistoryContent() {
             </div>
           </div>
 
-          {/* Weekly volume bar chart */}
-          {weeklyVol.some((w) => w.vol > 0) && (
+          {/* Daily minutes bar chart */}
+          {dailyMins.some((d) => d.mins > 0) && (
             <div className="chart-card">
               <div className="chead">
                 <div>
-                  <p className="eyebrow">Volume semanal</p>
+                  <p className="eyebrow">Minutos por dia</p>
                   <p className="cv" style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26 }}>
-                    {weeklyVol[weeklyVol.length - 1].vol > 0
-                      ? `${Math.round(weeklyVol[weeklyVol.length - 1].vol)} kg`
+                    {Math.max(...dailyMins.map((d) => d.mins)) > 0
+                      ? `${Math.max(...dailyMins.map((d) => d.mins))} min`
                       : "—"}
-                    <small style={{ fontSize: 14, color: "var(--text-dim)", fontWeight: 600 }}> última semana</small>
+                    <small style={{ fontSize: 14, color: "var(--text-dim)", fontWeight: 600 }}> melhor dia</small>
                   </p>
                 </div>
               </div>
               <div className="bars">
-                {weeklyVol.map((w, i) => (
+                {dailyMins.map((d, i) => (
                   <div key={i} className="bar">
                     <motion.div
-                      className={`bcol ${w.vol === 0 ? "muted" : ""}`}
+                      className={`bcol ${d.mins === 0 ? "muted" : ""}`}
                       initial={{ height: 0 }}
-                      animate={{ height: w.vol > 0 ? `${Math.max(8, (w.vol / maxWeekVol) * 100)}%` : "8%" }}
+                      animate={{ height: d.mins > 0 ? `${Math.max(8, (d.mins / maxDayMins) * 100)}%` : "8%" }}
                       transition={{ duration: 0.5, delay: i * 0.06, ease: "easeOut" }}
                     />
-                    <span className="blab">{w.label.split(" ")[1] ?? w.label}</span>
+                    <span className="blab">{d.label}</span>
                   </div>
                 ))}
               </div>

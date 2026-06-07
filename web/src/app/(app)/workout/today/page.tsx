@@ -164,21 +164,27 @@ function WorkoutTodayContent() {
     // Handle quick workout: day data was pre-generated and stored in sessionStorage
     if (quickParam === "1") {
       const raw = sessionStorage.getItem("wk_quick_day");
-      if (raw) {
-        try {
-          const quickDay: WorkoutDay = JSON.parse(raw);
-          sessionStorage.removeItem("wk_quick_day");
-          const runtime = Object.fromEntries((quickDay.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
-          setPlan(null);
-          setSessions([]);
-          setDay(quickDay);
-          setExerciseRuntime(runtime);
-          setCurrentIndex(0);
-          setCurrentSet(1);
-          setPhase("warmup");
-          setLoading(false);
-          return;
-        } catch { /* fall through */ }
+      if (!raw) {
+        router.replace("/workout/quick");
+        return;
+      }
+      try {
+        const quickDay: WorkoutDay = JSON.parse(raw);
+        sessionStorage.removeItem("wk_quick_day");
+        const runtime = Object.fromEntries((quickDay.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
+        setPlan(null);
+        setSessions([]);
+        setDay(quickDay);
+        setExerciseRuntime(runtime);
+        setCurrentIndex(0);
+        setCurrentSet(1);
+        beginSession(null);
+        setPhase("warmup");
+        setLoading(false);
+        return;
+      } catch {
+        router.replace("/workout/quick");
+        return;
       }
     }
 
@@ -722,7 +728,7 @@ function WorkoutTodayContent() {
 
   if (phase === "exercise_feedback") {
     return (
-      <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 py-6">
+      <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
         <div className="flex flex-1 flex-col justify-center">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary-500">Exercício concluído</p>
           <h1 className="mt-2 text-3xl font-bold text-white">{exercise.name}</h1>
@@ -1152,7 +1158,7 @@ function ChooseScreen({
   const displayedDays = filter === "favorites" ? favoriteDays : plan.days;
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] px-4 py-6">
+    <div className="min-h-screen bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
       <div className="mb-4 flex items-center justify-between">
         <button onClick={onBack} className="text-sm text-slate-400">← Voltar</button>
         <button
@@ -1370,7 +1376,7 @@ function OverviewScreen({
 
   return (
   <>
-    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
       <div className="mb-4 flex items-center justify-between">
         <button onClick={onBack} className="text-sm text-slate-400">← Escolher outro</button>
         <button
@@ -1764,7 +1770,7 @@ function DoneScreen({
   const calCols = savedCalories != null && savedCalories > 0 ? "grid-cols-2" : "grid-cols-3";
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
       <ConfettiBurst preset="workout" />
 
       <motion.div
@@ -1921,7 +1927,7 @@ function WarmupScreen({ day, onStart }: { day: WorkoutDay; onStart: () => void }
   const items = WARMUP_BY_TYPE[type] ?? WARMUP_BY_TYPE.default;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
       <div className="flex flex-1 flex-col">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-500">Aquecimento</p>
         <h1 className="mt-2 text-2xl font-bold text-white">Prepare o corpo</h1>
@@ -1960,7 +1966,7 @@ function CooldownScreen({ day, onFinish }: { day: WorkoutDay; onFinish: () => vo
   const items = COOLDOWN_BY_TYPE[type] ?? COOLDOWN_BY_TYPE.default;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 py-6">
+    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
       <div className="flex flex-1 flex-col">
         <p className="text-xs font-semibold uppercase tracking-wide text-green-600">Finalização</p>
         <h1 className="mt-2 text-2xl font-bold text-white">Recuperação</h1>
