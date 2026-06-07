@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
+ARG GIT_COMMIT=unknown
 COPY . .
 
 ARG NEXT_PUBLIC_API_URL
