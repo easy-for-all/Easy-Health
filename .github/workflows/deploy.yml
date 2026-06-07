@@ -58,4 +58,4 @@ jobs:
           done
 
       - name: Check TLS certificate expiry
-        run: bash scripts/check_cert_expiry.sh easyhealth.art 30 || echo "::warning::TLS certificate for easyhealth.art is expiring soon — renew it!"
+        run: bash scripts/check_cert_expiry.sh easyhealth.art 45 api.easyhealth.art || echo "::warning::TLS certificate for EasyHealth is expiring soon - renew it!"

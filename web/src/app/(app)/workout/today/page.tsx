@@ -170,7 +170,6 @@ function WorkoutTodayContent() {
       }
       try {
         const quickDay: WorkoutDay = JSON.parse(raw);
-        sessionStorage.removeItem("wk_quick_day");
         const runtime = Object.fromEntries((quickDay.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex)]));
         setPlan(null);
         setSessions([]);
@@ -380,7 +379,12 @@ function WorkoutTodayContent() {
     unlockAudio();
     if (day) {
       beginSession(day.id);
-      trackEvent(EVENTS.WORKOUT_STARTED, { workout_name: day.name });
+      trackEvent(EVENTS.WORKOUT_STARTED, {
+        workout_day_id: day.id,
+        workout_name: day.name,
+        exercises_count: day.exercises?.length ?? 0,
+        source: "workout_today",
+      });
     }
     setPhase("warmup");
   }
@@ -578,7 +582,7 @@ function WorkoutTodayContent() {
 
   if (loading || redirecting) return <LoadingScreen />;
 
-  if (!plan?.days?.length) {
+  if (!plan?.days?.length && !day) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0f1e] px-4 text-center">
         <h1 className="text-2xl font-bold text-white">Nenhum treino disponível</h1>
@@ -591,7 +595,7 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "choose") {
-    return <ChooseScreen plan={plan} sessions={sessions} onChoose={chooseWorkout} onToggleFavorite={toggleFavoriteWorkoutDay} onBack={() => router.push("/dashboard")} />;
+    return <ChooseScreen plan={plan!} sessions={sessions} onChoose={chooseWorkout} onToggleFavorite={toggleFavoriteWorkoutDay} onBack={() => router.push("/dashboard")} />;
   }
 
   if (phase === "overview") {
@@ -755,6 +759,14 @@ function WorkoutTodayContent() {
   const historicalMaxWeight = getHistoricalMaxWeight(sessions, exercise.exercise_id);
   const currentWeightNum = Number(runtime.weight_by_set[currentSet - 1]) || 0;
   const isNewPR = !isCardio(exercise) && currentWeightNum > 0 && historicalMaxWeight > 0 && currentWeightNum > historicalMaxWeight;
+  const totalPlannedSets = exercises.reduce((sum, ex) => sum + runtimeFor(exerciseRuntime, ex).planned_sets, 0);
+  const completedSets = exercises.reduce((sum, ex, idx) => {
+    const state = runtimeFor(exerciseRuntime, ex);
+    if (idx < currentIndex) return sum + state.planned_sets;
+    if (idx === currentIndex) return sum + Math.max(0, currentSet - 1);
+    return sum;
+  }, 0);
+  const setProgress = totalPlannedSets > 0 ? Math.min(100, Math.round((completedSets / totalPlannedSets) * 100)) : 0;
 
   return (
     <>
@@ -781,10 +793,13 @@ function WorkoutTodayContent() {
           <div className="exec-bar" style={{ flex: 1 }}>
             <motion.div
               className="exec-bar-fill"
-              animate={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }}
+              animate={{ width: `${setProgress}%` }}
               transition={{ duration: 0.4, ease: "easeOut" }}
             />
           </div>
+          <p style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--text-dim)" }}>
+            {completedSets}/{totalPlannedSets}
+          </p>
           {sessionVolume > 0 && (
             <p style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--text-dim)" }}>
               <AnimatedCounter value={sessionVolume} />kg
@@ -1292,6 +1307,9 @@ function OverviewScreen({
   const exercises = day.exercises ?? [];
   const [globalRest, setGlobalRest] = useState<number>(exercises[0]?.rest_seconds ?? 90);
   const addSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSession = lastSessionForDay(sessions, day.id);
+  const recentSessionsCount = sessions.length;
+  const plannedSetsCount = exercises.reduce((sum, exercise) => sum + runtimeFor(runtime, exercise).planned_sets, 0);
 
   async function openAdd() {
     const allIds = exercises.map((e) => e.exercise_id).join(",");
@@ -1388,6 +1406,30 @@ function OverviewScreen({
       </div>
       <h1 className="text-2xl font-bold text-white">{day.name}</h1>
       <p className="mt-1 text-sm text-slate-400">{exercises.length} exercícios</p>
+
+      <div className="mt-4 rounded-2xl border border-primary-500/30 bg-primary-500/10 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-primary-200">
+              {lastSession ? "Continue sua sequência" : "Primeiro registro deste treino"}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-300">
+              {lastSession
+                ? `Última vez ${relativeDate(lastSession.completed_at)}. Repita ou ajuste as cargas para manter evolução.`
+                : "Complete hoje para desbloquear histórico, volume e comparações na próxima sessão."}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-lg font-bold text-white">{plannedSetsCount}</p>
+            <p className="text-[11px] font-medium text-slate-400">séries</p>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold text-slate-300">
+          <span className="rounded-full bg-slate-950/50 px-2 py-1">{recentSessionsCount} recentes</span>
+          <span className="rounded-full bg-slate-950/50 px-2 py-1">{globalRest}s descanso</span>
+          <span className="rounded-full bg-slate-950/50 px-2 py-1">IA pronta</span>
+        </div>
+      </div>
 
       <div className="mt-4 flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
         <span className="flex-1 text-sm font-medium text-slate-300">Descanso entre séries</span>
@@ -1695,9 +1737,12 @@ function DoneScreen({
           }),
         });
         trackEvent(EVENTS.WORKOUT_COMPLETED, {
+          workout_day_id: day.id,
           workout_name: day.name,
           duration_minutes: duration,
           exercises_count: exercises.length,
+          total_volume: totalVolume,
+          source: "workout_today",
         });
         onSaved?.();
         setSavedCalories(saved.calories_estimated ?? null);
@@ -1747,6 +1792,14 @@ function DoneScreen({
             feeling: state.feeling || null,
           };
         }),
+      });
+      trackEvent(EVENTS.WORKOUT_COMPLETED, {
+        workout_day_id: day.id,
+        workout_name: day.name,
+        duration_minutes: duration,
+        exercises_count: exercises.length,
+        total_volume: totalVolume,
+        source: "workout_today_retry",
       });
       onSaved?.();
       setSavedCalories(saved.calories_estimated ?? null);

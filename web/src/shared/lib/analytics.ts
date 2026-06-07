@@ -5,6 +5,7 @@ declare global {
 }
 
 type EventParams = Record<string, string | number | boolean | undefined>;
+export type BillingPlanName = "pro_monthly" | "pro_yearly";
 
 export function trackEvent(eventName: string, params?: EventParams): void {
   if (typeof window === "undefined") return;
@@ -15,15 +16,16 @@ export function trackEvent(eventName: string, params?: EventParams): void {
   window.gtag("event", eventName, params);
 }
 
-// send_to labels: get from Google Ads → Conversions → select action → Tag setup
+// send_to labels: get from Google Ads -> Conversions -> select action -> Tag setup
 export const CONVERSIONS = {
   SIGNUP:       "AW-17759537883/-FCPCJ7mkrAcENuVtJRC",
   PAGE_VIEW:    "AW-17759537883/BIKACLyy67YcENuVtJRC",
-  SUBSCRIPTION: "AW-17759537883/REPLACE_SUBSCRIPTION_LABEL",
+  SUBSCRIPTION: process.env.NEXT_PUBLIC_GADS_SUBSCRIPTION_CONVERSION,
 } as const;
 
-export function trackConversion(sendTo: string): void {
+export function trackConversion(sendTo?: string): void {
   if (typeof window === "undefined") return;
+  if (!sendTo || sendTo.includes("REPLACE_")) return;
   if (process.env.NODE_ENV === "development") {
     console.log(`[GAds Conversion] ${sendTo}`);
     return;
@@ -50,3 +52,27 @@ export const EVENTS = {
   SCREEN_VIEW:          "screen_view",
   CTA_CLICK:            "cta_click",
 } as const;
+
+const PLAN_ANALYTICS: Record<BillingPlanName, {
+  billing_cycle: "monthly" | "yearly";
+  value: number;
+}> = {
+  pro_monthly: { billing_cycle: "monthly", value: 19.9 },
+  pro_yearly:  { billing_cycle: "yearly",  value: 118.8 },
+};
+
+export function checkoutEventParams(
+  plan: BillingPlanName,
+  source: string
+): EventParams {
+  return {
+    plan_name: plan,
+    billing_cycle: PLAN_ANALYTICS[plan].billing_cycle,
+    source,
+    value: PLAN_ANALYTICS[plan].value,
+  };
+}
+
+export function trackCheckoutStarted(plan: BillingPlanName, source: string): void {
+  trackEvent(EVENTS.CHECKOUT_STARTED, checkoutEventParams(plan, source));
+}

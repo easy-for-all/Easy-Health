@@ -31,17 +31,22 @@ export default function Precos() {
   return (
     <PublicLayout>
       {/* Hero */}
-      <section className="mx-auto max-w-5xl px-6 py-16 text-center">
+      <section className="mx-auto max-w-5xl px-6 pb-8 pt-10 text-center sm:pt-14">
         <h1 className="text-3xl font-bold text-white sm:text-4xl">
           Planos EasyHealth
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-lg text-slate-400">
           Comece com 7 dias grátis. Sem cartão de crédito. Cancele quando quiser.
         </p>
+        <div className="mx-auto mt-5 flex max-w-md flex-wrap justify-center gap-2 text-xs font-semibold text-slate-300">
+          <span className="rounded-full bg-slate-800 px-3 py-1">Mensal R$ 19,90</span>
+          <span className="rounded-full bg-slate-800 px-3 py-1">Anual R$ 9,90/mês</span>
+          <span className="rounded-full bg-slate-800 px-3 py-1">7 dias grátis</span>
+        </div>
       </section>
 
       {/* Plans */}
-      <section className="pb-20">
+      <section className="pb-16">
         <div className="mx-auto max-w-3xl px-6">
           <PricingPlans />
           <p className="mt-6 text-center text-sm text-slate-500">

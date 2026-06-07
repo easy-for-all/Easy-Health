@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
+import { trackCheckoutStarted } from "@/shared/lib/analytics";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -26,6 +27,7 @@ export default function LoginPage() {
       const pending = getPendingPlan();
       if (pending) {
         clearPendingPlan();
+        trackCheckoutStarted(pending, "login_pending_plan");
         const { checkout_url } = await api.post<{ checkout_url: string }>(
           "/api/v1/billing/checkout",
           { plan: pending }
