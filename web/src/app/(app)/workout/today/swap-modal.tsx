@@ -51,6 +51,42 @@ function contextLabel(current: WorkoutDayExercise, alt: ExerciseOption): string 
   return null;
 }
 
+// PT-BR to EN synonym map for equipment/muscle search
+const SEARCH_SYNONYMS: Record<string, string[]> = {
+  corda: ["rope", "corda"],
+  barra: ["barbell", "barra", "bar"],
+  cabo: ["cable", "cabo"],
+  halter: ["dumbbell", "halteres", "halter"],
+  halteres: ["dumbbell", "halteres"],
+  peito: ["chest", "peitoral", "peito"],
+  triceps: ["triceps", "tríceps"],
+  costas: ["back", "costas", "dorsal"],
+  pernas: ["legs", "quadriceps", "pernas"],
+  biceps: ["biceps", "bíceps", "curl"],
+  ombro: ["shoulder", "shoulders", "ombro"],
+  ombros: ["shoulder", "shoulders", "ombros"],
+  core: ["core", "abdomen", "abdominal", "abs"],
+  abdominal: ["core", "abdomen", "abdominal"],
+  maquina: ["machine", "máquina"],
+};
+
+function expandSearchTerm(term: string): string {
+  const normalized = term.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const synonyms = SEARCH_SYNONYMS[normalized];
+  if (synonyms) return synonyms[0]; // use the most common form for API search
+  return term;
+}
+
+function parseEquipmentIntent(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/\bcorda\b|rope/i.test(t)) return "corda";
+  if (/\bbarra\b|barbell/i.test(t)) return "barra";
+  if (/\bcabo\b|cable/i.test(t)) return "cabo";
+  if (/\bhalter(es)?\b|dumbbell/i.test(t)) return "halteres";
+  if (/\bm[aá]quina\b|machine/i.test(t)) return "maquina";
+  return null;
+}
+
 const TYPE_LABELS: Record<string, string> = {
   musculacao: "Musculação", cardio: "Cardio", natacao: "Natação",
   corrida: "Corrida", funcional: "Funcional", caminhada: "Caminhada", hiit: "HIIT",
@@ -98,13 +134,21 @@ export function SwapModal({
   const [searchLang, setSearchLang] = useState<"pt" | "en">("pt");
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [shownIds, setShownIds] = useState<Set<number>>(new Set());
+  const [noMoreOptions, setNoMoreOptions] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const openSwapFetch = useCallback(async (wde: WorkoutDayExercise) => {
-    const excludeIds = [...new Set([wde.exercise_id, ...allWorkoutExerciseIds])].join(",");
+  function trackShownIds(data: ExerciseOption[]) {
+    setShownIds((prev) => new Set([...prev, ...data.map((d) => d.id)]));
+  }
+
+  const openSwapFetch = useCallback(async (wde: WorkoutDayExercise, additionalExcludes: number[] = []) => {
+    const excludeIds = [...new Set([wde.exercise_id, ...allWorkoutExerciseIds, ...additionalExcludes])].join(",");
     const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
     const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${excludeIds}`);
     setAlternatives(data);
+    trackShownIds(data);
+    setNoMoreOptions(data.length === 0 && additionalExcludes.length > 0);
     setInitialLoading(false);
   }, [allWorkoutExerciseIds]);
 
@@ -112,16 +156,20 @@ export function SwapModal({
     openSwapFetch(exercise);
   }, [exercise, openSwapFetch]);
 
-  const fetchByName = useCallback(async (name: string, lang: "pt" | "en" = "pt") => {
+  const fetchByName = useCallback(async (name: string, additionalExcludes: number[] = []) => {
     setSearchLoading(true);
+    setNoMoreOptions(false);
     try {
-      const excludeIds = [...new Set([exercise.exercise_id, ...allWorkoutExerciseIds])].join(",");
-      const params = new URLSearchParams({ name, exclude_ids: excludeIds });
-      if (exercise.muscle_group) params.set("muscle_group", exercise.muscle_group);
-      else params.set("exercise_type", exercise.exercise_type);
-      if (lang === "en") params.set("lang", "en");
+      const excludeIds = [...new Set([exercise.exercise_id, ...allWorkoutExerciseIds, ...additionalExcludes])].join(",");
+      const expandedName = expandSearchTerm(name);
+      // When searching by name/intent, don't restrict by muscle_group to allow broader results
+      const params = new URLSearchParams({ name: expandedName, exclude_ids: excludeIds });
       const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${params.toString()}`);
       setAlternatives(data);
+      trackShownIds(data);
+      if (data.length === 0 && additionalExcludes.length > 0) {
+        setNoMoreOptions(true);
+      }
     } finally {
       setSearchLoading(false);
     }
@@ -152,9 +200,11 @@ export function SwapModal({
   function handleSearchChange(value: string) {
     setSwapSearch(value);
     setSwapFilter(null);
+    setNoMoreOptions(false);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     if (value.trim().length >= 2) {
-      searchTimerRef.current = setTimeout(() => fetchByName(value.trim(), searchLang), 300);
+      const term = parseEquipmentIntent(value.trim()) ?? value.trim();
+      searchTimerRef.current = setTimeout(() => fetchByName(term), 300);
     } else if (value.trim().length === 0) {
       openSwapFetch(exercise);
     }
@@ -164,8 +214,25 @@ export function SwapModal({
     setSearchLang(lang);
     if (swapSearch.trim().length >= 2) {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-      fetchByName(swapSearch.trim(), lang);
+      const term = parseEquipmentIntent(swapSearch.trim()) ?? swapSearch.trim();
+      fetchByName(term);
     }
+  }
+
+  function handleMoreOptions() {
+    setNoMoreOptions(false);
+    if (swapSearch.trim().length >= 2) {
+      const term = parseEquipmentIntent(swapSearch.trim()) ?? swapSearch.trim();
+      fetchByName(term, [...shownIds]);
+    } else {
+      openSwapFetch(exercise, [...shownIds]);
+    }
+  }
+
+  function handleResetAndSearch() {
+    setShownIds(new Set());
+    setNoMoreOptions(false);
+    openSwapFetch(exercise);
   }
 
   async function toggleFavorite(exerciseId: number, currentlyFav: boolean) {
@@ -399,12 +466,25 @@ export function SwapModal({
               </div>
             ))}
           </div>
+        ) : noMoreOptions ? (
+          <div className="rounded-lg bg-gray-50 p-4 text-center dark:bg-gray-800">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Não encontrei novas opções com esse critério.
+            </p>
+            <button
+              onClick={handleResetAndSearch}
+              className="mt-2 text-xs font-semibold text-primary-500 underline"
+            >
+              Ampliar busca (ver todos os exercícios do grupo)
+            </button>
+          </div>
         ) : displayedAlternatives.length === 0 ? (
           <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
             {onlyFavorites ? "Nenhum favorito encontrado para este grupo." : "Nenhuma alternativa encontrada."}
           </p>
         ) : (
-          displayedAlternatives.map((alt) => {
+          <>
+          {displayedAlternatives.map((alt) => {
             const ctx = contextLabel(exercise, alt);
             const muscleColor = alt.muscle_group ? MUSCLE_COLORS[alt.muscle_group] : null;
             return (
@@ -444,7 +524,17 @@ export function SwapModal({
                 </button>
               </div>
             );
-          })
+          })}
+          {/* Other options button */}
+          {displayedAlternatives.length > 0 && (
+            <button
+              onClick={handleMoreOptions}
+              className="mt-1 w-full rounded-xl border border-dashed border-gray-200 py-3 text-sm font-medium text-gray-400 hover:border-primary-300 hover:text-primary-500 dark:border-gray-700 dark:hover:border-primary-700"
+            >
+              Outras opções →
+            </button>
+          )}
+          </>
         )}
       </div>
     </div>

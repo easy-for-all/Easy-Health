@@ -7,10 +7,11 @@ import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { HeroWorkout } from "@/shared/components/workout/hero-workout";
+import { WorkoutDoneCard } from "@/shared/components/workout/workout-done-card";
 import { InsightCard } from "@/shared/components/workout/insight-card";
 import { StreakCard } from "@/shared/components/workout/streak-card";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
-import type { WorkoutPlan, WorkoutDay } from "@/shared/types/workout";
+import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const DAYS_PT = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const [weeklySessions, setWeeklySessions] = useState(0);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [todaySession, setTodaySession] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [noProfile, setNoProfile] = useState(false);
 
@@ -46,7 +48,8 @@ export default function DashboardPage() {
         "/api/v1/workout_sessions/stats"
       ).catch(() => null),
       api.get<{ suggestion: string; reason: string }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
-    ]).then(([p, s, ai]) => {
+      api.get<WorkoutSession | Record<string, never>>("/api/v1/workout_sessions/today").catch(() => null),
+    ]).then(([p, s, ai, todayRaw]) => {
       if (!p) setNoProfile(true);
       setPlan(p);
       setStreak(s?.streak ?? 0);
@@ -54,6 +57,9 @@ export default function DashboardPage() {
       setWeeklyGoal(s?.weekly_goal ?? 3);
       if (ai?.suggestion) {
         setAiInsight(`${ai.suggestion}${ai.reason ? ` <b>—</b> ${ai.reason}` : ""}`);
+      }
+      if (todayRaw && "id" in todayRaw) {
+        setTodaySession(todayRaw as WorkoutSession);
       }
     }).finally(() => setLoading(false));
   }, []);
@@ -140,15 +146,19 @@ export default function DashboardPage() {
       <div
         style={{ padding: "8px 20px 0", display: "flex", flexDirection: "column", gap: 14 }}
       >
-        {/* Hero */}
-        <HeroWorkout
-          dayLabel={`${todayLabel} · TREINO`}
-          workoutName={todayDay?.name ?? "Treinar agora"}
-          workoutSub={todayDay ? undefined : `${plan?.days?.length ?? 0} treinos no plano`}
-          exerciseCount={todayDay?.exercise_count}
-          estimatedMin={todayDay?.exercise_count ? estimateMinutes(todayDay.exercise_count) : undefined}
-          href={todayDay ? `/workout/today?day=${todayDay.id}` : "/workout/today"}
-        />
+        {/* Hero — treino do dia ou card de treino realizado */}
+        {todaySession ? (
+          <WorkoutDoneCard session={todaySession} suggestedDay={todayDay} />
+        ) : (
+          <HeroWorkout
+            dayLabel={`${todayLabel} · TREINO`}
+            workoutName={todayDay?.name ?? "Treinar agora"}
+            workoutSub={todayDay ? undefined : `${plan?.days?.length ?? 0} treinos no plano`}
+            exerciseCount={todayDay?.exercise_count}
+            estimatedMin={todayDay?.exercise_count ? estimateMinutes(todayDay.exercise_count) : undefined}
+            href={todayDay ? `/workout/today?day=${todayDay.id}` : "/workout/today"}
+          />
+        )}
 
         {/* AI Insight */}
         {aiInsight && <InsightCard text={aiInsight} />}

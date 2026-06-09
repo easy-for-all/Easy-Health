@@ -10,6 +10,7 @@ import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import { InsightCard } from "@/shared/components/workout/insight-card";
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutSession } from "@/shared/types/workout";
+import type { HealthProfile } from "@/shared/types/health-profile";
 
 // ── Chart helpers (ported from pro-charts.js) ────────────────────────────────
 
@@ -100,19 +101,62 @@ function computeDailyMinutes(sessions: WorkoutSession[], days = 7): { label: str
   });
 }
 
-function computeMuscleBalance(sessions: WorkoutSession[]): { name: string; pct: number; sets: number }[] {
+// Expected minutes per day based on user health profile
+function computeExpectedMinutes(profile: HealthProfile | null): number {
+  if (!profile) return 30;
+  let base = 30;
+  if (profile.fitness_level === "advanced") base += 15;
+  else if (profile.fitness_level === "intermediate") base += 7;
+  if (profile.goal === "lose_weight") base += 10;
+  if (profile.goal === "gain_muscle") base += 5;
+  if (profile.age && profile.age < 30) base += 5;
+  if (profile.age && profile.age > 60) base -= 5;
+  const daysPerWeek = profile.training_days_per_week ?? 3;
+  const activityFactor = daysPerWeek / 7;
+  return Math.round(base * activityFactor + base * 0.3);
+}
+
+const MUSCLE_NAME_MAP: Record<string, string> = {
+  chest: "Peito", peitoral: "Peito", peito: "Peito",
+  back: "Costas", costas: "Costas", dorsal: "Costas",
+  legs: "Pernas", pernas: "Pernas", quadriceps: "Pernas", "quadríceps": "Pernas",
+  shoulders: "Ombros", ombros: "Ombros", ombro: "Ombros",
+  biceps: "Bíceps", "bíceps": "Bíceps", bicep: "Bíceps",
+  triceps: "Tríceps", "tríceps": "Tríceps", tricep: "Tríceps",
+  core: "Core", abdomen: "Core", abdominal: "Core", abs: "Core",
+  glutes: "Glúteos", "glúteos": "Glúteos", gluteos: "Glúteos",
+  calves: "Panturrilha", panturrilha: "Panturrilha",
+  cardio: "Cardio",
+};
+
+function normalizeMuscleGroup(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const lower = raw.toLowerCase().trim();
+  if (lower === "n/a" || lower === "null" || lower === "-") return null;
+  return MUSCLE_NAME_MAP[lower] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
+}
+
+function computeMuscleBalance(sessions: WorkoutSession[]): { name: string; pct: number; sets: number; low: boolean }[] {
   const counts: Record<string, number> = {};
   for (const s of sessions) {
     for (const log of s.exercise_logs ?? []) {
-      const mg = log.muscle_group ?? "outros";
-      counts[mg] = (counts[mg] ?? 0) + log.sets;
+      const normalized = normalizeMuscleGroup(log.muscle_group);
+      if (!normalized || normalized.toLowerCase() === "outros") continue;
+      counts[normalized] = (counts[normalized] ?? 0) + log.sets;
     }
   }
+  if (Object.keys(counts).length === 0) return [];
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const max = Math.max(1, ...Object.values(counts));
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([name, sets]) => ({ name, sets, pct: Math.round((sets / max) * 100) }));
+    .slice(0, 7)
+    .map(([name, sets]) => ({
+      name,
+      sets,
+      pct: Math.round((sets / max) * 100),
+      low: (sets / total) < 0.10,
+    }));
 }
 
 function computeExerciseProgress(sessions: WorkoutSession[]): ExerciseProgress[] {
@@ -122,7 +166,9 @@ function computeExerciseProgress(sessions: WorkoutSession[]): ExerciseProgress[]
     for (const log of s.exercise_logs ?? []) {
       const key = log.name.toLowerCase();
       if (!map[key]) map[key] = { name: log.name, muscleGroup: log.muscle_group ?? null, entries: [] };
-      const weights = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
+      const allWeights = log.weight_by_set ?? (log.weight_kg ? [log.weight_kg] : []);
+      const warmupFlags: boolean[] = (log as { is_warmup_by_set?: boolean[] }).is_warmup_by_set ?? [];
+      const weights = allWeights.filter((_, i) => !warmupFlags[i]);
       const maxKg = Math.max(0, ...weights.filter((w): w is number => typeof w === "number" && w > 0));
       if (maxKg > 0) map[key].entries.push({ date, maxKg });
     }
@@ -173,16 +219,20 @@ type Tab = "resumo" | "cargas" | "historico";
 function HistoryContent() {
   const router = useRouter();
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
+  const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("resumo");
   const [selected, setSelected] = useState<WorkoutSession | null>(null);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "historico" });
-    api
-      .get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions")
-      .then(({ sessions: s }) => setSessions(s))
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions"),
+      api.get<HealthProfile>("/api/v1/health_profile").catch(() => null),
+    ]).then(([sessionsData, profile]) => {
+      setSessions(sessionsData.sessions);
+      setHealthProfile(profile);
+    }).finally(() => setLoading(false));
   }, []);
 
   const dailyMins = useMemo(() => computeDailyMinutes(sessions), [sessions]);
@@ -209,7 +259,9 @@ function HistoryContent() {
     return sessions.filter((s) => new Date(s.completed_at) >= weekStart).length;
   }, [sessions]);
 
+  const expectedMins = useMemo(() => computeExpectedMinutes(healthProfile), [healthProfile]);
   const maxDayMins = Math.max(1, ...dailyMins.map((d) => d.mins));
+  const chartMaxY = Math.max(maxDayMins, Math.ceil(expectedMins * 1.25));
 
   if (loading) return <LoadingScreen />;
 
@@ -270,40 +322,81 @@ function HistoryContent() {
                 <div>
                   <p className="eyebrow">Minutos por dia</p>
                   <p className="cv" style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26 }}>
-                    {Math.max(...dailyMins.map((d) => d.mins)) > 0
-                      ? `${Math.max(...dailyMins.map((d) => d.mins))} min`
-                      : "—"}
+                    {maxDayMins > 0 ? `${maxDayMins} min` : "—"}
                     <small style={{ fontSize: 14, color: "var(--text-dim)", fontWeight: 600 }}> melhor dia</small>
                   </p>
                 </div>
               </div>
-              <div className="bars">
-                {dailyMins.map((d, i) => (
-                  <div key={i} className="bar">
-                    <motion.div
-                      className={`bcol ${d.mins === 0 ? "muted" : ""}`}
-                      initial={{ height: 0 }}
-                      animate={{ height: d.mins > 0 ? `${Math.max(8, (d.mins / maxDayMins) * 100)}%` : "8%" }}
-                      transition={{ duration: 0.5, delay: i * 0.06, ease: "easeOut" }}
-                    />
-                    <span className="blab">{d.label}</span>
+
+              {/* Chart with Y-axis */}
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 6 }}>
+                {/* Y-axis labels */}
+                <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: 110, flexShrink: 0, paddingBottom: 20 }}>
+                  <span style={{ fontSize: 9, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{chartMaxY}</span>
+                  <span style={{ fontSize: 9, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{Math.round(chartMaxY / 2)}</span>
+                  <span style={{ fontSize: 9, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>0</span>
+                </div>
+
+                {/* Bars container with expected average line */}
+                <div style={{ flex: 1, position: "relative" }}>
+                  {/* Expected average dashed line */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      bottom: `calc(20px + ${(expectedMins / chartMaxY) * 90}px)`,
+                      height: 0,
+                      borderTop: "1.5px dashed var(--hot, #ef4444)",
+                      opacity: 0.8,
+                      zIndex: 2,
+                      pointerEvents: "none",
+                    }}
+                  />
+                  <div className="bars" style={{ position: "relative", zIndex: 1 }}>
+                    {dailyMins.map((d, i) => (
+                      <div key={i} className="bar" title={d.mins > 0 ? `${d.label}: ${d.mins}min (meta: ${expectedMins}min, ${d.mins >= expectedMins ? "+" : ""}${d.mins - expectedMins}min)` : `${d.label}: sem treino`}>
+                        <motion.div
+                          className={`bcol ${d.mins === 0 ? "muted" : ""}`}
+                          initial={{ height: 0 }}
+                          animate={{ height: d.mins > 0 ? `${Math.max(8, (d.mins / chartMaxY) * 90)}%` : "8%" }}
+                          transition={{ duration: 0.5, delay: i * 0.06, ease: "easeOut" }}
+                        />
+                        <span className="blab">{d.label}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 12, height: 12, borderRadius: 3, background: "linear-gradient(180deg, var(--primary), var(--primary-2))", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: "var(--text-dim)" }}>Minutos realizados</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 16, height: 0, borderTop: "1.5px dashed var(--hot, #ef4444)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: "var(--text-dim)" }}>Média esperada ({expectedMins}min)</span>
+                </div>
               </div>
             </div>
           )}
 
           {/* Muscle balance */}
-          {muscleBalance.length > 0 && (
+          {muscleBalance.length > 0 ? (
             <div className="chart-card">
               <p className="eyebrow" style={{ marginBottom: 14 }}>Equilíbrio muscular</p>
               <div className="mbar">
-                {muscleBalance.map(({ name, pct }) => (
+                {muscleBalance.map(({ name, pct, low }) => (
                   <div key={name} className="mb">
-                    <span className="mbn">{name}</span>
+                    <span className="mbn" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      {name}
+                      {low && <span style={{ fontSize: 9, background: "var(--hot-soft)", color: "var(--hot)", borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>baixo</span>}
+                    </span>
                     <div className="mbt">
                       <motion.i
-                        className={pct < 30 ? "low" : ""}
+                        className={low ? "low" : ""}
                         initial={{ width: 0 }}
                         animate={{ width: `${pct}%` }}
                         transition={{ duration: 0.6, ease: "easeOut" }}
@@ -313,8 +406,32 @@ function HistoryContent() {
                   </div>
                 ))}
               </div>
+              {/* Insight */}
+              {(() => {
+                const top = muscleBalance.slice(0, 2).map((m) => m.name);
+                const lowGroups = muscleBalance.filter((m) => m.low).map((m) => m.name);
+                if (lowGroups.length > 0) {
+                  return (
+                    <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                      Foco em <strong>{top.join(" e ")}</strong>. {lowGroups.join(", ")} teve{lowGroups.length > 1 ? "m" : ""} menor volume.
+                    </p>
+                  );
+                }
+                return (
+                  <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                    Grupo mais treinado: <strong>{top[0]}</strong>{top[1] ? ` e ${top[1]}` : ""}.
+                  </p>
+                );
+              })()}
             </div>
-          )}
+          ) : sessions.length >= 2 ? (
+            <div className="chart-card" style={{ textAlign: "center", padding: "20px" }}>
+              <p className="eyebrow" style={{ marginBottom: 8 }}>Equilíbrio muscular</p>
+              <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                Ainda não há dados suficientes para calcular equilíbrio muscular. Complete mais treinos para acompanhar sua evolução.
+              </p>
+            </div>
+          ) : null}
 
           {/* AI Insight */}
           {sessions.length >= 3 && (

@@ -41,6 +41,7 @@ type ExerciseRuntime = {
   planned_sets: number;
   reps_by_set: number[];
   weight_by_set: string[];
+  warmup_by_set: boolean[];
   rest_seconds: number;
   feeling: string;
   duration_minutes?: number;
@@ -69,6 +70,43 @@ const INTENSITY_STYLES: Record<string, string> = {
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// ── Rest timer dynamic messages ─────────────────────────────────────────────
+interface RestCtx {
+  exerciseName: string;
+  setNumber: number;
+  totalSets: number;
+  muscleGroup?: string | null;
+  isLastExercise: boolean;
+  weightKg?: number;
+  isWarmup?: boolean;
+}
+
+const GENERIC_REST_MESSAGES = [
+  "Boa série! Controle a respiração e mantenha o foco.",
+  "Ótima execução. Recupere bem para manter o volume.",
+  "Cada série conta. Prepare-se para a próxima com atenção.",
+  "Respire fundo. O descanso faz parte do treino.",
+  "Mantenha a técnica — consistência gera resultado.",
+];
+
+function getRestMessage(ctx: RestCtx): string {
+  const { setNumber, totalSets, isLastExercise, isWarmup, weightKg, exerciseName } = ctx;
+
+  if (isWarmup) return "Aquecimento feito. Agora inicie a carga principal com técnica.";
+  if (isLastExercise && setNumber === totalSets) return `Última série do treino! Dê o máximo em ${exerciseName}.`;
+  if (setNumber === totalSets) return "Última série deste exercício. Foco total agora.";
+  if (setNumber === totalSets - 1) return "Falta uma série. Mantenha a intensidade.";
+  if (setNumber === 1 && weightKg && weightKg > 0) {
+    return `Boa primeira série com ${weightKg}kg. Se a execução ficou estável, mantenha ou suba levemente.`;
+  }
+  if (setNumber === 1) return "Boa primeira série. Observe a execução e ajuste se necessário.";
+  if (isLastExercise) return "Treino quase concluído. Mantenha a intensidade até o fim.";
+
+  const idx = (setNumber * (exerciseName.length % 5 + 1)) % GENERIC_REST_MESSAGES.length;
+  return GENERIC_REST_MESSAGES[idx];
+}
+
 const FEELINGS = [
   { value: "bem", label: "Bem" },
   { value: "cansado", label: "Cansado" },
@@ -412,8 +450,16 @@ function WorkoutTodayContent() {
     const plannedSets = Math.max(1, Math.min(12, nextSets));
     const repsBySet = Array.from({ length: plannedSets }, (_, idx) => state.reps_by_set[idx] ?? exercise.reps);
     const weightBySet = Array.from({ length: plannedSets }, (_, idx) => state.weight_by_set[idx] ?? "");
-    updateRuntime(exercise.workout_day_exercise_id, { planned_sets: plannedSets, reps_by_set: repsBySet, weight_by_set: weightBySet });
+    const warmupBySet = Array.from({ length: plannedSets }, (_, idx) => state.warmup_by_set?.[idx] ?? false);
+    updateRuntime(exercise.workout_day_exercise_id, { planned_sets: plannedSets, reps_by_set: repsBySet, weight_by_set: weightBySet, warmup_by_set: warmupBySet });
     setCurrentSet((value) => Math.min(value, plannedSets));
+  }
+
+  function toggleWarmup(exercise: WorkoutDayExercise, setIdx: number) {
+    const state = runtimeFor(exerciseRuntime, exercise);
+    const warmup = [...(state.warmup_by_set ?? Array.from({ length: state.planned_sets }, () => false))];
+    warmup[setIdx] = !warmup[setIdx];
+    updateRuntime(exercise.workout_day_exercise_id, { warmup_by_set: warmup });
   }
 
   function unlockAudio() {
@@ -707,7 +753,15 @@ function WorkoutTodayContent() {
               <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
                 <AgentOrb size="card" glyph />
                 <AITrainerBubble
-                  message={`Boa série! Respire fundo e prepare-se para ${exercise.name}.`}
+                  message={getRestMessage({
+                    exerciseName: exercise.name,
+                    setNumber: currentSet,
+                    totalSets: runtimeFor(exerciseRuntime, exercise).planned_sets,
+                    muscleGroup: exercise.muscle_group,
+                    isLastExercise: currentIndex === (day!.exercises?.length ?? 1) - 1,
+                    weightKg: parseFloat(runtimeFor(exerciseRuntime, exercise).weight_by_set[currentSet - 1] || "0") || undefined,
+                    isWarmup: runtimeFor(exerciseRuntime, exercise).warmup_by_set?.[currentSet - 1],
+                  })}
                   mood="speaking"
                   show
                   side="left"
@@ -952,6 +1006,23 @@ function WorkoutTodayContent() {
               </label>
             </div>
             {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
+
+            {/* Warmup toggle for current set */}
+            {(() => {
+              const isWarmup = runtime.warmup_by_set?.[currentSet - 1] ?? false;
+              return (
+                <button
+                  onClick={() => toggleWarmup(exercise, currentSet - 1)}
+                  className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-xs font-semibold transition-colors ${
+                    isWarmup
+                      ? "border-amber-600/50 bg-amber-900/30 text-amber-400"
+                      : "border-slate-700 bg-slate-900 text-slate-500 hover:border-slate-600"
+                  }`}
+                >
+                  🔥 {isWarmup ? "Série de aquecimento (não conta na evolução)" : "Marcar como aquecimento"}
+                </button>
+              );
+            })()}
           </>
         )}
 
@@ -1680,6 +1751,11 @@ function DoneScreen({
   const [saveError, setSaveError] = useState("");
   const [savedCalories, setSavedCalories] = useState<number | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [savedSessionId, setSavedSessionId] = useState<number | null>(null);
+  const [savedFatigue, setSavedFatigue] = useState(3);
+  const [savedNotes, setSavedNotes] = useState("");
+  const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const exercises = useMemo(() => day.exercises ?? [], [day.exercises]);
 
   const totalVolume = useMemo(() => {
@@ -1728,6 +1804,7 @@ function DoneScreen({
               name: exercise.name,
               weight_kg: firstWeight(state.weight_by_set),
               weight_by_set: state.weight_by_set.map((value) => value ? Number(value) : null),
+              is_warmup_by_set: state.warmup_by_set ?? [],
               planned_sets: exercise.sets,
               sets: state.planned_sets,
               reps: state.reps_by_set,
@@ -1746,6 +1823,9 @@ function DoneScreen({
         });
         onSaved?.();
         setSavedCalories(saved.calories_estimated ?? null);
+        setSavedSessionId(saved.id);
+        setSavedFatigue(fatigueLevel);
+        setSavedNotes(notes);
         setIsSaved(true);
       } catch {
         setSaveError("Erro ao salvar o treino. Tente novamente.");
@@ -1803,11 +1883,34 @@ function DoneScreen({
       });
       onSaved?.();
       setSavedCalories(saved.calories_estimated ?? null);
+      setSavedSessionId(saved.id);
+      setSavedFatigue(fatigueLevel);
+      setSavedNotes(notes);
       setIsSaved(true);
     } catch {
       setSaveError("Erro ao salvar. Tente novamente.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function updateSession() {
+    if (!savedSessionId) return;
+    setUpdating(true);
+    setUpdateSuccess(false);
+    try {
+      await api.patch(`/api/v1/workout_sessions/${savedSessionId}`, {
+        fatigue_level: fatigueLevel,
+        notes: notes || null,
+      });
+      setSavedFatigue(fatigueLevel);
+      setSavedNotes(notes);
+      setUpdateSuccess(true);
+      setTimeout(() => setUpdateSuccess(false), 3000);
+    } catch {
+      // silent — user can retry
+    } finally {
+      setUpdating(false);
     }
   }
 
@@ -1912,7 +2015,7 @@ function DoneScreen({
           <label className="text-sm font-semibold text-slate-300 dark:text-gray-300">Nível geral de cansaço</label>
           <div className="mt-3 flex gap-2">
             {[1, 2, 3, 4, 5].map((level) => (
-              <button key={level} disabled={isSaved} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold transition-colors disabled:cursor-default ${fatigueLevel === level ? "bg-primary-500 text-white" : "bg-gray-100 text-slate-400"}`}>
+              <button key={level} onClick={() => setFatigueLevel(level)} className={`h-10 flex-1 rounded-lg text-sm font-bold transition-colors ${fatigueLevel === level ? "bg-primary-500 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>
                 {level}
               </button>
             ))}
@@ -1923,12 +2026,30 @@ function DoneScreen({
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            disabled={isSaved}
             placeholder="Alguma anotação? (opcional)"
             rows={2}
-            className="w-full rounded-xl border border-slate-700 px-4 py-3 text-sm focus:border-primary-500 focus:outline-none disabled:bg-slate-900/60 disabled:text-slate-500  dark:bg-gray-900"
+            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:border-primary-500 focus:outline-none dark:bg-gray-900"
           />
         </motion.div>
+
+        {/* Save observations button — shown after initial auto-save when user changes fields */}
+        {isSaved && savedSessionId && (fatigueLevel !== savedFatigue || notes !== savedNotes) && (
+          <motion.div variants={staggerItem}>
+            <button
+              onClick={updateSession}
+              disabled={updating}
+              className="w-full rounded-xl border border-primary-500/40 bg-primary-500/10 py-3 text-sm font-semibold text-primary-400 transition-colors hover:bg-primary-500/20 disabled:opacity-50"
+            >
+              {updating ? "Salvando..." : "Salvar observações"}
+            </button>
+          </motion.div>
+        )}
+
+        {updateSuccess && (
+          <motion.div variants={staggerItem} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-lg bg-green-900/40 px-4 py-3 text-center text-sm text-green-400">
+            Observações salvas ✓
+          </motion.div>
+        )}
 
         {saveError && (
           <motion.div variants={staggerItem} className="flex flex-col gap-2 rounded-lg bg-red-50 px-4 py-3">
@@ -2108,6 +2229,7 @@ function createRuntime(exercise: WorkoutDayExercise, lastWeight?: string): Exerc
     planned_sets: exercise.sets,
     reps_by_set: Array.from({ length: exercise.sets }, () => exercise.reps),
     weight_by_set: Array.from({ length: exercise.sets }, () => lastWeight ?? ""),
+    warmup_by_set: Array.from({ length: exercise.sets }, () => false),
     rest_seconds: exercise.rest_seconds,
     feeling: "",
     duration_minutes: exercise.duration_minutes ?? undefined,

@@ -7,12 +7,10 @@ module Api
         exercises = exercises.where(exercise_type: params[:exercise_type]) if params[:exercise_type].present?
         exercises = exercises.where(equipment_type: params[:equipment_type]) if params[:equipment_type].present?
         if params[:name].present?
-          term = "%#{params[:name]}%"
-          if params[:lang] == "en"
-            exercises = exercises.where("name_en ILIKE ? OR name ILIKE ? OR description ILIKE ?", term, term, term)
-          else
-            exercises = exercises.where("name ILIKE ? OR description ILIKE ?", term, term)
-          end
+          exercises = exercises.where(
+            "name ILIKE :t OR name_en ILIKE :t OR description ILIKE :t",
+            t: "%#{params[:name]}%"
+          )
         end
         exercises = exercises.where.not(id: params[:exclude_ids].to_s.split(",")) if params[:exclude_ids].present?
 

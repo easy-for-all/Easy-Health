@@ -62,6 +62,26 @@ module Api
         }
       end
 
+      def today
+        session = current_user.workout_sessions
+          .includes(:workout_day)
+          .where("completed_at >= ?", Time.current.beginning_of_day)
+          .order(completed_at: :desc)
+          .first
+        render json: session ? session_json(session) : {}
+      end
+
+      def update
+        session = current_user.workout_sessions.find_by(id: params[:id])
+        return render json: { error: "Not found" }, status: :not_found unless session
+
+        if session.update(update_params)
+          render json: session_json(session)
+        else
+          render json: { errors: session.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
       def personal_records
         sessions = current_user.workout_sessions
           .where("exercise_logs IS NOT NULL")
@@ -94,6 +114,10 @@ module Api
           free_workout_used: true,
           first_workout_completed_at: Time.current
         )
+      end
+
+      def update_params
+        params.permit(:fatigue_level, :notes)
       end
 
       def session_params
