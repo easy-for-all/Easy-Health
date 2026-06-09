@@ -645,3 +645,56 @@
 .exec-chip:hover { border-color: var(--border-strong); background: var(--surface-2); }
 .exec-chip svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
 .exec-chip.warn { color: var(--warn); border-color: oklch(0.82 0.15 78 / .4); background: var(--warn-soft); }
+
+/* ---------- WORKOUT DONE CARD (dashboard post-workout) ---------- */
+.workout-done-card {
+  border-radius: var(--r-xl); padding: 22px; position: relative; overflow: hidden;
+  background:
+    radial-gradient(120% 100% at 100% 0%, oklch(0.55 0.18 158 / .55), transparent 60%),
+    linear-gradient(155deg, oklch(0.30 0.10 158), oklch(0.22 0.07 180));
+  color: var(--on-primary, #fff); box-shadow: var(--glow);
+}
+.workout-done-card .wdc-top { display: flex; margin-bottom: 12px; }
+.workout-done-card .wdc-badge {
+  font-size: 11px; font-weight: 700;
+  background: oklch(1 0 0 / .18); padding: 5px 12px; border-radius: 999px;
+  display: inline-flex; gap: 6px; align-items: center;
+}
+.workout-done-card .wdc-name {
+  font-family: var(--font-display); font-size: 28px; font-weight: 700;
+  margin: 0 0 4px; letter-spacing: -0.02em; line-height: 1.05;
+}
+.workout-done-card .wdc-congrats { font-size: 14px; opacity: .85; margin: 0 0 18px; }
+.workout-done-card .wdc-meta { display: flex; gap: 18px; margin: 0 0 18px; }
+.workout-done-card .wdc-meta .m b {
+  font-family: var(--font-display); font-size: 19px; font-weight: 700; display: block;
+}
+.workout-done-card .wdc-meta .m span { font-size: 11.5px; opacity: .78; }
+.workout-done-card .wdc-note {
+  font-size: 12px; opacity: .75; margin: -8px 0 16px;
+  background: oklch(1 0 0 / .10); border-radius: var(--r-sm); padding: 8px 12px;
+}
+.workout-done-card .wdc-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.workout-done-card .wdc-btn-primary {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--text, #f4f5fb); color: var(--bg, #0f1320);
+  font-weight: 700; font-size: 14px; padding: 12px 18px; border-radius: 999px;
+  text-decoration: none; transition: transform .14s;
+}
+.workout-done-card .wdc-btn-primary:active { transform: scale(.985); }
+.workout-done-card .wdc-btn-secondary {
+  display: inline-flex; align-items: center;
+  background: oklch(1 0 0 / .15); color: #fff;
+  font-weight: 600; font-size: 13px; padding: 12px 16px; border-radius: 999px;
+  text-decoration: none; transition: background .16s;
+}
+.workout-done-card .wdc-btn-secondary:hover { background: oklch(1 0 0 / .22); }
+.workout-done-card .ring-deco {
+  position: absolute; right: -40px; top: -40px;
+  width: 150px; height: 150px; border-radius: 50%;
+  border: 2px solid oklch(1 0 0 / .14); pointer-events: none;
+}
+.workout-done-card .ring-deco::after {
+  content: ""; position: absolute; inset: 20px; border-radius: 50%;
+  border: 2px solid oklch(1 0 0 / .10);
+}

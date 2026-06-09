@@ -48,10 +48,11 @@ Rails.application.routes.draw do
       post   "workout_days/:workout_day_id/exercises",        to: "workout_day_exercises#create"
       patch  "workout_days/:workout_day_id/exercises/reorder", to: "workout_day_exercises#reorder"
 
-      resources :workout_sessions, only: [:index, :create] do
+      resources :workout_sessions, only: [:index, :create, :update] do
         collection do
           get :stats
           get :personal_records
+          get :today
         end
       end
 
