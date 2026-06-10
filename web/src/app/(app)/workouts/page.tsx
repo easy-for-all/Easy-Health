@@ -10,6 +10,7 @@ import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-ses
 import { AITrainerBubble } from "@/shared/components/ai-trainer";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
+import { RenameWorkoutModal } from "@/shared/components/workout/rename-workout-modal";
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 
@@ -24,6 +25,19 @@ const MUSCLE_COLORS: Record<string, string> = {
 };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function workoutDisplayName(day: WorkoutDay, idx: number): string {
+  return day.custom_name || day.name || `Treino ${LETTERS[idx] ?? idx + 1}`;
+}
+
+function formatLastCompleted(dateStr: string | null | undefined): string | undefined {
+  if (!dateStr) return undefined;
+  const daysAgo = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  if (daysAgo === 0) return "Última vez: hoje";
+  if (daysAgo === 1) return "Última vez: ontem";
+  if (daysAgo < 7) return `Última vez: há ${daysAgo} dias`;
+  return `Última vez: ${new Date(dateStr).toLocaleDateString("pt-BR")}`;
+}
 
 function recommendedDayId(plan: WorkoutPlan, sessions: WorkoutSession[]): number | null {
   if (!sessions.length) return plan.days[0]?.id ?? null;
@@ -67,6 +81,7 @@ function WorkoutsContent() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [activePhase, setActivePhase] = useState<string | null>(null);
+  const [renamingDay, setRenamingDay] = useState<WorkoutDay | null>(null);
 
   useEffect(() => {
     try {
@@ -114,6 +129,16 @@ function WorkoutsContent() {
     }
   }
 
+  async function handleRename(dayId: number, customName: string) {
+    const resp = await api.patch<{ id: number; custom_name: string | null }>(
+      `/api/v1/workout_days/${dayId}/rename`,
+      { custom_name: customName }
+    );
+    setPlan((p) =>
+      p ? { ...p, days: p.days.map((d) => d.id === dayId ? { ...d, custom_name: resp.custom_name } : d) } : p
+    );
+  }
+
   const mostExecutedDays = useMemo(() => {
     if (!plan?.days || !sessions.length) return [];
     const freq: Record<number, number> = {};
@@ -141,20 +166,34 @@ function WorkoutsContent() {
 
   return (
     <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>Treinos</h1>
-        <Link
-          href="/workout/quick"
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            background: "var(--primary-soft)", color: "var(--primary)",
-            borderRadius: "var(--r-pill)", padding: "8px 14px",
-            fontSize: 13, fontWeight: 700, textDecoration: "none",
-            border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .25)",
-          }}
-        >
-          ⚡ Rápido
-        </Link>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", margin: "0 0 12px" }}>Treinos</h1>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link
+            href="/workout/quick"
+            style={{
+              flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+              background: "var(--primary-soft)", color: "var(--primary)",
+              borderRadius: "var(--r-pill)", padding: "10px 14px",
+              fontSize: 13, fontWeight: 700, textDecoration: "none",
+              border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .25)",
+            }}
+          >
+            ⚡ Treino Rápido
+          </Link>
+          <button
+            onClick={() => router.push("/plan?wizard=1")}
+            style={{
+              flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+              background: "var(--surface)", color: "var(--text)",
+              borderRadius: "var(--r-pill)", padding: "10px 14px",
+              fontSize: 13, fontWeight: 700,
+              border: "1px solid var(--border)", cursor: "pointer",
+            }}
+          >
+            ✨ Replanejar com IA
+          </button>
+        </div>
       </div>
 
       {/* Active session card */}
@@ -237,11 +276,12 @@ function WorkoutsContent() {
               <WorkoutRow
                 key={day.id}
                 badge={LETTERS[idx] ?? String(idx + 1)}
-                name={day.name}
-                sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
+                name={workoutDisplayName(day, idx)}
+                sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
                 tags={day.muscle_groups?.slice(0, 2)}
                 favorited={day.favorited}
                 onFavorite={() => toggleFavorite(day.id)}
+                onRename={() => setRenamingDay(day)}
                 onClick={() => router.push(`/workout/today?day=${day.id}`)}
               />
             ))}
@@ -276,11 +316,12 @@ function WorkoutsContent() {
                       <WorkoutRow
                         key={day.id}
                         badge={LETTERS[idx] ?? String(idx + 1)}
-                        name={day.name}
-                        sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
+                        name={workoutDisplayName(day, idx)}
+                        sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
                         tags={day.muscle_groups?.slice(0, 2)}
                         favorited={day.favorited}
                         onFavorite={() => toggleFavorite(day.id)}
+                        onRename={() => setRenamingDay(day)}
                         onClick={() => router.push(`/workout/today?day=${day.id}`)}
                       />
                     );
@@ -300,11 +341,12 @@ function WorkoutsContent() {
                       <WorkoutRow
                         key={`freq-${day.id}`}
                         badge={LETTERS[idx] ?? String(idx + 1)}
-                        name={day.name}
-                        sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
+                        name={workoutDisplayName(day, idx)}
+                        sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
                         tags={day.muscle_groups?.slice(0, 2)}
                         favorited={day.favorited}
                         onFavorite={() => toggleFavorite(day.id)}
+                        onRename={() => setRenamingDay(day)}
                         onClick={() => router.push(`/workout/today?day=${day.id}`)}
                       />
                     );
@@ -319,11 +361,12 @@ function WorkoutsContent() {
                 <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", marginBottom: 8 }}>⏱ Último executado</p>
                 <WorkoutRow
                   badge={LETTERS[plan!.days.findIndex((d) => d.id === lastExecutedDay.id)] ?? "?"}
-                  name={lastExecutedDay.name}
-                  sub={lastExecutedDay.exercise_count ? `${lastExecutedDay.exercise_count} exercícios` : undefined}
+                  name={workoutDisplayName(lastExecutedDay, plan!.days.findIndex((d) => d.id === lastExecutedDay.id))}
+                  sub={formatLastCompleted(lastExecutedDay.last_completed_at) ?? (lastExecutedDay.exercise_count ? `${lastExecutedDay.exercise_count} exercícios` : undefined)}
                   tags={lastExecutedDay.muscle_groups?.slice(0, 2)}
                   favorited={lastExecutedDay.favorited}
                   onFavorite={() => toggleFavorite(lastExecutedDay.id)}
+                  onRename={() => setRenamingDay(lastExecutedDay)}
                   onClick={() => router.push(`/workout/today?day=${lastExecutedDay.id}`)}
                 />
               </div>
@@ -366,22 +409,13 @@ function WorkoutsContent() {
         )}
       </section>
 
-      {/* Actions */}
-      <section style={{ marginTop: 28 }}>
-        <button
-          onClick={() => router.push("/plan?wizard=1")}
-          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: 16, cursor: "pointer", color: "var(--text)" }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 24 }}>✨</span>
-            <div style={{ textAlign: "left" }}>
-              <p style={{ fontWeight: 700, margin: 0 }}>Replanejar com IA</p>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Gere um novo plano baseado no seu perfil</p>
-            </div>
-          </div>
-          <span style={{ color: "var(--text-dim)", fontSize: 20 }}>›</span>
-        </button>
-      </section>
+      <RenameWorkoutModal
+        open={!!renamingDay}
+        currentName={renamingDay?.custom_name ?? ""}
+        defaultName={renamingDay ? (renamingDay.name || `Treino ${LETTERS[plan!.days.findIndex((d) => d.id === renamingDay.id)] ?? ""}`) : ""}
+        onSave={(name) => handleRename(renamingDay!.id, name)}
+        onClose={() => setRenamingDay(null)}
+      />
     </div>
   );
 }

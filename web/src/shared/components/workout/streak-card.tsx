@@ -9,9 +9,10 @@ type StreakCardProps = {
   weeklySessions: number;
   weeklyGoal: number;
   todayIndex?: number; // 0 = Sunday…6 = Saturday (JS getDay)
+  completedDayIndices?: number[]; // Mon=0..Sun=6, actual days completed this week
 };
 
-export function StreakCard({ streak, weeklySessions, weeklyGoal, todayIndex }: StreakCardProps) {
+export function StreakCard({ streak, weeklySessions, weeklyGoal, todayIndex, completedDayIndices }: StreakCardProps) {
   const today = todayIndex ?? new Date().getDay();
   // Map JS Sunday=0 to our Mon-first display (Mon=0…Sun=6)
   const todayDisplay = today === 0 ? 6 : today - 1;
@@ -35,7 +36,12 @@ export function StreakCard({ streak, weeklySessions, weeklyGoal, todayIndex }: S
 
       <div className="sk-week">
         {WEEK_LABELS.map((label, i) => {
-          const isDone = i < weeklySessions;
+          const isFuture = i > todayDisplay;
+          const isDone = isFuture
+            ? false
+            : completedDayIndices
+              ? completedDayIndices.includes(i)
+              : i < weeklySessions;
           const isToday = i === todayDisplay;
           const dotClass = ["sk-dot", isDone ? "done" : "", isToday && !isDone ? "today" : ""].filter(Boolean).join(" ");
           return (

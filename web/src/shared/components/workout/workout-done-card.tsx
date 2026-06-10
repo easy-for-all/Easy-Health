@@ -5,6 +5,12 @@ import type { WorkoutSession } from "@/shared/types/workout";
 import type { WorkoutDay } from "@/shared/types/workout";
 import "./workout-ui.css";
 
+const MUSCLE_LABELS: Record<string, string> = {
+  chest: "Peito", back: "Costas", shoulders: "Ombros",
+  biceps: "Bíceps", triceps: "Tríceps", legs: "Pernas", core: "Core",
+  forearms: "Antebraços", calves: "Panturrilhas", glutes: "Glúteos", trapezius: "Trapézio",
+};
+
 type WorkoutDoneCardProps = {
   session: WorkoutSession;
   suggestedDay?: WorkoutDay | null;
@@ -21,6 +27,11 @@ const CONGRATS = [
 export function WorkoutDoneCard({ session, suggestedDay }: WorkoutDoneCardProps) {
   const congrats = CONGRATS[session.id % CONGRATS.length];
   const isDifferentFromSuggested = suggestedDay && session.workout_day_id !== suggestedDay.id;
+  const sessionMuscles = [...new Set(
+    (session.exercise_logs ?? [])
+      .map((l) => (l as { muscle_group?: string | null }).muscle_group)
+      .filter((m): m is string => !!m)
+  )];
 
   return (
     <div className="workout-done-card">
@@ -30,6 +41,13 @@ export function WorkoutDoneCard({ session, suggestedDay }: WorkoutDoneCardProps)
 
       <h2 className="wdc-name">{session.workout_day_name}</h2>
       <p className="wdc-congrats">{congrats}</p>
+      {sessionMuscles.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "4px 0 8px" }}>
+          {sessionMuscles.slice(0, 4).map((m) => (
+            <span key={m} className="tag-chip muscle">{MUSCLE_LABELS[m] ?? m}</span>
+          ))}
+        </div>
+      ) : null}
 
       <div className="wdc-meta">
         {session.duration_minutes > 0 && (

@@ -549,7 +549,17 @@ function WorkoutTodayContent() {
 
     const weightBySet = [...state.weight_by_set];
     if (currentSet < state.planned_sets && !weightBySet[currentSet]) {
-      weightBySet[currentSet] = currentWeight;
+      const isCurrentWarmup = state.warmup_by_set?.[currentSet - 1] ?? false;
+      if (!isCurrentWarmup) {
+        weightBySet[currentSet] = currentWeight;
+      } else {
+        // warmup: restore last non-warmup weight so the next normal set is not contaminated
+        const lastNormalWeight = state.weight_by_set
+          .filter((_, i) => !(state.warmup_by_set?.[i]))
+          .filter(Boolean)
+          .at(-1);
+        weightBySet[currentSet] = lastNormalWeight ?? "";
+      }
     }
 
     updateRuntime(exercise.workout_day_exercise_id, { reps_by_set: repsBySet, weight_by_set: weightBySet });
@@ -1294,7 +1304,7 @@ function ChooseScreen({
                   </span>
                   <button className="flex-1 text-left" onClick={() => onChoose(day)}>
                     <div className="flex items-center gap-2">
-                      <p className="font-semibold text-white">{day.name}</p>
+                      <p className="font-semibold text-white">{day.custom_name || day.name}</p>
                       {isRecommended && (
                         <span className="rounded-full bg-primary-500 px-2 py-0.5 text-xs font-semibold text-white">Hoje</span>
                       )}
@@ -1475,7 +1485,7 @@ function OverviewScreen({
           ✨ Dicas IA
         </button>
       </div>
-      <h1 className="text-2xl font-bold text-white">{day.name}</h1>
+      <h1 className="text-2xl font-bold text-white">{day.custom_name || day.name}</h1>
       <p className="mt-1 text-sm text-slate-400">{exercises.length} exercícios</p>
 
       <div className="mt-4 rounded-2xl border border-primary-500/30 bg-primary-500/10 p-4">
@@ -1939,7 +1949,7 @@ function DoneScreen({
           <AITrainerAvatar mood="celebrating" size="lg" />
         </div>
         <h1 className="mt-2 text-2xl font-bold text-white">Treino concluído!</h1>
-        <p className="mt-1 text-slate-400">{day.name}</p>
+        <p className="mt-1 text-slate-400">{day.custom_name || day.name}</p>
         {saving && <p className="mt-2 text-xs text-primary-500">Salvando...</p>}
       </motion.div>
 
@@ -2063,7 +2073,7 @@ function DoneScreen({
         {/* Share */}
         <motion.div variants={staggerItem}>
           <ShareButton
-            workoutName={day.name}
+            workoutName={day.custom_name || day.name}
             durationMinutes={duration}
             volumeKg={totalVolume}
             exerciseCount={exercises.length}
@@ -2186,11 +2196,17 @@ function lastExerciseLog(sessions: WorkoutSession[], exerciseId: number) {
 function lastUsedWeight(sessions: WorkoutSession[], exerciseId: number): string | undefined {
   const result = lastExerciseLog(sessions, exerciseId);
   if (!result) return undefined;
-  const log = result.log;
+  const { log } = result;
   const bySet = log.weight_by_set;
+  const warmupFlags: boolean[] = (log as { is_warmup_by_set?: boolean[] }).is_warmup_by_set ?? [];
   if (Array.isArray(bySet) && bySet.length > 0) {
-    const last = bySet[bySet.length - 1];
+    // exclude warmup sets when deriving the suggested weight
+    const normalWeights = bySet.filter((_, i) => !warmupFlags[i]).filter(Boolean);
+    const last = normalWeights.at(-1);
     if (last && Number(last) > 0) return String(last);
+    // fallback: any weight if all were warmup
+    const anyLast = bySet.filter(Boolean).at(-1);
+    if (anyLast && Number(anyLast) > 0) return String(anyLast);
   }
   if (log.weight_kg && log.weight_kg > 0) return String(log.weight_kg);
   return undefined;

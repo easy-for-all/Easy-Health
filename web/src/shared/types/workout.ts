@@ -24,10 +24,12 @@ export interface WorkoutDay {
   position?: number;
   day_of_week: number;
   name: string;
+  custom_name?: string | null;
   favorited?: boolean;
   muscle_groups?: string[];
   exercise_types?: string[];
   exercise_count?: number;
+  last_completed_at?: string | null;
   exercises?: WorkoutDayExercise[];
 }
 
