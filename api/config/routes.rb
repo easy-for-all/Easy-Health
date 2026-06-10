@@ -31,6 +31,7 @@ Rails.application.routes.draw do
       post "quick_workouts",            to: "quick_workouts#create"
       post "workout_days/:id/duplicate",       to: "workout_plans#duplicate_day"
       patch "workout_days/:id/toggle_favorite", to: "workout_days#toggle_favorite"
+      patch "workout_days/:id/rename",          to: "workout_days#rename"
 
       resources :exercises, only: [:index] do
         collection { post :ai_substitute }

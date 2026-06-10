@@ -25,6 +25,19 @@ function estimateMinutes(exerciseCount: number): number {
   return Math.round((exerciseCount * 4 + 10) / 5) * 5;
 }
 
+function completedWeekDayIndices(dates: string[]): number[] {
+  const now = new Date();
+  const indices = new Set<number>();
+  dates.forEach((iso) => {
+    const d = new Date(iso);
+    if (d <= now) {
+      const jsDay = d.getDay(); // 0=Sun..6=Sat
+      indices.add(jsDay === 0 ? 6 : jsDay - 1); // Mon=0..Sun=6
+    }
+  });
+  return [...indices];
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -32,6 +45,7 @@ export default function DashboardPage() {
   const [streak, setStreak] = useState(0);
   const [weeklySessions, setWeeklySessions] = useState(0);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [weeklySessionDates, setWeeklySessionDates] = useState<string[]>([]);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [todaySession, setTodaySession] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +58,7 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([
       api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-      api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number }>(
+      api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[] }>(
         "/api/v1/workout_sessions/stats"
       ).catch(() => null),
       api.get<{ suggestion: string; reason: string }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
@@ -55,6 +69,7 @@ export default function DashboardPage() {
       setStreak(s?.streak ?? 0);
       setWeeklySessions(s?.weekly_sessions ?? 0);
       setWeeklyGoal(s?.weekly_goal ?? 3);
+      setWeeklySessionDates(s?.weekly_session_dates ?? []);
       if (ai?.suggestion) {
         setAiInsight(`${ai.suggestion}${ai.reason ? ` <b>—</b> ${ai.reason}` : ""}`);
       }
@@ -152,8 +167,9 @@ export default function DashboardPage() {
         ) : (
           <HeroWorkout
             dayLabel={`${todayLabel} · TREINO`}
-            workoutName={todayDay?.name ?? "Treinar agora"}
+            workoutName={todayDay ? (todayDay.custom_name || todayDay.name) : "Treinar agora"}
             workoutSub={todayDay ? undefined : `${plan?.days?.length ?? 0} treinos no plano`}
+            muscleGroups={todayDay?.muscle_groups}
             exerciseCount={todayDay?.exercise_count}
             estimatedMin={todayDay?.exercise_count ? estimateMinutes(todayDay.exercise_count) : undefined}
             href={todayDay ? `/workout/today?day=${todayDay.id}` : "/workout/today"}
@@ -168,6 +184,7 @@ export default function DashboardPage() {
           streak={streak}
           weeklySessions={weeklySessions}
           weeklyGoal={weeklyGoal}
+          completedDayIndices={completedWeekDayIndices(weeklySessionDates)}
         />
 
         {/* Workout list */}
@@ -184,7 +201,7 @@ export default function DashboardPage() {
                 <WorkoutRow
                   key={day.id}
                   badge={LETTERS[idx] ?? String(idx + 1)}
-                  name={day.name}
+                  name={day.custom_name || day.name || `Treino ${LETTERS[idx] ?? idx + 1}`}
                   sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
                   tags={day.muscle_groups?.slice(0, 2)}
                   onClick={() => router.push(`/workout/today?day=${day.id}`)}

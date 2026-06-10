@@ -121,32 +121,36 @@ module Api
           active: plan.active,
           created_at: plan.created_at,
           days_count: days.count,
-          days: days.map { |d| { id: d.id, name: d.name, exercise_count: d.workout_day_exercises.count } }
+          days: days.map { |d| { id: d.id, name: d.name, custom_name: d.custom_name, exercise_count: d.workout_day_exercises.count } }
         }
       end
 
       def serialize_plan(plan)
         log = plan.ai_training_decision_log
+        days = plan.workout_days.order(Arel.sql("COALESCE(position, day_of_week) ASC")).to_a
+        last_completed = last_completed_at_by_day(days.map(&:id))
         {
           id: plan.id,
           active: plan.active,
           ai_rationale:       log&.rationale,
           ai_training_method: log&.training_method,
-          days: plan.workout_days.order(Arel.sql("COALESCE(position, day_of_week) ASC")).map { |d| serialize_day(d) }
+          days: days.map { |d| serialize_day(d, last_completed[d.id]) }
         }
       end
 
-      def serialize_day(day)
+      def serialize_day(day, last_completed_at = nil)
         exercises = day.workout_day_exercises.includes(:exercise)
         {
           id: day.id,
           position: day.position,
           day_of_week: day.day_of_week,
           name: day.name,
+          custom_name: day.custom_name,
           favorited: day.favorited,
           muscle_groups: exercises.map { |wde| wde.exercise.muscle_group }.compact.uniq,
           exercise_types: exercises.map { |wde| wde.exercise.exercise_type }.compact.uniq,
-          exercise_count: exercises.count
+          exercise_count: exercises.count,
+          last_completed_at: last_completed_at
         }
       end
 
@@ -163,7 +167,9 @@ module Api
           position: day.position,
           day_of_week: day.day_of_week,
           name: day.name,
+          custom_name: day.custom_name,
           favorited: day.favorited,
+          last_completed_at: last_completed_at_by_day([day.id])[day.id],
           exercises: wdes.map do |wde|
             {
               workout_day_exercise_id: wde.id,
@@ -208,6 +214,17 @@ module Api
         rows.each_with_object({}) do |row, hash|
           hash[row["exercise_id"].to_i] = row["completed_at"]
         end
+      end
+
+      # Returns hash { workout_day_id => completed_at } — last session per day for current user
+      def last_completed_at_by_day(day_ids)
+        return {} if day_ids.empty?
+
+        WorkoutSession
+          .where(user_id: current_user.id, workout_day_id: day_ids)
+          .select("DISTINCT ON (workout_day_id) workout_day_id, completed_at")
+          .order("workout_day_id, completed_at DESC")
+          .each_with_object({}) { |s, h| h[s.workout_day_id] = s.completed_at }
       end
 
       include ExerciseImageHelper

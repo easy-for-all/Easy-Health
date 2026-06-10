@@ -3,10 +3,17 @@
 import Link from "next/link";
 import "./workout-ui.css";
 
+const MUSCLE_LABELS: Record<string, string> = {
+  chest: "Peito", back: "Costas", shoulders: "Ombros",
+  biceps: "Bíceps", triceps: "Tríceps", legs: "Pernas", core: "Core",
+  forearms: "Antebraços", calves: "Panturrilhas", glutes: "Glúteos", trapezius: "Trapézio",
+};
+
 type HeroWorkoutProps = {
   dayLabel: string;
   workoutName: string;
   workoutSub?: string;
+  muscleGroups?: string[];
   exerciseCount?: number;
   estimatedMin?: number;
   href?: string;
@@ -17,11 +24,14 @@ export function HeroWorkout({
   dayLabel,
   workoutName,
   workoutSub,
+  muscleGroups,
   exerciseCount,
   estimatedMin,
   href = "/workout/today",
   onClick,
 }: HeroWorkoutProps) {
+  const uniqueMuscles = muscleGroups ? [...new Set(muscleGroups.filter(Boolean))] : [];
+
   const inner = (
     <div className="hero-workout">
       <div className="hw-top">
@@ -30,6 +40,15 @@ export function HeroWorkout({
       </div>
       <h2>{workoutName}</h2>
       {workoutSub && <p className="hw-sub">{workoutSub}</p>}
+      {uniqueMuscles.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "8px 0 4px" }}>
+          {uniqueMuscles.slice(0, 4).map((m) => (
+            <span key={m} className="tag-chip muscle">{MUSCLE_LABELS[m] ?? m}</span>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontSize: 12, color: "oklch(1 0 0 / 0.45)", margin: "4px 0" }}>Grupamentos não definidos</p>
+      )}
       {(exerciseCount !== undefined || estimatedMin !== undefined) && (
         <div className="hw-meta">
           {exerciseCount !== undefined && (

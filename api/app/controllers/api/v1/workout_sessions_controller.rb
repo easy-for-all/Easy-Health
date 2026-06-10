@@ -46,7 +46,9 @@ module Api
 
       def stats
         sessions = current_user.workout_sessions.order(completed_at: :desc)
-        weekly = sessions.select { |s| s.completed_at >= 7.days.ago }
+        week_start = Time.current.beginning_of_week(:monday)
+        week_end   = Time.current.end_of_week(:monday)
+        weekly = sessions.select { |s| s.completed_at >= week_start && s.completed_at <= week_end }
         goal = current_user.health_profile&.training_days_per_week || 3
         total_volume = calculate_total_volume(sessions)
         streak_svc = WorkoutStreakService.new(sessions)
@@ -58,7 +60,8 @@ module Api
           last_activity_at: streak_svc.last_activity_at,
           weekly_sessions: weekly.count,
           weekly_goal: goal,
-          total_volume_kg: total_volume
+          total_volume_kg: total_volume,
+          weekly_session_dates: weekly.map { |s| s.completed_at.iso8601 }
         }
       end
 

@@ -74,7 +74,9 @@ export function BottomNav() {
         borderTop: "1px solid var(--border)",
         background: "var(--glass, oklch(0.185 0.026 262 / 0.72))",
         backdropFilter: "blur(16px)",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        paddingLeft: "env(safe-area-inset-left, 0px)",
+        paddingRight: "env(safe-area-inset-right, 0px)",
       }}
     >
       <div style={{ display: "flex" }}>
