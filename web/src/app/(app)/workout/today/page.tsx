@@ -179,8 +179,12 @@ function WorkoutTodayContent() {
             workoutDayExerciseId: ex.workout_day_exercise_id,
             exerciseName: ex.name,
             muscleGroup: ex.muscle_group,
+            exerciseType: ex.exercise_type,
             currentIndex,
-            setInfo: `Série ${currentSet} de ${runtimeFor(exerciseRuntime, ex).planned_sets}`,
+            setInfo: (() => {
+              const ps = runtimeFor(exerciseRuntime, ex).planned_sets;
+              return ps ? `Série ${currentSet} de ${ps}` : `Série ${currentSet}`;
+            })(),
           },
           (wdeId, newExerciseId) => swapDuringExercise(wdeId, newExerciseId)
         );

@@ -453,3 +453,77 @@
   .coach-msg { animation: none; }
   .coach-dots span { animation: none; opacity: 1; }
 }
+
+/* ─── Alt card: tags row ─────────────────────────────────────────────────────── */
+.coach-alt-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.coach-alt-tag--type {
+  color: oklch(0.755 0.018 262);
+  background: oklch(0.755 0.018 262 / 0.12);
+}
+
+/* ─── Alt card: text swap button ────────────────────────────────────────────── */
+.coach-alt-swap-btn {
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid oklch(0.685 0.17 258 / 0.5);
+  background: oklch(0.685 0.17 258 / 0.10);
+  color: oklch(0.685 0.17 258);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  align-self: flex-start;
+}
+
+.coach-alt-swap-btn:hover:not(:disabled) {
+  background: oklch(0.685 0.17 258 / 0.22);
+  border-color: oklch(0.685 0.17 258);
+}
+
+.coach-alt-swap-btn:disabled {
+  cursor: default;
+}
+
+.coach-alt-swap-btn--applied {
+  border-color: oklch(0.78 0.16 158 / 0.5);
+  background: oklch(0.78 0.16 158 / 0.10);
+  color: oklch(0.78 0.16 158);
+}
+
+/* ─── Quick replies inside message bubble ────────────────────────────────────── */
+.coach-quick-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.coach-quick-reply-btn {
+  padding: 9px 16px;
+  border-radius: 14px;
+  border: 1px solid oklch(0.685 0.17 258 / 0.35);
+  background: oklch(0.685 0.17 258 / 0.08);
+  color: oklch(0.685 0.17 258);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.coach-quick-reply-btn:hover:not(:disabled) {
+  background: oklch(0.685 0.17 258 / 0.18);
+  border-color: oklch(0.685 0.17 258 / 0.6);
+}
+
+.coach-quick-reply-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
