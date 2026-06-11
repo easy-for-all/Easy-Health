@@ -239,10 +239,19 @@ export default function PlanPage() {
     if (cSplits) body.custom_splits    = cSplits;
     body.training_location = trainingLocation;
 
-    // Set activity_preferences explicitly so the backend never falls back to stale profile data
+    // Set activity_preferences explicitly so the backend never falls back to stale profile data.
+    // Sub-types of cardio (bicicleta, eliptico, remo, escada) are not valid ActivityType values —
+    // normalize them to "cardio" while keeping cardio_type for workout generation details.
+    const toActivityPref = (ct: CardioType | undefined): string => {
+      const map: Partial<Record<CardioType, string>> = {
+        corrida: "corrida", caminhada: "caminhada",
+        natacao: "natacao", hiit: "hiit",
+      };
+      return (ct && map[ct]) ?? "cardio";
+    };
     if (mod === "funcional")  body.activity_preferences = ["funcional"];
-    if (mod === "cardio")     body.activity_preferences = [cType ?? "cardio"];
-    if (mod === "misto")      body.activity_preferences = ["musculacao", cType ?? "cardio"];
+    if (mod === "cardio")     body.activity_preferences = [toActivityPref(cType)];
+    if (mod === "misto")      body.activity_preferences = ["musculacao", toActivityPref(cType)];
     if (mod === "musculacao") body.activity_preferences = ["musculacao"];
     // ai_choice: omit so the backend uses its own logic
 

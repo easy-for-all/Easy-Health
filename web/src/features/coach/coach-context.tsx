@@ -9,6 +9,7 @@ export type CoachMessage = {
   content: string;
   alternatives?: ExerciseAlternative[];
   appliedAlternativeId?: number;
+  quickReplies?: string[];
 };
 
 export type ExerciseAlternative = {
@@ -26,6 +27,7 @@ export type ExecContext = {
   workoutDayExerciseId: number;
   exerciseName: string;
   muscleGroup: string | null;
+  exerciseType?: string;
   currentIndex: number;
   setInfo?: string;
 };
@@ -50,6 +52,32 @@ const CoachContext = createContext<CoachContextType | null>(null);
 
 const SWAP_REGEX =
   /(outr[ao]\s+(op[çc][ãa]o|exerc|alternativa)|trocar|substitu|alternativ|outro\s+exerc|n[ãa]o\s+gostei|enjoei)/i;
+
+// Detects when the user wants a cardio modality (bike, running, etc.)
+const MODALITY_CHANGE_REGEX =
+  /\b(bike|bicicleta|corrida|correr|caminhada|nata[çc][ãa]o|nadar|el[íi]ptico|eliptico|esteira|remo|escada)\b/i;
+
+// Matches "Trocar este exercício por X" quick-reply
+const CARDIO_SWAP_REPLY_REGEX = /^trocar\s+este\s+exerc[íi]cio\s+por/i;
+
+// Matches "Manter treino atual" quick-reply
+const KEEP_TRAINING_REGEX = /^manter\s+treino/i;
+
+// Matches "Criar treino rápido de X" quick-reply
+const QUICK_WORKOUT_REGEX = /^criar\s+treino\s+r[áa]pido/i;
+
+// Exercise types that are classified as strength (not cardio)
+const STRENGTH_EXERCISE_TYPES = new Set(["musculacao", "strength"]);
+
+function detectRequestedCardio(text: string): string {
+  if (/bike|bicicleta/i.test(text)) return "bike";
+  if (/corrida|correr/i.test(text)) return "corrida";
+  if (/caminhada/i.test(text)) return "caminhada";
+  if (/nata/i.test(text)) return "natação";
+  if (/eliptico|el[íi]ptico|esteira/i.test(text)) return "elíptico";
+  if (/remo/i.test(text)) return "remo";
+  return "cardio";
+}
 
 function uid() {
   return Math.random().toString(36).slice(2);
@@ -113,56 +141,136 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
       setMessages((prev) => [...prev, userMsg]);
       setBusy(true);
 
-      const isSwap = currentScreen === "exec" && SWAP_REGEX.test(text);
+      const isInExec = currentScreen === "exec" && !!execContext;
 
       try {
-        if (isSwap && execContext) {
+        // ── Quick-reply: "Manter treino atual" ───────────────────────────────
+        if (KEEP_TRAINING_REGEX.test(text)) {
+          setMessages((prev) => [
+            ...prev,
+            { id: uid(), role: "assistant", content: "Combinado! Qualquer dúvida sobre o treino, estou aqui. 💪" },
+          ]);
+          return;
+        }
+
+        // ── Quick-reply: "Criar treino rápido de X" ─────────────────────────
+        if (QUICK_WORKOUT_REGEX.test(text)) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content:
+                "Para criar um treino rápido, acesse **Treinos → Treino Rápido** no menu. Ou pode continuar o treino atual!",
+              quickReplies: ["Manter treino atual"],
+            },
+          ]);
+          return;
+        }
+
+        // ── Quick-reply: "Trocar este exercício por X" ───────────────────────
+        if (CARDIO_SWAP_REPLY_REGEX.test(text) && isInExec) {
           const params = new URLSearchParams({
-            muscle_group: execContext.muscleGroup ?? "",
-            exclude_ids: String(execContext.exerciseId),
+            exercise_type: "cardio",
+            exclude_ids: String(execContext!.exerciseId),
             per_page: "3",
           });
           const alts = await api.get<ExerciseAlternative[]>(`/api/v1/exercises?${params}`);
-          const intro = `Aqui estão 3 opções para substituir o **${execContext.exerciseName}**:`;
-          const assistantMsg: CoachMessage = {
-            id: uid(),
-            role: "assistant",
-            content: intro,
-            alternatives: alts.slice(0, 3),
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
-        } else {
-          const history = messages
-            .concat(userMsg)
-            .slice(-6)
-            .map((m) => ({ role: m.role, content: m.content }));
-
-          const context = {
-            screen: currentScreen,
-            exercise_name: execContext?.exerciseName ?? "",
-            muscle_group: execContext?.muscleGroup ?? "",
-            set_info: execContext?.setInfo ?? "",
-          };
-
-          const data = await api.post<{ reply: string }>("/api/v1/coach/messages", {
-            messages: history,
-            context,
-          });
-
-          const assistantMsg: CoachMessage = {
-            id: uid(),
-            role: "assistant",
-            content: data.reply,
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content: `Aqui estão opções de cardio para substituir o **${execContext!.exerciseName}**:`,
+              alternatives: alts.slice(0, 3),
+            },
+          ]);
+          return;
         }
-      } catch {
-        const fallback: CoachMessage = {
-          id: uid(),
-          role: "assistant",
-          content: "Sem conexão com o servidor. Tente novamente em alguns segundos.",
+
+        // ── Modality change detected: user requests cardio while doing strength ──
+        const isModalityChange =
+          isInExec &&
+          execContext!.exerciseType &&
+          STRENGTH_EXERCISE_TYPES.has(execContext!.exerciseType) &&
+          MODALITY_CHANGE_REGEX.test(text);
+
+        if (isModalityChange) {
+          const requested = detectRequestedCardio(text);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content: `Boa! Você quer **${requested}** aqui no treino de hoje ou criar um treino separado?`,
+              quickReplies: [
+                `Trocar este exercício por ${requested}`,
+                `Criar treino rápido de ${requested}`,
+                "Manter treino atual",
+              ],
+            },
+          ]);
+          return;
+        }
+
+        // ── Normal swap: user asks for an alternative ────────────────────────
+        const isSwap = isInExec && SWAP_REGEX.test(text);
+
+        if (isSwap) {
+          const params = new URLSearchParams({
+            exclude_ids: String(execContext!.exerciseId),
+            per_page: "3",
+          });
+          // For cardio exercises filter by type; for strength filter by muscle group
+          if (execContext!.exerciseType === "cardio" || execContext!.exerciseType === "hiit") {
+            params.set("exercise_type", execContext!.exerciseType);
+          } else if (execContext!.muscleGroup) {
+            params.set("muscle_group", execContext!.muscleGroup);
+          }
+          const alts = await api.get<ExerciseAlternative[]>(`/api/v1/exercises?${params}`);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content: `Aqui estão 3 opções para substituir o **${execContext!.exerciseName}**:`,
+              alternatives: alts.slice(0, 3),
+            },
+          ]);
+          return;
+        }
+
+        // ── General Coach API call ────────────────────────────────────────────
+        const history = messages
+          .concat(userMsg)
+          .slice(-6)
+          .map((m) => ({ role: m.role, content: m.content }));
+
+        const context = {
+          screen: currentScreen,
+          exercise_name: execContext?.exerciseName ?? "",
+          muscle_group: execContext?.muscleGroup ?? "",
+          set_info: execContext?.setInfo ?? "",
         };
-        setMessages((prev) => [...prev, fallback]);
+
+        const data = await api.post<{ reply: string }>("/api/v1/coach/messages", {
+          messages: history,
+          context,
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          { id: uid(), role: "assistant", content: data.reply },
+        ]);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "assistant",
+            content: "Sem conexão com o servidor. Tente novamente em alguns segundos.",
+          },
+        ]);
       } finally {
         setBusy(false);
       }

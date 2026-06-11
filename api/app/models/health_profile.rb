@@ -27,7 +27,20 @@ class HealthProfile < ApplicationRecord
   validates :gender,             inclusion: { in: GENDERS },              allow_nil: true
   validate :activity_preferences_valid
 
+  before_validation :normalize_activity_preferences
+
   private
+
+  # Sub-types of cardio that are valid for cardio_type but not for activity_preferences.
+  # Normalize them to "cardio" so older clients and mobile don't break validation.
+  CARDIO_SUBTYPES = %w[bicicleta eliptico escada remo].freeze
+
+  def normalize_activity_preferences
+    return if activity_preferences.blank?
+    self.activity_preferences = activity_preferences.map do |pref|
+      CARDIO_SUBTYPES.include?(pref) ? "cardio" : pref
+    end
+  end
 
   def activity_preferences_valid
     return if activity_preferences.blank?

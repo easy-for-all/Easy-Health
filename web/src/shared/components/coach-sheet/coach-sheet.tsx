@@ -56,6 +56,17 @@ function TypingIndicator() {
   );
 }
 
+const MUSCLE_LABELS: Record<string, string> = {
+  chest: "Peito", back: "Costas", shoulders: "Ombros", biceps: "Bíceps",
+  triceps: "Tríceps", legs: "Pernas", core: "Core", glutes: "Glúteos",
+  calves: "Panturrilha", forearms: "Antebraço",
+};
+
+const EXERCISE_TYPE_LABELS: Record<string, string> = {
+  musculacao: "Força", cardio: "Cardio", hiit: "HIIT",
+  funcional: "Funcional", corrida: "Corrida", caminhada: "Caminhada",
+};
+
 function AltCard({
   alt,
   applied,
@@ -68,6 +79,8 @@ function AltCard({
   onApply: () => void;
 }) {
   const imgSrc = alt.gif_url || alt.image_url || `/exercise-images/${alt.exercise_type || "treino"}.svg`;
+  const muscleLabel = alt.muscle_group ? (MUSCLE_LABELS[alt.muscle_group] ?? alt.muscle_group) : null;
+  const typeLabel = EXERCISE_TYPE_LABELS[alt.exercise_type] ?? null;
 
   return (
     <div
@@ -90,36 +103,29 @@ function AltCard({
       <div className="coach-alt-info">
         <span className="coach-alt-name">{alt.name}</span>
         {alt.description && (
-          <span className="coach-alt-desc">{alt.description.slice(0, 72)}</span>
+          <span className="coach-alt-desc">{alt.description.slice(0, 80)}</span>
         )}
-        {alt.muscle_group && (
-          <span className="coach-alt-tag">{alt.muscle_group}</span>
-        )}
+        <div className="coach-alt-tags">
+          {muscleLabel && <span className="coach-alt-tag">{muscleLabel}</span>}
+          {typeLabel && muscleLabel !== typeLabel && (
+            <span className="coach-alt-tag coach-alt-tag--type">{typeLabel}</span>
+          )}
+        </div>
+        <button
+          onClick={onApply}
+          disabled={applied || dimmed}
+          aria-label={`Substituir por ${alt.name}`}
+          className={`coach-alt-swap-btn ${applied ? "coach-alt-swap-btn--applied" : ""}`}
+        >
+          {applied ? "✓ Substituído" : "Substituir exercício"}
+        </button>
       </div>
-
-      {/* apply button */}
-      <button
-        onClick={onApply}
-        disabled={applied || dimmed}
-        aria-label={`Aplicar ${alt.name}`}
-        className="coach-alt-apply"
-      >
-        {applied ? (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
-          </svg>
-        )}
-      </button>
     </div>
   );
 }
 
 function MessageBubble({ msg }: { msg: CoachMessage }) {
-  const { applySwap, close } = useCoach();
+  const { applySwap, close, sendMessage, busy } = useCoach();
   const isAi = msg.role === "assistant";
 
   if (isAi) {
@@ -150,6 +156,20 @@ function MessageBubble({ msg }: { msg: CoachMessage }) {
                   Ver na tela do treino →
                 </button>
               )}
+            </div>
+          )}
+          {msg.quickReplies && msg.quickReplies.length > 0 && (
+            <div className="coach-quick-replies">
+              {msg.quickReplies.map((reply) => (
+                <button
+                  key={reply}
+                  className="coach-quick-reply-btn"
+                  onClick={() => sendMessage(reply)}
+                  disabled={busy}
+                >
+                  {reply}
+                </button>
+              ))}
             </div>
           )}
         </div>
