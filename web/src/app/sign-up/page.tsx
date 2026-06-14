@@ -8,6 +8,20 @@ import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
 import { trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
 
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
+
 const PLAN_COPY: Record<PendingPlan, {
   label: string;
   price: string;
@@ -31,10 +45,14 @@ export default function SignUpPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsWarning, setTermsWarning] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
+
+  const passwordValid = password.length >= 8;
 
   useEffect(() => {
     trackEvent(EVENTS.SIGNUP_STARTED);
@@ -42,6 +60,10 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!acceptedTerms) {
+      setTermsWarning(true);
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -103,6 +125,26 @@ export default function SignUpPage() {
           </div>
         )}
 
+        {/* Google OAuth */}
+        <a
+          href={`${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2`}
+          className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-700 bg-slate-900 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M47.532 24.552c0-1.636-.143-3.2-.41-4.704H24.48v8.892h12.968c-.56 2.996-2.24 5.54-4.768 7.252v6.02h7.716c4.516-4.16 7.136-10.284 7.136-17.46z" fill="#4285F4"/>
+            <path d="M24.48 48c6.48 0 11.916-2.148 15.888-5.82l-7.716-6.02c-2.148 1.44-4.896 2.292-8.172 2.292-6.288 0-11.616-4.244-13.524-9.948H3.048v6.216C6.996 42.636 15.156 48 24.48 48z" fill="#34A853"/>
+            <path d="M10.956 28.504A14.51 14.51 0 0 1 10.2 24c0-1.568.264-3.088.756-4.504v-6.216H3.048A23.98 23.98 0 0 0 .48 24c0 3.876.924 7.536 2.568 10.72l7.908-6.216z" fill="#FBBC05"/>
+            <path d="M24.48 9.548c3.54 0 6.72 1.216 9.22 3.604l6.908-6.908C36.384 2.4 30.948 0 24.48 0 15.156 0 6.996 5.364 3.048 13.28l7.908 6.216c1.908-5.704 7.236-9.948 13.524-9.948z" fill="#EA4335"/>
+          </svg>
+          Continuar com Google
+        </a>
+
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-slate-800" />
+          <span className="text-xs text-slate-600">ou</span>
+          <div className="h-px flex-1 bg-slate-800" />
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <p className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
@@ -135,23 +177,39 @@ export default function SignUpPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-400">Senha</label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
-              placeholder="Mínimo 8 caracteres"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 pr-11 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
+                placeholder="Mínimo 8 caracteres"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
+                tabIndex={-1}
+                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+              >
+                <EyeIcon open={showPassword} />
+              </button>
+            </div>
+            {password.length > 0 && (
+              <p className={`mt-1.5 text-xs ${passwordValid ? "text-green-400" : "text-slate-500"}`}>
+                {passwordValid ? "✓" : "✗"} Mínimo 8 caracteres
+              </p>
+            )}
           </div>
 
           <label className="flex cursor-pointer items-start gap-3">
             <input
               type="checkbox"
               checked={acceptedTerms}
-              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              onChange={(e) => { setAcceptedTerms(e.target.checked); if (e.target.checked) setTermsWarning(false); }}
               className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-slate-600 text-primary-500 focus:ring-primary-500"
             />
             <span className="text-sm text-slate-400">
@@ -168,12 +226,16 @@ export default function SignUpPage() {
 
           <button
             type="submit"
-            disabled={loading || !acceptedTerms}
+            disabled={loading}
+            onClick={() => { if (!acceptedTerms) setTermsWarning(true); }}
             className="w-full rounded-full bg-primary-500 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
             style={{ boxShadow: "0 0 0 1px rgba(59,130,246,.35), 0 6px 20px rgba(59,130,246,.28)" }}
           >
             {loading ? "Criando conta..." : "Criar conta"}
           </button>
+          {termsWarning && !acceptedTerms && (
+            <p className="text-center text-xs text-amber-400">Aceite os termos para continuar</p>
+          )}
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">
