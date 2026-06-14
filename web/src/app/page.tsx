@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Footer } from "@/shared/components/footer";
 import { HeroCta } from "@/shared/components/hero-cta";
 import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
+import { LandingHeader } from "@/shared/components/landing-header";
 import { CONVERSIONS } from "@/shared/lib/analytics";
 
 export const metadata: Metadata = {
@@ -231,28 +232,7 @@ export default function LandingPage() {
       <AnalyticsTracker eventName="screen_view" params={{ screen_name: "home" }} />
 
       {/* ── NAV ── */}
-      <header style={{ position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", background: "oklch(0.155 0.022 262 / .82)", borderBottom: "1px solid var(--border)" }}>
-        <div style={{ margin: "0 auto", maxWidth: 1180, display: "flex", alignItems: "center", justifyContent: "space-between", height: 72, padding: "0 clamp(16px, 4vw, 32px)" }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 21, letterSpacing: "-0.01em", color: "var(--text)", textDecoration: "none" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="EasyHealth" style={{ width: 34, height: 34, borderRadius: 10 }} />
-            EasyHealth
-          </Link>
-          <nav style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {[{ href: "#funciona", label: "Como funciona" }, { href: "#planos", label: "Planos" }].map((l) => (
-              <a key={l.href} href={l.href} className="landing-nav-link sm:block" style={{ display: "none", fontWeight: 600, textDecoration: "none", padding: "8px 12px", fontSize: 15, transition: "color .15s" }}>
-                {l.label}
-              </a>
-            ))}
-            <Link href="/login" style={{ fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", padding: "8px 12px", fontSize: 15 }}>
-              Entrar
-            </Link>
-            <Link href="/sign-up" style={{ background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontWeight: 700, fontSize: 15, padding: "10px 20px", borderRadius: "var(--r-pill)", boxShadow: "var(--glow)", textDecoration: "none" }}>
-              Criar conta
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <LandingHeader />
 
       <main style={{ flex: 1 }}>
         {/* ── HERO ── */}

@@ -1,6 +1,7 @@
 class User < ApplicationRecord
   devise :database_authenticatable, :registerable,
-         :recoverable, :rememberable, :validatable
+         :recoverable, :rememberable, :validatable,
+         :omniauthable, omniauth_providers: [:google_oauth2]
 
   ACCOUNT_TYPES = %w[regular personal_trainer].freeze
   PROFILE_VISIBILITIES = %w[private public_limited public].freeze
@@ -50,6 +51,28 @@ class User < ApplicationRecord
   validates :email, presence: true, uniqueness: { case_sensitive: false }
   validates :account_type, inclusion: { in: ACCOUNT_TYPES }
   validates :profile_visibility, inclusion: { in: PROFILE_VISIBILITIES }
+
+  def self.from_omniauth(auth)
+    user = find_by(provider: auth.provider, uid: auth.uid)
+    user ||= find_by(email: auth.info.email)
+
+    if user
+      user.update(provider: auth.provider, uid: auth.uid) unless user.provider.present?
+      user
+    else
+      create!(
+        provider: auth.provider,
+        uid: auth.uid,
+        email: auth.info.email,
+        name: auth.info.name.presence || auth.info.email.split("@").first,
+        password: Devise.friendly_token[0, 20]
+      )
+    end
+  end
+
+  def password_required?
+    super && provider.blank?
+  end
 
   def personal_trainer?
     account_type == "personal_trainer"
