@@ -89,6 +89,15 @@
   width: 30px; height: 30px; border-radius: 9px;
   background: var(--hot-soft); display: grid; place-items: center; flex: none;
 }
+.streak-card .sk-streak-label {
+  font-size: 10px; color: var(--text-dim); font-weight: 500; margin: 1px 0 0;
+}
+.streak-card .sk-weekly-block {
+  text-align: right;
+}
+.streak-card .sk-weekly-label {
+  font-size: 10px; color: var(--text-dim); font-weight: 500; margin: 1px 0 0; text-align: right;
+}
 .streak-card .sk-frac {
   font-family: var(--font-display); font-weight: 700; font-size: 20px;
   color: var(--primary);
@@ -96,8 +105,11 @@
 .streak-card .sk-frac em {
   font-size: 13px; color: var(--text-dim); font-style: normal; font-weight: 600;
 }
+.streak-card .sk-divider {
+  height: 1px; background: var(--border); margin: 12px 0 10px;
+}
 .streak-card .sk-week {
-  display: flex; justify-content: space-between; margin-top: 14px;
+  display: flex; justify-content: space-between;
 }
 .streak-card .sk-day {
   display: flex; flex-direction: column; align-items: center; gap: 6px;

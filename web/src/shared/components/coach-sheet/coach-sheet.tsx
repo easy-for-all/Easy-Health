@@ -102,9 +102,11 @@ function AltCard({
       {/* info */}
       <div className="coach-alt-info">
         <span className="coach-alt-name">{alt.name}</span>
-        {alt.description && (
+        {alt.reason ? (
+          <span className="coach-alt-desc" style={{ color: "oklch(0.6 0.02 262)" }}>{alt.reason}</span>
+        ) : alt.description ? (
           <span className="coach-alt-desc">{alt.description.slice(0, 80)}</span>
-        )}
+        ) : null}
         <div className="coach-alt-tags">
           {muscleLabel && <span className="coach-alt-tag">{muscleLabel}</span>}
           {typeLabel && muscleLabel !== typeLabel && (

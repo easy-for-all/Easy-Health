@@ -26,7 +26,9 @@ const CONGRATS = [
 
 export function WorkoutDoneCard({ session, suggestedDay }: WorkoutDoneCardProps) {
   const congrats = CONGRATS[session.id % CONGRATS.length];
-  const isDifferentFromSuggested = suggestedDay && session.workout_day_id !== suggestedDay.id;
+  const isDifferentFromSuggested = suggestedDay &&
+    session.workout_day_id !== suggestedDay.id &&
+    session.workout_day_name !== suggestedDay.name;
   const sessionMuscles = [...new Set(
     (session.exercise_logs ?? [])
       .map((l) => (l as { muscle_group?: string | null }).muscle_group)
@@ -72,7 +74,7 @@ export function WorkoutDoneCard({ session, suggestedDay }: WorkoutDoneCardProps)
 
       {isDifferentFromSuggested && (
         <p className="wdc-note">
-          Você realizou o {session.workout_day_name}. O treino sugerido era {suggestedDay!.name}, mas sua atividade já foi registrada com sucesso.
+          Você realizou o {session.workout_day_name}. O treino sugerido era {suggestedDay!.name}.
         </p>
       )}
 

@@ -12,36 +12,40 @@ module Api
       OUTDOOR_EQUIPMENT = %w[bodyweight cardio].freeze
       ALL_MUSCLE_GROUPS  = %w[chest back legs shoulders biceps triceps core].freeze
 
-      def create
-        duration    = params[:duration_minutes].to_i.clamp(10, 90)
-        difficulty  = params[:difficulty].presence || "moderado"
-        location    = params[:location].presence || "gym"
-        raw_groups  = Array(params[:muscle_groups]).map(&:presence).compact
+      MODALITY_TO_EXERCISE_TYPE = {
+        "musculacao"  => "musculacao",
+        "funcional"   => "funcional",
+        "corrida"     => "cardio",
+        "bike"        => "cardio",
+        "cardio"      => "cardio",
+        "caminhada"   => "cardio",
+        "mobilidade"  => "funcional",
+        "alongamento" => "funcional",
+      }.freeze
 
-        muscle_groups = raw_groups.any? ? raw_groups : ALL_MUSCLE_GROUPS
+      CARDIO_MODALITIES = %w[corrida bike cardio caminhada].freeze
+      STRENGTH_MODALITIES = %w[musculacao funcional mobilidade alongamento].freeze
+
+      def create
+        duration   = params[:duration_minutes].to_i.clamp(10, 90)
+        difficulty = params[:difficulty].presence || "moderado"
+        location   = params[:location].presence || "academia"
+        modality   = params[:modality].presence || "ai_choice"
+
+        raw_groups     = Array(params[:muscle_groups]).map(&:presence).compact
+        muscle_groups  = raw_groups.any? ? raw_groups : ALL_MUSCLE_GROUPS
 
         exercise_count = (duration / 8.0).round.clamp(3, 12)
-        per_group      = [(exercise_count.to_f / muscle_groups.size).ceil, 1].max
         params_sr      = DIFFICULTY_PARAMS[difficulty] || DIFFICULTY_PARAMS["moderado"]
 
         fav_ids = current_user.user_favorite_exercises.pluck(:exercise_id)
 
-        chosen_exercises = []
-        muscle_groups.each do |group|
-          scope = Exercise.where(exercise_type: "musculacao", muscle_group: group)
-          scope = apply_location_filter(scope, location)
-          scope = scope.order(gif_presence_order, :id)
-          scope = scope.limit(per_group)
-          chosen_exercises.concat(scope.to_a)
-          break if chosen_exercises.size >= exercise_count
-        end
-
-        chosen_exercises = chosen_exercises.first(exercise_count)
+        chosen_exercises = build_exercises(modality, muscle_groups, location, exercise_count, fav_ids)
 
         render json: {
           day: {
             id: nil,
-            name: workout_name(muscle_groups, difficulty),
+            name: workout_name(modality, muscle_groups, difficulty),
             quick: true,
             exercises: chosen_exercises.each_with_index.map do |ex, idx|
               {
@@ -72,6 +76,30 @@ module Api
 
       private
 
+      def build_exercises(modality, muscle_groups, location, exercise_count, fav_ids)
+        exercise_type = MODALITY_TO_EXERCISE_TYPE[modality]
+
+        if exercise_type
+          scope = Exercise.where(exercise_type: exercise_type)
+          scope = apply_location_filter(scope, location)
+          fav_priority = fav_ids.any? ? Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END") : Arel.sql("1")
+          scope = scope.order(fav_priority, gif_presence_order, :id)
+          scope.limit(exercise_count).to_a
+        else
+          chosen = []
+          per_group = [(exercise_count.to_f / muscle_groups.size).ceil, 1].max
+          muscle_groups.each do |group|
+            group_scope = Exercise.where(exercise_type: "musculacao", muscle_group: group)
+            group_scope = apply_location_filter(group_scope, location)
+            fav_priority = fav_ids.any? ? Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END") : Arel.sql("1")
+            group_scope = group_scope.order(fav_priority, gif_presence_order, :id).limit(per_group)
+            chosen.concat(group_scope.to_a)
+            break if chosen.size >= exercise_count
+          end
+          chosen.first(exercise_count)
+        end
+      end
+
       def apply_location_filter(scope, location)
         case location
         when "casa" then scope.where(home_compatible: true)
@@ -84,18 +112,24 @@ module Api
         Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END")
       end
 
-      def workout_name(groups, difficulty)
-        label = case difficulty
-                when "iniciante" then "Iniciante"
-                when "intenso"   then "Intenso"
-                else "Moderado"
-                end
-        muscle_label = if groups == ALL_MUSCLE_GROUPS
-                         "Full Body"
-                       else
-                         groups.map(&:capitalize).join(" & ")
-                       end
-        "Treino Rápido — #{muscle_label} #{label}"
+      def workout_name(modality, groups, difficulty)
+        modality_labels = {
+          "musculacao"  => "Musculação",
+          "funcional"   => "Funcional",
+          "corrida"     => "Corrida",
+          "bike"        => "Bike",
+          "cardio"      => "Cardio",
+          "caminhada"   => "Caminhada",
+          "mobilidade"  => "Mobilidade",
+          "alongamento" => "Alongamento",
+        }
+        difficulty_label = case difficulty
+                           when "iniciante" then "Iniciante"
+                           when "intenso"   then "Intenso"
+                           else "Moderado"
+                           end
+        modality_label = modality_labels[modality] || "Full Body"
+        "Treino Rápido — #{modality_label} #{difficulty_label}"
       end
     end
   end

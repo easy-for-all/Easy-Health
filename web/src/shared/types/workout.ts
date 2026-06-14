@@ -36,6 +36,7 @@ export interface WorkoutDay {
 export interface WorkoutPlan {
   id: number;
   active: boolean;
+  created_at?: string | null;
   days: WorkoutDay[];
   ai_rationale?: string | null;
   ai_training_method?: string | null;

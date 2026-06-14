@@ -45,6 +45,10 @@ module AiAgents
         "Local: #{hp.training_location || 'não informado'}"
       ]
       parts << "Modalidade: #{hp.modality}" if hp.modality
+
+      fav_names = @user.favorite_exercises.limit(10).pluck(:name)
+      parts << "Exercícios favoritos: #{fav_names.join(', ')}" if fav_names.any?
+
       "Perfil do aluno: #{parts.join(' | ')}"
     end
 
@@ -97,7 +101,12 @@ module AiAgents
       if @context[:exercise_name].present?
         lines << "Exercício em foco: #{@context[:exercise_name]}" \
                  "#{" (#{@context[:muscle_group]})" if @context[:muscle_group].present?}" \
+                 "#{" [tipo: #{@context[:exercise_type]}]" if @context[:exercise_type].present?}" \
                  "#{" — #{@context[:set_info]}" if @context[:set_info].present?}"
+      end
+      if @context[:intent].present?
+        lines << "Intenção detectada: #{@context[:intent]}" \
+                 "#{" — modalidade solicitada: #{@context[:detected_modality]}" if @context[:detected_modality].present?}"
       end
       lines.join("\n")
     end

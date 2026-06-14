@@ -20,6 +20,15 @@ export type ExerciseAlternative = {
   description: string;
   image_url: string;
   gif_url?: string | null;
+  reason?: string;
+  score?: number;
+};
+
+type IntelligentSuggestionsResponse = {
+  exercises: ExerciseAlternative[];
+  intent: Record<string, unknown>;
+  no_more: boolean;
+  message?: string;
 };
 
 export type ExecContext = {
@@ -103,6 +112,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
   const [execContext, setExecContext] = useState<ExecContext | null>(null);
   const swapCallbackRef = useRef<SwapCallback | null>(null);
   const greetedRef = useRef(false);
+  const shownAlternativeIdsRef = useRef<Set<number>>(new Set());
 
   const setScreen = useCallback((screen: string) => {
     setCurrentScreen(screen);
@@ -170,44 +180,49 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
 
         // ── Quick-reply: "Trocar este exercício por X" ───────────────────────
         if (CARDIO_SWAP_REPLY_REGEX.test(text) && isInExec) {
-          const params = new URLSearchParams({
-            exercise_type: "cardio",
-            exclude_ids: String(execContext!.exerciseId),
-            per_page: "3",
+          const alreadyIds = [...shownAlternativeIdsRef.current].join(",");
+          const result = await api.post<IntelligentSuggestionsResponse>("/api/v1/exercises/intelligent_suggestions", {
+            current_exercise_id:   execContext!.exerciseId,
+            user_text:             "quero cardio",
+            already_suggested_ids: alreadyIds,
+            per_page:              3,
           });
-          const alts = await api.get<ExerciseAlternative[]>(`/api/v1/exercises?${params}`);
+          const alts = result.exercises.slice(0, 3);
+          alts.forEach((a) => shownAlternativeIdsRef.current.add(a.id));
           setMessages((prev) => [
             ...prev,
             {
               id: uid(),
               role: "assistant",
               content: `Aqui estão opções de cardio para substituir o **${execContext!.exerciseName}**:`,
-              alternatives: alts.slice(0, 3),
+              alternatives: alts,
             },
           ]);
           return;
         }
 
-        // ── Modality change detected: user requests cardio while doing strength ──
-        const isModalityChange =
-          isInExec &&
-          execContext!.exerciseType &&
-          STRENGTH_EXERCISE_TYPES.has(execContext!.exerciseType) &&
-          MODALITY_CHANGE_REGEX.test(text);
+        // ── Modality change detected: user wants a different activity type ──────
+        const isModalityChange = isInExec && MODALITY_CHANGE_REGEX.test(text);
 
         if (isModalityChange) {
           const requested = detectRequestedCardio(text);
+          const alreadyIds = [...shownAlternativeIdsRef.current].join(",");
+          const result = await api.post<IntelligentSuggestionsResponse>("/api/v1/exercises/intelligent_suggestions", {
+            current_exercise_id:   execContext!.exerciseId,
+            user_text:             text,
+            already_suggested_ids: alreadyIds,
+            per_page:              3,
+          });
+          const alts = result.exercises.slice(0, 3);
+          alts.forEach((a) => shownAlternativeIdsRef.current.add(a.id));
           setMessages((prev) => [
             ...prev,
             {
               id: uid(),
               role: "assistant",
-              content: `Boa! Você quer **${requested}** aqui no treino de hoje ou criar um treino separado?`,
-              quickReplies: [
-                `Trocar este exercício por ${requested}`,
-                `Criar treino rápido de ${requested}`,
-                "Manter treino atual",
-              ],
+              content: `Entendido! Aqui estão opções de **${requested}** para substituir o **${execContext!.exerciseName}**. Ou prefere criar um treino separado?`,
+              alternatives: alts,
+              quickReplies: [`Criar treino rápido de ${requested}`, "Manter treino atual"],
             },
           ]);
           return;
@@ -217,24 +232,26 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
         const isSwap = isInExec && SWAP_REGEX.test(text);
 
         if (isSwap) {
-          const params = new URLSearchParams({
-            exclude_ids: String(execContext!.exerciseId),
-            per_page: "3",
+          const alreadyIds = [...shownAlternativeIdsRef.current].join(",");
+          const result = await api.post<IntelligentSuggestionsResponse>("/api/v1/exercises/intelligent_suggestions", {
+            current_exercise_id:   execContext!.exerciseId,
+            user_text:             text,
+            already_suggested_ids: alreadyIds,
+            per_page:              3,
           });
-          // For cardio exercises filter by type; for strength filter by muscle group
-          if (execContext!.exerciseType === "cardio" || execContext!.exerciseType === "hiit") {
-            params.set("exercise_type", execContext!.exerciseType);
-          } else if (execContext!.muscleGroup) {
-            params.set("muscle_group", execContext!.muscleGroup);
-          }
-          const alts = await api.get<ExerciseAlternative[]>(`/api/v1/exercises?${params}`);
+          const alts = result.exercises.slice(0, 3);
+          alts.forEach((a) => shownAlternativeIdsRef.current.add(a.id));
+
+          const noMore = result.no_more && alts.length === 0;
           setMessages((prev) => [
             ...prev,
             {
               id: uid(),
               role: "assistant",
-              content: `Aqui estão 3 opções para substituir o **${execContext!.exerciseName}**:`,
-              alternatives: alts.slice(0, 3),
+              content: noMore
+                ? (result.message ?? "Não encontrei novas opções. Posso ampliar os critérios?")
+                : `Aqui estão opções para substituir o **${execContext!.exerciseName}**:`,
+              alternatives: noMore ? [] : alts,
             },
           ]);
           return;
@@ -246,11 +263,15 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
           .slice(-6)
           .map((m) => ({ role: m.role, content: m.content }));
 
+        const detectedModality = MODALITY_CHANGE_REGEX.test(text) ? detectRequestedCardio(text) : null;
+
         const context = {
           screen: currentScreen,
           exercise_name: execContext?.exerciseName ?? "",
           muscle_group: execContext?.muscleGroup ?? "",
+          exercise_type: execContext?.exerciseType ?? "",
           set_info: execContext?.setInfo ?? "",
+          ...(detectedModality ? { intent: "modality_change", detected_modality: detectedModality } : {}),
         };
 
         const data = await api.post<{ reply: string }>("/api/v1/coach/messages", {
