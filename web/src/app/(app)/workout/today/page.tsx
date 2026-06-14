@@ -826,7 +826,8 @@ function WorkoutTodayContent() {
 
   const historicalMaxWeight = getHistoricalMaxWeight(sessions, exercise.exercise_id);
   const currentWeightNum = Number(runtime.weight_by_set[currentSet - 1]) || 0;
-  const isNewPR = !isCardio(exercise) && currentWeightNum > 0 && historicalMaxWeight > 0 && currentWeightNum > historicalMaxWeight;
+  const isCurrentSetWarmup = runtime.warmup_by_set?.[currentSet - 1] ?? false;
+  const isNewPR = !isCardio(exercise) && !isCurrentSetWarmup && currentWeightNum > 0 && historicalMaxWeight > 0 && currentWeightNum > historicalMaxWeight;
   const totalPlannedSets = exercises.reduce((sum, ex) => sum + runtimeFor(exerciseRuntime, ex).planned_sets, 0);
   const completedSets = exercises.reduce((sum, ex, idx) => {
     const state = runtimeFor(exerciseRuntime, ex);
@@ -993,33 +994,57 @@ function WorkoutTodayContent() {
               <Metric label="série atual" value={currentSet} highlight />
             </div>
 
-            <div className="mt-3 flex gap-3">
-              <label className="flex-1 text-sm font-medium text-slate-400">
-                Peso (kg)
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.5"
-                  value={runtime.weight_by_set[currentSet - 1] ?? ""}
-                  onChange={(event) => { setWeightError(false); updateCurrentSetWeight(exercise, event.target.value); }}
-                  placeholder="kg"
-                  className={`mt-1.5 w-full rounded-xl border bg-slate-900 text-white px-3 py-2.5 text-sm focus:outline-none ${weightError ? "border-red-500 focus:border-red-400" : "border-slate-700 focus:border-primary-500"}`}
-                />
-              </label>
-              <label className="flex-1 text-sm font-medium text-slate-400">
-                Descanso (s)
-                <input
-                  type="number"
-                  min="0"
-                  step="5"
-                  value={runtime.rest_seconds}
-                  onChange={(event) => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: Number(event.target.value) || 0 })}
-                  className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 text-white px-3 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
-                />
-              </label>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              {/* Peso com +/- */}
+              {(() => {
+                const rawWeight = runtime.weight_by_set[currentSet - 1];
+                const weightVal = rawWeight !== "" && rawWeight !== undefined ? Number(rawWeight) : 0;
+                const weightStep = weightVal >= 60 ? 5 : weightVal >= 20 ? 2.5 : 1;
+                const weightDisplay = weightVal > 0 ? `${weightVal} kg` : "— kg";
+                return (
+                  <div className={`rounded-xl p-3 text-center ${weightError ? "bg-red-950/30 ring-1 ring-red-500/60" : "bg-slate-900/60"}`}>
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => { setWeightError(false); updateCurrentSetWeight(exercise, String(Math.max(0, +(weightVal - weightStep).toFixed(2)))); }}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-slate-400"
+                      >-</button>
+                      <p className={`min-w-14 text-xl font-bold ${weightVal > 0 ? "text-white" : "text-slate-600"}`}>{weightDisplay}</p>
+                      <button
+                        onClick={() => { setWeightError(false); updateCurrentSetWeight(exercise, String(+(weightVal + weightStep).toFixed(2))); }}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-slate-400"
+                      >+</button>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">peso · +{weightStep} kg</p>
+                    {weightError && <p className="mt-0.5 text-xs text-red-400">Informe o peso</p>}
+                  </div>
+                );
+              })()}
+
+              {/* Descanso com +/- */}
+              {(() => {
+                const restVal = runtime.rest_seconds ?? 60;
+                const restStep = restVal < 60 ? 15 : 30;
+                const restMin = Math.floor(restVal / 60);
+                const restSec = restVal % 60;
+                const restDisplay = restMin > 0 ? `${restMin}:${restSec.toString().padStart(2, "0")}` : `${restSec}s`;
+                return (
+                  <div className="rounded-xl bg-slate-900/60 p-3 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: Math.max(0, restVal - restStep) })}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-slate-400"
+                      >-</button>
+                      <p className="min-w-12 text-xl font-bold text-white">{restDisplay}</p>
+                      <button
+                        onClick={() => updateRuntime(exercise.workout_day_exercise_id, { rest_seconds: restVal + restStep })}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-slate-400"
+                      >+</button>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">descanso · +{restStep}s</p>
+                  </div>
+                );
+              })()}
             </div>
-            {weightError && <p className="mt-1 text-xs text-red-500">Preencha o peso antes de continuar.</p>}
 
             {/* Warmup toggle for current set */}
             {(() => {
@@ -2329,7 +2354,14 @@ function getHistoricalMaxWeight(sessions: WorkoutSession[], exerciseId: number):
   let max = 0;
   for (const session of sessions) {
     for (const log of session.exercise_logs ?? []) {
-      if (log.exercise_id === exerciseId && log.weight_kg) {
+      if (log.exercise_id !== exerciseId) continue;
+      const weights: (number | null)[] = (log as { weight_by_set?: (number | null)[] }).weight_by_set ?? [];
+      const warmups: boolean[] = (log as { is_warmup_by_set?: boolean[] }).is_warmup_by_set ?? [];
+      if (weights.length > 0) {
+        weights.forEach((w, i) => {
+          if (!warmups[i] && w) max = Math.max(max, w);
+        });
+      } else if (log.weight_kg && !warmups[0]) {
         max = Math.max(max, log.weight_kg);
       }
     }

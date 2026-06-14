@@ -14,6 +14,9 @@ class User < ApplicationRecord
   has_many :health_data_points, dependent: :destroy
   has_many :ai_usage_logs, dependent: :destroy
   has_many :ai_training_decision_logs, dependent: :destroy
+  has_many :ai_chat_messages, dependent: :destroy
+  has_many :user_training_preferences, dependent: :destroy
+  has_many :exercise_suggestion_logs, dependent: :destroy
   has_one_attached :avatar
   has_one :subscription, dependent: :destroy
   has_one :public_profile, dependent: :destroy

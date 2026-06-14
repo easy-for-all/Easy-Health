@@ -332,6 +332,7 @@ export default function PlanPage() {
               </div>
             </div>
           )}
+          {plan.created_at && <PlanAgeAlert createdAt={plan.created_at} onReplanejar={startWizard} />}
           <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} onToggleFavorite={handleToggleFavorite} />
           <button
             onClick={startWizard}
@@ -796,6 +797,47 @@ function PlanView({
   );
 }
 
+function weeksAgo(dateStr: string): number {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / (7 * 24 * 60 * 60 * 1000));
+}
+
+function PlanAgeAlert({ createdAt, onReplanejar }: { createdAt: string; onReplanejar: () => void }) {
+  const weeks = weeksAgo(createdAt);
+  if (weeks < 4) return null;
+
+  let bg = "bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950/30 dark:border-yellow-800/40 dark:text-yellow-300";
+  let message = "Seu corpo pode já ter se adaptado a este treino. Considere evoluir a carga.";
+  let showButton = false;
+
+  if (weeks >= 8) {
+    bg = "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800/40 dark:text-red-300";
+    message = "Plano com mais de 8 semanas. Sugerimos um replanejamento completo.";
+    showButton = true;
+  } else if (weeks >= 6) {
+    bg = "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-950/30 dark:border-orange-800/40 dark:text-orange-300";
+    message = "Recomendamos revisar ou evoluir este plano em breve.";
+    showButton = true;
+  }
+
+  return (
+    <div className={`mb-3 flex items-start gap-3 rounded-xl border px-4 py-3 ${bg}`}>
+      <span className="mt-0.5 text-base">⏱️</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold">Plano criado há {weeks} semana{weeks === 1 ? "" : "s"}</p>
+        <p className="mt-0.5 text-xs opacity-80">{message}</p>
+      </div>
+      {showButton && (
+        <button
+          onClick={onReplanejar}
+          className="shrink-0 rounded-lg bg-white/60 px-2.5 py-1 text-xs font-semibold dark:bg-white/10"
+        >
+          Replanejar
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PlanHistoryCard({ plan }: { plan: PlanSummary }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -803,7 +845,7 @@ function PlanHistoryCard({ plan }: { plan: PlanSummary }) {
       <button className="flex w-full items-center justify-between" onClick={() => setExpanded((v) => !v)}>
         <div className="text-left">
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-            {new Date(plan.created_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+            Criado há {weeksAgo(plan.created_at)} semana{weeksAgo(plan.created_at) === 1 ? "" : "s"}
           </p>
           <p className="text-xs text-gray-400">{plan.days_count} dias · {plan.days.reduce((s, d) => s + d.exercise_count, 0)} exercícios</p>
         </div>

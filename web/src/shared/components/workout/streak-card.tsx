@@ -19,21 +19,34 @@ export function StreakCard({ streak, weeklySessions, weeklyGoal, todayIndex, com
 
   return (
     <div className="streak-card">
+      {/* Streak global — dias consecutivos */}
       <div className="sk-top">
         <div className="sk-flame">
           <div className="sk-fi">
             <span style={{ fontSize: 16, lineHeight: 1 }}>🔥</span>
           </div>
-          <span>
-            {streak > 0 ? `${streak} dia${streak === 1 ? "" : "s"} seguidos` : "Comece sua ofensiva"}
-          </span>
+          <div>
+            <span>
+              {streak > 0 ? `${streak} dia${streak === 1 ? "" : "s"} seguidos` : "Comece sua ofensiva"}
+            </span>
+            <p className="sk-streak-label">sequência global</p>
+          </div>
         </div>
-        <div className="sk-frac">
-          {weeklySessions}
-          <em>/{weeklyGoal} esta semana</em>
+
+        {/* Treinos da semana — conceito separado */}
+        <div className="sk-weekly-block">
+          <div className="sk-frac">
+            {weeklySessions}
+            <em>/{weeklyGoal}</em>
+          </div>
+          <p className="sk-weekly-label">esta semana</p>
         </div>
       </div>
 
+      {/* Divisor visual */}
+      <div className="sk-divider" />
+
+      {/* Pontos da semana atual */}
       <div className="sk-week">
         {WEEK_LABELS.map((label, i) => {
           const isFuture = i > todayDisplay;

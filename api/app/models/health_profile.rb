@@ -31,20 +31,55 @@ class HealthProfile < ApplicationRecord
 
   private
 
-  # Sub-types of cardio that are valid for cardio_type but not for activity_preferences.
-  # Normalize them to "cardio" so older clients and mobile don't break validation.
-  CARDIO_SUBTYPES = %w[bicicleta eliptico escada remo].freeze
+  ACTIVITY_ALIASES = {
+    # Portuguese variants
+    "bicicleta"         => "cardio",
+    "ciclismo"          => "cardio",
+    "spinning"          => "cardio",
+    "eliptico"          => "cardio",
+    "escada"            => "cardio",
+    "remo"              => "cardio",
+    "musculação"        => "musculacao",
+    "academia"          => "musculacao",
+    "peso"              => "musculacao",
+    "corrida"           => "corrida",
+    "correr"            => "corrida",
+    "caminhada"         => "caminhada",
+    "andar"             => "caminhada",
+    "natação"           => "natacao",
+    "mobilidade"        => "funcional",
+    "alongamento"       => "funcional",
+    "funcional"         => "funcional",
+    # English/canonical variants (from ExerciseIntelligenceService)
+    "bike"              => "cardio",
+    "cycling"           => "cardio",
+    "running"           => "corrida",
+    "walking"           => "caminhada",
+    "strength"          => "musculacao",
+    "strength_training" => "musculacao",
+    "weights"           => "musculacao",
+    "stretching"        => "funcional",
+    "mobility"          => "funcional",
+    "functional"        => "funcional",
+    "hiit"              => "hiit",
+    "swimming"          => "natacao",
+    "cardio"            => "cardio",
+  }.freeze
 
   def normalize_activity_preferences
     return if activity_preferences.blank?
     self.activity_preferences = activity_preferences.map do |pref|
-      CARDIO_SUBTYPES.include?(pref) ? "cardio" : pref
-    end
+      normalized = pref.to_s.downcase.strip
+      ACTIVITY_ALIASES[normalized] || pref
+    end.uniq
   end
 
   def activity_preferences_valid
     return if activity_preferences.blank?
     invalid = activity_preferences - ACTIVITY_TYPES
-    errors.add(:activity_preferences, "contains invalid values: #{invalid.join(', ')}") if invalid.any?
+    if invalid.any?
+      friendly = invalid.join(", ")
+      errors.add(:activity_preferences, "Não entendemos a modalidade '#{friendly}'. Escolha entre as opções disponíveis.")
+    end
   end
 end

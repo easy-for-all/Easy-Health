@@ -14,7 +14,7 @@ module Api
           return
         end
 
-        profile = current_user.build_health_profile(profile_params)
+        profile = current_user.build_health_profile(normalized_profile_params)
         if profile.save
           WorkoutPlanGeneratorService.new(current_user).call
           render json: profile_json(profile), status: :created
@@ -25,7 +25,7 @@ module Api
 
       def update
         profile = current_user.health_profile || current_user.build_health_profile
-        if profile.update(profile_params)
+        if profile.update(normalized_profile_params)
           render json: profile_json(profile)
         else
           render json: { errors: profile.errors.full_messages }, status: :unprocessable_entity
@@ -37,6 +37,15 @@ module Api
       def profile_params
         params.permit(:age, :weight_kg, :height_cm, :fitness_level, :goal,
                       :training_days_per_week, :training_location, :gender, activity_preferences: [])
+      end
+
+      def normalized_profile_params
+        p = profile_params.to_h
+        if p["activity_preferences"].is_a?(Array)
+          normalized = p["activity_preferences"].map { |v| ExerciseIntelligenceService.resolve_activity(v) }.compact
+          p["activity_preferences"] = normalized.presence || p["activity_preferences"]
+        end
+        p
       end
 
       def profile_json(profile)

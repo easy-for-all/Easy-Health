@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_02_210004) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_13_100003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "vector"
@@ -77,13 +77,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_210004) do
   create_table "ai_usage_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "error_summary"
+    t.integer "estimated_cost_cents"
     t.integer "input_tokens"
     t.string "model", null: false
     t.integer "output_tokens"
+    t.string "provider", default: "anthropic", null: false
     t.string "status", default: "success", null: false
     t.string "task_type", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.index ["user_id", "provider", "created_at"], name: "index_ai_usage_logs_on_user_provider_created"
     t.index ["user_id", "task_type", "created_at"], name: "index_ai_usage_logs_on_user_id_and_task_type_and_created_at"
     t.index ["user_id"], name: "index_ai_usage_logs_on_user_id"
   end
@@ -119,6 +122,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_210004) do
     t.index ["exercise_id"], name: "index_equipment_identifications_on_exercise_id"
     t.index ["image_checksum"], name: "index_equipment_identifications_on_image_checksum"
     t.index ["user_id"], name: "index_equipment_identifications_on_user_id"
+  end
+
+  create_table "exercise_suggestion_logs", force: :cascade do |t|
+    t.boolean "accepted"
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.integer "current_exercise_id"
+    t.string "event_type", null: false
+    t.text "intent_text"
+    t.jsonb "parsed_intent", default: {}
+    t.integer "score"
+    t.integer "suggested_exercise_id"
+    t.bigint "user_id", null: false
+    t.index ["user_id", "created_at"], name: "index_exercise_suggestion_logs_on_user_id_and_created_at"
+    t.index ["user_id", "suggested_exercise_id"], name: "idx_on_user_id_suggested_exercise_id_dfd3213d7b"
+    t.index ["user_id"], name: "index_exercise_suggestion_logs_on_user_id"
   end
 
   create_table "exercises", force: :cascade do |t|
@@ -305,6 +323,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_210004) do
     t.index ["user_id"], name: "index_user_media_on_user_id"
   end
 
+  create_table "user_training_preferences", force: :cascade do |t|
+    t.decimal "confidence", precision: 3, scale: 2, default: "1.0"
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.datetime "last_seen_at"
+    t.string "source"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.string "value", null: false
+    t.index ["user_id", "key"], name: "index_user_training_preferences_on_user_id_and_key", unique: true
+    t.index ["user_id"], name: "index_user_training_preferences_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "account_type", default: "regular", null: false
     t.boolean "admin", default: false, null: false
@@ -347,6 +378,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_210004) do
 
   create_table "workout_days", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.string "custom_name"
     t.integer "day_of_week"
     t.boolean "favorited", default: false, null: false
     t.string "name"
@@ -388,6 +420,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_210004) do
   add_foreign_key "client_permissions", "personal_client_relationships"
   add_foreign_key "equipment_identifications", "exercises"
   add_foreign_key "equipment_identifications", "users"
+  add_foreign_key "exercise_suggestion_logs", "users"
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
@@ -400,6 +433,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_210004) do
   add_foreign_key "user_favorite_exercises", "exercises"
   add_foreign_key "user_favorite_exercises", "users"
   add_foreign_key "user_media", "users"
+  add_foreign_key "user_training_preferences", "users"
   add_foreign_key "workout_day_exercises", "exercises"
   add_foreign_key "workout_day_exercises", "workout_days"
   add_foreign_key "workout_days", "workout_plans"

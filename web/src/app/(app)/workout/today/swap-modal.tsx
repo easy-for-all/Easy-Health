@@ -22,12 +22,22 @@ type ExerciseOption = {
   name: string;
   muscle_group: string | null;
   exercise_type: string;
+  equipment_type?: string;
   description: string;
   image_url: string;
   gif_url?: string | null;
   video_url?: string | null;
   muscle_image_url: string;
   is_favorite?: boolean;
+  reason?: string;
+  score?: number;
+};
+
+type IntelligentSuggestionsResponse = {
+  exercises: ExerciseOption[];
+  intent: Record<string, unknown>;
+  no_more: boolean;
+  message?: string;
 };
 
 const MUSCLE_LABELS: Record<string, string> = {
@@ -125,7 +135,7 @@ export function SwapModal({
 }) {
   const [alternatives, setAlternatives] = useState<ExerciseOption[]>([]);
   const [swapSearch, setSwapSearch] = useState("");
-  const [swapFilter, setSwapFilter] = useState<{ muscle_group?: string; exercise_type?: string } | null>(null);
+  const [swapFilter, setSwapFilter] = useState<{ muscle_group?: string; exercise_type?: string; quick?: string } | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<ExerciseOption[]>([]);
@@ -133,9 +143,12 @@ export function SwapModal({
   const [aiError, setAiError] = useState<string | null>(null);
   const [searchLang, setSearchLang] = useState<"pt" | "en">("pt");
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [shownIds, setShownIds] = useState<Set<number>>(new Set());
   const [noMoreOptions, setNoMoreOptions] = useState(false);
+  const [noMoreMessage, setNoMoreMessage] = useState<string | null>(null);
+  const [lastIntent, setLastIntent] = useState<Record<string, unknown> | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function trackShownIds(data: ExerciseOption[]) {
@@ -151,6 +164,17 @@ export function SwapModal({
     setNoMoreOptions(data.length === 0 && additionalExcludes.length > 0);
     setInitialLoading(false);
   }, [allWorkoutExerciseIds]);
+
+  const fetchFavorites = useCallback(async (wde: WorkoutDayExercise) => {
+    setFavoritesLoading(true);
+    try {
+      const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
+      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&only_favorites=true`);
+      setAlternatives(data);
+    } finally {
+      setFavoritesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     openSwapFetch(exercise);
@@ -197,12 +221,40 @@ export function SwapModal({
     }
   }
 
+  const fetchIntelligentSuggestions = useCallback(async (userText: string, additionalExcludes: number[] = []) => {
+    setSearchLoading(true);
+    setNoMoreOptions(false);
+    setNoMoreMessage(null);
+    try {
+      const alreadyIds = [...new Set([...shownIds, ...additionalExcludes])].join(",");
+      const result = await api.post<IntelligentSuggestionsResponse>("/api/v1/exercises/intelligent_suggestions", {
+        current_exercise_id:   exercise.exercise_id,
+        user_text:             userText,
+        already_suggested_ids: alreadyIds,
+        per_page:              5,
+      });
+      setAlternatives(result.exercises);
+      setLastIntent(result.intent ?? null);
+      if (result.no_more) {
+        setNoMoreOptions(true);
+        setNoMoreMessage(result.message ?? "Não encontrei novas opções com esse critério. Posso ampliar para exercícios parecidos?");
+      } else {
+        trackShownIds(result.exercises);
+      }
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [exercise.exercise_id, shownIds]);
+
   function handleSearchChange(value: string) {
     setSwapSearch(value);
     setSwapFilter(null);
     setNoMoreOptions(false);
+    setNoMoreMessage(null);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (value.trim().length >= 2) {
+    if (value.trim().length >= 3) {
+      searchTimerRef.current = setTimeout(() => fetchIntelligentSuggestions(value.trim()), 350);
+    } else if (value.trim().length >= 2) {
       const term = parseEquipmentIntent(value.trim()) ?? value.trim();
       searchTimerRef.current = setTimeout(() => fetchByName(term), 300);
     } else if (value.trim().length === 0) {
@@ -221,11 +273,27 @@ export function SwapModal({
 
   function handleMoreOptions() {
     setNoMoreOptions(false);
-    if (swapSearch.trim().length >= 2) {
+    setNoMoreMessage(null);
+    if (swapSearch.trim().length >= 3) {
+      fetchIntelligentSuggestions(swapSearch.trim(), [...shownIds]);
+    } else if (swapSearch.trim().length >= 2) {
       const term = parseEquipmentIntent(swapSearch.trim()) ?? swapSearch.trim();
       fetchByName(term, [...shownIds]);
     } else {
       openSwapFetch(exercise, [...shownIds]);
+    }
+  }
+
+  async function sendSuggestionFeedback(exerciseId: number, eventType: string) {
+    try {
+      await api.post(`/api/v1/exercises/${exerciseId}/suggestion_feedback`, {
+        event_type:          eventType,
+        current_exercise_id: exercise.exercise_id,
+        intent_text:         swapSearch,
+        parsed_intent:       lastIntent ?? {},
+      });
+    } catch {
+      // non-critical — ignore failures silently
     }
   }
 
@@ -250,9 +318,18 @@ export function SwapModal({
     }
   }
 
-  const displayedAlternatives = onlyFavorites
-    ? alternatives.filter((a) => a.is_favorite)
-    : alternatives;
+  async function handleToggleOnlyFavorites() {
+    const next = !onlyFavorites;
+    setOnlyFavorites(next);
+    setNoMoreOptions(false);
+    if (next) {
+      await fetchFavorites(exercise);
+    } else {
+      await openSwapFetch(exercise);
+    }
+  }
+
+  const displayedAlternatives = alternatives;
 
   async function handleAiPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -400,13 +477,38 @@ export function SwapModal({
           />
         </div>
 
-        {/* Filtro somente favoritos */}
-        <div className="mb-2 flex gap-2">
+        {/* Filtro somente favoritos + filtros rápidos */}
+        <div className="mb-2 flex flex-wrap gap-2">
           <button
-            onClick={() => setOnlyFavorites((v) => !v)}
+            onClick={handleToggleOnlyFavorites}
+            disabled={favoritesLoading}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${onlyFavorites ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-orange-50"}`}
           >
-            {onlyFavorites ? "❤️ Somente favoritos" : "🤍 Todos"}
+            {favoritesLoading ? "Carregando..." : onlyFavorites ? "❤️ Favoritos" : "🤍 Favoritos"}
+          </button>
+          <button
+            onClick={() => { setSwapSearch("em casa"); setSwapFilter({ quick: "home" }); fetchIntelligentSuggestions("em casa"); }}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${swapFilter?.quick === "home" ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-primary-50"}`}
+          >
+            🏠 Em casa
+          </button>
+          <button
+            onClick={() => { setSwapSearch("cardio"); setSwapFilter({ quick: "cardio" }); fetchIntelligentSuggestions("quero cardio"); }}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${swapFilter?.quick === "cardio" ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-primary-50"}`}
+          >
+            🏃 Cardio
+          </button>
+          <button
+            onClick={() => { setSwapSearch("mais leve"); setSwapFilter({ quick: "lighter" }); fetchIntelligentSuggestions("mais leve"); }}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${swapFilter?.quick === "lighter" ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-primary-50"}`}
+          >
+            🪶 Mais leve
+          </button>
+          <button
+            onClick={() => { setSwapSearch("mais pesado"); setSwapFilter({ quick: "heavier" }); fetchIntelligentSuggestions("mais pesado"); }}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${swapFilter?.quick === "heavier" ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-primary-50"}`}
+          >
+            🏋️ Mais pesado
           </button>
         </div>
 
@@ -469,7 +571,7 @@ export function SwapModal({
         ) : noMoreOptions ? (
           <div className="rounded-lg bg-gray-50 p-4 text-center dark:bg-gray-800">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Não encontrei novas opções com esse critério.
+              {noMoreMessage ?? "Não encontrei novas opções com esse critério. Posso ampliar para exercícios parecidos?"}
             </p>
             <button
               onClick={handleResetAndSearch}
@@ -479,18 +581,35 @@ export function SwapModal({
             </button>
           </div>
         ) : displayedAlternatives.length === 0 ? (
-          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
-            {onlyFavorites ? "Nenhum favorito encontrado para este grupo." : "Nenhuma alternativa encontrada."}
-          </p>
+          <div className="rounded-lg bg-gray-50 p-4 text-center dark:bg-gray-800">
+            {onlyFavorites ? (
+              <>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Você ainda não possui favoritos para {MUSCLE_LABELS[exercise.muscle_group ?? ""] || exercise.muscle_group || exercise.exercise_type}.
+                </p>
+                <button
+                  onClick={() => { setOnlyFavorites(false); openSwapFetch(exercise); }}
+                  className="mt-2 text-xs font-semibold text-primary-500 underline"
+                >
+                  Ver exercícios recomendados
+                </button>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma alternativa encontrada.</p>
+            )}
+          </div>
         ) : (
           <>
           {displayedAlternatives.map((alt) => {
-            const ctx = contextLabel(exercise, alt);
+            const ctx = !alt.reason ? contextLabel(exercise, alt) : null;
             const muscleColor = alt.muscle_group ? MUSCLE_COLORS[alt.muscle_group] : null;
             return (
               <div key={alt.id} className="mb-2.5 flex w-full items-center gap-1">
                 <button
-                  onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
+                  onClick={async () => {
+                    await sendSuggestionFeedback(alt.id, "suggestion_accepted");
+                    onSwap(exercise.workout_day_exercise_id, alt.id);
+                  }}
                   className="flex flex-1 gap-3 rounded-xl border border-gray-100 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                 >
                   <SmartImage
@@ -513,6 +632,9 @@ export function SwapModal({
                         </span>
                       )}
                     </div>
+                    {alt.reason && (
+                      <p className="mt-1 text-xs text-gray-400 leading-snug">{alt.reason}</p>
+                    )}
                   </div>
                 </button>
                 <button

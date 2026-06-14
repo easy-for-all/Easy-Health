@@ -132,6 +132,7 @@ module Api
         {
           id: plan.id,
           active: plan.active,
+          created_at: plan.created_at,
           ai_rationale:       log&.rationale,
           ai_training_method: log&.training_method,
           days: days.map { |d| serialize_day(d, last_completed[d.id]) }

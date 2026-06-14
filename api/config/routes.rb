@@ -34,11 +34,15 @@ Rails.application.routes.draw do
       patch "workout_days/:id/rename",          to: "workout_days#rename"
 
       resources :exercises, only: [:index] do
-        collection { post :ai_substitute }
+        collection do
+          post :ai_substitute
+          post :intelligent_suggestions
+        end
         member do
-          get  :setup_guide
-          post :favorite,   to: "user_favorite_exercises#create"
-          delete :favorite, to: "user_favorite_exercises#destroy"
+          get    :setup_guide
+          post   :favorite,            to: "user_favorite_exercises#create"
+          delete :favorite,            to: "user_favorite_exercises#destroy"
+          post   :suggestion_feedback
         end
       end
       get "exercises/favorites", to: "user_favorite_exercises#index"

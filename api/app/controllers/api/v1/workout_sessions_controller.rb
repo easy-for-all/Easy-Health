@@ -93,14 +93,24 @@ module Api
         records = {}
         sessions.each do |session|
           (session.exercise_logs || []).each do |log|
-            next unless log["exercise_id"] && log["weight_kg"].to_f > 0
+            next unless log["exercise_id"]
             ex_id = log["exercise_id"]
-            weight = log["weight_kg"].to_f
-            if records[ex_id].nil? || weight > records[ex_id][:max_weight_kg]
+            warmup_flags = Array(log["is_warmup_by_set"])
+            weights = Array(log["weight_by_set"])
+
+            max_normal_weight = if weights.any?
+              weights.each_with_index.filter_map { |w, i| w.to_f if w.to_f > 0 && !warmup_flags[i] }.max
+            elsif log["weight_kg"].to_f > 0 && !warmup_flags[0]
+              log["weight_kg"].to_f
+            end
+
+            next unless max_normal_weight
+
+            if records[ex_id].nil? || max_normal_weight > records[ex_id][:max_weight_kg]
               records[ex_id] = {
                 exercise_id: ex_id,
                 exercise_name: log["name"],
-                max_weight_kg: weight,
+                max_weight_kg: max_normal_weight,
                 achieved_at: session.completed_at
               }
             end
