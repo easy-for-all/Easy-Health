@@ -751,7 +751,7 @@ function PlanView({
           className="rounded-xl border border-gray-100 bg-white transition hover:border-primary-200 hover:bg-primary-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-primary-800 dark:hover:bg-primary-950/30"
         >
           <button
-            onClick={() => onDayClick(day.id)}
+            onClick={() => day.id !== null && onDayClick(day.id)}
             className="w-full p-4 text-left"
           >
             <div className="flex items-center justify-between">
@@ -774,7 +774,7 @@ function PlanView({
             <div className="border-t border-gray-50 px-4 pb-3 pt-2 flex items-center gap-4 dark:border-gray-800">
               {onToggleFavorite && (
                 <button
-                  onClick={() => onToggleFavorite(day.id)}
+                  onClick={() => day.id !== null && onToggleFavorite(day.id)}
                   className="text-base leading-none transition-transform active:scale-110"
                   aria-label={day.favorited ? "Remover dos favoritos" : "Adicionar aos favoritos"}
                 >
@@ -783,7 +783,7 @@ function PlanView({
               )}
               {onDuplicate && day.favorited && (
                 <button
-                  onClick={() => onDuplicate(day.id)}
+                  onClick={() => day.id !== null && onDuplicate(day.id)}
                   className="text-xs font-medium text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
                 >
                   + Duplicar treino
