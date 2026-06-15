@@ -422,7 +422,7 @@ function WorkoutTodayContent() {
     if (day) {
       beginSession(day.id);
       trackEvent(EVENTS.WORKOUT_STARTED, {
-        workout_day_id: day.id,
+        workout_day_id: day.id ?? undefined,
         workout_name: day.name,
         exercises_count: day.exercises?.length ?? 0,
         source: "workout_today",
@@ -1320,7 +1320,7 @@ function ChooseScreen({
         ) : (
           displayedDays.map((day, idx) => {
             const isRecommended = day.id === recommendedId;
-            const lastSession = lastSessionForDay(sessions, day.id);
+            const lastSession = day.id !== null ? lastSessionForDay(sessions, day.id) : null;
             const originalIdx = plan.days.findIndex((d) => d.id === day.id);
             return (
               <div
@@ -1351,7 +1351,7 @@ function ChooseScreen({
                     </p>
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(day.id); }}
+                    onClick={(e) => { e.stopPropagation(); day.id !== null && onToggleFavorite(day.id); }}
                     className="shrink-0 p-1 text-xl leading-none transition-transform active:scale-90"
                     aria-label={day.favorited ? "Remover dos favoritos" : "Adicionar aos favoritos"}
                   >
@@ -1417,7 +1417,7 @@ function OverviewScreen({
   const exercises = day.exercises ?? [];
   const [globalRest, setGlobalRest] = useState<number>(exercises[0]?.rest_seconds ?? 90);
   const addSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSession = lastSessionForDay(sessions, day.id);
+  const lastSession = day.id !== null ? lastSessionForDay(sessions, day.id) : null;
   const recentSessionsCount = sessions.length;
   const plannedSetsCount = exercises.reduce((sum, exercise) => sum + runtimeFor(runtime, exercise).planned_sets, 0);
 
@@ -1856,7 +1856,7 @@ function DoneScreen({
           }),
         });
         trackEvent(EVENTS.WORKOUT_COMPLETED, {
-          workout_day_id: day.id,
+          workout_day_id: day.id ?? undefined,
           workout_name: day.name,
           duration_minutes: duration,
           exercises_count: exercises.length,
@@ -1919,7 +1919,7 @@ function DoneScreen({
         }),
       });
       trackEvent(EVENTS.WORKOUT_COMPLETED, {
-        workout_day_id: day.id,
+        workout_day_id: day.id ?? undefined,
         workout_name: day.name,
         duration_minutes: duration,
         exercises_count: exercises.length,

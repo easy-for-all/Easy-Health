@@ -144,8 +144,8 @@ function WorkoutsContent() {
     const freq: Record<number, number> = {};
     sessions.forEach((s) => { freq[s.workout_day_id] = (freq[s.workout_day_id] ?? 0) + 1; });
     return [...plan.days]
-      .filter((d) => (freq[d.id] ?? 0) > 0)
-      .sort((a, b) => (freq[b.id] ?? 0) - (freq[a.id] ?? 0))
+      .filter((d) => d.id !== null && (freq[d.id] ?? 0) > 0)
+      .sort((a, b) => (freq[b.id!] ?? 0) - (freq[a.id!] ?? 0))
       .slice(0, 3);
   }, [plan?.days, sessions]);
 
@@ -280,7 +280,7 @@ function WorkoutsContent() {
                 sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
                 tags={day.muscle_groups?.slice(0, 2)}
                 favorited={day.favorited}
-                onFavorite={() => toggleFavorite(day.id)}
+                onFavorite={() => day.id !== null && toggleFavorite(day.id)}
                 onRename={() => setRenamingDay(day)}
                 onClick={() => router.push(`/workout/today?day=${day.id}`)}
               />
@@ -320,7 +320,7 @@ function WorkoutsContent() {
                         sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
                         tags={day.muscle_groups?.slice(0, 2)}
                         favorited={day.favorited}
-                        onFavorite={() => toggleFavorite(day.id)}
+                        onFavorite={() => day.id !== null && toggleFavorite(day.id)}
                         onRename={() => setRenamingDay(day)}
                         onClick={() => router.push(`/workout/today?day=${day.id}`)}
                       />
@@ -345,7 +345,7 @@ function WorkoutsContent() {
                         sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
                         tags={day.muscle_groups?.slice(0, 2)}
                         favorited={day.favorited}
-                        onFavorite={() => toggleFavorite(day.id)}
+                        onFavorite={() => day.id !== null && toggleFavorite(day.id)}
                         onRename={() => setRenamingDay(day)}
                         onClick={() => router.push(`/workout/today?day=${day.id}`)}
                       />
@@ -365,7 +365,7 @@ function WorkoutsContent() {
                   sub={formatLastCompleted(lastExecutedDay.last_completed_at) ?? (lastExecutedDay.exercise_count ? `${lastExecutedDay.exercise_count} exercícios` : undefined)}
                   tags={lastExecutedDay.muscle_groups?.slice(0, 2)}
                   favorited={lastExecutedDay.favorited}
-                  onFavorite={() => toggleFavorite(lastExecutedDay.id)}
+                  onFavorite={() => lastExecutedDay.id !== null && toggleFavorite(lastExecutedDay.id)}
                   onRename={() => setRenamingDay(lastExecutedDay)}
                   onClick={() => router.push(`/workout/today?day=${lastExecutedDay.id}`)}
                 />
@@ -413,7 +413,7 @@ function WorkoutsContent() {
         open={!!renamingDay}
         currentName={renamingDay?.custom_name ?? ""}
         defaultName={renamingDay ? (renamingDay.name || `Treino ${LETTERS[plan!.days.findIndex((d) => d.id === renamingDay.id)] ?? ""}`) : ""}
-        onSave={(name) => handleRename(renamingDay!.id, name)}
+        onSave={(name) => renamingDay?.id != null ? handleRename(renamingDay.id, name) : Promise.resolve()}
         onClose={() => setRenamingDay(null)}
       />
     </div>
@@ -439,7 +439,7 @@ function WorkoutDayCard({
   onToggleFavorite: () => void;
   highlight?: boolean;
 }) {
-  const lastSession = lastSessionForDay(sessions, day.id);
+  const lastSession = day.id !== null ? lastSessionForDay(sessions, day.id) : null;
 
   return (
     <div
