@@ -101,7 +101,7 @@ export default function FavoritesPage() {
                   sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
                   tags={day.muscle_groups?.slice(0, 2)}
                   favorited
-                  onFavorite={() => toggleFavorite(day.id)}
+                  onFavorite={() => day.id != null && toggleFavorite(day.id)}
                   onClick={() => router.push(`/workout/today?day=${day.id}`)}
                 />
               );
@@ -152,7 +152,7 @@ export default function FavoritesPage() {
                   sub={day.exercise_count ? `${day.exercise_count} exercícios` : undefined}
                   tags={day.muscle_groups?.slice(0, 2)}
                   favorited={false}
-                  onFavorite={() => toggleFavorite(day.id)}
+                  onFavorite={() => day.id != null && toggleFavorite(day.id)}
                   onClick={() => router.push(`/workout/today?day=${day.id}`)}
                 />
               );
