@@ -25,6 +25,8 @@ module Api
           render json: { error: "Plano ativo necessário." }, status: :forbidden and return
         end
 
+        Rails.logger.info("[WorkoutSessionCreate] user=#{current_user.id} workout_day_id=#{params[:workout_day_id].inspect} source=#{params[:source].inspect} duration=#{params[:duration_minutes].inspect}")
+
         session = current_user.workout_sessions.build(session_params)
         session.completed_at ||= Time.current
 
@@ -40,14 +42,19 @@ module Api
           mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
           render json: session_json(session), status: :created
         else
+          Rails.logger.error("[WorkoutSessionCreateError] user=#{current_user.id} errors=#{session.errors.full_messages.inspect}")
           render json: { errors: session.errors.full_messages }, status: :unprocessable_entity
         end
+      rescue => e
+        Rails.logger.error("[WorkoutSessionCreateError] #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+        render json: { errors: [e.message] }, status: :unprocessable_entity
       end
 
       def stats
         sessions = current_user.workout_sessions.order(completed_at: :desc)
-        week_start = Time.current.beginning_of_week(:monday)
-        week_end   = Time.current.end_of_week(:monday)
+        range      = Progress::WeekRange.current
+        week_start = range.begin.beginning_of_day
+        week_end   = range.end.end_of_day
         weekly = sessions.select { |s| s.completed_at >= week_start && s.completed_at <= week_end }
         goal = current_user.health_profile&.training_days_per_week || 3
         total_volume = calculate_total_volume(sessions)
@@ -136,6 +143,7 @@ module Api
       def session_params
         params.permit(
           :workout_day_id,
+          :source,
           :duration_minutes,
           :notes,
           :completed_at,
@@ -152,6 +160,7 @@ module Api
             :duration_minutes,
             :intensity,
             weight_by_set: [],
+            is_warmup_by_set: [],
             reps: []
           ]
         )

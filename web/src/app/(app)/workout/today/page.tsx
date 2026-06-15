@@ -1819,17 +1819,20 @@ function DoneScreen({
     async function save() {
       setSaving(true);
       try {
+        const isQuick = day.quick === true;
         const saved = await api.post<WorkoutSession>("/api/v1/workout_sessions", {
-          workout_day_id: day.id,
+          workout_day_id: isQuick ? null : day.id,
+          source: isQuick ? "quick" : "plan",
           duration_minutes: duration,
           fatigue_level: fatigueLevel,
           notes: notes || null,
           completed_at: finishedAt.toISOString(),
           exercise_logs: exercises.map((exercise) => {
             const state = runtimeFor(runtime, exercise);
+            const wdeId = isQuick || exercise.workout_day_exercise_id < 0 ? null : exercise.workout_day_exercise_id;
             if (isCardio(exercise)) {
               return {
-                workout_day_exercise_id: exercise.workout_day_exercise_id,
+                workout_day_exercise_id: wdeId,
                 exercise_id: exercise.exercise_id,
                 name: exercise.name,
                 duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
@@ -1838,7 +1841,7 @@ function DoneScreen({
               };
             }
             return {
-              workout_day_exercise_id: exercise.workout_day_exercise_id,
+              workout_day_exercise_id: wdeId,
               exercise_id: exercise.exercise_id,
               name: exercise.name,
               weight_kg: firstWeight(state.weight_by_set),
@@ -1858,7 +1861,7 @@ function DoneScreen({
           duration_minutes: duration,
           exercises_count: exercises.length,
           total_volume: totalVolume,
-          source: "workout_today",
+          source: isQuick ? "quick_workout" : "workout_today",
         });
         onSaved?.();
         setSavedCalories(saved.calories_estimated ?? null);
@@ -1880,17 +1883,20 @@ function DoneScreen({
     setSaving(true);
     setSaveError("");
     try {
+      const isQuick = day.quick === true;
       const saved = await api.post<WorkoutSession>("/api/v1/workout_sessions", {
-        workout_day_id: day.id,
+        workout_day_id: isQuick ? null : day.id,
+        source: isQuick ? "quick" : "plan",
         duration_minutes: duration,
         fatigue_level: fatigueLevel,
         notes: notes || null,
         completed_at: finishedAt.toISOString(),
         exercise_logs: exercises.map((exercise) => {
           const state = runtimeFor(runtime, exercise);
+          const wdeId = isQuick || exercise.workout_day_exercise_id < 0 ? null : exercise.workout_day_exercise_id;
           if (isCardio(exercise)) {
             return {
-              workout_day_exercise_id: exercise.workout_day_exercise_id,
+              workout_day_exercise_id: wdeId,
               exercise_id: exercise.exercise_id,
               name: exercise.name,
               duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
@@ -1899,7 +1905,7 @@ function DoneScreen({
             };
           }
           return {
-            workout_day_exercise_id: exercise.workout_day_exercise_id,
+            workout_day_exercise_id: wdeId,
             exercise_id: exercise.exercise_id,
             name: exercise.name,
             weight_kg: firstWeight(state.weight_by_set),
@@ -1918,7 +1924,7 @@ function DoneScreen({
         duration_minutes: duration,
         exercises_count: exercises.length,
         total_volume: totalVolume,
-        source: "workout_today_retry",
+        source: isQuick ? "quick_workout_retry" : "workout_today_retry",
       });
       onSaved?.();
       setSavedCalories(saved.calories_estimated ?? null);

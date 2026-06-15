@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_13_100003) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_14_100002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "vector"
@@ -349,14 +349,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_13_100003) do
     t.boolean "free_workout_used", default: false, null: false
     t.string "name", default: "", null: false
     t.string "profile_visibility", default: "private", null: false
+    t.string "provider"
     t.string "referral_code"
     t.datetime "remember_created_at"
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.string "reset_password_token_digest"
+    t.string "uid"
     t.datetime "updated_at", null: false
     t.index ["account_type"], name: "index_users_on_account_type"
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
     t.index ["referral_code"], name: "index_users_on_referral_code", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
@@ -406,7 +409,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_13_100003) do
     t.text "notes"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
-    t.bigint "workout_day_id", null: false
+    t.bigint "workout_day_id"
     t.index ["user_id"], name: "index_workout_sessions_on_user_id"
     t.index ["workout_day_id"], name: "index_workout_sessions_on_workout_day_id"
   end
