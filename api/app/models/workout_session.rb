@@ -1,6 +1,6 @@
 class WorkoutSession < ApplicationRecord
   belongs_to :user
-  belongs_to :workout_day
+  belongs_to :workout_day, optional: true
 
   validates :completed_at, presence: true
   validates :duration_minutes, presence: true, numericality: { only_integer: true, greater_than: 0 }

@@ -2,20 +2,19 @@
 
 import "./workout-ui.css";
 
-const WEEK_LABELS = ["S", "T", "Q", "Q", "S", "S", "D"];
+const WEEK_LABELS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 type StreakCardProps = {
   streak: number;
   weeklySessions: number;
   weeklyGoal: number;
-  todayIndex?: number; // 0 = Sunday…6 = Saturday (JS getDay)
-  completedDayIndices?: number[]; // Mon=0..Sun=6, actual days completed this week
+  todayIndex?: number; // 0 = Sunday…6 = Saturday (JS getDay) — Sun-first
+  completedDayIndices?: number[]; // Sun=0..Sat=6, actual days completed this week
 };
 
 export function StreakCard({ streak, weeklySessions, weeklyGoal, todayIndex, completedDayIndices }: StreakCardProps) {
-  const today = todayIndex ?? new Date().getDay();
-  // Map JS Sunday=0 to our Mon-first display (Mon=0…Sun=6)
-  const todayDisplay = today === 0 ? 6 : today - 1;
+  // JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat — matches our Sun-first labels directly
+  const todayDisplay = todayIndex ?? new Date().getDay();
 
   return (
     <div className="streak-card">
@@ -52,9 +51,7 @@ export function StreakCard({ streak, weeklySessions, weeklyGoal, todayIndex, com
           const isFuture = i > todayDisplay;
           const isDone = isFuture
             ? false
-            : completedDayIndices
-              ? completedDayIndices.includes(i)
-              : i < weeklySessions;
+            : (completedDayIndices ?? []).includes(i);
           const isToday = i === todayDisplay;
           const dotClass = ["sk-dot", isDone ? "done" : "", isToday && !isDone ? "today" : ""].filter(Boolean).join(" ");
           return (

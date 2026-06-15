@@ -20,9 +20,9 @@ export interface WorkoutDayExercise {
 }
 
 export interface WorkoutDay {
-  id: number;
+  id: number | null;
   position?: number;
-  day_of_week: number;
+  day_of_week?: number;
   name: string;
   custom_name?: string | null;
   favorited?: boolean;
@@ -31,6 +31,7 @@ export interface WorkoutDay {
   exercise_count?: number;
   last_completed_at?: string | null;
   exercises?: WorkoutDayExercise[];
+  quick?: boolean;
 }
 
 export interface WorkoutPlan {

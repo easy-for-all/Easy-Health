@@ -31,8 +31,7 @@ function completedWeekDayIndices(dates: string[]): number[] {
   dates.forEach((iso) => {
     const d = new Date(iso);
     if (d <= now) {
-      const jsDay = d.getDay(); // 0=Sun..6=Sat
-      indices.add(jsDay === 0 ? 6 : jsDay - 1); // Mon=0..Sun=6
+      indices.add(d.getDay()); // 0=Sun..6=Sat — matches Sun-first streak-card labels
     }
   });
   return [...indices];
