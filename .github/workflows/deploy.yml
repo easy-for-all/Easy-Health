@@ -5,57 +5,25 @@ on:
     branches:
       - main
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 45
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 177.7.58.46 >> ~/.ssh/known_hosts || true
-
-      - name: Test SSH connectivity
-        run: |
-          echo "Runner IP: $(curl -s --max-time 5 https://api.ipify.org)"
-          nc -zv -w 10 177.7.58.46 22 && echo "Port 22 reachable" || echo "Port 22 UNREACHABLE"
-
       - name: Deploy to VPS
         env:
           GIT_COMMIT: ${{ github.sha }}
+        working-directory: /home/easy/Easy-Health
         run: |
-          for attempt in 1 2 3; do
-            echo "SSH attempt $attempt/3..."
-            ssh -i ~/.ssh/id_ed25519 \
-              -o ConnectTimeout=30 \
-              -o ServerAliveInterval=30 \
-              -o ServerAliveCountMax=3 \
-              -o PreferredAuthentications=publickey \
-              easy@177.7.58.46 "
-                cd /home/easy/Easy-Health &&
-                git fetch origin main &&
-                mkdir -p scripts/production &&
-                for script in backup_production.sh restore_production.sh pre_deploy_guard.sh safe_deploy.sh check_persistence.sh; do
-                  git show '${{ github.sha }}':scripts/production/\$script > scripts/production/\$script
-                  chmod +x scripts/production/\$script
-                done &&
-                bash scripts/production/safe_deploy.sh '${{ github.sha }}'
-              " && break || {
-              echo "Attempt $attempt failed."
-              [ $attempt -lt 3 ] && sleep 15 || { echo "All SSH attempts failed."; exit 1; }
-            }
+          git fetch origin main
+          mkdir -p scripts/production
+          for script in backup_production.sh restore_production.sh pre_deploy_guard.sh safe_deploy.sh check_persistence.sh; do
+            git show "$GIT_COMMIT":scripts/production/$script > scripts/production/$script
+            chmod +x scripts/production/$script
           done
+          bash scripts/production/safe_deploy.sh "$GIT_COMMIT"
 
       - name: Check TLS certificate expiry
+        working-directory: /home/easy/Easy-Health
         run: bash scripts/check_cert_expiry.sh easyhealth.art 45 api.easyhealth.art || echo "::warning::TLS certificate for EasyHealth is expiring soon - renew it!"
