@@ -278,6 +278,12 @@ Devise.setup do |config|
     scope: "email,profile",
     prompt: "select_account"
 
+  # `devise_for :users, skip: :all` (routes.rb) skips Devise's own omniauthable
+  # route generation, which is what normally sets OmniAuth.config.path_prefix.
+  # Without this, OmniAuth falls back to its gem default of "/auth", so
+  # "/users/auth/google_oauth2" never reaches the OmniAuth middleware.
+  OmniAuth.config.path_prefix = "/users/auth"
+
   # ==> Warden configuration
   # If you want to use other strategies, that are not supported by Devise, or
   # change the failure app, you can configure them inside the config.warden block.
