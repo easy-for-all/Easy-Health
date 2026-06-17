@@ -58,9 +58,8 @@ class User < ApplicationRecord
 
     if user
       user.update(provider: auth.provider, uid: auth.uid) unless user.provider.present?
-      user
     else
-      create!(
+      user = create!(
         provider: auth.provider,
         uid: auth.uid,
         email: auth.info.email,
@@ -68,6 +67,19 @@ class User < ApplicationRecord
         password: Devise.friendly_token[0, 20]
       )
     end
+
+    attach_google_avatar(user, auth.info.image) if auth.info.image.present? && !user.avatar.attached?
+
+    user
+  end
+
+  def self.attach_google_avatar(user, image_url)
+    require "open-uri"
+    url = image_url.gsub(/=s\d+-c$/, "=s400-c")
+    io  = URI.open(url)  # rubocop:disable Security/Open
+    user.avatar.attach(io: io, filename: "google_avatar_#{user.id}.jpg", content_type: "image/jpeg")
+  rescue => e
+    Rails.logger.warn("[GoogleAvatar] Failed to attach avatar for user #{user.id}: #{e.message}")
   end
 
   def password_required?
