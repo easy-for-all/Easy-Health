@@ -17,7 +17,7 @@ export function proxy(request: NextRequest) {
   const isAuthRedirect = AUTH_REDIRECT_PATHS.some((p) =>
     pathname.startsWith(p)
   );
-  const sessionCookie = request.cookies.get("_easy_health_session");
+  const sessionCookie = request.cookies.get("_eh_auth") ?? request.cookies.get("_easy_health_session");
 
   if (!isPublic && !sessionCookie) {
     return NextResponse.redirect(new URL("/login", request.url));

@@ -11,6 +11,7 @@ module Api
           Rails.logger.info("[GoogleOAuth] started uid=#{request.env.dig('omniauth.auth', 'uid')}")
           user = User.from_omniauth(request.env["omniauth.auth"])
           sign_in(user)
+          cookies[:_eh_auth] = { value: "1", domain: ".easyhealth.art", path: "/", secure: true, httponly: false, same_site: :lax }
           new_user = user.previously_new_record? || (user.created_at > 5.minutes.ago && user.health_profile.nil?)
           Rails.logger.info("[GoogleOAuthCallback] email=#{user.email} new_user=#{new_user}")
           redirect_to "#{FRONTEND}#{new_user ? '/onboarding' : '/dashboard'}", allow_other_host: true
