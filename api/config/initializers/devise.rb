@@ -289,6 +289,7 @@ Devise.setup do |config|
   # OmniAuth.config.path_prefix back to nil as a side effect.
   Rails.application.config.to_prepare do
     OmniAuth.config.path_prefix = "/users/auth"
+    OmniAuth.config.allowed_request_methods = %i[get post]
   end
 
   # ==> Warden configuration
