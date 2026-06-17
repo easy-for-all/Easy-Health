@@ -282,7 +282,14 @@ Devise.setup do |config|
   # route generation, which is what normally sets OmniAuth.config.path_prefix.
   # Without this, OmniAuth falls back to its gem default of "/auth", so
   # "/users/auth/google_oauth2" never reaches the OmniAuth middleware.
-  OmniAuth.config.path_prefix = "/users/auth"
+  #
+  # This must run in `to_prepare`, not here directly: requiring
+  # 'devise/omniauth' (triggered when the User model with :omniauthable
+  # eager loads, which happens *after* initializers) resets
+  # OmniAuth.config.path_prefix back to nil as a side effect.
+  Rails.application.config.to_prepare do
+    OmniAuth.config.path_prefix = "/users/auth"
+  end
 
   # ==> Warden configuration
   # If you want to use other strategies, that are not supported by Devise, or
