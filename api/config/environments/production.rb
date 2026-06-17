@@ -4,6 +4,7 @@ Rails.application.configure do
   config.assume_ssl = true
   config.session_store :cookie_store,
     key: "_easy_health_session",
+    domain: ".easyhealth.art",
     same_site: :lax,
     secure: true
 
