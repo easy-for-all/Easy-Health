@@ -170,6 +170,7 @@ module Api
           name: day.name,
           custom_name: day.custom_name,
           favorited: day.favorited,
+          invalid_workout_reason: day.invalid_workout_reason,
           last_completed_at: last_completed_at_by_day([day.id])[day.id],
           exercises: wdes.map do |wde|
             {

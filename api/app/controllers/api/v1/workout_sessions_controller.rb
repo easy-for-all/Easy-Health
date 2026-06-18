@@ -60,6 +60,10 @@ module Api
         total_volume = calculate_total_volume(sessions)
         streak_svc = WorkoutStreakService.new(sessions)
 
+        recent_sessions = sessions.first(10)
+        dominant_modality = detect_dominant_modality(recent_sessions)
+        modality_stats = calculate_modality_stats(sessions.first(30), dominant_modality)
+
         render json: {
           total_sessions: sessions.count,
           streak: streak_svc.current_streak,
@@ -68,7 +72,9 @@ module Api
           weekly_sessions: weekly.count,
           weekly_goal: goal,
           total_volume_kg: total_volume,
-          weekly_session_dates: weekly.map { |s| s.completed_at.iso8601 }
+          weekly_session_dates: weekly.map { |s| s.completed_at.iso8601 },
+          dominant_modality: dominant_modality,
+          modality_stats: modality_stats
         }
       end
 
@@ -159,6 +165,11 @@ module Api
             :feeling,
             :duration_minutes,
             :intensity,
+            :elapsed_seconds,
+            :target_seconds,
+            :distance_km,
+            :avg_speed_kmh,
+            :avg_pace_per_km,
             weight_by_set: [],
             is_warmup_by_set: [],
             reps: []
@@ -170,7 +181,7 @@ module Api
         {
           id: s.id,
           workout_day_id: s.workout_day_id,
-          workout_day_name: s.workout_day.name,
+          workout_day_name: s.workout_day&.name,
           completed_at: s.completed_at,
           duration_minutes: s.duration_minutes,
           fatigue_level: s.fatigue_level,
@@ -178,6 +189,64 @@ module Api
           notes: s.notes,
           calories_estimated: s.calories_estimated
         }
+      end
+
+      def detect_dominant_modality(sessions)
+        type_counts = Hash.new(0)
+        sessions.each do |s|
+          (s.exercise_logs || []).each do |log|
+            t = log["exercise_type"] || "musculacao"
+            type_counts[t] += 1
+          end
+        end
+        return "musculacao" if type_counts.empty?
+
+        raw = type_counts.max_by { |_, v| v }&.first
+        case raw
+        when "cardio", "corrida"   then "corrida"
+        when "bike"                then "bike"
+        when "caminhada"           then "caminhada"
+        when "hiit"                then "hiit"
+        when "timed"               then "timed"
+        when "funcional"           then "funcional"
+        else "musculacao"
+        end
+      end
+
+      def calculate_modality_stats(sessions, modality)
+        logs = sessions.flat_map { |s| s.exercise_logs || [] }
+
+        case modality
+        when "musculacao", "funcional"
+          {
+            total_volume_kg: calculate_total_volume(sessions),
+            total_sessions: sessions.count
+          }
+        when "corrida", "bike", "caminhada", "cardio"
+          durations = logs.filter_map { |l| l["duration_minutes"].to_f if l["duration_minutes"].to_f > 0 }
+          distances = logs.filter_map { |l| l["distance_km"].to_f if l["distance_km"].to_f > 0 }
+          {
+            total_duration_minutes: durations.sum.round,
+            total_distance_km: distances.sum.round(1),
+            avg_speed_kmh: logs.filter_map { |l| l["avg_speed_kmh"].to_f if l["avg_speed_kmh"].to_f > 0 }.then { |sp| sp.any? ? (sp.sum / sp.size).round(1) : nil },
+            total_sessions: sessions.count
+          }
+        when "timed"
+          elapsed = logs.filter_map { |l| l["elapsed_seconds"].to_i if l["elapsed_seconds"].to_i > 0 }
+          {
+            max_hold_seconds: elapsed.max || 0,
+            avg_hold_seconds: elapsed.any? ? (elapsed.sum / elapsed.size.to_f).round : 0,
+            total_sessions: sessions.count
+          }
+        when "hiit"
+          durations = logs.filter_map { |l| l["duration_minutes"].to_f if l["duration_minutes"].to_f > 0 }
+          {
+            total_duration_minutes: durations.sum.round,
+            total_sessions: sessions.count
+          }
+        else
+          { total_sessions: sessions.count }
+        end
       end
 
       def calculate_total_volume(sessions)

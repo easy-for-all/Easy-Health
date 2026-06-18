@@ -46,6 +46,7 @@ type ExerciseRuntime = {
   feeling: string;
   duration_minutes?: number;
   intensity?: string;
+  elapsed_seconds?: number;
 };
 
 const MUSCLE_COLORS: Record<string, string> = {
@@ -61,6 +62,11 @@ const MUSCLE_COLORS: Record<string, string> = {
 const CARDIO_TYPES_SET = new Set(["cardio", "corrida", "caminhada", "hiit", "natacao"]);
 function isCardio(ex: WorkoutDayExercise) {
   return !ex.muscle_group && CARDIO_TYPES_SET.has(ex.exercise_type);
+}
+
+const TIMED_TYPES_SET = new Set(["timed"]);
+function isTimed(ex: WorkoutDayExercise) {
+  return TIMED_TYPES_SET.has(ex.exercise_type);
 }
 
 const INTENSITY_STYLES: Record<string, string> = {
@@ -144,8 +150,11 @@ function WorkoutTodayContent() {
   const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [showReorderModal, setShowReorderModal] = useState(false);
   const [cardioTimeLeft, setCardioTimeLeft] = useState(0);
+  const [timedElapsed, setTimedElapsed] = useState(0);
+  const [timedRunning, setTimedRunning] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cardioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const beepFiredRef = useRef(false);
 
@@ -153,7 +162,7 @@ function WorkoutTodayContent() {
     if (!day?.exercises) return 0;
     let total = 0;
     day.exercises.forEach((ex, idx) => {
-      if (isCardio(ex)) return;
+      if (isCardio(ex) || isTimed(ex)) return;
       const state = runtimeFor(exerciseRuntime, ex);
       const setsCompleted = idx < currentIndex ? state.planned_sets : (idx === currentIndex ? currentSet - 1 : 0);
       for (let s = 0; s < setsCompleted; s++) {
@@ -359,6 +368,28 @@ function WorkoutTodayContent() {
       sessionStorage.setItem("wk_exercises_order", JSON.stringify((day.exercises ?? []).map((e) => e.workout_day_exercise_id)));
     } catch { /* storage unavailable */ }
   }, [startTime, phase, currentIndex, currentSet, exerciseRuntime, day]);
+
+  // Reset timed exercise state when switching to a new timed exercise
+  useEffect(() => {
+    if (phase !== "exercising") return;
+    const ex = day?.exercises?.[currentIndex];
+    if (!ex || !isTimed(ex)) return;
+    if (timedTimerRef.current) clearInterval(timedTimerRef.current);
+    setTimedElapsed(0);
+    setTimedRunning(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, phase]);
+
+  // Run timed exercise counter when active
+  useEffect(() => {
+    if (!timedRunning) return;
+    timedTimerRef.current = setInterval(() => {
+      setTimedElapsed((prev) => prev + 1);
+    }, 1000);
+    return () => {
+      if (timedTimerRef.current) clearInterval(timedTimerRef.current);
+    };
+  }, [timedRunning]);
 
   // Auto-start cardio timer when switching to a cardio exercise in exercising phase
   useEffect(() => {
@@ -827,12 +858,16 @@ function WorkoutTodayContent() {
   const historicalMaxWeight = getHistoricalMaxWeight(sessions, exercise.exercise_id);
   const currentWeightNum = Number(runtime.weight_by_set[currentSet - 1]) || 0;
   const isCurrentSetWarmup = runtime.warmup_by_set?.[currentSet - 1] ?? false;
-  const isNewPR = !isCardio(exercise) && !isCurrentSetWarmup && currentWeightNum > 0 && historicalMaxWeight > 0 && currentWeightNum > historicalMaxWeight;
-  const totalPlannedSets = exercises.reduce((sum, ex) => sum + runtimeFor(exerciseRuntime, ex).planned_sets, 0);
+  const isNewPR = !isCardio(exercise) && !isTimed(exercise) && !isCurrentSetWarmup && currentWeightNum > 0 && historicalMaxWeight > 0 && currentWeightNum > historicalMaxWeight;
+  const totalPlannedSets = exercises.reduce((sum, ex) => {
+    if (isCardio(ex) || isTimed(ex)) return sum + 1;
+    return sum + runtimeFor(exerciseRuntime, ex).planned_sets;
+  }, 0);
   const completedSets = exercises.reduce((sum, ex, idx) => {
     const state = runtimeFor(exerciseRuntime, ex);
-    if (idx < currentIndex) return sum + state.planned_sets;
-    if (idx === currentIndex) return sum + Math.max(0, currentSet - 1);
+    const isTimedOrCardio = isCardio(ex) || isTimed(ex);
+    if (idx < currentIndex) return sum + (isTimedOrCardio ? 1 : state.planned_sets);
+    if (idx === currentIndex && !isTimedOrCardio) return sum + Math.max(0, currentSet - 1);
     return sum;
   }, 0);
   const setProgress = totalPlannedSets > 0 ? Math.min(100, Math.round((completedSets / totalPlannedSets) * 100)) : 0;
@@ -971,7 +1006,60 @@ function WorkoutTodayContent() {
           }
           return null;
         })()}
-        {isCardio(exercise) ? (
+        {isTimed(exercise) ? (
+          /* ── Timed (isometric) exercise panel ───────────── */
+          (() => {
+            const targetSecs = (exercise.duration_minutes ?? 1) * 60;
+            const pct = targetSecs > 0 ? Math.min(1, timedElapsed / targetSecs) : 0;
+            const radius = 72;
+            const circ = 2 * Math.PI * radius;
+            return (
+              <div className="mt-6 flex flex-col items-center gap-4">
+                <div style={{ position: "relative", width: 176, height: 176 }}>
+                  <svg width="176" height="176" style={{ transform: "rotate(-90deg)" }}>
+                    <circle cx="88" cy="88" r={radius} fill="none" stroke="var(--border)" strokeWidth="8" />
+                    <motion.circle
+                      cx="88" cy="88" r={radius}
+                      fill="none"
+                      stroke="var(--primary)"
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={circ}
+                      animate={{ strokeDashoffset: circ * (1 - pct) }}
+                      transition={{ duration: 0.9, ease: "easeOut" }}
+                      style={{ filter: "drop-shadow(0 0 8px oklch(0.685 0.17 258))" }}
+                    />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                    <p className="text-4xl font-bold tabular-nums text-primary-500">
+                      {Math.floor(timedElapsed / 60).toString().padStart(2, "0")}:{(timedElapsed % 60).toString().padStart(2, "0")}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      meta: {Math.floor(targetSecs / 60).toString().padStart(2, "0")}:{(targetSecs % 60).toString().padStart(2, "0")}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  {!timedRunning ? (
+                    <PressButton
+                      onClick={() => setTimedRunning(true)}
+                      style={{ background: "var(--primary)", color: "white", border: 0, borderRadius: "var(--r-pill)", padding: "10px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+                    >
+                      {timedElapsed === 0 ? "Iniciar" : "Continuar"}
+                    </PressButton>
+                  ) : (
+                    <PressButton
+                      onClick={() => setTimedRunning(false)}
+                      style={{ background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: "var(--r-pill)", padding: "10px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+                    >
+                      Pausar
+                    </PressButton>
+                  )}
+                </div>
+              </div>
+            );
+          })()
+        ) : isCardio(exercise) ? (
           /* ── Cardio exercise panel ───────────────────────── */
           <div className="mt-6 flex flex-col items-center gap-4">
             <span className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize ${INTENSITY_STYLES[runtime.intensity ?? "moderado"] ?? "bg-yellow-100 text-yellow-700"}`}>
@@ -1088,7 +1176,20 @@ function WorkoutTodayContent() {
       </div>
 
       <div className="px-4" style={{ paddingTop: 8, paddingBottom: "max(24px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
-      {isCardio(exercise) ? (
+      {isTimed(exercise) ? (
+        <PressButton
+          onClick={() => {
+            if (timedTimerRef.current) clearInterval(timedTimerRef.current);
+            setTimedRunning(false);
+            updateRuntime(exercise.workout_day_exercise_id, { elapsed_seconds: timedElapsed });
+            setPhase("exercise_feedback");
+          }}
+          className="w-full rounded-2xl py-4 text-base font-semibold text-white"
+          style={{ background: "var(--primary)" }}
+        >
+          Concluir — {Math.floor(timedElapsed / 60).toString().padStart(2, "0")}:{(timedElapsed % 60).toString().padStart(2, "0")}
+        </PressButton>
+      ) : isCardio(exercise) ? (
         <PressButton onClick={() => finishExercise("bem")} className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white">
           Concluir cardio
         </PressButton>
@@ -1419,7 +1520,10 @@ function OverviewScreen({
   const addSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSession = day.id !== null ? lastSessionForDay(sessions, day.id) : null;
   const recentSessionsCount = sessions.length;
-  const plannedSetsCount = exercises.reduce((sum, exercise) => sum + runtimeFor(runtime, exercise).planned_sets, 0);
+  const plannedSetsCount = exercises.reduce((sum, exercise) => {
+    if (isCardio(exercise) || isTimed(exercise)) return sum + 1;
+    return sum + runtimeFor(runtime, exercise).planned_sets;
+  }, 0);
 
   async function openAdd() {
     const allIds = exercises.map((e) => e.exercise_id).join(",");
@@ -1516,6 +1620,16 @@ function OverviewScreen({
       </div>
       <h1 className="text-2xl font-bold text-white">{day.custom_name || day.name}</h1>
       <p className="mt-1 text-sm text-slate-400">{exercises.length} exercícios</p>
+
+      {day.invalid_workout_reason && (
+        <div className="mt-4 rounded-2xl border border-amber-600/40 bg-amber-950/30 p-4">
+          <p className="text-sm font-semibold text-amber-400">⚠ Treino com exercícios desatualizados</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-300">
+            Seu treino usava exercícios que não fazem mais parte da biblioteca validada da EasyHealth.
+            Para manter a qualidade das imagens e execução, gere um novo treino.
+          </p>
+        </div>
+      )}
 
       <div className="mt-4 rounded-2xl border border-primary-500/30 bg-primary-500/10 p-4">
         <div className="flex items-start justify-between gap-3">
@@ -1800,7 +1914,7 @@ function DoneScreen({
   const totalVolume = useMemo(() => {
     let total = 0;
     exercises.forEach((ex) => {
-      if (isCardio(ex)) return;
+      if (isCardio(ex) || isTimed(ex)) return;
       const state = runtimeFor(runtime, ex);
       state.weight_by_set.forEach((w, i) => {
         total += (Number(w) || 0) * (state.reps_by_set[i] || 0);
@@ -1830,6 +1944,16 @@ function DoneScreen({
           exercise_logs: exercises.map((exercise) => {
             const state = runtimeFor(runtime, exercise);
             const wdeId = isQuick || exercise.workout_day_exercise_id < 0 ? null : exercise.workout_day_exercise_id;
+            if (isTimed(exercise)) {
+              return {
+                workout_day_exercise_id: wdeId,
+                exercise_id: exercise.exercise_id,
+                name: exercise.name,
+                elapsed_seconds: state.elapsed_seconds ?? 0,
+                target_seconds: (exercise.duration_minutes ?? 1) * 60,
+                feeling: state.feeling || null,
+              };
+            }
             if (isCardio(exercise)) {
               return {
                 workout_day_exercise_id: wdeId,
@@ -1894,6 +2018,16 @@ function DoneScreen({
         exercise_logs: exercises.map((exercise) => {
           const state = runtimeFor(runtime, exercise);
           const wdeId = isQuick || exercise.workout_day_exercise_id < 0 ? null : exercise.workout_day_exercise_id;
+          if (isTimed(exercise)) {
+            return {
+              workout_day_exercise_id: wdeId,
+              exercise_id: exercise.exercise_id,
+              name: exercise.name,
+              elapsed_seconds: state.elapsed_seconds ?? 0,
+              target_seconds: (exercise.duration_minutes ?? 1) * 60,
+              feeling: state.feeling || null,
+            };
+          }
           if (isCardio(exercise)) {
             return {
               workout_day_exercise_id: wdeId,
@@ -1910,6 +2044,7 @@ function DoneScreen({
             name: exercise.name,
             weight_kg: firstWeight(state.weight_by_set),
             weight_by_set: state.weight_by_set.map((value) => value ? Number(value) : null),
+            is_warmup_by_set: state.warmup_by_set ?? [],
             planned_sets: exercise.sets,
             sets: state.planned_sets,
             reps: state.reps_by_set,
@@ -2276,15 +2411,17 @@ function categoryIcon(exerciseType: string, muscleGroup: string | null): string 
 }
 
 function createRuntime(exercise: WorkoutDayExercise, lastWeight?: string): ExerciseRuntime {
+  const sets = exercise.sets || 1;
   return {
-    planned_sets: exercise.sets,
-    reps_by_set: Array.from({ length: exercise.sets }, () => exercise.reps),
-    weight_by_set: Array.from({ length: exercise.sets }, () => lastWeight ?? ""),
-    warmup_by_set: Array.from({ length: exercise.sets }, () => false),
-    rest_seconds: exercise.rest_seconds,
+    planned_sets: sets,
+    reps_by_set: Array.from({ length: sets }, () => exercise.reps || 0),
+    weight_by_set: Array.from({ length: sets }, () => lastWeight ?? ""),
+    warmup_by_set: Array.from({ length: sets }, () => false),
+    rest_seconds: exercise.rest_seconds || 0,
     feeling: "",
     duration_minutes: exercise.duration_minutes ?? undefined,
     intensity: exercise.intensity ?? undefined,
+    elapsed_seconds: 0,
   };
 }
 

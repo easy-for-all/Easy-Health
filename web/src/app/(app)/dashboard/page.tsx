@@ -49,6 +49,8 @@ export default function DashboardPage() {
   const [todaySession, setTodaySession] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [noProfile, setNoProfile] = useState(false);
+  const [dominantModality, setDominantModality] = useState<string | null>(null);
+  const [modalityStats, setModalityStats] = useState<Record<string, number | null> | null>(null);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "home" });
@@ -57,7 +59,7 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([
       api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-      api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[] }>(
+      api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[]; dominant_modality?: string; modality_stats?: Record<string, number | null> }>(
         "/api/v1/workout_sessions/stats"
       ).catch(() => null),
       api.get<{ suggestion: string; reason: string }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
@@ -69,6 +71,8 @@ export default function DashboardPage() {
       setWeeklySessions(s?.weekly_sessions ?? 0);
       setWeeklyGoal(s?.weekly_goal ?? 3);
       setWeeklySessionDates(s?.weekly_session_dates ?? []);
+      if (s?.dominant_modality) setDominantModality(s.dominant_modality);
+      if (s?.modality_stats) setModalityStats(s.modality_stats as Record<string, number | null>);
       if (ai?.suggestion) {
         setAiInsight(`${ai.suggestion}${ai.reason ? ` <b>—</b> ${ai.reason}` : ""}`);
       }
@@ -186,6 +190,9 @@ export default function DashboardPage() {
           completedDayIndices={completedWeekDayIndices(weeklySessionDates)}
         />
 
+        {/* Modality metrics card */}
+        {modalityStats && dominantModality && <ModalityMetricsCard modality={dominantModality} stats={modalityStats} />}
+
         {/* Workout list */}
         {plan?.days && plan.days.length > 0 && (
           <section>
@@ -265,6 +272,61 @@ export default function DashboardPage() {
             Histórico
           </a>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const MODALITY_LABELS: Record<string, string> = {
+  musculacao: "Musculação",
+  funcional: "Funcional",
+  corrida: "Corrida",
+  bike: "Bicicleta",
+  caminhada: "Caminhada",
+  hiit: "HIIT",
+  timed: "Isométrico",
+};
+
+function fmtSecs(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m > 0 ? `${m}min ${sec.toString().padStart(2, "0")}s` : `${sec}s`;
+}
+
+function ModalityMetricsCard({ modality, stats }: { modality: string; stats: Record<string, number | null> }) {
+  if (!stats || stats.sessions_count === 0) return null;
+
+  const label = MODALITY_LABELS[modality] ?? modality;
+  const items: { label: string; value: string }[] = [];
+
+  if (modality === "timed") {
+    if (stats.max_hold_seconds) items.push({ label: "Maior tempo", value: fmtSecs(stats.max_hold_seconds as number) });
+    if (stats.avg_hold_seconds) items.push({ label: "Média", value: fmtSecs(stats.avg_hold_seconds as number) });
+  } else if (["corrida", "bike", "caminhada"].includes(modality)) {
+    if (stats.total_distance_km) items.push({ label: "Distância", value: `${stats.total_distance_km} km` });
+    if (stats.total_duration_minutes) items.push({ label: "Tempo", value: `${stats.total_duration_minutes} min` });
+    if (stats.avg_speed_kmh) items.push({ label: "Velocidade média", value: `${stats.avg_speed_kmh} km/h` });
+  } else if (modality === "hiit") {
+    if (stats.total_duration_minutes) items.push({ label: "Tempo total", value: `${stats.total_duration_minutes} min` });
+  } else {
+    if (stats.total_volume_kg) items.push({ label: "Volume total", value: `${stats.total_volume_kg} kg` });
+  }
+  items.push({ label: "Sessões (30 dias)", value: String(stats.sessions_count ?? 0) });
+
+  if (items.length === 0) return null;
+
+  return (
+    <div style={{ borderRadius: "var(--r-lg)", background: "var(--surface)", border: "1px solid var(--border)", padding: "16px" }}>
+      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-dim)", textTransform: "uppercase", marginBottom: 12 }}>
+        {label} — últimos 30 dias
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(items.length, 3)}, 1fr)`, gap: 10 }}>
+        {items.map((item) => (
+          <div key={item.label} style={{ textAlign: "center" }}>
+            <p style={{ fontSize: 18, fontWeight: 700, color: "var(--primary)", margin: 0 }}>{item.value}</p>
+            <p style={{ fontSize: 11, color: "var(--text-dim)", margin: "2px 0 0" }}>{item.label}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
