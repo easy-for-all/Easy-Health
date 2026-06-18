@@ -32,6 +32,7 @@ export interface WorkoutDay {
   last_completed_at?: string | null;
   exercises?: WorkoutDayExercise[];
   quick?: boolean;
+  invalid_workout_reason?: string | null;
 }
 
 export interface WorkoutPlan {

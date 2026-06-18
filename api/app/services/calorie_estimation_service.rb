@@ -7,6 +7,7 @@ class CalorieEstimationService
     "funcional"  => 6.0,
     "natacao"    => 7.0,
     "caminhada"  => 3.5,
+    "timed"      => 4.0,
   }.freeze
 
   DEFAULT_MET    = 5.0

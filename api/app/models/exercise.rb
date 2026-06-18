@@ -1,6 +1,6 @@
 class Exercise < ApplicationRecord
   MUSCLE_GROUPS    = %w[chest back shoulders biceps triceps legs core forearms calves glutes trapezius].freeze
-  EXERCISE_TYPES   = %w[musculacao cardio natacao corrida funcional caminhada hiit].freeze
+  EXERCISE_TYPES   = %w[musculacao cardio natacao corrida funcional caminhada hiit timed].freeze
   EQUIPMENT_TYPES  = %w[bodyweight gym dumbbell barbell cable machine cardio].freeze
 
   has_many :workout_day_exercises, dependent: :destroy

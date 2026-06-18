@@ -8,15 +8,17 @@ module Ai
 
     def call
       {
-        current_datetime: Time.current.iso8601,
-        current_date:     Time.current.to_date.to_s,
-        current_weekday:  Time.current.strftime("%A"),
-        user:             user_payload,
-        active_plan:      active_plan_payload,
-        today_workout:    today_workout_payload,
-        last_session:     last_session_payload,
-        recent_sessions:  recent_sessions_payload,
-        evolution:        evolution_payload
+        current_datetime:  Time.current.iso8601,
+        current_date:      Time.current.to_date.to_s,
+        current_weekday:   Time.current.strftime("%A"),
+        user:              user_payload,
+        active_plan:       active_plan_payload,
+        today_workout:     today_workout_payload,
+        last_session:      last_session_payload,
+        recent_sessions:   recent_sessions_payload,
+        evolution:         evolution_payload,
+        dominant_modality: dominant_modality,
+        modality_metrics:  modality_metrics_payload
       }
     end
 
@@ -114,6 +116,64 @@ module Ai
         last_30_days: sessions.count,
         total_volume_30d: sessions.sum { |s| total_volume(s) }.round(1)
       }
+    end
+
+    def dominant_modality
+      @dominant_modality ||= begin
+        sessions = @user.workout_sessions.order(completed_at: :desc).limit(10)
+        type_counts = Hash.new(0)
+        sessions.each do |s|
+          (s.exercise_logs || []).each { |l| type_counts[l["exercise_type"] || "musculacao"] += 1 }
+        end
+        return "musculacao" if type_counts.empty?
+
+        raw = type_counts.max_by { |_, v| v }&.first
+        case raw
+        when "cardio", "corrida" then "corrida"
+        when "bike"              then "bike"
+        when "caminhada"         then "caminhada"
+        when "hiit"              then "hiit"
+        when "timed"             then "timed"
+        when "funcional"         then "funcional"
+        else "musculacao"
+        end
+      end
+    end
+
+    def modality_metrics_payload
+      sessions = @user.workout_sessions
+                      .where("completed_at >= ?", 30.days.ago)
+                      .order(completed_at: :desc)
+      logs = sessions.flat_map { |s| s.exercise_logs || [] }
+
+      case dominant_modality
+      when "corrida", "bike", "caminhada"
+        durations = logs.filter_map { |l| l["duration_minutes"].to_f if l["duration_minutes"].to_f > 0 }
+        distances = logs.filter_map { |l| l["distance_km"].to_f if l["distance_km"].to_f > 0 }
+        {
+          total_duration_minutes: durations.sum.round,
+          total_distance_km: distances.sum.round(1),
+          sessions_count: sessions.count
+        }
+      when "timed"
+        elapsed = logs.filter_map { |l| l["elapsed_seconds"].to_i if l["elapsed_seconds"].to_i > 0 }
+        {
+          max_hold_seconds: elapsed.max || 0,
+          avg_hold_seconds: elapsed.any? ? (elapsed.sum / elapsed.size.to_f).round : 0,
+          sessions_count: sessions.count
+        }
+      when "hiit"
+        durations = logs.filter_map { |l| l["duration_minutes"].to_f if l["duration_minutes"].to_f > 0 }
+        {
+          total_duration_minutes: durations.sum.round,
+          sessions_count: sessions.count
+        }
+      else
+        {
+          total_volume_kg: sessions.sum { |s| total_volume(s) }.round(1),
+          sessions_count: sessions.count
+        }
+      end
     end
 
     def session_exercises(session)
