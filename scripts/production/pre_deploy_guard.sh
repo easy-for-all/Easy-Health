@@ -40,10 +40,19 @@ confirm_production() {
   grep -q 'storage_data:/rails/storage' "$COMPOSE_FILE" || fail "volume persistente storage_data nao encontrado no compose"
 }
 
+COLD_START=false
+
 check_runtime() {
   log "Verificando containers, volumes, banco e storage"
   db_container="$(compose ps -q "$DB_SERVICE")"
   api_container="$(compose ps -q "$API_SERVICE")"
+
+  if [ -z "$db_container" ] && [ -z "$api_container" ]; then
+    log "Nenhum container encontrado — cold start detectado; verificacoes de runtime ignoradas"
+    COLD_START=true
+    return
+  fi
+
   [ -n "$db_container" ] || fail "container do banco nao encontrado para service=$DB_SERVICE"
   [ -n "$api_container" ] || fail "container da API nao encontrado para service=$API_SERVICE"
 
@@ -58,10 +67,14 @@ confirm_production
 block_dangerous_commands
 check_runtime
 
-log "Executando backup obrigatorio antes do deploy"
-if bash scripts/production/backup_production.sh; then
-  log "Backup concluido; deploy autorizado"
+if [ "$COLD_START" = "true" ]; then
+  log "Cold start — backup pre-deploy ignorado"
 else
-  printf 'DEPLOY BLOQUEADO: backup de producao falhou.\n' >&2
-  exit 1
+  log "Executando backup obrigatorio antes do deploy"
+  if bash scripts/production/backup_production.sh; then
+    log "Backup concluido; deploy autorizado"
+  else
+    printf 'DEPLOY BLOQUEADO: backup de producao falhou.\n' >&2
+    exit 1
+  fi
 fi
