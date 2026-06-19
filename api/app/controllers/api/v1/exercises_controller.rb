@@ -4,7 +4,7 @@ module Api
       def index
         favorite_ids = Set.new(current_user.user_favorite_exercises.pluck(:exercise_id))
 
-        exercises = Exercise.all
+        exercises = Exercise.browseable
         exercises = exercises.where(muscle_group: params[:muscle_group]) if params[:muscle_group].present?
         exercises = exercises.where(exercise_type: params[:exercise_type]) if params[:exercise_type].present?
         exercises = exercises.where(equipment_type: params[:equipment_type]) if params[:equipment_type].present?

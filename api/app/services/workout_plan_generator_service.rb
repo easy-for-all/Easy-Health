@@ -443,6 +443,8 @@ class WorkoutPlanGeneratorService
           else relation
           end
 
+    rel = rel.merge(Exercise.browseable)
+
     fav_priority = if fav_ids.any?
       Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END")
     else

@@ -149,6 +149,14 @@ function WorkoutTodayContent() {
   const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [gifModalExercise, setGifModalExercise] = useState<WorkoutDayExercise | null>(null);
   const [showReorderModal, setShowReorderModal] = useState(false);
+  const [reorderSwapTarget, setReorderSwapTarget] = useState<WorkoutDayExercise | null>(null);
+  const [showReorderAdd, setShowReorderAdd] = useState(false);
+  const [reorderAddAlternatives, setReorderAddAlternatives] = useState<ExerciseOption[]>([]);
+  const [reorderAddSearch, setReorderAddSearch] = useState("");
+  const [reorderAddLoading, setReorderAddLoading] = useState(false);
+  const [reorderAddMuscleFilter, setReorderAddMuscleFilter] = useState<string | null>(null);
+  const [reorderAddDupeMsg, setReorderAddDupeMsg] = useState<string | null>(null);
+  const reorderAddTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cardioTimeLeft, setCardioTimeLeft] = useState(0);
   const [timedElapsed, setTimedElapsed] = useState(0);
   const [timedRunning, setTimedRunning] = useState(false);
@@ -335,7 +343,11 @@ function WorkoutTodayContent() {
             } else {
               setPhase(storedPhase);
             }
-          } catch { /* restore failed, stay on choose screen */ }
+          } catch {
+            try {
+              ["wk_start_ts","wk_day_id","wk_phase","wk_current_index","wk_current_set","wk_exercise_runtime","wk_exercises_order"].forEach((k) => sessionStorage.removeItem(k));
+            } catch { /* ignore */ }
+          }
         }
       }
     }).finally(() => setLoading(false));
@@ -345,6 +357,7 @@ function WorkoutTodayContent() {
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (cardioTimerRef.current) clearInterval(cardioTimerRef.current);
+    if (reorderAddTimerRef.current) clearTimeout(reorderAddTimerRef.current);
   }, []);
 
   // Redirect to central hub when there is no active session and no day param
@@ -646,6 +659,94 @@ function WorkoutTodayContent() {
     setExerciseRuntime((prev) => ({ ...prev, [updated.workout_day_exercise_id]: createRuntime(updated) }));
     setCurrentSet(1);
     setShowSwapModal(false);
+  }
+
+  async function removeExerciseDuring(wdeId: number) {
+    if (!day) return;
+    const list = day.exercises ?? [];
+    if (list.length <= 1) return;
+    const currentExId = list[currentIndex]?.workout_day_exercise_id;
+    const newList = list.filter((e) => e.workout_day_exercise_id !== wdeId);
+    let newCurrentIndex: number;
+    if (currentExId === wdeId) {
+      newCurrentIndex = Math.min(currentIndex, newList.length - 1);
+      setCurrentSet(1);
+    } else {
+      newCurrentIndex = Math.max(0, newList.findIndex((e) => e.workout_day_exercise_id === currentExId));
+    }
+    setDay({ ...day, exercises: newList });
+    setCurrentIndex(newCurrentIndex);
+    try {
+      await api.delete(`/api/v1/workout_day_exercises/${wdeId}`);
+    } catch {
+      setDay(day);
+      setCurrentIndex(currentIndex);
+    }
+  }
+
+  async function swapFromReorder(wdeId: number, replacementId: number) {
+    const updated = await api.post<WorkoutDayExercise>(`/api/v1/workout_day_exercises/${wdeId}/swap`, { replacement_exercise_id: replacementId });
+    setDay((prev) =>
+      prev ? { ...prev, exercises: (prev.exercises ?? []).map((e) => e.workout_day_exercise_id === wdeId ? updated : e) } : prev
+    );
+    setExerciseRuntime((prev) => ({ ...prev, [updated.workout_day_exercise_id]: createRuntime(updated) }));
+    if (wdeId === (day?.exercises ?? [])[currentIndex]?.workout_day_exercise_id) {
+      setCurrentSet(1);
+    }
+    setReorderSwapTarget(null);
+  }
+
+  async function openReorderAdd() {
+    if (!day) return;
+    const allIds = (day.exercises ?? []).map((e) => e.exercise_id).join(",");
+    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?exclude_ids=${allIds}`);
+    setReorderAddAlternatives(data);
+    setReorderAddSearch("");
+    setReorderAddMuscleFilter(null);
+    setReorderAddDupeMsg(null);
+    setShowReorderAdd(true);
+  }
+
+  function handleReorderAddSearch(value: string) {
+    if (!day) return;
+    setReorderAddSearch(value);
+    if (reorderAddTimerRef.current) clearTimeout(reorderAddTimerRef.current);
+    const allIds = (day.exercises ?? []).map((e) => e.exercise_id).join(",");
+    if (value.trim().length >= 2) {
+      reorderAddTimerRef.current = setTimeout(async () => {
+        setReorderAddLoading(true);
+        try {
+          const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?name=${encodeURIComponent(value.trim())}&exclude_ids=${allIds}`);
+          setReorderAddAlternatives(data);
+        } finally {
+          setReorderAddLoading(false);
+        }
+      }, 300);
+    } else if (value.trim().length === 0) {
+      reorderAddTimerRef.current = setTimeout(async () => {
+        setReorderAddLoading(true);
+        try {
+          const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?exclude_ids=${allIds}`);
+          setReorderAddAlternatives(data);
+        } finally {
+          setReorderAddLoading(false);
+        }
+      }, 300);
+    }
+  }
+
+  async function doAddDuring(exerciseId: number) {
+    if (!day) return;
+    setReorderAddDupeMsg(null);
+    try {
+      const created = await api.post<WorkoutDayExercise>(`/api/v1/workout_days/${day.id}/exercises`, { exercise_id: exerciseId });
+      setDay((prev) => prev ? { ...prev, exercises: [...(prev.exercises ?? []), created] } : prev);
+      setExerciseRuntime((prev) => ({ ...prev, [created.workout_day_exercise_id]: createRuntime(created) }));
+      setShowReorderAdd(false);
+      setReorderAddSearch("");
+    } catch {
+      setReorderAddDupeMsg("Exercício já está no treino.");
+    }
   }
 
   function finishExercise(feeling: string) {
@@ -1281,12 +1382,12 @@ function WorkoutTodayContent() {
     {showReorderModal && (
       <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setShowReorderModal(false)}>
         <div
-          className="max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-slate-900 px-4 pb-8 pt-4"
+          className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-slate-900 px-4 pb-8 pt-4"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-slate-700" />
           <div className="flex items-center justify-between mt-2 mb-4">
-            <h3 className="text-base font-bold text-white">Reordenar exercícios</h3>
+            <h3 className="text-base font-bold text-white">Gerenciar treino</h3>
             <button onClick={() => setShowReorderModal(false)} className="text-sm text-slate-500 hover:text-slate-300">Fechar</button>
           </div>
           <div className="space-y-2">
@@ -1296,47 +1397,166 @@ function WorkoutTodayContent() {
               return (
                 <div
                   key={ex.workout_day_exercise_id}
-                  className={`flex items-center gap-3 rounded-xl border p-3 ${isCurrent ? "border-primary-500/50 bg-primary-500/12" : isDone ? "border-slate-800 bg-slate-800/50 opacity-60" : "border-slate-800 bg-slate-900/60"}`}
+                  className={`rounded-xl border p-3 ${isCurrent ? "border-primary-500/50 bg-primary-500/12" : isDone ? "border-slate-800 bg-slate-800/50 opacity-60" : "border-slate-800 bg-slate-900/60"}`}
                 >
-                  <span className="w-5 text-center text-xs font-bold text-slate-500">
-                    {isDone ? "✓" : idx + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-white">{ex.name}</p>
-                    {!isCurrent && !isDone && (
+                  <div className="flex items-center gap-3">
+                    <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-500">
+                      {isDone ? "✓" : idx + 1}
+                    </span>
+                    <p className="flex-1 min-w-0 truncate text-sm font-medium text-white">{ex.name}</p>
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={() => {
-                          setCurrentIndex(idx);
-                          setCurrentSet(1);
-                          setPhase("exercising");
-                          setShowReorderModal(false);
-                        }}
-                        className="mt-0.5 text-xs font-semibold text-primary-500 hover:text-primary-700"
+                        onClick={() => handleMoveExercising(ex.workout_day_exercise_id, "up")}
+                        disabled={idx === 0}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-xs text-slate-500 disabled:opacity-25 hover:bg-slate-800"
+                      >↑</button>
+                      <button
+                        onClick={() => handleMoveExercising(ex.workout_day_exercise_id, "down")}
+                        disabled={idx === exercises.length - 1}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-xs text-slate-500 disabled:opacity-25 hover:bg-slate-800"
+                      >↓</button>
+                    </div>
+                  </div>
+                  {!isDone && (
+                    <div className="mt-2 flex items-center gap-3 pl-8">
+                      {isCurrent && <span className="text-xs font-semibold text-primary-500">atual</span>}
+                      {!isCurrent && (
+                        <button
+                          onClick={() => {
+                            setCurrentIndex(idx);
+                            setCurrentSet(1);
+                            setPhase("exercising");
+                            setShowReorderModal(false);
+                          }}
+                          className="text-xs font-semibold text-primary-500 hover:text-primary-400"
+                        >
+                          Começar por este
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setReorderSwapTarget(ex)}
+                        className="text-xs font-semibold text-blue-400 hover:text-blue-300"
                       >
-                        Começar por este
+                        Trocar
                       </button>
-                    )}
-                  </div>
-                  {isCurrent && <span className="shrink-0 text-xs font-semibold text-primary-500">atual</span>}
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => handleMoveExercising(ex.workout_day_exercise_id, "up")}
-                      disabled={idx === 0}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-xs text-slate-500 disabled:opacity-25 hover:bg-slate-800  "
-                    >↑</button>
-                    <button
-                      onClick={() => handleMoveExercising(ex.workout_day_exercise_id, "down")}
-                      disabled={idx === exercises.length - 1}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-xs text-slate-500 disabled:opacity-25 hover:bg-slate-800  "
-                    >↓</button>
-                  </div>
+                      <button
+                        onClick={() => removeExerciseDuring(ex.workout_day_exercise_id)}
+                        disabled={exercises.length <= 1}
+                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-700 text-xs text-red-400 disabled:opacity-25 hover:bg-slate-800"
+                      >✕</button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
+          <div className="mt-4 border-t border-slate-800 pt-3">
+            <button
+              onClick={openReorderAdd}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-primary-500/50 py-3 text-sm font-semibold text-primary-400"
+            >
+              + Adicionar exercício
+            </button>
+          </div>
         </div>
       </div>
     )}
+
+    {reorderSwapTarget && (
+      <div className="fixed inset-0 z-[60]">
+        <SwapModal
+          exercise={reorderSwapTarget}
+          allWorkoutExerciseIds={exercises.map((e) => e.exercise_id)}
+          onSwap={swapFromReorder}
+          onClose={() => setReorderSwapTarget(null)}
+        />
+      </div>
+    )}
+
+    {showReorderAdd && (() => {
+      const muscleGroups = Array.from(new Set(reorderAddAlternatives.filter((e) => e.muscle_group).map((e) => e.muscle_group as string)));
+      const filtered = reorderAddAlternatives.filter((ex) => !reorderAddMuscleFilter || ex.muscle_group === reorderAddMuscleFilter);
+      return (
+        <div
+          className="fixed inset-0 z-[60] flex items-end bg-black/50"
+          onClick={() => { setShowReorderAdd(false); setReorderAddSearch(""); }}
+        >
+          <div
+            className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex-shrink-0 px-4 pt-3 pb-2">
+              <div className="mb-3 mx-auto h-1 w-10 rounded-full bg-slate-700" />
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-white">Adicionar exercício</h3>
+                <button
+                  onClick={() => { setShowReorderAdd(false); setReorderAddSearch(""); }}
+                  className="text-slate-400 text-lg leading-none"
+                >✕</button>
+              </div>
+            </div>
+            <div className="flex-shrink-0 px-4 pb-2">
+              <input
+                type="text"
+                placeholder="Buscar por nome..."
+                value={reorderAddSearch}
+                onChange={(e) => handleReorderAddSearch(e.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-primary-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex-shrink-0 overflow-x-auto px-4 pb-2">
+              <div className="flex gap-2 min-w-max">
+                {muscleGroups.map((mg) => (
+                  <button
+                    key={mg}
+                    onClick={() => setReorderAddMuscleFilter((f) => f === mg ? null : mg)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${reorderAddMuscleFilter === mg ? "bg-primary-500/20 text-primary-300 border-primary-500/40" : "bg-slate-800 text-slate-400 border-slate-700"}`}
+                  >
+                    {MUSCLE_LABELS[mg] ?? mg}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {reorderAddDupeMsg && (
+              <p className="flex-shrink-0 mx-4 mb-2 rounded-lg bg-yellow-900/40 border border-yellow-700/40 px-3 py-2 text-xs text-yellow-400">
+                {reorderAddDupeMsg}
+              </p>
+            )}
+            <div className="flex-1 overflow-y-auto px-4 pb-8">
+              {reorderAddLoading ? (
+                <p className="p-4 text-center text-sm text-slate-500">Buscando...</p>
+              ) : filtered.length === 0 ? (
+                <p className="p-4 text-sm text-slate-400">Nenhum exercício encontrado.</p>
+              ) : (
+                filtered.map((alt) => (
+                  <button
+                    key={alt.id}
+                    onClick={() => doAddDuring(alt.id)}
+                    className="mb-2 flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-800/60 p-3 text-left active:bg-slate-700"
+                  >
+                    <SmartImage
+                      src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)}
+                      fallbackSrc={exerciseFallback(alt)}
+                      alt={alt.name}
+                      className="h-14 w-14 flex-shrink-0 rounded-lg object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-white">{alt.name}</p>
+                      {alt.muscle_group && (
+                        <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[alt.muscle_group] ?? "bg-slate-700 text-slate-300"}`}>
+                          {MUSCLE_LABELS[alt.muscle_group] ?? alt.muscle_group}
+                        </span>
+                      )}
+                    </div>
+                    <span className="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary-500/20 text-primary-400 text-sm font-bold">+</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    })()}
     </>
   );
 }
@@ -2255,7 +2475,7 @@ function DoneScreen({
         {/* Done CTA */}
         <motion.div variants={staggerItem}>
           <PressButton
-            onClick={() => router.push("/dashboard")}
+            onClick={() => { if (!isSaved) onSaved?.(); router.push("/dashboard"); }}
             className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
           >
             {isSaved ? "Ir para o dashboard →" : "Concluir sem salvar →"}

@@ -322,7 +322,7 @@ class ExerciseIntelligenceService
   end
 
   private_class_method def self.build_candidate_scope(current_exercise, intent)
-    base = Exercise.all
+    base = Exercise.browseable
 
     case intent[:intent_type]
     when INTENT_CARDIO
