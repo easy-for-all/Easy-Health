@@ -282,7 +282,7 @@ export default function ProfilePage() {
           <small>{user?.email}</small>
         </div>
       </div>
-      <input ref={avatarInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
+      <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
       {avatarError && (
         <p style={{ marginBottom: 12, borderRadius: "var(--r-md)", border: "1px solid var(--hot)", background: "var(--hot-soft)", padding: "10px 14px", fontSize: 13, color: "var(--hot)" }}>{avatarError}</p>
       )}
@@ -426,7 +426,6 @@ export default function ProfilePage() {
           ref={mediaInputRef}
           type="file"
           accept="image/*,application/pdf"
-          capture={mediaTab === "body_photo" ? "environment" : undefined}
           className="hidden"
           onChange={handleMediaUpload}
         />
