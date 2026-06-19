@@ -1,6 +1,16 @@
 module Api
   module V1
     class UserMediaController < BaseController
+      ALLOWED_TYPES = {
+        "body_photo" => %w[image/jpeg image/png image/webp].freeze,
+        "exam"       => %w[image/jpeg image/png application/pdf].freeze
+      }.freeze
+
+      MAX_SIZE = {
+        "body_photo" => 10.megabytes,
+        "exam"       => 25.megabytes
+      }.freeze
+
       def index
         media = current_user.user_media.order(captured_at: :desc)
         render json: media.map { |m| media_json(m) }
@@ -11,16 +21,15 @@ module Api
           return render json: { error: "No file uploaded" }, status: :unprocessable_entity
         end
 
-        file = params[:file]
-        unless file.content_type.start_with?("image/") || file.content_type == "application/pdf"
-          return render json: { error: "Only images and PDFs are allowed" }, status: :unprocessable_entity
-        end
-
-        if file.size > 20.megabytes
-          return render json: { error: "File too large (max 20MB)" }, status: :unprocessable_entity
-        end
-
+        file     = params[:file]
         category = params[:category].to_s
+
+        if (error = validate_file_for_category(file, category))
+          Rails.logger.warn "[UserMedia] upload_failed user_id=#{current_user.id} category=#{category} reason=#{error}"
+          return render json: { error: error }, status: :unprocessable_entity
+        end
+
+        Rails.logger.info "[UserMedia] upload_started user_id=#{current_user.id} category=#{category} size=#{file.size}"
         file_data = file.read
 
         case category
@@ -46,6 +55,7 @@ module Api
         )
 
         if media.save
+          Rails.logger.info "[UserMedia] upload_completed user_id=#{current_user.id} media_id=#{media.id} category=#{category}"
           extra = { face_blurred: result&.dig(:face_blurred) || false }
 
           if category == "exam"
@@ -99,6 +109,7 @@ module Api
         media = current_user.user_media.find(params[:id])
         media.file.purge_later if media.file.attached?
         media.destroy!
+        Rails.logger.info "[UserMedia] file_purged user_id=#{current_user.id} media_id=#{params[:id]}"
         head :no_content
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Not found" }, status: :not_found
@@ -138,6 +149,23 @@ module Api
       end
 
       private
+
+      def validate_file_for_category(file, category)
+        allowed = ALLOWED_TYPES[category]
+        return "Invalid category: #{category}" unless allowed
+
+        unless allowed.include?(file.content_type)
+          readable = allowed.map { |t| t.split("/").last.upcase }.join(", ")
+          return "Invalid file type for #{category}. Allowed: #{readable}"
+        end
+
+        max = MAX_SIZE[category]
+        if file.size > max
+          return "File too large (max #{max / 1.megabyte}MB for #{category})"
+        end
+
+        nil
+      end
 
       def validate_and_process_body_photo(file_data, content_type)
         cfg = AiConfig.for(:image_validation)

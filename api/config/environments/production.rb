@@ -22,6 +22,7 @@ Rails.application.configure do
   config.active_record.dump_schema_after_migration = false
   config.active_record.attributes_for_inspect = [ :id ]
 
-  config.active_storage.service = :local
+  config.active_storage.service = :easyhealth_s3
+  config.active_storage.service_urls_expire_in = 1.hour
   config.active_storage.variant_processor = :vips
 end

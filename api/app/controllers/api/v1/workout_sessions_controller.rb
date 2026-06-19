@@ -30,7 +30,12 @@ module Api
         session = current_user.workout_sessions.build(session_params)
         session.completed_at ||= Time.current
 
-        workout_day = WorkoutDay.includes(workout_day_exercises: :exercise).find_by(id: session.workout_day_id)
+        workout_day = nil
+        if session.workout_day_id.present?
+          workout_day = WorkoutDay.includes(workout_day_exercises: :exercise).find_by(id: session.workout_day_id)
+          session.workout_day_id = nil unless workout_day
+        end
+
         calories = CalorieEstimationService.new(
           duration_minutes: session.duration_minutes,
           workout_day: workout_day,

@@ -72,7 +72,16 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     const now = new Date();
     try {
       sessionStorage.setItem(KEY_START_TS, now.toISOString());
-      if (dayId !== null) sessionStorage.setItem(KEY_DAY_ID, String(dayId));
+      if (dayId !== null) {
+        sessionStorage.setItem(KEY_DAY_ID, String(dayId));
+      } else {
+        sessionStorage.removeItem(KEY_DAY_ID);
+      }
+      sessionStorage.removeItem(`${STORAGE_PREFIX}phase`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}current_index`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}current_set`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}exercise_runtime`);
+      sessionStorage.removeItem(`${STORAGE_PREFIX}exercises_order`);
     } catch { /* storage unavailable */ }
     setStartTime(now);
     setActiveWorkoutDayId(dayId);

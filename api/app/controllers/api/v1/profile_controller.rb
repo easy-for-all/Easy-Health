@@ -55,18 +55,23 @@ module Api
 
         file = params[:avatar]
         unless file.content_type.start_with?("image/")
+          Rails.logger.warn "[Profile] avatar_upload_failed user_id=#{current_user.id} reason=invalid_content_type"
           return render json: { error: "Only image files are allowed" }, status: :unprocessable_entity
         end
 
         if file.size > 10.megabytes
+          Rails.logger.warn "[Profile] avatar_upload_failed user_id=#{current_user.id} reason=file_too_large size=#{file.size}"
           return render json: { error: "File too large (max 10MB)" }, status: :unprocessable_entity
         end
 
+        Rails.logger.info "[Profile] avatar_upload_started user_id=#{current_user.id} size=#{file.size}"
         current_user.avatar.attach(file)
 
         if current_user.avatar.attached?
+          Rails.logger.info "[Profile] avatar_upload_completed user_id=#{current_user.id}"
           render json: { avatar_url: blob_path(current_user.avatar) }, status: :ok
         else
+          Rails.logger.warn "[Profile] avatar_upload_failed user_id=#{current_user.id} reason=attach_failed"
           render json: { error: "Upload failed" }, status: :unprocessable_entity
         end
       end

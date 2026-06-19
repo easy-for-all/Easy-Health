@@ -300,6 +300,34 @@ namespace :exercises do
     puts "HIIT exercises:      #{Exercise.where(exercise_type: 'hiit').count}"
   end
 
+  desc "Replace or remove workout_day_exercises linked to gym exercises without valid GIFs"
+  task clean_gifless_wdes: :environment do
+    audit    = ExerciseGifAuditJob.new
+    replaced = 0
+    removed  = 0
+
+    WorkoutDayExercise
+      .joins(:exercise)
+      .where(
+        "(exercises.exercise_type = 'musculacao' OR exercises.equipment_type IN ('gym','dumbbell','barbell','cable','machine'))" \
+        " AND (exercises.gif_url IS NULL OR exercises.gif_url NOT LIKE '/exercise-images/%')"
+      )
+      .find_each do |wde|
+        exercise = wde.exercise
+        if (equiv = audit.send(:find_equivalent, exercise))
+          wde.update!(exercise_id: equiv.id)
+          puts "  Replaced: #{exercise.name} → #{equiv.name} [wde #{wde.id}]"
+          replaced += 1
+        else
+          puts "  Removed: #{exercise.name} [wde #{wde.id}] (no equivalent)"
+          wde.destroy
+          removed += 1
+        end
+      end
+
+    puts "\nDone. Replaced: #{replaced}, Removed: #{removed}"
+  end
+
   desc "Fix image_url for existing seeded exercises and copy missing images"
   task fix_seed_images: :environment do
     local_db = [
