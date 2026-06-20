@@ -28,7 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
         setUser(null);
 
-        if (!publicPaths.some((path) => window.location.pathname.startsWith(path))) {
+        const pathname = window.location.pathname;
+        if (!publicPaths.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)))) {
           window.location.replace("/login");
         }
       })
@@ -53,6 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     try {
       await api.delete("/api/v1/auth/sign_out");
+    } catch {
+      // server-side signout failed; local state still cleared in finally
     } finally {
       document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
       setUser(null);
