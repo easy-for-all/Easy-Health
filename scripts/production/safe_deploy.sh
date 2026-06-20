@@ -119,6 +119,9 @@ log "Aguardando API e banco"
 sleep 15
 compose exec -T "$DB_SERVICE" sh -lc "pg_isready -U '$DB_USER' -d '$DB_NAME'" >/dev/null
 
+log "Criando banco de dados se necessario"
+compose exec -T "$API_SERVICE" bin/rails db:create || true
+
 log "Rodando migrations Rails incrementais"
 compose exec -T "$API_SERVICE" bin/rails db:migrate
 

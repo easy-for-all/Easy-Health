@@ -206,8 +206,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_14_100002) do
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
-# Could not dump table "knowledge_chunks" because of following StandardError
-#   Unknown type 'vector(1536)' for column 'embedding'
+  create_table "knowledge_chunks", force: :cascade do |t|
+    t.bigint "knowledge_document_id", null: false
+    t.text "content", null: false
+    t.column "embedding", "vector(1536)"
+    t.integer "chunk_index"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["knowledge_document_id"], name: "index_knowledge_chunks_on_knowledge_document_id"
+  end
 
 
   create_table "knowledge_documents", force: :cascade do |t|
