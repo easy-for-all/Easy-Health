@@ -6,7 +6,6 @@ const PUBLIC_PATHS = [
   "/ia-para-treino", "/treino-personalizado", "/emagrecimento",
   "/treino-em-casa", "/analise-de-exames", "/exercicios", "/sobre", "/precos",
 ];
-const AUTH_REDIRECT_PATHS = ["/login", "/sign-up"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,17 +13,10 @@ export function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) =>
     p === "/" ? pathname === "/" : pathname.startsWith(p)
   );
-  const isAuthRedirect = AUTH_REDIRECT_PATHS.some((p) =>
-    pathname.startsWith(p)
-  );
   const sessionCookie = request.cookies.get("_eh_auth") ?? request.cookies.get("_easy_health_session");
 
   if (!isPublic && !sessionCookie) {
     return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  if (isAuthRedirect && sessionCookie) {
-    return NextResponse.redirect(new URL("/profile", request.url));
   }
 
   return NextResponse.next();

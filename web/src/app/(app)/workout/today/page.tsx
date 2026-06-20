@@ -21,6 +21,8 @@ import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer
 import { useCoach } from "@/features/coach/coach-context";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import "@/shared/components/workout/workout-ui.css";
+import { workoutEngine, usesTimerScreen, usesRecoveryScreen } from "@/features/workout/workout-engine";
+import { CardioPanel, IntervalPanel, RecoveryPanel } from "./workout-engine-screens";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
 type ExerciseOption = {
@@ -59,21 +61,9 @@ const MUSCLE_COLORS: Record<string, string> = {
   core: "bg-teal-100 text-teal-700",
 };
 
-const CARDIO_TYPES_SET = new Set(["cardio", "corrida", "caminhada", "hiit", "natacao"]);
-function isCardio(ex: WorkoutDayExercise) {
-  return !ex.muscle_group && CARDIO_TYPES_SET.has(ex.exercise_type);
-}
-
-const TIMED_TYPES_SET = new Set(["timed"]);
-function isTimed(ex: WorkoutDayExercise) {
-  return TIMED_TYPES_SET.has(ex.exercise_type);
-}
-
-const INTENSITY_STYLES: Record<string, string> = {
-  leve: "bg-green-100 text-green-700",
-  moderado: "bg-yellow-100 text-yellow-700",
-  intenso: "bg-red-100 text-red-700",
-};
+function isCardio(ex: WorkoutDayExercise) { return usesTimerScreen(ex); }
+function isTimed(ex: WorkoutDayExercise)  { return usesRecoveryScreen(ex); }
+function isInterval(ex: WorkoutDayExercise) { return workoutEngine(ex) === "interval"; }
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -1108,72 +1098,41 @@ function WorkoutTodayContent() {
           return null;
         })()}
         {isTimed(exercise) ? (
-          /* ── Timed (isometric) exercise panel ───────────── */
-          (() => {
-            const targetSecs = (exercise.duration_minutes ?? 1) * 60;
-            const pct = targetSecs > 0 ? Math.min(1, timedElapsed / targetSecs) : 0;
-            const radius = 72;
-            const circ = 2 * Math.PI * radius;
-            return (
-              <div className="mt-6 flex flex-col items-center gap-4">
-                <div style={{ position: "relative", width: 176, height: 176 }}>
-                  <svg width="176" height="176" style={{ transform: "rotate(-90deg)" }}>
-                    <circle cx="88" cy="88" r={radius} fill="none" stroke="var(--border)" strokeWidth="8" />
-                    <motion.circle
-                      cx="88" cy="88" r={radius}
-                      fill="none"
-                      stroke="var(--primary)"
-                      strokeWidth="8"
-                      strokeLinecap="round"
-                      strokeDasharray={circ}
-                      animate={{ strokeDashoffset: circ * (1 - pct) }}
-                      transition={{ duration: 0.9, ease: "easeOut" }}
-                      style={{ filter: "drop-shadow(0 0 8px oklch(0.685 0.17 258))" }}
-                    />
-                  </svg>
-                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                    <p className="text-4xl font-bold tabular-nums text-primary-500">
-                      {Math.floor(timedElapsed / 60).toString().padStart(2, "0")}:{(timedElapsed % 60).toString().padStart(2, "0")}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      meta: {Math.floor(targetSecs / 60).toString().padStart(2, "0")}:{(targetSecs % 60).toString().padStart(2, "0")}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  {!timedRunning ? (
-                    <PressButton
-                      onClick={() => setTimedRunning(true)}
-                      style={{ background: "var(--primary)", color: "white", border: 0, borderRadius: "var(--r-pill)", padding: "10px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
-                    >
-                      {timedElapsed === 0 ? "Iniciar" : "Continuar"}
-                    </PressButton>
-                  ) : (
-                    <PressButton
-                      onClick={() => setTimedRunning(false)}
-                      style={{ background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: "var(--r-pill)", padding: "10px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
-                    >
-                      Pausar
-                    </PressButton>
-                  )}
-                </div>
-              </div>
-            );
-          })()
+          /* ── Recovery panel (mobilidade / yoga / isometria) ── */
+          <RecoveryPanel
+            exerciseName={exercise.name}
+            nextName={exercises[currentIndex + 1]?.name ?? null}
+            imageUrl={exercise.image_url}
+            gifUrl={exercise.gif_url ?? null}
+            instruction={exercise.instructions ?? null}
+            elapsedSeconds={timedElapsed}
+            targetSeconds={(exercise.duration_minutes ?? 1) * 60}
+            running={timedRunning}
+            onToggle={() => setTimedRunning((v) => !v)}
+            onOpenMedia={() => setGifModalExercise(exercise)}
+          />
+        ) : isInterval(exercise) ? (
+          /* ── Interval panel (HIIT / Funcional / Circuito) ── */
+          <IntervalPanel
+            exerciseName={exercise.name}
+            nextName={exercises[currentIndex + 1]?.name ?? null}
+            secondsLeft={cardioTimeLeft}
+            totalSeconds={(runtime.duration_minutes ?? 20) * 60}
+            blockIndex={currentIndex + 1}
+            blockTotal={exercises.length}
+          />
         ) : isCardio(exercise) ? (
-          /* ── Cardio exercise panel ───────────────────────── */
-          <div className="mt-6 flex flex-col items-center gap-4">
-            <span className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize ${INTENSITY_STYLES[runtime.intensity ?? "moderado"] ?? "bg-yellow-100 text-yellow-700"}`}>
-              {runtime.intensity ?? "moderado"}
-            </span>
-            <div className="flex flex-col items-center">
-              <p className="text-7xl font-bold tabular-nums text-primary-500">
-                {Math.floor(cardioTimeLeft / 60).toString().padStart(2, "0")}:{(cardioTimeLeft % 60).toString().padStart(2, "0")}
-              </p>
-              <p className="mt-1 text-sm text-slate-500">restante</p>
-            </div>
-            <p className="text-xs text-slate-500">{runtime.duration_minutes ?? 20} min planejados</p>
-          </div>
+          /* ── Cardio panel (Bike / Corrida / Caminhada / Cardio) ── */
+          <CardioPanel
+            exerciseName={exercise.name}
+            nextName={exercises[currentIndex + 1]?.name ?? null}
+            secondsLeft={cardioTimeLeft}
+            totalSeconds={(runtime.duration_minutes ?? 20) * 60}
+            intensity={runtime.intensity}
+            durationMin={runtime.duration_minutes}
+            blockIndex={currentIndex + 1}
+            blockTotal={exercises.length}
+          />
         ) : (
           /* ── Strength exercise panel ─────────────────────── */
           <>

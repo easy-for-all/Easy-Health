@@ -6,23 +6,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/shared/lib/api";
 import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 import type { WorkoutDay } from "@/shared/types/workout";
-
-type Modality = "musculacao" | "cardio" | "corrida" | "caminhada" | "bike" | "funcional" | "mobilidade" | "alongamento" | "ai_choice";
+import { ModalityPicker, type Modality } from "./modality-picker";
+import { EnvironmentStep, type EquipId, type Location } from "./environment-step";
 type Duration = 15 | 30 | 45 | 60;
-type Location = "academia" | "casa" | "ar_livre";
 type Difficulty = "iniciante" | "moderado" | "intenso";
 
-const MODALITY_OPTIONS: { value: Modality; label: string; emoji: string; description: string }[] = [
-  { value: "musculacao", label: "Musculação",   emoji: "🏋️", description: "Treino com pesos e máquinas" },
-  { value: "funcional",  label: "Funcional",    emoji: "⚡",  description: "Movimentos funcionais e HIIT" },
-  { value: "corrida",    label: "Corrida",      emoji: "🏃",  description: "Corrida e cardio de alto impacto" },
-  { value: "bike",       label: "Bike",         emoji: "🚴",  description: "Ciclismo indoor ou outdoor" },
-  { value: "cardio",     label: "Cardio",       emoji: "💓",  description: "Cardio variado e aeróbico" },
-  { value: "caminhada",  label: "Caminhada",    emoji: "🚶",  description: "Caminhada leve ou moderada" },
-  { value: "mobilidade", label: "Mobilidade",   emoji: "🤸",  description: "Flexibilidade e amplitude" },
-  { value: "alongamento",label: "Alongamento",  emoji: "🧘",  description: "Relaxamento e recuperação" },
-  { value: "ai_choice",  label: "IA escolhe",   emoji: "🤖",  description: "A IA monta o melhor para você" },
-];
 
 const DURATION_OPTIONS: { value: Duration; label: string; sub: string }[] = [
   { value: 15, label: "15 min", sub: "Rápido" },
@@ -31,11 +19,6 @@ const DURATION_OPTIONS: { value: Duration; label: string; sub: string }[] = [
   { value: 60, label: "60 min+", sub: "Intenso" },
 ];
 
-const LOCATION_OPTIONS: { value: Location; label: string; emoji: string }[] = [
-  { value: "academia",  label: "Academia",    emoji: "🏋️" },
-  { value: "casa",      label: "Em casa",     emoji: "🏠" },
-  { value: "ar_livre",  label: "Ao ar livre", emoji: "🌳" },
-];
 
 const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; emoji: string; sub: string }[] = [
   { value: "iniciante", label: "Iniciante", emoji: "🟢", sub: "Mais descanso, menor carga" },
@@ -65,6 +48,8 @@ export default function QuickWorkoutPage() {
   const [modality, setModality] = useState<Modality | null>(null);
   const [duration, setDuration] = useState<Duration | null>(null);
   const [location, setLocation] = useState<Location | null>(null);
+  const [equipment, setEquipment] = useState<EquipId[]>([]);
+  const [branchAnswer, setBranchAnswer] = useState<boolean | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -84,6 +69,7 @@ export default function QuickWorkoutPage() {
         duration_minutes: duration,
         location,
         difficulty: selectedDifficulty,
+        equipment,
       });
       sessionStorage.setItem("wk_quick_day", JSON.stringify(data.day));
       router.push("/workout/today?quick=1");
@@ -136,19 +122,10 @@ export default function QuickWorkoutPage() {
           className="flex-1"
         >
           {step === 1 && (
-            <div className="space-y-2.5">
-              {MODALITY_OPTIONS.map((opt) => (
-                <SelectCard
-                  key={opt.value}
-                  selected={modality === opt.value}
-                  onClick={() => { setModality(opt.value); next(); }}
-                  label={opt.label}
-                  sub={opt.description}
-                  icon={opt.emoji}
-                  horizontal
-                />
-              ))}
-            </div>
+            <ModalityPicker
+              value={modality}
+              onSelect={(m) => { setModality(m); next(); }}
+            />
           )}
 
           {step === 2 && (
@@ -166,18 +143,27 @@ export default function QuickWorkoutPage() {
             </div>
           )}
 
-          {step === 3 && (
-            <div className="grid grid-cols-3 gap-3">
-              {LOCATION_OPTIONS.map((opt) => (
-                <SelectCard
-                  key={opt.value}
-                  selected={location === opt.value}
-                  onClick={() => { setLocation(opt.value); next(); }}
-                  label={opt.label}
-                  icon={opt.emoji}
-                />
-              ))}
-            </div>
+          {step === 3 && modality && (
+            <>
+              <EnvironmentStep
+                modality={modality}
+                location={location}
+                equipment={equipment}
+                branchAnswer={branchAnswer}
+                onLocation={(l) => { setLocation(l); setBranchAnswer(null); }}
+                onToggleEquip={(e) => setEquipment((arr) => arr.includes(e) ? arr.filter((x) => x !== e) : [...arr, e])}
+                onBranch={setBranchAnswer}
+                onSwapModality={(m) => { setModality(m); setBranchAnswer(null); }}
+              />
+              <button
+                disabled={!location}
+                onClick={next}
+                className="mt-4 w-full rounded-2xl py-4 text-base font-semibold text-white disabled:opacity-40"
+                style={{ background: "var(--primary)" }}
+              >
+                Continuar →
+              </button>
+            </>
           )}
 
           {step === 4 && (

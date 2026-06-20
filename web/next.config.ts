@@ -52,8 +52,12 @@ const nextConfig = {
         destination: `${internalApiUrl}/rails/:path*`,
       },
       {
-        source: "/exercise-images/:path*",
-        destination: `${internalApiUrl}/exercise-images/:path*`,
+        source: "/exercise-images/db/:path*",
+        destination: `${internalApiUrl}/exercise-images/db/:path*`,
+      },
+      {
+        source: "/exercise-images/gifdotreino/:path*",
+        destination: `${internalApiUrl}/exercise-images/gifdotreino/:path*`,
       },
     ];
   },

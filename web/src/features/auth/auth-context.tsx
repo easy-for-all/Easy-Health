@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { api } from "@/shared/lib/api";
+import { api, ApiError } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
 
 interface AuthContextValue {
@@ -24,8 +24,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     api.get<User>("/api/v1/auth/me")
       .then(setUser)
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && [401, 403].includes(error.status)) {
+          void api.delete("/api/v1/auth/sign_out").catch(() => undefined);
+        }
+
         document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
+        if (window.location.hostname === "easyhealth.art" || window.location.hostname.endsWith(".easyhealth.art")) {
+          document.cookie = "_eh_auth=; Max-Age=0; path=/; domain=.easyhealth.art; SameSite=Lax";
+        }
         setUser(null);
 
         const pathname = window.location.pathname;
