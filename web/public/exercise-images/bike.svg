@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220" role="img" aria-label="Bicicleta">
+  <rect width="320" height="220" fill="#eff6ff"/>
+  <circle cx="93" cy="159" r="34" fill="none" stroke="#2563eb" stroke-width="12"/>
+  <circle cx="231" cy="159" r="34" fill="none" stroke="#2563eb" stroke-width="12"/>
+  <path d="M93 159l42-78h42l54 78M135 81l28 78h-70M163 159h68M177 81l-13-27h28" fill="none" stroke="#1e3a8a" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="163" cy="159" r="8" fill="#f97316"/>
+</svg>

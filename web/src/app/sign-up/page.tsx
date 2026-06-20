@@ -60,14 +60,30 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const submittedName = String(formData.get("name") ?? "").trim();
+    const submittedEmail = String(formData.get("email") ?? "").trim();
+    const submittedPassword = String(formData.get("password") ?? "");
+
     if (!acceptedTerms) {
       setTermsWarning(true);
       return;
     }
+
+    if (!submittedName || !submittedEmail || !submittedPassword) {
+      setError("Preencha todos os campos para continuar.");
+      return;
+    }
+
+    if (submittedPassword.length < 8) {
+      setError("A senha deve ter pelo menos 8 caracteres.");
+      return;
+    }
+
     setError("");
     setLoading(true);
     try {
-      await signUp(name, email, password);
+      await signUp(submittedName, submittedEmail, submittedPassword);
       trackEvent(EVENTS.SIGNUP_COMPLETED);
       trackConversion(CONVERSIONS.SIGNUP);
       const pending = getPendingPlan();
@@ -145,7 +161,7 @@ export default function SignUpPage() {
           <div className="h-px flex-1 bg-slate-800" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form noValidate onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <p className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
           )}
@@ -153,6 +169,7 @@ export default function SignUpPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-400">Nome</label>
             <input
+              name="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -166,6 +183,7 @@ export default function SignUpPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-400">Email</label>
             <input
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -179,6 +197,7 @@ export default function SignUpPage() {
             <label className="mb-1 block text-sm font-medium text-slate-400">Senha</label>
             <div className="relative">
               <input
+                name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
                 value={password}

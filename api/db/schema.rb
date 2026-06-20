@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_14_100002) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_19_030001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "vector"
@@ -206,15 +206,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_14_100002) do
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
-  create_table "knowledge_chunks", force: :cascade do |t|
-    t.bigint "knowledge_document_id", null: false
-    t.text "content", null: false
-    t.column "embedding", "vector(1536)"
-    t.integer "chunk_index"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["knowledge_document_id"], name: "index_knowledge_chunks_on_knowledge_document_id"
-  end
+# Could not dump table "knowledge_chunks" because of following StandardError
+#   Unknown type 'vector(1536)' for column 'embedding'
 
 
   create_table "knowledge_documents", force: :cascade do |t|
@@ -391,6 +384,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_14_100002) do
     t.string "custom_name"
     t.integer "day_of_week"
     t.boolean "favorited", default: false, null: false
+    t.string "invalid_workout_reason"
     t.string "name"
     t.integer "position"
     t.datetime "updated_at", null: false
@@ -414,6 +408,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_14_100002) do
     t.jsonb "exercise_logs", default: [], null: false
     t.integer "fatigue_level"
     t.text "notes"
+    t.string "source"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "workout_day_id"
