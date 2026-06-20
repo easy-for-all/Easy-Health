@@ -83,6 +83,14 @@ elif [ -f ".env" ]; then
   chmod 600 "$backup_dir/env.backup" || true
 fi
 
+log "Verificando existencia do banco de dados"
+db_exists="$(compose exec -T "$DB_SERVICE" sh -lc "psql -U '$DB_USER' -d postgres -tAc \"SELECT 1 FROM pg_database WHERE datname='$DB_NAME'\"" 2>/dev/null || true)"
+if [ "$db_exists" != "1" ]; then
+  log "Banco '$DB_NAME' nao existe ainda — nada a preservar; backup ignorado"
+  printf '\nBACKUP IGNORADO (banco nao inicializado)\n'
+  exit 0
+fi
+
 log "Gerando dump PostgreSQL"
 compose exec -T "$DB_SERVICE" sh -lc "pg_dump -U '$DB_USER' -d '$DB_NAME' --format=custom --blobs --verbose" > "$backup_dir/database.dump"
 require_file "$backup_dir/database.dump"
