@@ -8,5 +8,8 @@ class PersonalAlert < ApplicationRecord
   scope :for_personal, ->(user) { where(personal: user).order(created_at: :desc) }
 
   def unread? = read_at.nil?
-  def mark_read! = update!(read_at: Time.current) if unread?
+
+  def mark_read!
+    update!(read_at: Time.current) if unread?
+  end
 end

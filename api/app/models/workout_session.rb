@@ -17,7 +17,6 @@ class WorkoutSession < ApplicationRecord
 
   def maybe_create_community_post
     return unless user.community_enabled?
-    return unless user.public_profile&.show_workouts
 
     streak = recent_streak
     post_type = streak >= 3 ? "streak_achieved" : "workout_completed"
