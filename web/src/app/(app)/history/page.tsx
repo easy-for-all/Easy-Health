@@ -83,6 +83,7 @@ type ExerciseProgress = {
   count: number; // number of records
   maxKg: number;
   trend: number; // % change vs prev
+  lastFeeling: string | null;
 };
 
 function computeDailyMinutes(sessions: WorkoutSession[], days = 7): { label: string; mins: number }[] {
@@ -160,7 +161,7 @@ function computeMuscleBalance(sessions: WorkoutSession[]): { name: string; pct: 
 }
 
 function computeExerciseProgress(sessions: WorkoutSession[]): ExerciseProgress[] {
-  const map: Record<string, { name: string; muscleGroup: string | null; entries: { date: Date; maxKg: number }[] }> = {};
+  const map: Record<string, { name: string; muscleGroup: string | null; entries: { date: Date; maxKg: number; feeling: string | null }[] }> = {};
   for (const s of sessions) {
     const date = new Date(s.completed_at);
     for (const log of s.exercise_logs ?? []) {
@@ -170,7 +171,7 @@ function computeExerciseProgress(sessions: WorkoutSession[]): ExerciseProgress[]
       const warmupFlags: boolean[] = (log as { is_warmup_by_set?: boolean[] }).is_warmup_by_set ?? [];
       const weights = allWeights.filter((_, i) => !warmupFlags[i]);
       const maxKg = Math.max(0, ...weights.filter((w): w is number => typeof w === "number" && w > 0));
-      if (maxKg > 0) map[key].entries.push({ date, maxKg });
+      if (maxKg > 0) map[key].entries.push({ date, maxKg, feeling: log.feeling ?? null });
     }
   }
   return Object.values(map)
@@ -181,7 +182,8 @@ function computeExerciseProgress(sessions: WorkoutSession[]): ExerciseProgress[]
       const maxKg = Math.max(...weights);
       const prev = weights[weights.length - 2] ?? maxKg;
       const trend = prev > 0 ? Math.round(((maxKg - prev) / prev) * 100) : 0;
-      return { name: e.name, muscleGroup: e.muscleGroup, weights, count: sorted.length, maxKg, trend };
+      const lastFeeling = sorted[sorted.length - 1]?.feeling ?? null;
+      return { name: e.name, muscleGroup: e.muscleGroup, weights, count: sorted.length, maxKg, trend, lastFeeling };
     })
     .sort((a, b) => b.count - a.count)
     .slice(0, 12);
@@ -288,6 +290,16 @@ function HistoryContent() {
     return sessions.filter((s) => new Date(s.completed_at) >= weekStart).length;
   }, [sessions]);
 
+  const caloriesWeek = useMemo(() => {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    return sessions
+      .filter((s) => new Date(s.completed_at) >= weekStart)
+      .reduce((sum, s) => sum + (s.calories_estimated ?? 0), 0);
+  }, [sessions]);
+
   const expectedMins = useMemo(() => computeExpectedMinutes(healthProfile), [healthProfile]);
   const maxDayMins = Math.max(1, ...dailyMins.map((d) => d.mins));
   const chartMaxY = Math.max(maxDayMins, Math.ceil(expectedMins * 1.25));
@@ -342,6 +354,13 @@ function HistoryContent() {
               <p className="mk">📅 Esta semana</p>
               <p className="mv">{thisWeekSessions}<small> treinos</small></p>
             </div>
+            {caloriesWeek > 0 && (
+              <div className="metric">
+                <p className="mk">🔥 Calorias</p>
+                <p className="mv">{caloriesWeek.toLocaleString("pt-BR")}<small> kcal</small></p>
+                <p className="mtrend">esta semana</p>
+              </div>
+            )}
           </div>
 
           {/* Daily minutes bar chart */}
@@ -517,6 +536,11 @@ function HistoryContent() {
                     {ex.trend !== 0 && (
                       <span style={{ color: ex.trend > 0 ? "var(--good)" : "var(--hot)" }}>
                         {ex.trend > 0 ? "↑" : "↓"}{Math.abs(ex.trend)}%
+                      </span>
+                    )}
+                    {ex.lastFeeling && (
+                      <span style={{ fontSize: 14 }}>
+                        {{"bem": "😊", "cansado": "😓", "pesado": "⚠️", "dolorido": "🤕", "com dor": "🚨"}[ex.lastFeeling] ?? null}
                       </span>
                     )}
                   </div>
@@ -726,6 +750,21 @@ function SessionSheet({ session, onClose }: { session: WorkoutSession; onClose: 
             </div>
           ))}
         </div>
+
+        {/* Notes & calories */}
+        {(session.notes || (session.calories_estimated ?? 0) > 0) && (
+          <div style={{ padding: "0 20px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {session.notes && (
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "10px 14px" }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 4px" }}>Anotações</p>
+                <p style={{ fontSize: 13, margin: 0, lineHeight: 1.5 }}>{session.notes}</p>
+              </div>
+            )}
+            {(session.calories_estimated ?? 0) > 0 && (
+              <p style={{ fontSize: 12, color: "var(--text-dim)", margin: 0 }}>🔥 {session.calories_estimated} kcal estimadas</p>
+            )}
+          </div>
+        )}
 
         {/* Exercise list */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 20px" }}>

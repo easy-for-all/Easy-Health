@@ -1081,21 +1081,48 @@ function WorkoutTodayContent() {
         </div>
         {(() => {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
-          if (prev) {
-            const date = new Date(prev.session.completed_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
-            const weight = prev.log.weight_kg ? `${prev.log.weight_kg} kg` : null;
-            return (
-              <p className="mt-1 text-xs text-slate-500">
-                Última vez: {date}{weight ? ` · ${weight}` : ""}
-              </p>
-            );
+          if (!prev) {
+            if (exercise.last_performed_at) {
+              const d = Math.floor((Date.now() - new Date(exercise.last_performed_at).getTime()) / 86400000);
+              const label = d === 0 ? "hoje" : d === 1 ? "ontem" : `há ${d} dias`;
+              return <p className="mt-1 text-xs text-slate-500">Última vez: {label}</p>;
+            }
+            return null;
           }
-          if (exercise.last_performed_at) {
-            const daysAgo = Math.floor((Date.now() - new Date(exercise.last_performed_at).getTime()) / 86400000);
-            const label = daysAgo === 0 ? "hoje" : daysAgo === 1 ? "ontem" : `há ${daysAgo} dias`;
-            return <p className="mt-1 text-xs text-slate-500">Última vez: {label}</p>;
-          }
-          return null;
+          const log = prev.log;
+          const warmupFlags: boolean[] = (log as { is_warmup_by_set?: boolean[] }).is_warmup_by_set ?? [];
+          const normalWeights = Array.isArray(log.weight_by_set)
+            ? log.weight_by_set.filter((_, i) => !warmupFlags[i]).filter((w): w is number => w != null && w > 0)
+            : [];
+          const maxWeight = normalWeights.length > 0
+            ? Math.max(...normalWeights)
+            : (log.weight_kg && log.weight_kg > 0 ? log.weight_kg : null);
+          const setsCount = log.sets ?? (Array.isArray(log.weight_by_set) ? log.weight_by_set.length : null);
+          const repsVal = Array.isArray(log.reps) ? (log.reps[0] ?? null) : (log.reps ?? null);
+          const feelingEmoji: Record<string, string> = { "bem": "😊", "cansado": "😓", "pesado": "⚠️", "dolorido": "🤕", "com dor": "🚨" };
+          const feelEmoji = log.feeling ? (feelingEmoji[log.feeling] ?? null) : null;
+          const suggestion = maxWeight && log.feeling !== "com dor" && log.feeling !== "cansado"
+            ? maxWeight + (maxWeight >= 30 ? 2.5 : 1)
+            : null;
+          const dateLabel = relativeDate(prev.session.completed_at);
+          return (
+            <div className="mt-2 rounded-lg border border-slate-700/60 bg-slate-800/50 px-3 py-2">
+              <p className="text-xs font-medium text-slate-400 mb-1">Da última vez · {dateLabel}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {maxWeight && (
+                  <span className="text-sm font-bold text-white">
+                    {maxWeight} kg{setsCount && repsVal ? ` · ${setsCount}×${repsVal}` : setsCount ? ` · ${setsCount} séries` : ""}
+                  </span>
+                )}
+                {feelEmoji && <span className="text-base">{feelEmoji}</span>}
+              </div>
+              {suggestion && (
+                <p className="mt-1 text-xs font-semibold" style={{ color: "var(--primary, #60a5fa)" }}>
+                  💡 Tente {suggestion} kg hoje
+                </p>
+              )}
+            </div>
+          );
         })()}
         {isTimed(exercise) ? (
           /* ── Recovery panel (mobilidade / yoga / isometria) ── */

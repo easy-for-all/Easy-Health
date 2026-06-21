@@ -66,6 +66,7 @@ Rails.application.routes.draw do
           get :personal_records
           get :today
           get :monthly_summary
+          get :last_performances
         end
       end
 
