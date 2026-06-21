@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_19_030001) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_20_100001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "vector"
@@ -143,6 +143,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_19_030001) do
     t.datetime "created_at", null: false
     t.text "description"
     t.string "difficulty", default: "intermediate"
+    t.string "difficulty_level"
     t.string "equipment_type", default: "gym", null: false
     t.string "exercise_type", default: "musculacao", null: false
     t.string "gif_path"
@@ -158,6 +159,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_19_030001) do
     t.string "source_dataset"
     t.datetime "updated_at", null: false
     t.string "video_url"
+    t.index ["difficulty_level"], name: "index_exercises_on_difficulty_level"
     t.index ["equipment_type"], name: "index_exercises_on_equipment_type"
     t.index ["exercise_type"], name: "index_exercises_on_exercise_type"
   end

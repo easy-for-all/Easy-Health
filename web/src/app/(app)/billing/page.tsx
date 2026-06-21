@@ -32,12 +32,12 @@ function StatusBadge({ status }: { status: string | null }) {
     incomplete: "Incompleto",
   };
   const colors: Record<string, string> = {
-    trialing: "bg-blue-100 text-blue-700",
-    active: "bg-green-100 text-green-700",
-    past_due: "bg-yellow-100 text-yellow-700",
-    canceled: "bg-gray-100 text-gray-500",
-    unpaid: "bg-red-100 text-red-700",
-    incomplete: "bg-gray-100 text-gray-500",
+    trialing: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+    active: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+    past_due: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
+    canceled: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+    unpaid: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+    incomplete: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   };
 
   if (!status || status === "none") return null;
@@ -52,9 +52,9 @@ function StatusBadge({ status }: { status: string | null }) {
 function StatusMessage({ billing }: { billing: BillingStatus }) {
   if (!billing.plan || billing.plan === "none") {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Você ainda não possui uma assinatura ativa.{" "}
-        <Link href="/pricing" className="text-primary-600 hover:underline font-medium">
+        <Link href="/pricing" className="text-primary-600 dark:text-primary-400 hover:underline font-medium">
           Ver planos
         </Link>
       </p>
@@ -64,7 +64,7 @@ function StatusMessage({ billing }: { billing: BillingStatus }) {
   if (billing.status === "trialing") {
     const days = daysUntil(billing.trial_end);
     return (
-      <p className="text-sm text-blue-600">
+      <p className="text-sm text-blue-600 dark:text-blue-400">
         Você está no teste grátis. Termina em{" "}
         <strong>{days} {days === 1 ? "dia" : "dias"}</strong>{" "}
         ({formatDate(billing.trial_end)}).
@@ -74,7 +74,7 @@ function StatusMessage({ billing }: { billing: BillingStatus }) {
 
   if (billing.cancel_at_period_end) {
     return (
-      <p className="text-sm text-yellow-700">
+      <p className="text-sm text-yellow-700 dark:text-yellow-400">
         Sua assinatura será cancelada ao final do período ({formatDate(billing.current_period_end)}).
       </p>
     );
@@ -82,7 +82,7 @@ function StatusMessage({ billing }: { billing: BillingStatus }) {
 
   if (billing.status === "active" && billing.current_period_end) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Sua próxima renovação será em <strong>{formatDate(billing.current_period_end)}</strong>.
       </p>
     );
@@ -90,7 +90,7 @@ function StatusMessage({ billing }: { billing: BillingStatus }) {
 
   if (billing.status === "past_due") {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-600 dark:text-red-400">
         Houve um problema com o pagamento. Atualize sua forma de pagamento para manter o acesso.
       </p>
     );
@@ -98,7 +98,7 @@ function StatusMessage({ billing }: { billing: BillingStatus }) {
 
   if (billing.status === "canceled") {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Sua assinatura foi cancelada. Assine novamente para recuperar o acesso.
       </p>
     );
@@ -212,16 +212,16 @@ export default function BillingPage() {
   const hasPortal = !!billing?.stripe_customer_id;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="max-w-lg mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Meu Plano</h1>
-        <p className="text-gray-500 text-sm mb-6">Gerencie sua assinatura EasyHealth.</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-1">Meu Plano</h1>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">Gerencie sua assinatura EasyHealth.</p>
 
         {/* Status atual */}
         {billing && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-6">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 mb-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-gray-800">
+              <span className="font-medium text-gray-800 dark:text-gray-200">
                 {!hasPlan
                   ? "Sem assinatura"
                   : billing.plan === "pro_yearly"
@@ -235,7 +235,7 @@ export default function BillingPage() {
         )}
 
         {error && (
-          <div className="bg-red-50 text-red-700 rounded-xl px-4 py-3 text-sm mb-4">
+          <div className="bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 rounded-xl px-4 py-3 text-sm mb-4">
             {error}
           </div>
         )}
@@ -243,21 +243,21 @@ export default function BillingPage() {
         {/* Troca de plano — só mostra para assinantes ativos */}
         {isPaid && billing && (billing.plan === "pro_monthly" || billing.plan === "pro_yearly") && (
           <div className="mb-6">
-            <h2 className="text-sm font-semibold text-gray-700 mb-3">Mudar de plano</h2>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Mudar de plano</h2>
             <div className="flex flex-col gap-3">
               {/* Anual — primeiro */}
-              <div className={`bg-white rounded-2xl border-2 p-4 relative ${billing.plan === "pro_yearly" ? "border-primary-300 bg-primary-50" : "border-primary-200"}`}>
+              <div className={`bg-white dark:bg-gray-900 rounded-2xl border-2 p-4 relative ${billing.plan === "pro_yearly" ? "border-primary-300 bg-primary-50 dark:bg-primary-900/20" : "border-primary-200 dark:border-primary-800"}`}>
                 {billing.plan !== "pro_yearly" && (
                   <span className="absolute -top-2.5 left-4 rounded-full bg-primary-500 px-2 py-0.5 text-xs font-bold text-white">Mais vantajoso</span>
                 )}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-semibold text-gray-900 text-sm">Pro Anual</h3>
-                    <p className="text-lg font-bold text-gray-900">R$ 9,90<span className="text-xs font-normal text-gray-500">/mês</span></p>
-                    <p className="text-xs text-gray-400">R$ 118,80/ano · economize ~50%</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-50 text-sm">Pro Anual</h3>
+                    <p className="text-lg font-bold text-gray-900 dark:text-gray-50">R$ 9,90<span className="text-xs font-normal text-gray-500 dark:text-gray-400">/mês</span></p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">R$ 118,80/ano · economize ~50%</p>
                   </div>
                   {billing.plan === "pro_yearly" ? (
-                    <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700">Plano atual</span>
+                    <span className="rounded-full bg-primary-100 dark:bg-primary-900/40 px-3 py-1 text-xs font-semibold text-primary-700 dark:text-primary-300">Plano atual</span>
                   ) : (
                     <button
                       onClick={() => handleChangePlan("pro_yearly")}
@@ -270,19 +270,19 @@ export default function BillingPage() {
                 </div>
               </div>
               {/* Mensal */}
-              <div className={`bg-white rounded-2xl border-2 p-4 ${billing.plan === "pro_monthly" ? "border-primary-300 bg-primary-50" : "border-gray-100"}`}>
+              <div className={`bg-white dark:bg-gray-900 rounded-2xl border-2 p-4 ${billing.plan === "pro_monthly" ? "border-primary-300 bg-primary-50 dark:bg-primary-900/20" : "border-gray-100 dark:border-gray-800"}`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-semibold text-gray-900 text-sm">Pro Mensal</h3>
-                    <p className="text-lg font-bold text-gray-900">R$ 19,90<span className="text-xs font-normal text-gray-500">/mês</span></p>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-50 text-sm">Pro Mensal</h3>
+                    <p className="text-lg font-bold text-gray-900 dark:text-gray-50">R$ 19,90<span className="text-xs font-normal text-gray-500 dark:text-gray-400">/mês</span></p>
                   </div>
                   {billing.plan === "pro_monthly" ? (
-                    <span className="rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700">Plano atual</span>
+                    <span className="rounded-full bg-primary-100 dark:bg-primary-900/40 px-3 py-1 text-xs font-semibold text-primary-700 dark:text-primary-300">Plano atual</span>
                   ) : (
                     <button
                       onClick={() => handleChangePlan("pro_monthly")}
                       disabled={actionLoading !== null}
-                      className="rounded-xl bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 hover:bg-gray-700 transition"
+                      className="rounded-xl bg-gray-900 dark:bg-gray-700 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 hover:bg-gray-700 dark:hover:bg-gray-600 transition"
                     >
                       {actionLoading === "change_pro_monthly" ? "..." : "Mudar para este"}
                     </button>
@@ -297,7 +297,7 @@ export default function BillingPage() {
                 <button
                   onClick={handleReactivate}
                   disabled={actionLoading !== null}
-                  className="w-full rounded-xl border border-green-300 bg-green-50 py-3 text-sm font-medium text-green-700 disabled:opacity-50"
+                  className="w-full rounded-xl border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/40 py-3 text-sm font-medium text-green-700 dark:text-green-400 disabled:opacity-50"
                 >
                   {actionLoading === "reactivate" ? "Aguarde..." : "Reativar assinatura"}
                 </button>
@@ -306,16 +306,16 @@ export default function BillingPage() {
                   {!confirmCancel ? (
                     <button
                       onClick={() => setConfirmCancel(true)}
-                      className="w-full text-center text-xs text-gray-400 underline underline-offset-2 py-2"
+                      className="w-full text-center text-xs text-gray-400 dark:text-gray-500 underline underline-offset-2 py-2"
                     >
                       Cancelar assinatura
                     </button>
                   ) : (
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                      <p className="text-sm text-red-700 font-medium mb-3">Cancelar assinatura?</p>
-                      <p className="text-xs text-red-600 mb-3">Você manterá o acesso até o final do período pago.</p>
+                    <div className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4">
+                      <p className="text-sm text-red-700 dark:text-red-400 font-medium mb-3">Cancelar assinatura?</p>
+                      <p className="text-xs text-red-600 dark:text-red-400/80 mb-3">Você manterá o acesso até o final do período pago.</p>
                       <div className="flex gap-2">
-                        <button onClick={() => setConfirmCancel(false)} className="flex-1 rounded-lg border border-gray-300 py-2 text-xs text-gray-600">Manter plano</button>
+                        <button onClick={() => setConfirmCancel(false)} className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 py-2 text-xs text-gray-600 dark:text-gray-400">Manter plano</button>
                         <button
                           onClick={handleCancel}
                           disabled={actionLoading !== null}
@@ -336,24 +336,24 @@ export default function BillingPage() {
         {!isPaid && (
           <div className="flex flex-col gap-4 mb-6">
             {/* Pro Anual — primeiro para chamar atenção */}
-            <div className="bg-white rounded-2xl border-2 border-primary-500 p-5 relative">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border-2 border-primary-500 p-5 relative">
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-xs font-bold px-3 py-1 rounded-full">
                 Mais vantajoso
               </span>
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h2 className="font-semibold text-gray-900">Pro Anual</h2>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    R$ 9,90<span className="text-sm font-normal text-gray-500">/mês</span>
+                  <h2 className="font-semibold text-gray-900 dark:text-gray-50">Pro Anual</h2>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-50 mt-1">
+                    R$ 9,90<span className="text-sm font-normal text-gray-500 dark:text-gray-400">/mês</span>
                   </p>
-                  <p className="text-xs text-gray-500">R$ 118,80 cobrado por ano</p>
-                  <p className="text-xs text-green-600 font-semibold">Economize cerca de 50%</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">R$ 118,80 cobrado por ano</p>
+                  <p className="text-xs text-green-600 dark:text-green-400 font-semibold">Economize cerca de 50%</p>
                 </div>
               </div>
-              <ul className="text-sm text-gray-600 space-y-1 mb-4">
+              <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 mb-4">
                 <li>✓ Tudo do Pro Mensal</li>
                 <li>✓ Metade do preço por mês</li>
-                <li className="font-medium text-primary-700">✓ 7 dias grátis</li>
+                <li className="font-medium text-primary-700 dark:text-primary-400">✓ 7 dias grátis</li>
               </ul>
               <button
                 onClick={() => handleCheckout("pro_yearly")}
@@ -362,34 +362,34 @@ export default function BillingPage() {
               >
                 {actionLoading === "pro_yearly" ? "Aguarde..." : "Começar 7 dias grátis"}
               </button>
-              <p className="text-xs text-gray-400 text-center mt-2">Cancele quando quiser</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">Cancele quando quiser</p>
             </div>
 
             {/* Pro Mensal */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h2 className="font-semibold text-gray-900">Pro Mensal</h2>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    R$ 19,90<span className="text-sm font-normal text-gray-500">/mês</span>
+                  <h2 className="font-semibold text-gray-900 dark:text-gray-50">Pro Mensal</h2>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-50 mt-1">
+                    R$ 19,90<span className="text-sm font-normal text-gray-500 dark:text-gray-400">/mês</span>
                   </p>
-                  <p className="text-xs text-gray-400">Depois de 7 dias grátis</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Depois de 7 dias grátis</p>
                 </div>
               </div>
-              <ul className="text-sm text-gray-600 space-y-1 mb-4">
+              <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 mb-4">
                 <li>✓ Acesso completo a todos os recursos</li>
                 <li>✓ Treinos personalizados por IA</li>
                 <li>✓ Histórico ilimitado</li>
-                <li className="font-medium text-primary-700">✓ 7 dias grátis</li>
+                <li className="font-medium text-primary-700 dark:text-primary-400">✓ 7 dias grátis</li>
               </ul>
               <button
                 onClick={() => handleCheckout("pro_monthly")}
                 disabled={actionLoading !== null}
-                className="w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-gray-700 transition"
+                className="w-full bg-gray-900 dark:bg-gray-700 text-white rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-gray-700 dark:hover:bg-gray-600 transition"
               >
                 {actionLoading === "pro_monthly" ? "Aguarde..." : "Começar 7 dias grátis"}
               </button>
-              <p className="text-xs text-gray-400 text-center mt-2">Cancele quando quiser</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">Cancele quando quiser</p>
             </div>
           </div>
         )}
@@ -400,7 +400,7 @@ export default function BillingPage() {
             <button
               onClick={handlePortal}
               disabled={actionLoading !== null}
-              className="w-full border border-gray-300 text-gray-700 rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-gray-50 transition"
+              className="w-full border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl py-3 text-sm font-medium disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-900 transition"
             >
               {actionLoading === "portal" ? "Aguarde..." : "Gerenciar no Stripe"}
             </button>
@@ -413,7 +413,7 @@ export default function BillingPage() {
             <button
               onClick={handleSync}
               disabled={actionLoading !== null}
-              className="w-full text-center text-xs text-gray-400 underline underline-offset-2 py-2"
+              className="w-full text-center text-xs text-gray-400 dark:text-gray-500 underline underline-offset-2 py-2"
             >
               {actionLoading === "sync" ? "Sincronizando..." : "Sincronizar status da assinatura"}
             </button>
