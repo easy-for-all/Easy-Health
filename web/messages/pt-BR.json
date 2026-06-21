@@ -226,7 +226,8 @@
   },
   "plan": {
     "title": "Plano de treinamento",
-    "noplan": "Nenhum plano criado ainda."
+    "noplan": "Nenhum plano criado ainda.",
+    "personalization_reason_prefix": "Montei este treino porque"
   },
   "profile": {
     "title": "Perfil",
@@ -265,11 +266,20 @@
     "weightKg": "Peso (kg)",
     "heightCm": "Altura (cm)",
     "language": "Idioma",
+    "trainingPreferences": "Preferências de treino",
+    "trainingPreferencesHint": "Ajuste o contexto que deixa seus treinos mais adequados a você.",
+    "preferencesEmpty": "Você ainda não informou preferências de treino.",
     "goals": {
       "lose_weight": "Perder peso",
       "gain_muscle": "Ganhar músculo",
       "maintain": "Manter peso",
-      "health": "Saúde geral"
+      "health": "Saúde geral",
+      "body_definition": "Definir o corpo",
+      "conditioning": "Melhorar condicionamento",
+      "strength": "Ganhar força",
+      "mobility": "Melhorar mobilidade",
+      "safe_return": "Voltar a treinar com segurança",
+      "health_longevity": "Saúde e longevidade"
     },
     "levels": {
       "beginner": "Iniciante",
@@ -296,5 +306,12 @@
     "hiit": "HIIT",
     "push": "Superiores (Empurrar)",
     "pull": "Superiores (Puxar)"
+  },
+  "coach": {
+    "insights": {
+      "title": "Seu Coach aprendeu sobre você",
+      "empty": "Nenhuma recomendação no momento",
+      "mark_read": "Marcar como lido"
+    }
   }
 }

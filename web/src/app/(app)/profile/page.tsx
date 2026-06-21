@@ -13,7 +13,19 @@ import { LoadingScreen } from "@/shared/components/loading-screen";
 import { DeleteAccountModal } from "@/shared/components/delete-account-modal";
 import { CleanDataModal } from "@/shared/components/clean-data-modal";
 import { setLocale } from "@/app/actions";
-import type { HealthProfile, Goal, FitnessLevel } from "@/shared/types/health-profile";
+import { ExercisePreferencePicker } from "@/features/profile/exercise-preference-picker";
+import type {
+  BodyFocus,
+  Equipment,
+  ExercisePreference,
+  HealthProfile,
+  Goal,
+  FitnessLevel,
+  IntensityPreference,
+  TrainingContext,
+  TrainingLocation,
+  TrainingStyle,
+} from "@/shared/types/health-profile";
 import "@/shared/components/workout/workout-ui.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -253,6 +265,12 @@ export default function ProfilePage() {
     gain_muscle: t("goals.gain_muscle"),
     maintain:    t("goals.maintain"),
     health:      t("goals.health"),
+    body_definition: t("goals.body_definition"),
+    conditioning: t("goals.conditioning"),
+    strength: t("goals.strength"),
+    mobility: t("goals.mobility"),
+    safe_return: t("goals.safe_return"),
+    health_longevity: t("goals.health_longevity"),
   };
 
   const levelLabels: Record<FitnessLevel, string> = {
@@ -395,6 +413,18 @@ export default function ProfilePage() {
         )}
       </div>
 
+      {profile && <TrainingPreferencesCard profile={profile} onSaved={(updated) => {
+        setProfile(updated);
+        setForm({
+          age: updated.age,
+          weight_kg: updated.weight_kg,
+          height_cm: updated.height_cm,
+          goal: updated.goal,
+          fitness_level: updated.fitness_level,
+          limitations: updated.limitations ?? [],
+        });
+      }} />}
+
       {/* Body evolution chart */}
       {!editing && <BodyEvolutionSection history={bodyHistory} />}
 
@@ -449,7 +479,7 @@ export default function ProfilePage() {
           </span>
           <span className="lv">›</span>
         </Link>
-        <Link href="/settings" className="li">
+        <Link href="/community/privacy" className="li">
           <span className="lic">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
           </span>
@@ -891,6 +921,168 @@ export default function ProfilePage() {
         />
       )}
     </div>
+  );
+}
+
+const BODY_FOCUS_LABELS: Record<BodyFocus, string> = {
+  full_body: "Corpo inteiro", glutes: "Glúteos", legs: "Pernas", abs: "Abdômen", arms: "Braços",
+  chest: "Peito", back: "Costas", shoulders: "Ombros", mobility_posture: "Mobilidade/postura", conditioning_cardio: "Condicionamento/cardio",
+};
+const STYLE_LABELS: Record<TrainingStyle, string> = {
+  traditional_strength: "Musculação tradicional", short_sessions: "Treinos curtos", cardio: "Cardio",
+  functional: "Funcional", calisthenics: "Calistenia", mobility: "Mobilidade/alongamento", mixed: "Misturado", unknown: "Ainda não sei",
+};
+const LOCATION_LABELS: Record<TrainingLocation, string> = {
+  full_gym: "Academia completa", simple_gym: "Academia simples", home: "Casa", condo: "Condomínio",
+  outdoor: "Ar livre", hotel_travel: "Hotel/viagem", unknown: "Ainda não sei",
+};
+const EQUIPMENT_LABELS: Record<Equipment, string> = {
+  machine: "Máquinas", dumbbell: "Halteres", barbell: "Barra", plates: "Anilhas", resistance_band: "Elásticos",
+  treadmill: "Esteira", stationary_bike: "Bicicleta", rower: "Remo", jump_rope: "Corda", bodyweight: "Peso corporal", none: "Nenhum",
+};
+const INTENSITY_LABELS: Record<IntensityPreference, string> = {
+  easy_start: "Fáceis de começar", balanced: "Equilibrados", intense: "Intensos", progressive: "Progressivos", unknown: "Não sei",
+};
+const CONTEXT_LABELS: Record<TrainingContext, string> = {
+  none: "Nenhum", postpartum: "Pós-parto", pregnant: "Gestante", menstrual_cycle_impact: "Ciclo menstrual impacta meus treinos", prefer_not_to_say: "Prefiro não informar",
+};
+const PREFERENCE_LIMITATIONS = ["Joelho", "Lombar", "Ombro", "Punho", "Pescoço", "Quadril", "Pós-parto", "Retorno de lesão"];
+
+type PreferenceDraft = {
+  goal: Goal;
+  preferred_body_focus: BodyFocus[];
+  preferred_training_styles: TrainingStyle[];
+  training_location: TrainingLocation;
+  available_equipment: Equipment[];
+  session_duration_minutes: 15 | 25 | 35 | 45 | 60 | null;
+  training_days_per_week: number | null;
+  intensity_preference: IntensityPreference | null;
+  training_context: TrainingContext | null;
+  limitations: string[];
+  favorite_exercises: ExercisePreference[];
+  avoided_exercises: ExercisePreference[];
+};
+
+function preferenceDraft(profile: HealthProfile): PreferenceDraft {
+  return {
+    goal: profile.goal,
+    preferred_body_focus: profile.preferred_body_focus ?? [],
+    preferred_training_styles: profile.preferred_training_styles ?? [],
+    training_location: profile.training_location ?? "unknown",
+    available_equipment: profile.available_equipment ?? [],
+    session_duration_minutes: profile.session_duration_minutes ?? null,
+    training_days_per_week: profile.training_days_per_week ?? null,
+    intensity_preference: profile.intensity_preference ?? null,
+    training_context: profile.training_context ?? null,
+    limitations: profile.limitations ?? [],
+    favorite_exercises: profile.favorite_exercises ?? [],
+    avoided_exercises: profile.avoided_exercises ?? [],
+  };
+}
+
+function PreferenceChoices({ values, selected, onToggle, disabled }: {
+  values: { value: string; label: string }[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  disabled?: (value: string) => boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {values.map((item) => {
+        const active = selected.includes(item.value);
+        return <button key={item.value} type="button" disabled={disabled?.(item.value)} onClick={() => onToggle(item.value)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${active ? "border-primary-500 bg-primary-500 text-white" : "border-slate-700 bg-slate-800 text-slate-300"} disabled:opacity-40`}>{item.label}</button>;
+      })}
+    </div>
+  );
+}
+
+function TrainingPreferencesCard({ profile, onSaved }: { profile: HealthProfile; onSaved: (profile: HealthProfile) => void }) {
+  const t = useTranslations("profile");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [customLimitation, setCustomLimitation] = useState("");
+  const [draft, setDraft] = useState<PreferenceDraft>(() => preferenceDraft(profile));
+
+  function setField<K extends keyof PreferenceDraft>(key: K, value: PreferenceDraft[K]) {
+    setDraft((previous) => ({ ...previous, [key]: value }));
+  }
+
+  function toggleArray(key: "preferred_body_focus" | "available_equipment" | "limitations", value: string, limit?: number) {
+    setDraft((previous) => {
+      const values = previous[key] as string[];
+      if (values.includes(value)) return { ...previous, [key]: values.filter((item) => item !== value) };
+      if (limit && values.length >= limit) return previous;
+      if (key === "available_equipment" && value === "none") return { ...previous, [key]: ["none"] };
+      const next = key === "available_equipment" ? values.filter((item) => item !== "none") : values;
+      return { ...previous, [key]: [...next, value] };
+    });
+  }
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await api.patch<HealthProfile>("/api/v1/health_profile", {
+        goal: draft.goal,
+        preferred_body_focus: draft.preferred_body_focus,
+        preferred_training_styles: draft.preferred_training_styles,
+        training_location: draft.training_location,
+        available_equipment: draft.available_equipment,
+        session_duration_minutes: draft.session_duration_minutes,
+        training_days_per_week: draft.training_days_per_week,
+        intensity_preference: draft.intensity_preference,
+        training_context: profile.gender === "female" ? draft.training_context : null,
+        limitations: draft.limitations,
+        favorite_exercise_ids: draft.favorite_exercises.map((exercise) => exercise.id),
+        avoided_exercise_ids: draft.avoided_exercises.map((exercise) => exercise.id),
+      });
+      setDraft(preferenceDraft(updated));
+      onSaved(updated);
+      setEditing(false);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : t("saveError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const current = editing ? draft : preferenceDraft(profile);
+  const summary = [
+    current.preferred_body_focus.map((focus) => BODY_FOCUS_LABELS[focus]).join(", "),
+    current.preferred_training_styles.map((style) => STYLE_LABELS[style]).join(", "),
+    LOCATION_LABELS[current.training_location],
+    current.session_duration_minutes ? `${current.session_duration_minutes === 60 ? "60+" : current.session_duration_minutes} min` : "",
+  ].filter(Boolean);
+
+  return (
+    <section style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "16px 18px", marginBottom: 14 }}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div><p className="m-0 font-bold">{t("trainingPreferences")}</p><p className="mt-1 text-xs text-slate-500">{t("trainingPreferencesHint")}</p></div>
+        {!editing && <button type="button" onClick={() => { setDraft(preferenceDraft(profile)); setEditing(true); }} className="border-0 bg-transparent text-sm font-bold text-primary-400">{t("edit")}</button>}
+      </div>
+      {!editing ? <p className="m-0 text-sm text-slate-300">{summary.join(" · ") || t("preferencesEmpty")}</p> : <div className="space-y-5">
+        {error && <p className="rounded-xl border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-300">Objetivo atual</label>
+          <select value={draft.goal} onChange={(event) => setField("goal", event.target.value as Goal)} className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white">
+            <option value="lose_weight">Emagrecer</option><option value="gain_muscle">Ganhar massa muscular</option><option value="body_definition">Definir o corpo</option><option value="conditioning">Melhorar condicionamento</option><option value="strength">Ganhar força</option><option value="mobility">Melhorar mobilidade</option><option value="safe_return">Voltar a treinar com segurança</option><option value="health_longevity">Saúde e longevidade</option><option value="maintain">Manutenção</option><option value="health">Saúde geral</option>
+          </select>
+        </div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-300">Foco corporal (até 3)</label><PreferenceChoices values={Object.entries(BODY_FOCUS_LABELS).map(([value, label]) => ({ value, label }))} selected={draft.preferred_body_focus} onToggle={(value) => toggleArray("preferred_body_focus", value, 3)} disabled={(value) => !draft.preferred_body_focus.includes(value as BodyFocus) && draft.preferred_body_focus.length >= 3} /></div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-300">Estilo preferido</label><PreferenceChoices values={Object.entries(STYLE_LABELS).map(([value, label]) => ({ value, label }))} selected={draft.preferred_training_styles} onToggle={(value) => setField("preferred_training_styles", [value as TrainingStyle])} /></div>
+        <Select label="Onde você costuma treinar?" value={draft.training_location} onChange={(value) => setField("training_location", value as TrainingLocation)} options={Object.entries(LOCATION_LABELS).map(([value, label]) => ({ value, label }))} />
+        <div><label className="mb-2 block text-sm font-medium text-slate-300">Equipamentos disponíveis</label><PreferenceChoices values={Object.entries(EQUIPMENT_LABELS).map(([value, label]) => ({ value, label }))} selected={draft.available_equipment} onToggle={(value) => toggleArray("available_equipment", value)} /></div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-300">Tempo por treino</label><PreferenceChoices values={[15, 25, 35, 45, 60].map((value) => ({ value: String(value), label: value === 60 ? "60 min ou mais" : `${value} min` }))} selected={draft.session_duration_minutes ? [String(draft.session_duration_minutes)] : []} onToggle={(value) => setField("session_duration_minutes", Number(value) as PreferenceDraft["session_duration_minutes"])} /></div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-300">Frequência semanal</label><PreferenceChoices values={[1, 2, 3, 4, 5, 6].map((value) => ({ value: String(value), label: value === 6 ? "6x ou mais" : `${value}x` }))} selected={draft.training_days_per_week ? [String(draft.training_days_per_week)] : []} onToggle={(value) => setField("training_days_per_week", Number(value))} /></div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-300">Intensidade preferida</label><PreferenceChoices values={Object.entries(INTENSITY_LABELS).map(([value, label]) => ({ value, label }))} selected={draft.intensity_preference ? [draft.intensity_preference] : []} onToggle={(value) => setField("intensity_preference", value as IntensityPreference)} /></div>
+        <ExercisePreferencePicker label="Exercícios favoritos" hint="Selecione exercícios que você gostaria de ver quando forem seguros." selected={draft.favorite_exercises} onChange={(exercises) => setField("favorite_exercises", exercises)} />
+        <ExercisePreferencePicker label="Exercícios a evitar" hint="Eles não serão priorizados nas próximas estratégias." selected={draft.avoided_exercises} onChange={(exercises) => setField("avoided_exercises", exercises)} />
+        <div><label className="mb-2 block text-sm font-medium text-slate-300">Limitações e cuidados</label><PreferenceChoices values={PREFERENCE_LIMITATIONS.map((value) => ({ value, label: value }))} selected={draft.limitations} onToggle={(value) => toggleArray("limitations", value)} /><div className="mt-2 flex gap-2"><input value={customLimitation} onChange={(event) => setCustomLimitation(event.target.value)} placeholder="Outro cuidado" className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" /><button type="button" onClick={() => { const value = customLimitation.trim(); if (value && !draft.limitations.includes(value)) setField("limitations", [...draft.limitations, value]); setCustomLimitation(""); }} className="rounded-xl border border-slate-700 px-3 text-sm text-slate-200">Adicionar</button></div></div>
+        {profile.gender === "female" && <div><label className="mb-2 block text-sm font-medium text-slate-300">Contexto opcional</label><PreferenceChoices values={Object.entries(CONTEXT_LABELS).map(([value, label]) => ({ value, label }))} selected={draft.training_context ? [draft.training_context] : []} onToggle={(value) => setField("training_context", value as TrainingContext)} /><p className="mt-2 text-xs text-slate-500">A EasyHealth não substitui orientação médica. Em caso de dor ou condição de saúde, consulte um profissional.</p></div>}
+        <div className="flex gap-2"><button type="button" onClick={() => { setDraft(preferenceDraft(profile)); setEditing(false); setError(""); }} className="flex-1 rounded-full border border-slate-700 py-2 text-sm text-slate-400">{t("cancel")}</button><button type="button" onClick={save} disabled={saving} className="flex-1 rounded-full bg-primary-500 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("saving") : t("save")}</button></div>
+      </div>}
+    </section>
   );
 }
 

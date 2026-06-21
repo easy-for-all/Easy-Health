@@ -1,133 +1,222 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/auth-context";
 import { usePersonalDashboard } from "@/features/personal/use-personal";
-import { LoadingScreen } from "@/shared/components/loading-screen";
+import { FilterChips } from "@/shared/components/ui/filter-chips";
+import { StudentCard, type Student } from "@/shared/components/personal/student-card";
+import { IconBell, IconUserPlus } from "@/shared/components/icons";
 import type { ClientSummary } from "@/shared/types/personal";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const FILTERS = [
+  { id: "all",    label: "Todos"       },
+  { id: "alert",  label: "Com alerta"  },
+  { id: "active", label: "Em dia"      },
+];
 
-function StatCard({ label, value, alert }: { label: string; value: number; alert?: boolean }) {
-  return (
-    <div className={`flex flex-col items-center justify-center rounded-2xl p-4 ${alert && value > 0 ? "bg-amber-50 dark:bg-amber-900/20" : "bg-white dark:bg-gray-900"}`}>
-      <span className={`text-2xl font-bold ${alert && value > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-900 dark:text-gray-100"}`}>{value}</span>
-      <span className="mt-1 text-center text-xs text-gray-500 dark:text-gray-400">{label}</span>
-    </div>
-  );
-}
+function clientToStudent(c: ClientSummary): Student {
+  const adherencePct = c.weekly_adherence ?? 0;
+  const riskLevel =
+    c.inactive_alert || adherencePct < 50 ? "high" :
+    adherencePct < 80 ? "med" :
+    "low";
 
-function ClientRow({ client }: { client: ClientSummary }) {
-  const t = useTranslations("personal");
-  const avatarSrc = client.avatar_url
-    ? client.avatar_url.startsWith("http") ? client.avatar_url : `${API_URL}${client.avatar_url}`
-    : null;
-
-  const lastTrainedLabel = () => {
-    const days = client.days_without_training;
-    if (days == null) return t("never");
-    if (days === 0) return t("today");
-    return t("days_ago", { days });
+  return {
+    id:            c.client_id,
+    name:          c.name,
+    avatarUrl:     c.avatar_url,
+    adherencePct,
+    riskLevel,
+    daysInactive:  c.days_without_training ?? undefined,
   };
-
-  return (
-    <Link href={`/personal/clients/${client.client_id}`} className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-      {avatarSrc ? (
-        <Image src={avatarSrc} alt={client.name} width={40} height={40} className="rounded-full object-cover flex-shrink-0" />
-      ) : (
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 font-semibold">
-          {client.name.charAt(0).toUpperCase()}
-        </div>
-      )}
-
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{client.name}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400">{lastTrainedLabel()}</p>
-      </div>
-
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {client.weekly_adherence != null && (
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-            client.weekly_adherence >= 80
-              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-              : client.weekly_adherence >= 50
-              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-          }`}>
-            {client.weekly_adherence}%
-          </span>
-        )}
-        {client.inactive_alert && (
-          <span className="flex h-2 w-2 rounded-full bg-amber-500" />
-        )}
-      </div>
-    </Link>
-  );
 }
 
 export default function PersonalDashboardPage() {
-  const t = useTranslations("personal");
+  const router = useRouter();
   const { user } = useAuth();
   const { dashboard, clients, loading } = usePersonalDashboard();
+  const [filter, setFilter] = useState("all");
 
   if (!user || user.account_type !== "personal_trainer") {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Link href="/personal" className="rounded-xl bg-primary-500 px-5 py-3 text-sm font-semibold text-white">
+      <main style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100svh" }}>
+        <Link
+          href="/personal"
+          style={{
+            padding: "13px 24px",
+            borderRadius: "var(--r-lg)",
+            background: "var(--primary)",
+            color: "var(--on-primary)",
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
           Ativar conta Personal Trainer
         </Link>
-      </div>
+      </main>
     );
   }
 
-  if (loading || !dashboard) return <LoadingScreen />;
+  const filteredClients = clients.filter((c) => {
+    if (filter === "alert") return c.inactive_alert || (c.weekly_adherence ?? 0) < 50;
+    if (filter === "active") return !c.inactive_alert && (c.weekly_adherence ?? 0) >= 80;
+    return true;
+  });
+
+  const alertCount = clients.filter((c) => c.inactive_alert || (c.weekly_adherence ?? 0) < 50).length;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 dark:bg-gray-950">
-      <header className="bg-gradient-to-b from-primary-600 to-primary-500 px-4 pt-12 pb-6 text-white">
-        <p className="text-sm opacity-80">Olá, {user.name}</p>
-        <h1 className="text-xl font-bold">{t("dashboard_title")}</h1>
-      </header>
-
-      <div className="mx-auto max-w-lg px-4 py-5 space-y-5">
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard label={t("active_clients")} value={dashboard.active_clients} />
-          <StatCard label={t("inactive_7d")} value={dashboard.inactive_7_days} alert />
-          <StatCard label={t("high_adherence")} value={dashboard.high_adherence} />
-          <StatCard label={t("needs_plan")} value={dashboard.needs_new_plan} alert />
+    <main
+      style={{
+        minHeight: "100svh",
+        background: "var(--bg)",
+        paddingBottom: 32,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
+          padding: "20px 16px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={() => router.back()}
+            aria-label="Voltar"
+            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22, padding: 0 }}
+          >
+            ←
+          </button>
+          <h1 className="h-md" style={{ margin: 0 }}>Painel Personal</h1>
         </div>
 
-        {/* Quick actions */}
-        <div className="flex gap-3">
+        <div style={{ display: "flex", gap: 8 }}>
           <Link
-            href="/personal/clients/invite"
-            className="flex-1 rounded-xl bg-primary-500 py-3 text-center text-sm font-semibold text-white"
+            href="/personal/alerts"
+            aria-label="Alertas"
+            style={{
+              position: "relative",
+              width: 40,
+              height: 40,
+              borderRadius: "var(--r-sm)",
+              background: alertCount > 0 ? "var(--hot-soft)" : "var(--surface-2)",
+              color: alertCount > 0 ? "var(--hot)" : "var(--text-muted)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textDecoration: "none",
+            }}
           >
-            + Convidar aluno
-          </Link>
-          <Link
-            href="/personal/clients"
-            className="flex-1 rounded-xl bg-white py-3 text-center text-sm font-semibold text-gray-700 shadow-sm dark:bg-gray-900 dark:text-gray-300"
-          >
-            Ver todos →
+            <IconBell className="w-5 h-5" />
+            {alertCount > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: -4,
+                  right: -4,
+                  background: "var(--hot)",
+                  color: "#fff",
+                  borderRadius: "50%",
+                  width: 18,
+                  height: 18,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {alertCount}
+              </span>
+            )}
           </Link>
         </div>
+      </div>
 
-        {/* Client list */}
-        {clients.length === 0 ? (
-          <div className="py-8 text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">{t("no_clients")}</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Alunos</h2>
-            {clients.map((c) => <ClientRow key={c.client_id} client={c} />)}
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* Stats strip */}
+        {!loading && dashboard && (
+          <div style={{ display: "flex", gap: 8 }}>
+            {[
+              { label: "Ativos", value: dashboard.active_clients, color: "var(--text)" },
+              { label: "Em risco", value: dashboard.inactive_7_days, color: "var(--hot)" },
+              { label: "Aderência alta", value: dashboard.high_adherence, color: "var(--good)" },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                style={{
+                  flex: 1,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--r-md)",
+                  padding: "12px 8px",
+                  textAlign: "center",
+                }}
+              >
+                <p className="num" style={{ fontSize: 24, color: stat.color, margin: 0 }}>{stat.value}</p>
+                <p style={{ fontSize: 11, color: "var(--text-dim)", margin: "2px 0 0" }}>{stat.label}</p>
+              </div>
+            ))}
           </div>
         )}
+
+        {/* Action */}
+        <Link
+          href="/personal/invite"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            padding: "13px",
+            borderRadius: "var(--r-lg)",
+            background: "var(--primary)",
+            color: "var(--on-primary)",
+            fontWeight: 700,
+            fontSize: 14,
+            textDecoration: "none",
+          }}
+        >
+          <IconUserPlus className="w-5 h-5" />
+          Convidar aluno
+        </Link>
+
+        {/* Filter */}
+        <FilterChips chips={FILTERS} active={filter} onChange={setFilter} />
+
+        {/* Client list */}
+        {loading && (
+          <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-dim)" }}>
+            Carregando...
+          </div>
+        )}
+
+        {!loading && filteredClients.length === 0 && (
+          <div style={{ textAlign: "center", padding: "48px 0" }}>
+            <span style={{ fontSize: 36 }}>🎯</span>
+            <p className="h-sm" style={{ margin: "12px 0 6px" }}>
+              {filter === "all" ? "Nenhum aluno ainda" : "Nenhum aluno neste filtro"}
+            </p>
+            {filter === "all" && (
+              <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                Convide alunos e eles aparecerão aqui.
+              </p>
+            )}
+          </div>
+        )}
+
+        {!loading && filteredClients.map((c) => (
+          <StudentCard key={c.client_id} student={clientToStudent(c)} />
+        ))}
       </div>
-    </div>
+    </main>
   );
 }

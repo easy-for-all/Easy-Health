@@ -1,5 +1,6 @@
 class WorkoutPlanGeneratorService
   DAY_SCHEDULE = {
+    1 => [ 1 ],
     2 => [1, 4],
     3 => [1, 3, 5],
     4 => [1, 2, 4, 5],
@@ -152,35 +153,44 @@ class WorkoutPlanGeneratorService
     @user    = user
     @profile = user.health_profile
     @fitness_level     = @profile&.fitness_level || "beginner"
-    @days_per_week     = (days_per_week || @profile&.training_days_per_week || 3).clamp(2, 6)
+    @days_per_week     = (days_per_week || @profile&.training_days_per_week || 3).clamp(1, 6)
     @modality          = modality          || @profile&.modality          || "ai_choice"
     @split_type        = split_type        || @profile&.split_type        || "ai_choice"
     @cardio_type       = cardio_type       || @profile&.cardio_type       || "cardio"
     @cardio_format     = cardio_format     || @profile&.cardio_format
     @custom_splits     = custom_splits     || @profile&.custom_splits     || []
-    @training_location = training_location || @profile&.training_location || "gym"
+    @training_location = legacy_training_location(training_location || @profile&.training_location)
     raw_prefs = Array(activity_preferences || @profile&.activity_preferences || [])
     @activity_preferences = raw_prefs.presence || ["musculacao"]
     @plan_rationale    = nil
     @ai_decision       = nil
+    @fitness_profile   = user.fitness_profile
   end
 
   def call
     WorkoutPlan.transaction do
+      @workout_strategy = build_workout_strategy
+      @strategy_active = FitnessIntelligence.enabled?
       old_favorited_names = @user.active_workout_plan
                               &.workout_days&.where(favorited: true)&.pluck(:name) || []
-      fav_exercise_ids = @user.user_favorite_exercises.pluck(:exercise_id)
+      fav_exercise_ids = if @strategy_active
+        Array(@workout_strategy["preferred_exercises"])
+      else
+        @user.user_favorite_exercises.pluck(:exercise_id)
+      end
 
       @user.workout_plans.update_all(active: false)
       plan = @user.workout_plans.create!(active: true)
+      persist_workout_strategy(plan)
       @profile&.update_columns(
         training_days_per_week: @days_per_week,
         activity_preferences:   @activity_preferences
       )
 
-      template = build_template
-      schedule = DAY_SCHEDULE[@days_per_week]
-      params   = @ai_sets_reps || SETS_REPS[@fitness_level]
+      plan_days_per_week = @strategy_active ? strategy_frequency : @days_per_week
+      template = @strategy_active ? build_strategy_template : build_template
+      schedule = DAY_SCHEDULE[plan_days_per_week]
+      params   = @strategy_active ? strategy_sets_reps : @ai_sets_reps || SETS_REPS[@fitness_level]
 
       template.each_with_index do |day_tmpl, idx|
         day = plan.workout_days.create!(
@@ -193,15 +203,20 @@ class WorkoutPlanGeneratorService
 
         if day_tmpl[:exercise_type]
           ex_type   = day_tmpl[:exercise_type]
-          exercises = exercise_scope(Exercise.where(exercise_type: ex_type), fav_exercise_ids).limit(EXERCISES_PER_GROUP * 2)
+          exercises = exercise_scope(
+            Exercise.where(exercise_type: ex_type),
+            fav_exercise_ids,
+            strategy: active_strategy
+          ).limit(day_exercise_limit)
 
           # Outdoor funcional fallback: gym-equipment funcional exercises are filtered out,
           # so complement with HIIT bodyweight exercises
           if exercises.empty? && ex_type == "funcional" && @training_location == "outdoor"
             exercises = exercise_scope(
               Exercise.where(exercise_type: %w[funcional hiit]),
-              fav_exercise_ids
-            ).limit(EXERCISES_PER_GROUP * 2)
+              fav_exercise_ids,
+              strategy: active_strategy
+            ).limit(day_exercise_limit)
           end
 
           exercises.each do |ex|
@@ -221,8 +236,15 @@ class WorkoutPlanGeneratorService
           end
         else
           day_tmpl[:muscle_groups].each do |group|
-            exercise_scope(Exercise.where(exercise_type: "musculacao", muscle_group: group), fav_exercise_ids)
-                    .limit(EXERCISES_PER_GROUP).each do |ex|
+            break if idx_exercise >= day_exercise_limit
+
+            group_limit = [ EXERCISES_PER_GROUP, day_exercise_limit - idx_exercise ].min
+            exercise_scope(
+              Exercise.where(exercise_type: "musculacao", muscle_group: group),
+              fav_exercise_ids,
+              strategy: active_strategy
+            )
+                    .limit(group_limit).each do |ex|
               day.workout_day_exercises.create!(
                 exercise: ex, sets: params[:sets], reps: params[:reps],
                 rest_seconds: params[:rest_seconds], order_index: idx_exercise
@@ -280,34 +302,147 @@ class WorkoutPlanGeneratorService
 
   private
 
+  def build_workout_strategy
+    if strategy_profile_stale?
+      @fitness_profile = FitnessIntelligence::ProfileBuilder.new(@user).call(source: "workout_plan_strategy")
+    end
+    CoachEngine::WorkoutStrategist.new(
+      user: @user,
+      fitness_profile: @fitness_profile,
+      health_profile: @profile
+    ).call
+  rescue StandardError => e
+    Rails.logger.error("[WorkoutPlanGeneratorService] Workout strategy failed: #{e.class}: #{e.message}")
+    CoachEngine::WorkoutStrategist.new(
+      user: @user,
+      fitness_profile: @user.fitness_profile,
+      health_profile: @profile
+    ).call
+  end
+
+  def strategy_profile_stale?
+    return false unless @profile
+    return true unless @fitness_profile
+
+    @fitness_profile.last_recalculated_at.blank? || @fitness_profile.last_recalculated_at < @profile.updated_at
+  end
+
+  def persist_workout_strategy(plan)
+    WorkoutStrategy.create!(
+      user: @user,
+      workout_plan: plan,
+      fitness_profile: @fitness_profile,
+      strategy: @workout_strategy,
+      strategy_version: @workout_strategy.fetch("strategy_version", WorkoutStrategy::VERSION)
+    )
+  end
+
+  def active_strategy
+    @strategy_active ? @workout_strategy : nil
+  end
+
+  def strategy_sets_reps
+    strategy = @workout_strategy.fetch("strength_strategy", {})
+    {
+      sets: strategy.fetch("sets", 3).to_i.clamp(1, 6),
+      reps: strategy.fetch("reps", 10).to_i.clamp(1, 30),
+      rest_seconds: strategy.fetch("rest_seconds", 90).to_i.clamp(0, 300)
+    }
+  end
+
+  def strategy_frequency
+    @workout_strategy.fetch("weekly_frequency", @days_per_week).to_i.clamp(1, 6)
+  end
+
+  def day_exercise_limit
+    return EXERCISES_PER_GROUP * 4 unless @strategy_active
+
+    @workout_strategy.dig("strength_strategy", "max_exercises_per_session").to_i.clamp(1, 12)
+  end
+
   def build_template
     return build_custom_template   if @split_type == "custom"
     return build_explicit_template if EXPLICIT_SPLITS.key?(@split_type)
     build_ai_driven_template || build_ai_template
   end
 
+  def build_strategy_template
+    split = @workout_strategy.fetch("training_split", "full_body")
+    priority = Array(@workout_strategy["body_focus_priority"])
+    upper = priority & %w[chest back shoulders biceps triceps]
+    lower = priority & %w[legs glutes calves]
+    upper = %w[chest back shoulders] if upper.empty?
+    lower = %w[legs core] if lower.empty?
+
+    case split
+    when "cardio_mobility"
+      build_cardio_mobility_template
+    when "abc"
+      [
+        { name: "Treino A", muscle_groups: upper.first(3) },
+        { name: "Treino B", muscle_groups: (upper.drop(3).presence || %w[back biceps]) },
+        { name: "Treino C", muscle_groups: (lower + [ "core" ]).uniq }
+      ].cycle.take(strategy_frequency)
+    when "upper_lower"
+      [
+        { name: "Superior", muscle_groups: upper },
+        { name: "Inferior", muscle_groups: (lower + [ "core" ]).uniq }
+      ].cycle.take(strategy_frequency)
+    when "push_pull_legs"
+      [
+        { name: "Push", muscle_groups: upper & %w[chest shoulders triceps] },
+        { name: "Pull", muscle_groups: upper & %w[back biceps] },
+        { name: "Legs", muscle_groups: (lower + [ "core" ]).uniq }
+      ].cycle.take(strategy_frequency).map { |day| day.merge(muscle_groups: day[:muscle_groups].presence || upper.first(3)) }
+    else
+      full_body_groups = (priority + [ "core" ]).uniq.first(5)
+      Array.new(strategy_frequency) { |index| { name: "Full Body #{index + 1}", muscle_groups: full_body_groups } }
+    end
+  end
+
+  def build_cardio_mobility_template
+    cardio_enabled = @workout_strategy.dig("cardio_strategy", "enabled")
+    Array.new(strategy_frequency) do |index|
+      cardio_day = cardio_enabled && index.even?
+      {
+        name: cardio_day ? "Cardio Progressivo" : "Mobilidade e Core",
+        exercise_type: cardio_day ? "cardio" : "funcional"
+      }
+    end
+  end
+
   def build_ai_driven_template
     # Only use AI for musculacao/ai_choice modalities — rule-based handles cardio/funcional well
     return nil unless %w[musculacao ai_choice].include?(@modality)
 
-    fav_ids    = @user.user_favorite_exercises.pluck(:exercise_id)
-    avail      = available_exercises_by_group
+    if AiWorkout::DailyLimitChecker.new(@user).limit_reached?
+      Rails.logger.info("[WorkoutPlanGeneratorService] Daily AI limit reached for user #{@user.id}")
+      return nil
+    end
+
+    fav_ids = @user.user_favorite_exercises.pluck(:exercise_id)
+    avail   = available_exercises_by_group
+
+    prebuilt_prompt, prompt_version_id = build_ai_workout_prompt(fav_ids, avail)
 
     planner = AiAgents::WorkoutPlannerService.new(
       @user,
       days_per_week:       @days_per_week,
       profile:             @profile,
       fav_exercise_ids:    fav_ids,
-      available_exercises: avail
+      available_exercises: avail,
+      prebuilt_prompt:     prebuilt_prompt
     )
 
-    decision = planner.call
+    raw_decision = planner.call
+    return nil unless raw_decision
+
+    decision = apply_ai_workout_pipeline(raw_decision, prompt_version_id)
     return nil unless decision
 
     @ai_decision    = decision
     @plan_rationale = decision[:rationale]
 
-    # Override sets/reps/rest with AI recommendation
     ai_params = decision[:sets_reps]
     if ai_params
       @ai_sets_reps = {
@@ -321,6 +456,59 @@ class WorkoutPlanGeneratorService
   rescue => e
     Rails.logger.error("[WorkoutPlanGeneratorService] AI template failed: #{e.message}")
     nil
+  end
+
+  def build_ai_workout_prompt(fav_ids, avail)
+    return [nil, nil] unless @strategy_active && @fitness_profile
+
+    strategy_record = @fitness_profile.workout_strategies.order(created_at: :desc).first
+
+    result = AiWorkout::PromptBuilder.new(
+      user:               @user,
+      fitness_profile:    @fitness_profile,
+      workout_strategy:   strategy_record,
+      days_per_week:      @days_per_week,
+      fav_exercise_ids:   fav_ids,
+      available_exercises: avail
+    ).call
+
+    [result[:prompt], result[:prompt_version_id]]
+  end
+
+  def apply_ai_workout_pipeline(raw_decision, prompt_version_id)
+    if @strategy_active && @fitness_profile
+      safety_result = AiWorkout::SafetyValidator.new(
+        parsed_data:      raw_decision,
+        fitness_profile:  @fitness_profile,
+        workout_strategy: @fitness_profile.workout_strategies.order(created_at: :desc).first
+      ).call
+
+      unless safety_result[:valid]
+        Rails.logger.warn("[WorkoutPlanGeneratorService] Safety violations: #{safety_result[:violations].join(', ')}")
+        UserEventService.track(
+          user:     @user,
+          event:    :ai_workout_validation_failed,
+          metadata: { violations: safety_result[:violations] }
+        )
+        return nil
+      end
+
+      safety_result[:warnings].each do |w|
+        Rails.logger.info("[WorkoutPlanGeneratorService] Safety warning: #{w}")
+      end
+
+      @ai_prompt_version_id = prompt_version_id
+    end
+
+    UserEventService.track(
+      user:     @user,
+      event:    :ai_workout_generated,
+      metadata: {
+        training_method:   raw_decision[:training_method],
+        prompt_version_id: prompt_version_id
+      }
+    )
+    raw_decision
   end
 
   def available_exercises_by_group
@@ -378,6 +566,8 @@ class WorkoutPlanGeneratorService
   end
 
   def build_misto_template
+    return STRENGTH_TEMPLATES.fetch(1) if @days_per_week == 1
+
     strength_count  = [(@days_per_week * 2 / 3.0).ceil, @days_per_week - 1].min
     cardio_count    = @days_per_week - strength_count
     strength_days   = (STRENGTH_TEMPLATES[strength_count] || STRENGTH_TEMPLATES[3]).dup
@@ -437,7 +627,7 @@ class WorkoutPlanGeneratorService
     end
   end
 
-  def exercise_scope(relation, fav_ids = [])
+  def exercise_scope(relation, fav_ids = [], strategy: nil)
     rel = case @training_location
           when "home"    then relation.where(home_compatible: true)
           when "outdoor" then relation.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT)
@@ -446,6 +636,7 @@ class WorkoutPlanGeneratorService
 
     rel = rel.merge(Exercise.browseable)
     rel = rel.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?
+    rel = strategy_filtered_scope(rel, strategy) if strategy
 
     fav_priority = if fav_ids.any?
       Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END")
@@ -456,22 +647,79 @@ class WorkoutPlanGeneratorService
     rel.order(fav_priority, Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END"), :id)
   end
 
+  def strategy_filtered_scope(relation, strategy)
+    rel = relation.where.not(id: Array(strategy["avoided_exercises"]))
+    forbidden_tags = Array(strategy["forbidden_exercises"])
+    if forbidden_tags.any?
+      rel = rel.where.not("safety_tags && ARRAY[?]::text[]", forbidden_tags)
+    end
+
+    equipment_types = strategy_equipment_types
+    rel = rel.where(equipment_type: equipment_types) if equipment_types.any?
+    rel
+  end
+
+  def strategy_equipment_types
+    equipment = Array(@profile&.available_equipment || @fitness_profile&.available_equipment)
+    return [] if equipment.empty?
+    return [ "bodyweight" ] if equipment.include?("none") || equipment.include?("bodyweight")
+
+    mapping = {
+      "machine" => %w[machine gym],
+      "dumbbell" => [ "dumbbell" ],
+      "barbell" => [ "barbell" ],
+      "plates" => [ "barbell" ],
+      "resistance_band" => [ "bodyweight" ],
+      "treadmill" => [ "cardio" ],
+      "stationary_bike" => [ "cardio" ],
+      "rower" => [ "cardio" ],
+      "jump_rope" => [ "bodyweight" ]
+    }
+    equipment.flat_map { |item| mapping.fetch(item, []) }.uniq.presence || [ "bodyweight" ]
+  end
+
+  def legacy_training_location(location)
+    {
+      "full_gym" => "gym",
+      "simple_gym" => "gym",
+      "home" => "home",
+      "condo" => "home",
+      "hotel_travel" => "home",
+      "outdoor" => "outdoor",
+      "unknown" => "any",
+      "gym" => "gym",
+      "any" => "any"
+    }.fetch(location, "gym")
+  end
+
   def persist_ai_decision_log(plan)
     AiTrainingDecisionLog.create!(
-      user:                @user,
-      workout_plan:        plan,
-      training_method:     @ai_decision[:training_method],
-      rationale:           @ai_decision[:rationale],
-      progression_strategy: @ai_decision[:progression_strategy],
-      safety_notes:        @ai_decision[:safety_notes],
-      week_structure:      @ai_decision[:week_structure].map { |d| { name: d[:name], muscle_groups: d[:muscle_groups] } },
-      model_used:          AiConfig.for(:workout_planning)[:model],
-      input_summary:       {
-        fitness_level:     @fitness_level,
-        days_per_week:     @days_per_week,
-        modality:          @modality,
-        training_location: @training_location,
-        goal:              @profile&.goal
+      user:                   @user,
+      workout_plan:           plan,
+      training_method:        @ai_decision[:training_method],
+      rationale:              @ai_decision[:rationale],
+      progression_strategy:   @ai_decision[:progression_strategy],
+      safety_notes:           @ai_decision[:safety_notes],
+      week_structure:         @ai_decision[:week_structure].map { |d| { name: d[:name], muscle_groups: d[:muscle_groups] } },
+      model_used:             AiConfig.for(:workout_planning)[:model],
+      prompt_version_id:      @ai_prompt_version_id,
+      generation_type:        "workout_plan",
+      status:                 "success",
+      output_summary:         {
+        personalization_reason: @ai_decision[:personalization_reason],
+        user_explanation:       @ai_decision[:user_explanation],
+        coach_notes:            @ai_decision[:coach_notes],
+        plan_name:              @ai_decision[:plan_name]
+      },
+      input_summary:          {
+        fitness_level:          @fitness_level,
+        days_per_week:          @days_per_week,
+        modality:               @modality,
+        training_location:      @training_location,
+        goal:                   @profile&.goal,
+        primary_persona:        @fitness_profile&.primary_persona,
+        training_archetype:     @fitness_profile&.training_archetype,
+        behavior_pattern:       @fitness_profile&.behavior_pattern
       }
     )
   rescue => e

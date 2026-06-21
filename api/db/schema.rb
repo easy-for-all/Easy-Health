@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "vector"
@@ -58,18 +58,42 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.index ["user_id"], name: "index_ai_chat_messages_on_user_id"
   end
 
+  create_table "ai_prompt_versions", force: :cascade do |t|
+    t.boolean "active", default: false, null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.string "name", null: false
+    t.string "prompt_type", null: false
+    t.datetime "updated_at", null: false
+    t.string "version", null: false
+    t.index ["active"], name: "index_ai_prompt_versions_on_active"
+    t.index ["name", "version"], name: "index_ai_prompt_versions_on_name_and_version", unique: true
+  end
+
   create_table "ai_training_decision_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.text "error_message"
+    t.decimal "estimated_cost_cents", precision: 10, scale: 6
+    t.string "generation_type", default: "workout_plan"
     t.jsonb "input_summary", default: {}
     t.string "model_used"
+    t.jsonb "output_summary", default: {}
     t.text "progression_strategy"
+    t.bigint "prompt_version_id"
     t.text "rationale"
     t.jsonb "safety_notes", default: []
+    t.string "status", default: "success"
+    t.integer "tokens_input"
+    t.integer "tokens_output"
     t.string "training_method"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.jsonb "week_structure", default: []
     t.bigint "workout_plan_id", null: false
+    t.index ["prompt_version_id"], name: "index_ai_training_decision_logs_on_prompt_version_id"
+    t.index ["status"], name: "index_ai_training_decision_logs_on_status"
+    t.index ["user_id", "created_at"], name: "index_ai_training_decision_logs_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_ai_training_decision_logs_on_user_id"
     t.index ["workout_plan_id"], name: "index_ai_training_decision_logs_on_workout_plan_id"
   end
@@ -104,6 +128,59 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.bigint "personal_client_relationship_id", null: false
     t.datetime "updated_at", null: false
     t.index ["personal_client_relationship_id"], name: "index_client_permissions_on_personal_client_relationship_id", unique: true
+  end
+
+  create_table "coach_insights", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "fitness_profile_id", null: false
+    t.string "insight_type", null: false
+    t.text "message", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "read_at"
+    t.string "severity", default: "info", null: false
+    t.string "source", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["fitness_profile_id"], name: "index_coach_insights_on_fitness_profile_id"
+    t.index ["insight_type"], name: "index_coach_insights_on_insight_type"
+    t.index ["user_id", "created_at"], name: "index_coach_insights_on_user_id_and_created_at"
+    t.index ["user_id", "read_at"], name: "index_coach_insights_on_user_id_and_read_at"
+    t.index ["user_id"], name: "index_coach_insights_on_user_id"
+  end
+
+  create_table "community_comments", force: :cascade do |t|
+    t.text "body", null: false
+    t.bigint "community_post_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["community_post_id", "created_at"], name: "index_community_comments_on_community_post_id_and_created_at"
+    t.index ["community_post_id"], name: "index_community_comments_on_community_post_id"
+    t.index ["user_id"], name: "index_community_comments_on_user_id"
+  end
+
+  create_table "community_posts", force: :cascade do |t|
+    t.text "body"
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.jsonb "metadata", default: {}
+    t.string "post_type", null: false
+    t.string "title"
+    t.bigint "user_id", null: false
+    t.string "visibility", default: "public", null: false
+    t.index ["user_id", "created_at"], name: "index_community_posts_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_community_posts_on_user_id"
+    t.index ["visibility"], name: "index_community_posts_on_visibility"
+  end
+
+  create_table "community_reactions", force: :cascade do |t|
+    t.bigint "community_post_id", null: false
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.string "reaction_type", default: "congrats", null: false
+    t.bigint "user_id", null: false
+    t.index ["community_post_id"], name: "index_community_reactions_on_community_post_id"
+    t.index ["user_id", "community_post_id"], name: "index_community_reactions_on_user_id_and_community_post_id", unique: true
+    t.index ["user_id"], name: "index_community_reactions_on_user_id"
   end
 
   create_table "equipment_identifications", force: :cascade do |t|
@@ -155,6 +232,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.string "muscle_group"
     t.string "name"
     t.string "name_en"
+    t.text "safety_tags", default: [], null: false, array: true
     t.text "setup_guide"
     t.string "source_dataset"
     t.datetime "updated_at", null: false
@@ -162,6 +240,39 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.index ["difficulty_level"], name: "index_exercises_on_difficulty_level"
     t.index ["equipment_type"], name: "index_exercises_on_equipment_type"
     t.index ["exercise_type"], name: "index_exercises_on_exercise_type"
+  end
+
+  create_table "fitness_profiles", force: :cascade do |t|
+    t.decimal "adherence_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.jsonb "available_equipment", default: [], null: false
+    t.jsonb "avoided_exercises", default: [], null: false
+    t.decimal "behavior_confidence_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.string "behavior_pattern", default: "unknown", null: false
+    t.string "classification_version", default: "v1", null: false
+    t.decimal "consistency_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.datetime "created_at", null: false
+    t.string "current_goal"
+    t.string "current_phase", default: "onboarding", null: false
+    t.string "fitness_level", default: "beginner", null: false
+    t.datetime "last_recalculated_at"
+    t.jsonb "metadata", default: {}, null: false
+    t.decimal "mobility_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.decimal "motivation_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.jsonb "physical_limitations", default: [], null: false
+    t.decimal "preference_confidence_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.jsonb "preferred_body_focus", default: [], null: false
+    t.jsonb "preferred_exercises", default: [], null: false
+    t.jsonb "preferred_training_styles", default: [], null: false
+    t.string "primary_persona", default: "general_health", null: false
+    t.decimal "recovery_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.decimal "risk_score", precision: 4, scale: 2, default: "0.0", null: false
+    t.string "secondary_persona"
+    t.string "secondary_training_archetype"
+    t.string "training_archetype", default: "balanced_full_body", null: false
+    t.decimal "training_maturity", precision: 4, scale: 2, default: "0.0", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id"], name: "index_fitness_profiles_on_user_id", unique: true
   end
 
   create_table "health_data_points", force: :cascade do |t|
@@ -187,6 +298,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.text "activity_preferences", default: [], array: true
     t.decimal "adherence_score", precision: 5, scale: 2
     t.integer "age"
+    t.text "available_equipment", default: [], null: false, array: true
+    t.bigint "avoided_exercise_ids", default: [], null: false, array: true
     t.string "cardio_format"
     t.string "cardio_type"
     t.datetime "created_at", null: false
@@ -195,13 +308,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.string "gender"
     t.string "goal"
     t.decimal "height_cm"
+    t.string "intensity_preference"
     t.datetime "last_profile_review_at"
     t.text "limitations", default: [], array: true
     t.string "modality", default: "ai_choice"
+    t.text "preferred_body_focus", default: [], null: false, array: true
     t.text "preferred_training_styles", default: [], array: true
+    t.integer "session_duration_minutes"
     t.string "split_type", default: "ai_choice"
+    t.string "training_context"
     t.integer "training_days_per_week", default: 3
-    t.string "training_location", default: "gym", null: false
+    t.string "training_location", default: "full_gym", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.decimal "weight_kg"
@@ -225,6 +342,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.index ["source"], name: "index_knowledge_documents_on_source", unique: true
   end
 
+  create_table "personal_alerts", force: :cascade do |t|
+    t.text "body"
+    t.bigint "client_id"
+    t.datetime "created_at", null: false
+    t.string "kind", default: "info", null: false
+    t.bigint "personal_id", null: false
+    t.datetime "read_at"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["client_id"], name: "index_personal_alerts_on_client_id"
+    t.index ["personal_id", "read_at"], name: "index_personal_alerts_on_personal_id_and_read_at"
+    t.index ["personal_id"], name: "index_personal_alerts_on_personal_id"
+  end
+
   create_table "personal_client_relationships", force: :cascade do |t|
     t.bigint "client_id"
     t.datetime "created_at", null: false
@@ -242,6 +373,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.index ["status"], name: "index_personal_client_relationships_on_status"
   end
 
+  create_table "personal_notes", force: :cascade do |t|
+    t.text "body", null: false
+    t.bigint "client_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "personal_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "visibility", default: "private", null: false
+    t.index ["personal_id", "client_id"], name: "index_personal_notes_on_personal_id_and_client_id"
+    t.index ["personal_id"], name: "index_personal_notes_on_personal_id"
+  end
+
   create_table "public_profiles", force: :cascade do |t|
     t.boolean "avatar_visible", default: false, null: false
     t.boolean "city_visible", default: false, null: false
@@ -251,6 +393,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.text "public_bio"
     t.boolean "show_badges", default: false, null: false
     t.boolean "show_points", default: false, null: false
+    t.boolean "show_progress_photos", default: false, null: false
     t.boolean "show_streak", default: true, null: false
     t.boolean "show_workout_count", default: true, null: false
     t.datetime "updated_at", null: false
@@ -302,6 +445,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.index ["stripe_customer_id"], name: "index_subscriptions_on_stripe_customer_id"
     t.index ["stripe_subscription_id"], name: "index_subscriptions_on_stripe_subscription_id", unique: true
     t.index ["user_id"], name: "index_subscriptions_on_user_id", unique: true
+  end
+
+  create_table "trainer_profiles", force: :cascade do |t|
+    t.text "bio"
+    t.datetime "created_at", null: false
+    t.string "cref"
+    t.string "display_name"
+    t.string "status", default: "active", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id"], name: "index_trainer_profiles_on_user_id", unique: true
+  end
+
+  create_table "user_badges", force: :cascade do |t|
+    t.string "badge_key", null: false
+    t.datetime "created_at", null: false
+    t.datetime "earned_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "badge_key"], name: "index_user_badges_on_user_id_and_badge_key", unique: true
+    t.index ["user_id"], name: "index_user_badges_on_user_id"
   end
 
   create_table "user_events", force: :cascade do |t|
@@ -431,25 +595,53 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
     t.index ["workout_day_id"], name: "index_workout_sessions_on_workout_day_id"
   end
 
+  create_table "workout_strategies", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "fitness_profile_id"
+    t.jsonb "strategy", default: {}, null: false
+    t.string "strategy_version", default: "v1", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.bigint "workout_plan_id", null: false
+    t.index ["fitness_profile_id"], name: "index_workout_strategies_on_fitness_profile_id"
+    t.index ["user_id"], name: "index_workout_strategies_on_user_id"
+    t.index ["workout_plan_id"], name: "index_workout_strategies_on_workout_plan_id", unique: true
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chat_messages", "users"
+  add_foreign_key "ai_training_decision_logs", "ai_prompt_versions", column: "prompt_version_id"
   add_foreign_key "ai_training_decision_logs", "users"
   add_foreign_key "ai_training_decision_logs", "workout_plans"
   add_foreign_key "ai_usage_logs", "users"
   add_foreign_key "client_permissions", "personal_client_relationships"
+  add_foreign_key "coach_insights", "fitness_profiles"
+  add_foreign_key "coach_insights", "users"
+  add_foreign_key "community_comments", "community_posts"
+  add_foreign_key "community_comments", "users"
+  add_foreign_key "community_posts", "users"
+  add_foreign_key "community_reactions", "community_posts"
+  add_foreign_key "community_reactions", "users"
   add_foreign_key "equipment_identifications", "exercises"
   add_foreign_key "equipment_identifications", "users"
   add_foreign_key "exercise_suggestion_logs", "users"
+  add_foreign_key "fitness_profiles", "users"
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
   add_foreign_key "knowledge_chunks", "knowledge_documents"
+  add_foreign_key "personal_alerts", "users", column: "client_id"
+  add_foreign_key "personal_alerts", "users", column: "personal_id"
   add_foreign_key "personal_client_relationships", "users", column: "client_id"
   add_foreign_key "personal_client_relationships", "users", column: "personal_id"
+  add_foreign_key "personal_notes", "users", column: "client_id"
+  add_foreign_key "personal_notes", "users", column: "personal_id"
   add_foreign_key "public_profiles", "users"
   add_foreign_key "shared_workouts", "users", column: "owner_id"
   add_foreign_key "subscriptions", "users"
+  add_foreign_key "trainer_profiles", "users"
+  add_foreign_key "user_badges", "users"
   add_foreign_key "user_events", "users"
   add_foreign_key "user_favorite_exercises", "exercises"
   add_foreign_key "user_favorite_exercises", "users"
@@ -461,4 +653,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
   add_foreign_key "workout_plans", "users"
   add_foreign_key "workout_sessions", "users"
   add_foreign_key "workout_sessions", "workout_days"
+  add_foreign_key "workout_strategies", "fitness_profiles"
+  add_foreign_key "workout_strategies", "users"
+  add_foreign_key "workout_strategies", "workout_plans"
 end

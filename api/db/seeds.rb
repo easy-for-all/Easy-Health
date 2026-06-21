@@ -75,3 +75,90 @@ User.find_or_create_by(email: "test@example.com") do |u|
   u.password_confirmation = "password123"
 end
 puts "Test user: test@example.com / password123"
+
+# AI Prompt Versions
+VALID_METHODS  = %w[full_body upper_lower ab abc ppl custom].freeze
+VALID_GROUPS   = %w[chest back shoulders biceps triceps legs core forearms calves glutes trapezius].freeze
+
+workout_prompt_v1 = <<~PROMPT
+  Você é um Coach Fitness especialista em prescrição personalizada de treino.
+  Analise o perfil completo abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
+
+  ## IDENTIDADE DO USUÁRIO
+  - Persona primária: {{persona}}
+  - Archetype de treino: {{archetype}}
+  - Padrão de comportamento: {{behavior}}
+  - Nível: {{fitness_level}}
+  - Objetivo: {{goal}}
+
+  ## SCORES DE INTELIGÊNCIA FITNESS
+  {{scores}}
+
+  ## ESTRATÉGIA DEFINIDA PELO COACH ENGINE
+  {{strategy}}
+
+  ## LIMITAÇÕES FÍSICAS
+  {{limitations}}
+
+  ## EQUIPAMENTOS DISPONÍVEIS
+  {{equipment}}
+
+  ## EXERCÍCIOS PREFERIDOS
+  {{preferred_exercises}}
+
+  ## EXERCÍCIOS A EVITAR
+  {{avoided_exercises}}
+
+  ## HISTÓRICO RECENTE (últimas 5 sessões)
+  {{recent_history}}
+
+  ## EXERCÍCIOS DISPONÍVEIS NO SISTEMA (por grupo muscular)
+  {{available_exercises}}
+
+  ## REGRAS DE SEGURANÇA (OBRIGATÓRIAS)
+  - NUNCA sugira exercícios avançados para persona beginner ou iniciante
+  - NUNCA ignore as limitações físicas declaradas
+  - NUNCA coloque mais de 5 exercícios por grupo muscular para iniciantes
+  - NUNCA coloque o mesmo grupo muscular em dias consecutivos
+  - SEMPRE inclua aquecimento para personas de risco alto
+  - Respeite o foco corporal definido na estratégia (body_focus_priority)
+  - Se behavior inclui "abandons_long_workouts", mantenha sessões curtas
+  - Se behavior inclui "skips_cardio", não force cardio pesado
+
+  ## REGRAS DE PRODUTO
+  - Explique CLARAMENTE por que esse treino foi montado para esta persona específica
+  - O campo personalization_reason DEVE referenciar a persona, archetype e behavior real do usuário
+  - O campo user_explanation deve ser amigável e motivador, em português
+
+  ## FORMATO DE RESPOSTA (JSON puro, sem markdown, sem texto fora do JSON)
+  {
+    "training_method": "#{VALID_METHODS.join(' | ')}",
+    "plan_name": "Nome do Plano",
+    "rationale": "Explicação técnica em português (2-3 frases)",
+    "personalization_reason": "Montei este treino porque você [persona/archetype/behavior em linguagem humana]",
+    "user_explanation": "Mensagem amigável para o usuário explicando o treino",
+    "coach_notes": "Observações do coach para futuras adaptações",
+    "week_structure": [
+      { "name": "Nome do Dia", "muscle_groups": ["#{VALID_GROUPS.join('", "')}"] }
+    ],
+    "sets": 3,
+    "reps": 10,
+    "rest_seconds": 90,
+    "progression_strategy": "Descrição da progressão semana a semana",
+    "safety_notes": ["Nota de segurança 1", "Nota de segurança 2"]
+  }
+
+  Número de dias no week_structure: exatamente {{days_per_week}}.
+  Grupos musculares válidos: #{VALID_GROUPS.join(', ')}.
+  Métodos válidos: #{VALID_METHODS.join(', ')}.
+PROMPT
+
+AiPromptVersion.find_or_create_by(name: "workout_generation", version: "v1") do |pv|
+  pv.prompt_type = "user"
+  pv.content     = workout_prompt_v1
+  pv.active      = true
+  pv.metadata    = { created_by: "seeds", description: "Prompt v1 com contexto de fitness_profile e arquétipo" }
+end
+
+AiPromptVersion.where(name: "workout_generation").where.not(version: "v1").update_all(active: false)
+puts "#{AiPromptVersion.count} AI prompt versions seeded"

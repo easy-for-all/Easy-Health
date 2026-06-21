@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
+import { IconUsers } from "./icons";
 
 // ── Icons ────────────────────────────────────────────────────────────────────
 
@@ -37,14 +38,6 @@ function IconChart() {
   );
 }
 
-function IconHeart() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-    </svg>
-  );
-}
-
 function IconUser() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
@@ -57,15 +50,21 @@ function IconUser() {
 // ── Nav config ───────────────────────────────────────────────────────────────
 
 const ITEMS = [
-  { href: "/dashboard", label: "Hoje",      Icon: IconHome,     match: (p: string) => p === "/dashboard" || p === "/" },
-  { href: "/workouts",  label: "Treinos",   Icon: IconDumbbell, match: (p: string) => p.startsWith("/workout") || p.startsWith("/workouts") || p.startsWith("/plan") },
-  { href: "/history",   label: "Progresso", Icon: IconChart,    match: (p: string) => p.startsWith("/history") },
-  { href: "/favorites", label: "Favoritos", Icon: IconHeart,    match: (p: string) => p.startsWith("/favorites") },
-  { href: "/profile",   label: "Perfil",    Icon: IconUser,     match: (p: string) => p.startsWith("/profile") },
+  { href: "/dashboard",  label: "Hoje",      Icon: IconHome,  match: (p: string) => p === "/dashboard" || p === "/" },
+  { href: "/workouts",   label: "Treinos",   Icon: IconDumbbell, match: (p: string) => p.startsWith("/workout") || p.startsWith("/workouts") || p.startsWith("/plan") },
+  { href: "/history",    label: "Progresso", Icon: IconChart, match: (p: string) => p.startsWith("/history") },
+  { href: "/community",  label: "Comunidade", Icon: ({ className }: { className?: string }) => <IconUsers className={className ?? "w-6 h-6"} />, match: (p: string) => p.startsWith("/community") },
+  { href: "/profile",    label: "Perfil",    Icon: IconUser,  match: (p: string) => p.startsWith("/profile") },
 ] as const;
+
+const IMMERSIVE_PREFIXES = ["/personal", "/join"];
 
 export function BottomNav() {
   const pathname = usePathname();
+
+  if (IMMERSIVE_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return null;
+  }
 
   return (
     <nav

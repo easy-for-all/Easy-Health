@@ -1,10 +1,18 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { useCoach } from "@/features/coach/coach-context";
 
+const IMMERSIVE_PREFIXES = ["/personal", "/join"];
+
 export function CoachFab() {
   const { open } = useCoach();
+  const pathname = usePathname();
+
+  if (IMMERSIVE_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return null;
+  }
 
   return (
     <button

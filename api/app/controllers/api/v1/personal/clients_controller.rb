@@ -33,9 +33,12 @@ module Api
           if policy.can_view?(:can_view_completed_workouts)
             data[:recent_sessions] = client.workout_sessions
                                            .order(completed_at: :desc)
-                                           .limit(5)
+                                           .limit(10)
                                            .map { |s| { id: s.id, completed_at: s.completed_at, duration: s.duration_minutes } }
+            data[:weekly_frequency] = weekly_frequency_chart(client)
           end
+
+          data[:next_workout] = next_workout_for(client)
 
           render json: { client: data }
         end
@@ -69,6 +72,36 @@ module Api
         end
 
         private
+
+        def weekly_frequency_chart(client)
+          (0..11).map do |weeks_ago|
+            start_of_week = weeks_ago.weeks.ago.beginning_of_week
+            end_of_week   = start_of_week.end_of_week
+            count = client.workout_sessions
+              .where(completed_at: start_of_week..end_of_week)
+              .count
+            { week: start_of_week.strftime("%d/%m"), sessions: count }
+          end.reverse
+        end
+
+        def next_workout_for(client)
+          plan = client.active_workout_plan
+          return nil unless plan
+
+          today_dow = Date.today.wday
+          upcoming = plan.workout_days
+            .where.not(day_of_week: nil)
+            .order(:day_of_week)
+            .find { |d| d.day_of_week >= today_dow }
+          upcoming ||= plan.workout_days.where.not(day_of_week: nil).order(:day_of_week).first
+          return nil unless upcoming
+
+          {
+            id:           upcoming.id,
+            name:         upcoming.custom_name.presence || "Treino #{upcoming.day_of_week}",
+            day_of_week:  upcoming.day_of_week,
+          }
+        end
 
         def find_active_relationship(client_id)
           current_user.personal_client_relationships

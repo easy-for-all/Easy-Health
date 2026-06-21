@@ -81,4 +81,39 @@ RSpec.describe HealthProfile, type: :model do
       expect(profile).to be_valid
     end
   end
+
+  describe "training preferences" do
+    let(:profile) { build(:health_profile) }
+
+    it "normalizes legacy locations and accepts expanded goals" do
+      profile.training_location = "gym"
+      profile.goal = "strength"
+
+      expect(profile).to be_valid
+      expect(profile.training_location).to eq("full_gym")
+    end
+
+    it "limits body focus to three structured values" do
+      profile.preferred_body_focus = %w[glutes legs abs arms]
+
+      expect(profile).not_to be_valid
+      expect(profile.errors[:preferred_body_focus]).to include("permite no máximo 3 opções")
+    end
+
+    it "keeps none equipment exclusive" do
+      profile.available_equipment = %w[none dumbbell]
+
+      expect(profile).not_to be_valid
+      expect(profile.errors[:available_equipment]).to include("'none' não pode ser combinado com outros equipamentos")
+    end
+
+    it "accepts one weekly session and supported preference values" do
+      profile.training_days_per_week = 1
+      profile.session_duration_minutes = 25
+      profile.intensity_preference = "easy_start"
+      profile.training_context = "pregnant"
+
+      expect(profile).to be_valid
+    end
+  end
 end

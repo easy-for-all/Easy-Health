@@ -3,6 +3,11 @@ class UserEventService
     signup_completed
     trial_started
     onboarding_completed
+    fitness_profile_created
+    fitness_profile_recalculated
+    persona_classified
+    training_archetype_classified
+    behavior_pattern_updated
     workout_created
     workout_started
     workout_completed
@@ -15,6 +20,14 @@ class UserEventService
     checkout_started
     subscription_created
     trial_expired
+    workout_strategy_created
+    ai_workout_generated
+    ai_workout_validation_failed
+    coach_insight_created
+    exercise_favorited
+    exercise_skipped
+    exercise_substituted
+    bioimpedance_added
   ].freeze
 
   def self.track(user:, event:, metadata: {})
