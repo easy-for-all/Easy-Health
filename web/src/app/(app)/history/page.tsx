@@ -211,10 +211,25 @@ function computeStreak(sessions: WorkoutSession[]): number {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function HistoryPage() {
-  return <UpgradeGate><HistoryContent /></UpgradeGate>;
+  return <HistoryContent />;
 }
 
 type Tab = "resumo" | "cargas" | "historico";
+type Period = "all" | "week" | "month";
+
+function getPeriodParams(period: Period): string {
+  if (period === "all") return "";
+  const now = new Date();
+  const to = now.toISOString().split("T")[0];
+  if (period === "week") {
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // Monday
+    mon.setHours(0, 0, 0, 0);
+    return `?from=${mon.toISOString().split("T")[0]}&to=${to}`;
+  }
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  return `?from=${first.toISOString().split("T")[0]}&to=${to}`;
+}
 
 function HistoryContent() {
   const router = useRouter();
@@ -222,6 +237,7 @@ function HistoryContent() {
   const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("resumo");
+  const [period, setPeriod] = useState<Period>("all");
   const [selected, setSelected] = useState<WorkoutSession | null>(null);
 
   useEffect(() => {
@@ -234,6 +250,14 @@ function HistoryContent() {
       setHealthProfile(profile);
     }).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (tab !== "historico") return;
+    const params = getPeriodParams(period);
+    api.get<{ sessions: WorkoutSession[]; total: number }>(`/api/v1/workout_sessions${params}`)
+      .then((data) => setSessions(data.sessions))
+      .catch(() => null);
+  }, [period, tab]);
 
   const dailyMins = useMemo(() => computeDailyMinutes(sessions), [sessions]);
   const muscleBalance = useMemo(() => computeMuscleBalance(sessions), [sessions]);
@@ -446,96 +470,119 @@ function HistoryContent() {
         </motion.div>
       )}
 
-      {/* ── CARGAS ── */}
+      {/* ── CARGAS ── (premium) */}
       {tab === "cargas" && (
-        <motion.div
-          key="cargas"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22 }}
-          style={{ display: "flex", flexDirection: "column", gap: 8 }}
-        >
-          {exerciseProgress.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 0" }}>
-              <p style={{ fontSize: 32 }}>📊</p>
-              <p style={{ color: "var(--text-muted)", marginTop: 12 }}>
-                Faça pelo menos 2 treinos com o mesmo exercício para ver a evolução de carga.
-              </p>
-            </div>
-          ) : (
-            exerciseProgress.map((ex) => (
-              <button
-                key={ex.name}
-                className="exprog"
-                onClick={() => router.push(`/history/exercise?name=${encodeURIComponent(ex.name)}`)}
-              >
-                <div className="epi">
-                  <b>{ex.name}</b>
-                  <div className="epm">{ex.muscleGroup ?? "exercício"} · {ex.count} reg.</div>
-                </div>
-                <div
-                  className="epspark"
-                  dangerouslySetInnerHTML={{ __html: sparklineSvg(ex.weights) }}
-                />
-                <div className="epval">
-                  <b>{ex.maxKg} kg</b>
-                  {ex.trend !== 0 && (
-                    <span style={{ color: ex.trend > 0 ? "var(--good)" : "var(--hot)" }}>
-                      {ex.trend > 0 ? "↑" : "↓"}{Math.abs(ex.trend)}%
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))
-          )}
-        </motion.div>
+        <UpgradeGate>
+          <motion.div
+            key="cargas"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22 }}
+            style={{ display: "flex", flexDirection: "column", gap: 8 }}
+          >
+            {exerciseProgress.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 0" }}>
+                <p style={{ fontSize: 32 }}>📊</p>
+                <p style={{ color: "var(--text-muted)", marginTop: 12 }}>
+                  Faça pelo menos 2 treinos com o mesmo exercício para ver a evolução de carga.
+                </p>
+              </div>
+            ) : (
+              exerciseProgress.map((ex) => (
+                <button
+                  key={ex.name}
+                  className="exprog"
+                  onClick={() => router.push(`/history/exercise?name=${encodeURIComponent(ex.name)}`)}
+                >
+                  <div className="epi">
+                    <b>{ex.name}</b>
+                    <div className="epm">{ex.muscleGroup ?? "exercício"} · {ex.count} reg.</div>
+                  </div>
+                  <div
+                    className="epspark"
+                    dangerouslySetInnerHTML={{ __html: sparklineSvg(ex.weights) }}
+                  />
+                  <div className="epval">
+                    <b>{ex.maxKg} kg</b>
+                    {ex.trend !== 0 && (
+                      <span style={{ color: ex.trend > 0 ? "var(--good)" : "var(--hot)" }}>
+                        {ex.trend > 0 ? "↑" : "↓"}{Math.abs(ex.trend)}%
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </motion.div>
+        </UpgradeGate>
       )}
 
-      {/* ── HISTÓRICO ── */}
+      {/* ── HISTÓRICO ── (premium) */}
       {tab === "historico" && (
-        <motion.div
-          key="historico"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22 }}
-        >
-          {sessions.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 0" }}>
-              <p style={{ fontSize: 32 }}>📋</p>
-              <p style={{ color: "var(--text-muted)", marginTop: 12 }}>Nenhum treino registrado ainda.</p>
+        <UpgradeGate>
+          <motion.div
+            key="historico"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22 }}
+          >
+            {/* Period filter chips */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              {(["all", "week", "month"] as Period[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  style={{
+                    padding: "6px 14px", borderRadius: "var(--r-pill)", border: "none",
+                    background: period === p ? "var(--primary)" : "var(--surface)",
+                    color: period === p ? "var(--on-primary)" : "var(--text-muted)",
+                    fontSize: 13, fontWeight: period === p ? 700 : 400, cursor: "pointer",
+                    outline: period !== p ? "1px solid var(--border)" : "none",
+                  }}
+                >
+                  {p === "all" ? "Tudo" : p === "week" ? "Esta semana" : "Este mês"}
+                </button>
+              ))}
             </div>
-          ) : (
-            <div className="timeline">
-              {sessions.map((s, i) => {
-                const d = new Date(s.completed_at);
-                const dateStr = d.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" });
-                return (
-                  <button
-                    key={s.id}
-                    className="tl-item"
-                    style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "0 0 18px", width: "100%" }}
-                    onClick={() => setSelected(s)}
-                  >
-                    <div className="tdot done">
-                      <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
-                    </div>
-                    <div className="tbody">
-                      <div className="tt">
-                        <b>{s.workout_day_name}</b>
-                        <span className="tdate">{dateStr}</span>
+
+            {sessions.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 0" }}>
+                <p style={{ fontSize: 32 }}>📋</p>
+                <p style={{ color: "var(--text-muted)", marginTop: 12 }}>Nenhum treino registrado ainda.</p>
+              </div>
+            ) : (
+              <div className="timeline">
+                {sessions.map((s) => {
+                  const d = new Date(s.completed_at);
+                  const dateStr = d.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" });
+                  return (
+                    <button
+                      key={s.id}
+                      className="tl-item"
+                      style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "0 0 18px", width: "100%" }}
+                      onClick={() => setSelected(s)}
+                    >
+                      <div className="tdot done">
+                        <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
                       </div>
-                      <div className="tmeta">
-                        {s.duration_minutes} min
-                        {s.exercise_logs?.length ? ` · ${s.exercise_logs.length} exercícios` : ""}
-                        {s.fatigue_level ? ` · cansaço ${s.fatigue_level}/5` : ""}
+                      <div className="tbody">
+                        <div className="tt">
+                          <b>{s.workout_day_name}</b>
+                          <span className="tdate">{dateStr}</span>
+                        </div>
+                        <div className="tmeta">
+                          {s.duration_minutes} min
+                          {s.exercise_logs?.length ? ` · ${s.exercise_logs.length} exercícios` : ""}
+                          {s.fatigue_level ? ` · cansaço ${s.fatigue_level}/5` : ""}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </motion.div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+        </UpgradeGate>
       )}
 
       {/* Session detail modal */}

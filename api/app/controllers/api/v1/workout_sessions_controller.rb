@@ -9,6 +9,8 @@ module Api
           .includes(:workout_day)
           .order(completed_at: :desc)
         sessions = sessions.where("completed_at >= ?", 7.days.ago) if params[:recent].present?
+        sessions = sessions.where(completed_at: params[:from]..) if params[:from].present?
+        sessions = sessions.where(completed_at: ..params[:to])   if params[:to].present?
         total = sessions.count
         sessions = sessions
           .limit(PER_PAGE)

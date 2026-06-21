@@ -86,6 +86,8 @@ export default function ProfilePage() {
   const [lightboxPhoto, setLightboxPhoto] = useState<UserMedia | null>(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [cleanDataOpen, setCleanDataOpen] = useState(false);
+  const [showUpdatePlanPrompt, setShowUpdatePlanPrompt] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -110,16 +112,31 @@ export default function ProfilePage() {
   async function handleSave() {
     setError("");
     setSaving(true);
+    const prevGoal = profile?.goal;
+    const prevFitnessLevel = profile?.fitness_level;
     try {
       const updated = profile
         ? await api.patch<HealthProfile>("/api/v1/health_profile", form)
         : await api.post<HealthProfile>("/api/v1/health_profile", form);
       setProfile(updated);
       setEditing(false);
+      if (form.goal !== prevGoal || form.fitness_level !== prevFitnessLevel) {
+        setShowUpdatePlanPrompt(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("saveError"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRegeneratePlan() {
+    setRegenerating(true);
+    try {
+      await api.post("/api/v1/workout_plan/regenerate", {}, { timeout: 90_000 });
+      router.push("/plan");
+    } catch {
+      setRegenerating(false);
     }
   }
 
@@ -373,6 +390,45 @@ export default function ProfilePage() {
           </dl>
         )}
       </div>
+
+      {/* Update plan prompt */}
+      {showUpdatePlanPrompt && !editing && (
+        <div style={{
+          marginBottom: 16, padding: "16px", borderRadius: "var(--r-lg)",
+          background: "var(--primary-soft)", border: "1px solid oklch(0.685 var(--accent-c,0.17) var(--accent-h,258)/.3)",
+        }}>
+          <p style={{ fontWeight: 700, fontSize: 14, margin: "0 0 4px", color: "var(--primary)" }}>
+            Perfil atualizado
+          </p>
+          <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "0 0 12px" }}>
+            Seu objetivo ou nível mudou. Deseja gerar um novo plano personalizado?
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleRegeneratePlan}
+              disabled={regenerating}
+              style={{
+                flex: 1, padding: "11px", borderRadius: "var(--r-md)", border: "none",
+                background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+                color: "var(--on-primary)", fontWeight: 700, fontSize: 13,
+                cursor: regenerating ? "not-allowed" : "pointer", opacity: regenerating ? 0.7 : 1,
+              }}
+            >
+              {regenerating ? "Gerando plano…" : "Atualizar plano de treino"}
+            </button>
+            <button
+              onClick={() => setShowUpdatePlanPrompt(false)}
+              style={{
+                padding: "11px 16px", borderRadius: "var(--r-md)",
+                border: "1px solid var(--border)", background: "transparent",
+                color: "var(--text-dim)", fontSize: 13, cursor: "pointer",
+              }}
+            >
+              Agora não
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Navegação — list-card */}
       <div className="list-card" style={{ marginBottom: 14 }}>
@@ -881,6 +937,21 @@ function EditForm({
           />
         </div>
       ))}
+
+      {/* BMI inline */}
+      {form.weight_kg && form.height_cm && (form.weight_kg as number) > 0 && (form.height_cm as number) > 0 && (() => {
+        const bmi = (form.weight_kg as number) / Math.pow((form.height_cm as number) / 100, 2);
+        const label = bmi < 18.5 ? "Abaixo do peso" : bmi < 25 ? "Peso normal" : bmi < 30 ? "Sobrepeso" : "Obesidade";
+        const color = bmi < 18.5 ? "#60a5fa" : bmi < 25 ? "#4ade80" : bmi < 30 ? "#fb923c" : "#f87171";
+        return (
+          <div className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800/50 px-3 py-2">
+            <span className="text-sm text-slate-400">IMC</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color }}>
+              {bmi.toFixed(1)} — {label}
+            </span>
+          </div>
+        );
+      })()}
 
       <div className="flex gap-2 pt-2">
         <button onClick={onCancel} className="flex-1 rounded-full border border-slate-700 py-2 text-sm text-slate-400">
