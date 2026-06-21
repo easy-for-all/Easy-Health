@@ -65,6 +65,7 @@ Rails.application.routes.draw do
           get :stats
           get :personal_records
           get :today
+          get :monthly_summary
         end
       end
 
@@ -75,7 +76,9 @@ Rails.application.routes.draw do
         member { post :reanalyze }
       end
 
-      resources :health_data_points, only: [:index, :update]
+      resources :health_data_points, only: [:index, :update] do
+        collection { get :history }
+      end
 
       resource :detailed_profile, only: [:show]
 

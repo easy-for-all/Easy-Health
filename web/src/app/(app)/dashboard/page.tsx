@@ -53,12 +53,17 @@ export default function DashboardPage() {
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [weeklySessionDates, setWeeklySessionDates] = useState<string[]>([]);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [aiActionType, setAiActionType] = useState<string | null>(null);
+  const [aiDismissed, setAiDismissed] = useState(false);
   const [todaySession, setTodaySession] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [noProfile, setNoProfile] = useState(false);
   const [dominantModality, setDominantModality] = useState<string | null>(null);
   const [modalityStats, setModalityStats] = useState<Record<string, number | null> | null>(null);
   const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
+  const [fatigueAvg, setFatigueAvg] = useState<number | null>(null);
+  const [fatigueTrend, setFatigueTrend] = useState<number | null>(null);
+  const [suggestDeload, setSuggestDeload] = useState(false);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "home" });
@@ -68,10 +73,10 @@ export default function DashboardPage() {
     function loadData() {
       return Promise.all([
         api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-        api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[]; dominant_modality?: string; modality_stats?: Record<string, number | null> }>(
+        api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[]; dominant_modality?: string; modality_stats?: Record<string, number | null>; fatigue_avg?: number | null; fatigue_trend?: number | null; suggest_deload?: boolean }>(
           "/api/v1/workout_sessions/stats"
         ).catch(() => null),
-        api.get<{ suggestion: string; reason: string }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
+        api.get<{ recommendations?: { action: string; suggestion: string; reason: string; priority: string }[] }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
         api.get<WorkoutSession | Record<string, never>>("/api/v1/workout_sessions/today").catch(() => null),
         api.get<PersonalRecord[]>("/api/v1/workout_sessions/personal_records").catch(() => []),
       ]).then(([p, s, ai, todayRaw, prs]) => {
@@ -83,8 +88,13 @@ export default function DashboardPage() {
         setWeeklySessionDates(s?.weekly_session_dates ?? []);
         if (s?.dominant_modality) setDominantModality(s.dominant_modality);
         if (s?.modality_stats) setModalityStats(s.modality_stats as Record<string, number | null>);
-        if (ai?.suggestion) {
-          setAiInsight(`${ai.suggestion}${ai.reason ? ` <b>—</b> ${ai.reason}` : ""}`);
+        setFatigueAvg(s?.fatigue_avg ?? null);
+        setFatigueTrend(s?.fatigue_trend ?? null);
+        setSuggestDeload(s?.suggest_deload ?? false);
+        const topRec = ai?.recommendations?.find((r) => r.priority === "high") ?? ai?.recommendations?.[0];
+        if (topRec?.suggestion) {
+          setAiInsight(`${topRec.suggestion}${topRec.reason ? ` <b>—</b> ${topRec.reason}` : ""}`);
+          setAiActionType(topRec.action ?? null);
         }
         if (todayRaw && "id" in todayRaw) {
           setTodaySession(todayRaw as WorkoutSession);
@@ -201,7 +211,22 @@ export default function DashboardPage() {
         )}
 
         {/* AI Insight */}
-        {aiInsight && <InsightCard text={aiInsight} />}
+        {aiInsight && !aiDismissed && (
+          <InsightCard
+            text={aiInsight}
+            onDismiss={() => setAiDismissed(true)}
+            actionLabel={
+              aiActionType === "deload" ? "Ver treino rápido →" :
+              aiActionType === "progressao" || aiActionType === "aumentar_peso" || aiActionType === "reduzir_peso" ? "Ver minha evolução →" :
+              undefined
+            }
+            actionHref={
+              aiActionType === "deload" ? "/workout/quick" :
+              aiActionType === "progressao" || aiActionType === "aumentar_peso" || aiActionType === "reduzir_peso" ? "/history" :
+              undefined
+            }
+          />
+        )}
 
         {/* Streak */}
         <StreakCard
@@ -210,6 +235,9 @@ export default function DashboardPage() {
           weeklyGoal={weeklyGoal}
           completedDayIndices={completedWeekDayIndices(weeklySessionDates)}
         />
+
+        {/* Fadiga e recuperação */}
+        {fatigueAvg !== null && <FatigueCard avg={fatigueAvg} trend={fatigueTrend} deload={suggestDeload} />}
 
         {/* Modality metrics card */}
         {modalityStats && dominantModality && <ModalityMetricsCard modality={dominantModality} stats={modalityStats} />}
@@ -315,6 +343,37 @@ function fmtSecs(s: number): string {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return m > 0 ? `${m}min ${sec.toString().padStart(2, "0")}s` : `${sec}s`;
+}
+
+function FatigueCard({ avg, trend, deload }: { avg: number; trend: number | null; deload: boolean }) {
+  const isHigh = avg >= 3.5;
+  const color = deload ? "var(--hot, #ef4444)" : isHigh ? "#fb923c" : "var(--good, #4ade80)";
+  const bg = deload ? "rgba(239,68,68,.08)" : isHigh ? "rgba(251,146,60,.08)" : "rgba(74,222,128,.08)";
+  const icon = deload ? "⚠️" : isHigh ? "😓" : "✅";
+  const label = deload
+    ? `Fadiga elevada (${avg}/5) — considere uma semana de deload`
+    : isHigh
+    ? `Fadiga moderada (${avg}/5) — descanse bem entre as sessões`
+    : `Recuperação boa (${avg}/5) — continue assim`;
+
+  return (
+    <div style={{ borderRadius: "var(--r-lg)", background: bg, border: `1px solid ${color}30`, padding: "14px 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+          <span style={{ fontSize: 18 }}>{icon}</span>
+          <p style={{ fontSize: 13, color: "var(--text)", margin: 0, lineHeight: 1.4 }}>{label}</p>
+        </div>
+        {trend !== null && Math.abs(trend) >= 5 && (
+          <span style={{
+            fontSize: 12, fontWeight: 700, color,
+            background: `${color}18`, borderRadius: "var(--r-sm)", padding: "3px 8px", flexShrink: 0,
+          }}>
+            {trend > 0 ? "↑" : "↓"}{Math.abs(trend)}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function daysAgo(iso: string): string {

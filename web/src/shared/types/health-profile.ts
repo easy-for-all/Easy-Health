@@ -15,4 +15,5 @@ export interface HealthProfile {
   activity_preferences: ActivityType[];
   training_days_per_week?: number;
   gender?: Gender | null;
+  limitations?: string[];
 }
