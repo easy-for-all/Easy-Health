@@ -1,6 +1,8 @@
 module Api
   module V1
     class CoachController < BaseController
+      before_action :require_active_access!, only: [:messages]
+
       DAILY_MESSAGE_LIMIT = 20
 
       def messages

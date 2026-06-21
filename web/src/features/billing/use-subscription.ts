@@ -12,7 +12,16 @@ export function useSubscription() {
   const isTrialing = bs?.status === "trialing";
   const hasNoPlan = !bs || bs.plan === "none" || bs.plan === null;
   const freeWorkoutUsed = bs?.free_workout_used === true;
-  const canAccessWorkout = canAccessPremiumFeatures || !freeWorkoutUsed;
+
+  // App-level trial (no credit card required)
+  const trialActive = bs?.app_trial_active === true;
+  const trialDaysRemaining = bs?.app_trial_days_remaining ?? 0;
+  const trialEndsAt = bs?.app_trial_ends_at ?? null;
+  const accessLocked = bs?.access_locked === true;
+
+  // Full access = premium subscription OR app trial active
+  const hasActiveAccess = canAccessPremiumFeatures || trialActive;
+  const canAccessWorkout = hasActiveAccess;
 
   return {
     billingStatus: bs,
@@ -23,5 +32,10 @@ export function useSubscription() {
     hasNoPlan,
     freeWorkoutUsed,
     canAccessWorkout,
+    trialActive,
+    trialDaysRemaining,
+    trialEndsAt,
+    accessLocked,
+    hasActiveAccess,
   };
 }

@@ -6,19 +6,17 @@ import { motion } from "framer-motion";
 import { useSubscription } from "@/features/billing/use-subscription";
 import { GlowPulse } from "./motion";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { TrialExpiredPaywall } from "./trial-expired-paywall";
 
 interface UpgradeGateProps {
   children: React.ReactNode;
-  allowFreeWorkout?: boolean;
 }
 
-export function UpgradeGate({ children, allowFreeWorkout }: UpgradeGateProps) {
-  const { canAccessPremiumFeatures, canAccessWorkout } = useSubscription();
-  const canAccess = allowFreeWorkout ? canAccessWorkout : canAccessPremiumFeatures;
+export function UpgradeGate({ children }: UpgradeGateProps) {
+  const { hasActiveAccess, accessLocked } = useSubscription();
 
-  if (!canAccess) {
-    return <UpgradeBanner />;
-  }
+  if (accessLocked) return <TrialExpiredPaywall />;
+  if (!hasActiveAccess) return <UpgradeBanner />;
 
   return <>{children}</>;
 }
@@ -56,7 +54,7 @@ export function UpgradeBanner() {
           Eleve seus treinos ao próximo nível
         </h2>
         <p className="text-gray-500 text-sm mb-6 leading-relaxed">
-          Planos personalizados por IA, histórico ilimitado, análise de progressão e muito mais. Experimente 7 dias grátis.
+          Planos personalizados por IA, histórico ilimitado, análise de progressão e muito mais.
         </p>
 
         <GlowPulse color="blue" radius={12} className="w-full mb-3">
@@ -64,7 +62,7 @@ export function UpgradeBanner() {
             href="/billing"
             className="block w-full bg-primary-500 text-white rounded-xl py-3.5 text-sm font-semibold hover:bg-primary-600 transition-colors"
           >
-            Começar 7 dias grátis →
+            Ver planos →
           </Link>
         </GlowPulse>
 

@@ -128,11 +128,13 @@ class StripeWebhookService
     end
 
     period_end = invoice.lines&.data&.first&.period&.end
+    was_inactive = !sub.subscription_active?
     sub.update!(
       status:             "active",
       current_period_end: period_end ? Time.zone.at(period_end) : sub.current_period_end
     )
     Rails.logger.info("[Stripe] invoice paid stripe_sub=#{subscription_id} → active")
+    UserEventService.track(user: sub.user, event: :subscription_created) if was_inactive
   end
 
   def self.handle_invoice_payment_failed(invoice)

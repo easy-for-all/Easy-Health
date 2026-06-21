@@ -5,6 +5,7 @@ class User < ApplicationRecord
 
   ACCOUNT_TYPES = %w[regular personal_trainer].freeze
   PROFILE_VISIBILITIES = %w[private public_limited public].freeze
+  TRIAL_DURATION_DAYS = 7
 
   has_one :health_profile, dependent: :destroy
   has_many :workout_plans, dependent: :destroy
@@ -43,6 +44,7 @@ class User < ApplicationRecord
 
   after_create :create_public_profile_record
   after_create :generate_referral_code
+  after_create :start_app_trial
 
   delegate :pro_monthly?, :pro_yearly?, :pro?, :subscription_active?,
            to: :subscription, allow_nil: true
@@ -113,13 +115,50 @@ class User < ApplicationRecord
     subscription.nil? || subscription.billing_required?
   end
 
-  def can_access_workout?
+  # App-level trial (no Stripe required)
+  def trial_active?
+    return false if trial_ends_at.nil?
+    trial_ends_at > Time.current
+  end
+
+  def trial_expired?
+    trial_ends_at.present? && trial_ends_at <= Time.current
+  end
+
+  def trial_days_remaining
+    return 0 unless trial_active?
+    [(trial_ends_at - Time.current) / 1.day, 0].max.ceil
+  end
+
+  # Stripe subscription active (includes Stripe trialing)
+  def premium_active?
     return true if admin?
-    return true if paid_plan?
-    !free_workout_used?
+    subscription&.paid_plan? || false
+  end
+
+  def has_active_access?
+    premium_active? || trial_active?
+  end
+
+  def access_locked?
+    !has_active_access?
+  end
+
+  def can_access_workout?
+    has_active_access?
   end
 
   private
+
+  def start_app_trial
+    return if trial_started_at.present?
+    update_columns(
+      trial_started_at: created_at,
+      trial_ends_at: created_at + TRIAL_DURATION_DAYS.days
+    )
+    UserEventService.track(user: self, event: :trial_started)
+    UserEventService.track(user: self, event: :signup_completed)
+  end
 
   def create_public_profile_record
     create_public_profile(display_name: name)
@@ -147,7 +186,11 @@ class User < ApplicationRecord
         current_period_end: nil,
         cancel_at_period_end: false,
         stripe_customer_id: nil,
-        free_workout_used: free_workout_used
+        free_workout_used: free_workout_used,
+        app_trial_active: false,
+        app_trial_ends_at: nil,
+        app_trial_days_remaining: 0,
+        access_locked: false
       }
     end
     base = subscription&.billing_status || {
@@ -159,6 +202,12 @@ class User < ApplicationRecord
       cancel_at_period_end: false,
       stripe_customer_id: nil
     }
-    base.merge(free_workout_used: free_workout_used)
+    base.merge(
+      free_workout_used: free_workout_used,
+      app_trial_active: trial_active?,
+      app_trial_ends_at: trial_ends_at&.iso8601,
+      app_trial_days_remaining: trial_days_remaining,
+      access_locked: access_locked?
+    )
   end
 end

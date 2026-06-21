@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { api, ApiError } from "@/shared/lib/api";
+import { api, ApiError, TRIAL_EXPIRED_EVENT } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
 
 interface AuthContextValue {
@@ -72,6 +72,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function updateUser(patch: Partial<User>) {
     setUser((prev) => prev ? { ...prev, ...patch } : prev);
   }
+
+  useEffect(() => {
+    function handleTrialExpired() {
+      setUser((prev) => {
+        if (!prev?.billing_status) return prev;
+        return {
+          ...prev,
+          billing_status: {
+            ...prev.billing_status,
+            app_trial_active: false,
+            app_trial_days_remaining: 0,
+            access_locked: true,
+          },
+        };
+      });
+    }
+    window.addEventListener(TRIAL_EXPIRED_EVENT, handleTrialExpired);
+    return () => window.removeEventListener(TRIAL_EXPIRED_EVENT, handleTrialExpired);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, updateUser }}>

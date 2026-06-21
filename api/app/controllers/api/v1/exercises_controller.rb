@@ -1,6 +1,8 @@
 module Api
   module V1
     class ExercisesController < BaseController
+      before_action :require_active_access!, only: [:intelligent_suggestions, :ai_substitute]
+
       def index
         favorite_ids = Set.new(current_user.user_favorite_exercises.pluck(:exercise_id))
 

@@ -1,6 +1,8 @@
 module Api
   module V1
     class AiAgentsController < BaseController
+      before_action :require_active_access!
+
       def personal_trainer
         result = AiAgents::PersonalTrainerService.new(current_user).call
         render json: result
