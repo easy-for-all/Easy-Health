@@ -2,12 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { ExerciseRow } from "@/shared/components/workout/exercise-row";
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay } from "@/shared/types/workout";
+
+type QuickModality = "musculacao" | "funcional" | "hiit" | "cardio";
+
+const QUICK_MODALITIES: { id: QuickModality; label: string; emoji: string }[] = [
+  { id: "musculacao", label: "Musculação", emoji: "🏋️" },
+  { id: "funcional", label: "Funcional", emoji: "⚡" },
+  { id: "hiit", label: "HIIT", emoji: "🔥" },
+  { id: "cardio", label: "Cardio", emoji: "🏃" },
+];
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -23,6 +33,8 @@ export default function FavoritesPage() {
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [exercises, setExercises] = useState<FavoriteExercise[]>([]);
   const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [generatingQuick, setGeneratingQuick] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -33,6 +45,17 @@ export default function FavoritesPage() {
       setExercises(Array.isArray(exs) ? exs : []);
     }).finally(() => setLoading(false));
   }, []);
+
+  async function handleQuickWorkout(modality: QuickModality) {
+    setGeneratingQuick(true);
+    setModalOpen(false);
+    try {
+      await api.post("/api/v1/quick_workouts", { modality, duration_minutes: 45 });
+      router.push("/workout/today?quick=true");
+    } catch {
+      setGeneratingQuick(false);
+    }
+  }
 
   async function toggleFavorite(dayId: number) {
     if (!plan) return;
@@ -57,24 +80,99 @@ export default function FavoritesPage() {
         </h1>
       </header>
 
-      {/* Hero card */}
-      <div className="fav-hero" style={{ marginBottom: 24 }}>
-        <div className="fh">
-          <div className="fhi">
-            <svg viewBox="0 0 24 24">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
+      {/* CTA card — quick workout with favorites */}
+      <div style={{
+        background: "var(--surface)", border: "1px solid var(--border)",
+        borderRadius: "var(--r-lg)", padding: "18px", marginBottom: 24,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: "var(--r-md)", flexShrink: 0,
+            background: "var(--primary-soft)", display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 20,
+          }}>
+            ❤️
           </div>
-          <div className="fht">
-            <b>Favoritos alimentam a IA</b>
-            <p>Treinos e exercícios marcados aparecem com prioridade no seu plano gerado pela IA.</p>
+          <div>
+            <p style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>Favoritos alimentam a IA</p>
+            <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "2px 0 0" }}>
+              Treinos e exercícios marcados têm prioridade no plano e no treino rápido.
+            </p>
           </div>
         </div>
-        <p className="fp">
-          Quanto mais você favorita, <b>mais personalizado</b> fica o seu planejamento. A IA considera
-          seus favoritos ao sugerir séries, cargas e substituições.
-        </p>
+        <button
+          onClick={() => exercises.length > 0 && setModalOpen(true)}
+          disabled={exercises.length === 0 || generatingQuick}
+          title={exercises.length === 0 ? "Adicione exercícios favoritos primeiro" : undefined}
+          style={{
+            width: "100%", padding: "13px", borderRadius: "var(--r-md)", border: "none",
+            background: exercises.length > 0
+              ? "linear-gradient(180deg, var(--primary), var(--primary-2))"
+              : "var(--border)",
+            color: exercises.length > 0 ? "var(--on-primary)" : "var(--text-dim)",
+            fontWeight: 700, fontSize: 14, cursor: exercises.length > 0 ? "pointer" : "not-allowed",
+            opacity: generatingQuick ? 0.7 : 1,
+            transition: "opacity 0.2s",
+          }}
+        >
+          {generatingQuick ? "Gerando treino…" : "⚡ Criar Treino Rápido com Favoritos"}
+        </button>
+        {exercises.length === 0 && (
+          <p style={{ fontSize: 11, color: "var(--text-dim)", textAlign: "center", marginTop: 8 }}>
+            Adicione exercícios favoritos durante o treino para liberar esta função.
+          </p>
+        )}
       </div>
+
+      {/* Modality selector modal */}
+      <AnimatePresence>
+        {modalOpen && (
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)" }}
+            onClick={() => setModalOpen(false)}
+          >
+            <motion.div
+              style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                background: "var(--bg-2)", borderRadius: "var(--r-xl) var(--r-xl) 0 0",
+                padding: "20px 20px 48px",
+              }}
+              onClick={(e) => e.stopPropagation()}
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+                <div style={{ width: 36, height: 4, borderRadius: 9, background: "var(--border-strong)" }} />
+              </div>
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, margin: "0 0 6px" }}>
+                Escolha a modalidade
+              </h2>
+              <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "0 0 20px" }}>
+                Seus exercícios favoritos serão priorizados na montagem.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {QUICK_MODALITIES.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => handleQuickWorkout(m.id)}
+                    style={{
+                      padding: "16px 12px", borderRadius: "var(--r-md)",
+                      background: "var(--surface)", border: "1px solid var(--border)",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ fontSize: 28 }}>{m.emoji}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Favorited workout days */}
       <section style={{ marginBottom: 28 }}>

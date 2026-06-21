@@ -13,6 +13,13 @@ import { StreakCard } from "@/shared/components/workout/streak-card";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 
+type PersonalRecord = {
+  exercise_id: number;
+  exercise_name: string;
+  max_weight_kg: number;
+  achieved_at: string;
+};
+
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const DAYS_PT = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
@@ -51,6 +58,7 @@ export default function DashboardPage() {
   const [noProfile, setNoProfile] = useState(false);
   const [dominantModality, setDominantModality] = useState<string | null>(null);
   const [modalityStats, setModalityStats] = useState<Record<string, number | null> | null>(null);
+  const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "home" });
@@ -65,7 +73,8 @@ export default function DashboardPage() {
         ).catch(() => null),
         api.get<{ suggestion: string; reason: string }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
         api.get<WorkoutSession | Record<string, never>>("/api/v1/workout_sessions/today").catch(() => null),
-      ]).then(([p, s, ai, todayRaw]) => {
+        api.get<PersonalRecord[]>("/api/v1/workout_sessions/personal_records").catch(() => []),
+      ]).then(([p, s, ai, todayRaw, prs]) => {
         if (!p) setNoProfile(true);
         setPlan(p);
         setStreak(s?.streak ?? 0);
@@ -80,6 +89,7 @@ export default function DashboardPage() {
         if (todayRaw && "id" in todayRaw) {
           setTodaySession(todayRaw as WorkoutSession);
         }
+        if (prs && prs.length > 0) setPersonalRecords(prs);
       }).finally(() => setLoading(false));
     }
 
@@ -204,6 +214,9 @@ export default function DashboardPage() {
         {/* Modality metrics card */}
         {modalityStats && dominantModality && <ModalityMetricsCard modality={dominantModality} stats={modalityStats} />}
 
+        {/* Personal Records */}
+        {personalRecords.length > 0 && <PersonalRecordsBlock records={personalRecords.slice(0, 3)} />}
+
         {/* Workout list */}
         {plan?.days && plan.days.length > 0 && (
           <section>
@@ -302,6 +315,42 @@ function fmtSecs(s: number): string {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return m > 0 ? `${m}min ${sec.toString().padStart(2, "0")}s` : `${sec}s`;
+}
+
+function daysAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (diff === 0) return "hoje";
+  if (diff === 1) return "ontem";
+  return `há ${diff} dias`;
+}
+
+function PersonalRecordsBlock({ records }: { records: PersonalRecord[] }) {
+  return (
+    <div style={{ borderRadius: "var(--r-lg)", background: "var(--surface)", border: "1px solid var(--border)", padding: "16px" }}>
+      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-dim)", textTransform: "uppercase", marginBottom: 12 }}>
+        🏆 Recordes pessoais
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {records.map((pr) => (
+          <div key={pr.exercise_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {pr.exercise_name}
+              </p>
+              <p style={{ fontSize: 11, color: "var(--text-dim)", margin: "2px 0 0" }}>{daysAgo(pr.achieved_at)}</p>
+            </div>
+            <span style={{
+              fontSize: 15, fontWeight: 700, color: "var(--primary)",
+              background: "var(--primary-soft)", borderRadius: "var(--r-sm)",
+              padding: "4px 10px", flexShrink: 0, marginLeft: 12,
+            }}>
+              {pr.max_weight_kg} kg
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ModalityMetricsCard({ modality, stats }: { modality: string; stats: Record<string, number | null> }) {
