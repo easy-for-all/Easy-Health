@@ -471,6 +471,16 @@ export default function ProfilePage() {
           </span>
           <span className="lv">›</span>
         </Link>
+        <Link href="/billing" className="li">
+          <span className="lic">
+            <svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          </span>
+          <span className="lt">
+            <span style={{ fontWeight: 700 }}>Meu Plano</span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>Assinatura e faturamento</span>
+          </span>
+          <span className="lv">›</span>
+        </Link>
       </div>
 
       {/* Fotos e Exames */}

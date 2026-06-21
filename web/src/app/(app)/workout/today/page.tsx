@@ -5,13 +5,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { api } from "@/shared/lib/api";
+import { api, ApiError } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from "@/shared/types/workout";
 import { WARMUP_BY_TYPE, COOLDOWN_BY_TYPE } from "./warmup-data";
 import { SwapModal } from "./swap-modal";
 import { ExerciseInfoModal } from "./exercise-info-modal";
-import { UpgradeGate } from "@/shared/components/upgrade-gate";
+import { UpgradeGate, UpgradeBanner } from "@/shared/components/upgrade-gate";
+import { useAuth } from "@/features/auth/auth-context";
 import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
 import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared/components/motion";
 import { ShareButton } from "@/shared/components/workout-share/share-button";
@@ -2102,12 +2103,14 @@ function DoneScreen({
   onSaved?: () => void;
 }) {
   const router = useRouter();
+  const { user, updateUser } = useAuth();
   const [finishedAt] = useState(() => new Date());
   const duration = Math.max(1, Math.round((finishedAt.getTime() - startTime.getTime()) / 60000));
   const [fatigueLevel, setFatigueLevel] = useState(3);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [savedCalories, setSavedCalories] = useState<number | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [savedSessionId, setSavedSessionId] = useState<number | null>(null);
@@ -2200,6 +2203,10 @@ function DoneScreen({
         setSavedFatigue(fatigueLevel);
         setSavedNotes(notes);
         setIsSaved(true);
+        // Mark free workout as used in frontend state so UpgradeGate blocks next attempt
+        if (user?.billing_status && !user.billing_status.paid) {
+          updateUser({ billing_status: { ...user.billing_status, free_workout_used: true } });
+        }
         // Signal dashboard to refetch fresh stats on next visit
         try { sessionStorage.setItem("dashboard_stale", "1"); } catch { /* ok */ }
         router.refresh();
@@ -2207,8 +2214,12 @@ function DoneScreen({
         api.get<{ streak: number }>("/api/v1/workout_sessions/stats").then((s) => {
           setCurrentStreak(s.streak);
         }).catch(() => { /* non-critical */ });
-      } catch {
-        setSaveError("Erro ao salvar o treino. Tente novamente.");
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 403) {
+          setShowUpgrade(true);
+        } else {
+          setSaveError("Erro ao salvar o treino. Tente novamente.");
+        }
       } finally {
         setSaving(false);
       }
@@ -2281,8 +2292,16 @@ function DoneScreen({
       setSavedFatigue(fatigueLevel);
       setSavedNotes(notes);
       setIsSaved(true);
-    } catch {
-      setSaveError("Erro ao salvar. Tente novamente.");
+      if (user?.billing_status && !user.billing_status.paid) {
+        updateUser({ billing_status: { ...user.billing_status, free_workout_used: true } });
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) {
+        setShowUpgrade(true);
+        setSaveError("");
+      } else {
+        setSaveError("Erro ao salvar. Tente novamente.");
+      }
     } finally {
       setSaving(false);
     }
@@ -2455,6 +2474,12 @@ function DoneScreen({
         {updateSuccess && (
           <motion.div variants={staggerItem} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-lg bg-green-900/40 px-4 py-3 text-center text-sm text-green-400">
             Observações salvas ✓
+          </motion.div>
+        )}
+
+        {showUpgrade && (
+          <motion.div variants={staggerItem}>
+            <UpgradeBanner />
           </motion.div>
         )}
 
