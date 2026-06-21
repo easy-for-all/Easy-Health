@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { api } from "@/shared/lib/api";
@@ -231,6 +231,8 @@ function getPeriodParams(period: Period): string {
   return `?from=${first.toISOString().split("T")[0]}&to=${to}`;
 }
 
+type MonthSummary = { month: string; label: string; sessions: number; volume_kg: number };
+
 function HistoryContent() {
   const router = useRouter();
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
@@ -239,15 +241,18 @@ function HistoryContent() {
   const [tab, setTab] = useState<Tab>("resumo");
   const [period, setPeriod] = useState<Period>("all");
   const [selected, setSelected] = useState<WorkoutSession | null>(null);
+  const [monthlySummary, setMonthlySummary] = useState<MonthSummary[]>([]);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "historico" });
     Promise.all([
       api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions"),
       api.get<HealthProfile>("/api/v1/health_profile").catch(() => null),
-    ]).then(([sessionsData, profile]) => {
+      api.get<MonthSummary[]>("/api/v1/workout_sessions/monthly_summary").catch(() => []),
+    ]).then(([sessionsData, profile, monthly]) => {
       setSessions(sessionsData.sessions);
       setHealthProfile(profile);
+      setMonthlySummary(Array.isArray(monthly) ? monthly : []);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -457,6 +462,11 @@ function HistoryContent() {
             </div>
           ) : null}
 
+          {/* Monthly summary */}
+          {monthlySummary.some((m) => m.sessions > 0) && (
+            <MonthlySummaryBlock months={monthlySummary} />
+          )}
+
           {/* AI Insight */}
           {sessions.length >= 3 && (
             <InsightCard
@@ -588,6 +598,68 @@ function HistoryContent() {
       {/* Session detail modal */}
       {selected && (
         <SessionSheet session={selected} onClose={() => setSelected(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Monthly summary bar chart ─────────────────────────────────────────────────
+
+function MonthlySummaryBlock({ months }: { months: MonthSummary[] }) {
+  const [view, setView] = React.useState<"sessions" | "volume">("sessions");
+  const vals = months.map((m) => (view === "sessions" ? m.sessions : m.volume_kg));
+  const maxVal = Math.max(...vals, 1);
+  const lastIdx = months.length - 1;
+  const prevIdx = months.length - 2;
+  const currVal = vals[lastIdx] ?? 0;
+  const prevVal = vals[prevIdx] ?? 0;
+  const delta = currVal - prevVal;
+  const deltaLabel = view === "sessions"
+    ? `${delta >= 0 ? "+" : ""}${delta} sessões vs mês anterior`
+    : `${delta >= 0 ? "+" : ""}${(delta / 1000).toFixed(1)}t vol vs mês anterior`;
+
+  return (
+    <div style={{ borderRadius: "var(--r-lg)", background: "var(--surface)", border: "1px solid var(--border)", padding: "16px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-dim)", textTransform: "uppercase", margin: 0 }}>
+          Últimos 6 meses
+        </p>
+        <div style={{ display: "flex", gap: 4 }}>
+          {(["sessions", "volume"] as const).map((v) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              padding: "3px 10px", borderRadius: "var(--r-pill)", border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
+              background: view === v ? "var(--primary)" : "var(--bg-2)",
+              color: view === v ? "var(--on-primary)" : "var(--text-dim)",
+            }}>
+              {v === "sessions" ? "Sessões" : "Volume"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 72, marginBottom: 8 }}>
+        {months.map((m, i) => {
+          const val = vals[i];
+          const pct = val / maxVal;
+          const isLast = i === lastIdx;
+          return (
+            <div key={m.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+              <div style={{
+                width: "100%", borderRadius: "var(--r-sm) var(--r-sm) 0 0",
+                height: `${Math.max(pct * 60, val > 0 ? 4 : 0)}px`,
+                background: isLast ? "var(--primary)" : "var(--primary-soft)",
+                transition: "height 0.3s ease",
+              }} />
+              <span style={{ fontSize: 9, color: "var(--text-dim)", textAlign: "center" }}>{m.label}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {prevVal > 0 && (
+        <p style={{ fontSize: 11, color: delta >= 0 ? "var(--good, #4ade80)" : "var(--hot, #ef4444)", margin: 0, textAlign: "right" }}>
+          {delta >= 0 ? "↑" : "↓"} {deltaLabel}
+        </p>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import React, { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
@@ -88,6 +88,7 @@ export default function ProfilePage() {
   const [cleanDataOpen, setCleanDataOpen] = useState(false);
   const [showUpdatePlanPrompt, setShowUpdatePlanPrompt] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [bodyHistory, setBodyHistory] = useState<{ field_name: string; value: number; unit: string | null; collected_at: string }[]>([]);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -101,11 +102,13 @@ export default function ProfilePage() {
       api.get<HealthProfile>("/api/v1/health_profile").catch(() => null),
       api.get<Stats>("/api/v1/workout_sessions/stats").catch(() => null),
       api.get<UserMedia[]>("/api/v1/user_media").catch(() => []),
-    ]).then(([p, s, media]) => {
+      api.get<{ field_name: string; value: number; unit: string | null; collected_at: string }[]>("/api/v1/health_data_points/history").catch(() => []),
+    ]).then(([p, s, media, history]) => {
       setProfile(p);
       setStats(s);
       setMediaItems(media ?? []);
-      if (p) setForm({ age: p.age, weight_kg: p.weight_kg, height_cm: p.height_cm, goal: p.goal, fitness_level: p.fitness_level });
+      setBodyHistory(Array.isArray(history) ? history : []);
+      if (p) setForm({ age: p.age, weight_kg: p.weight_kg, height_cm: p.height_cm, goal: p.goal, fitness_level: p.fitness_level, limitations: p.limitations ?? [] });
     }).finally(() => setLoading(false));
   }, []);
 
@@ -372,6 +375,7 @@ export default function ProfilePage() {
           <EditForm
             form={form}
             onChange={(key, val) => setForm((f) => ({ ...f, [key]: val }))}
+            onLimitationsChange={(lims) => setForm((f) => ({ ...f, limitations: lims }))}
             error={error}
             saving={saving}
             onSave={handleSave}
@@ -390,6 +394,9 @@ export default function ProfilePage() {
           </dl>
         )}
       </div>
+
+      {/* Body evolution chart */}
+      {!editing && <BodyEvolutionSection history={bodyHistory} />}
 
       {/* Update plan prompt */}
       {showUpdatePlanPrompt && !editing && (
@@ -886,9 +893,12 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+const LIMITATION_PRESETS = ["Joelho", "Lombar", "Ombro", "Punho", "Cervical", "Quadril", "Tornozelo"];
+
 function EditForm({
   form,
   onChange,
+  onLimitationsChange,
   error,
   saving,
   onSave,
@@ -899,6 +909,7 @@ function EditForm({
 }: {
   form: Partial<HealthProfile>;
   onChange: (key: keyof HealthProfile, val: string | number) => void;
+  onLimitationsChange: (lims: string[]) => void;
   error: string;
   saving: boolean;
   onSave: () => void;
@@ -907,6 +918,20 @@ function EditForm({
   levelLabels: Record<FitnessLevel, string>;
   t: ReturnType<typeof useTranslations<"profile">>;
 }) {
+  const [customLim, setCustomLim] = React.useState("");
+  const lims: string[] = Array.isArray(form.limitations) ? form.limitations : [];
+
+  function toggleLimitation(item: string) {
+    const updated = lims.includes(item) ? lims.filter((l) => l !== item) : [...lims, item];
+    onLimitationsChange(updated);
+  }
+
+  function addCustom() {
+    const trimmed = customLim.trim();
+    if (!trimmed || lims.includes(trimmed)) { setCustomLim(""); return; }
+    onLimitationsChange([...lims, trimmed]);
+    setCustomLim("");
+  }
   return (
     <div className="space-y-4">
       {error && <p className="rounded-xl border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>}
@@ -953,6 +978,62 @@ function EditForm({
         );
       })()}
 
+      {/* Limitations chip editor */}
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-400">Limitações / Lesões</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {LIMITATION_PRESETS.map((item) => {
+            const active = lims.includes(item);
+            return (
+              <button
+                key={item}
+                type="button"
+                onClick={() => toggleLimitation(item)}
+                style={{
+                  padding: "5px 12px", borderRadius: "var(--r-pill, 99px)", fontSize: 12, fontWeight: 600,
+                  border: active ? "none" : "1px solid var(--border)",
+                  background: active ? "var(--primary)" : "var(--surface)",
+                  color: active ? "var(--on-primary)" : "var(--text-dim)",
+                  cursor: "pointer",
+                }}
+              >
+                {item}
+              </button>
+            );
+          })}
+          {lims.filter((l) => !LIMITATION_PRESETS.includes(l)).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => toggleLimitation(item)}
+              style={{
+                padding: "5px 12px", borderRadius: "var(--r-pill, 99px)", fontSize: 12, fontWeight: 600,
+                border: "none", background: "var(--primary)", color: "var(--on-primary)", cursor: "pointer",
+              }}
+            >
+              {item} ×
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            type="text"
+            value={customLim}
+            onChange={(e) => setCustomLim(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustom())}
+            placeholder="Adicionar outra..."
+            className="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-primary-500 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={addCustom}
+            style={{ padding: "8px 14px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "var(--text)" }}
+          >
+            +
+          </button>
+        </div>
+      </div>
+
       <div className="flex gap-2 pt-2">
         <button onClick={onCancel} className="flex-1 rounded-full border border-slate-700 py-2 text-sm text-slate-400">
           {t("cancel")}
@@ -988,6 +1069,83 @@ function Select({
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+type BodyPoint = { field_name: string; value: number; unit: string | null; collected_at: string };
+
+function miniLineSvg(vals: number[], w = 280, h = 60): string {
+  if (vals.length < 2) return "";
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const rng = max - min || 1;
+  const pad = 4;
+  const pts = vals.map((v, i) => ({
+    x: pad + (i / (vals.length - 1)) * (w - pad * 2),
+    y: h - pad - ((v - min) / rng) * (h - pad * 2),
+  }));
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const last = pts[pts.length - 1];
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" fill="none">
+    <path d="${d} L${last.x.toFixed(1)} ${h - pad} L${pts[0].x.toFixed(1)} ${h - pad} Z" fill="var(--primary)" fill-opacity="0.12"/>
+    <path d="${d}" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="var(--primary)"/>
+  </svg>`;
+}
+
+function BodyEvolutionSection({ history }: { history: BodyPoint[] }) {
+  const [view, setView] = React.useState<"weight" | "fat">("weight");
+  const weights = history.filter((p) => p.field_name === "weight_kg");
+  const bodyFats = history.filter((p) => p.field_name === "body_fat_pct");
+  if (weights.length < 2 && bodyFats.length < 2) return null;
+  const active = view === "weight" ? weights : bodyFats;
+  const vals = active.map((p) => p.value);
+  const first = active[0]?.value ?? 0;
+  const last = active[active.length - 1]?.value ?? 0;
+  const delta = (last - first).toFixed(1);
+  const deltaNum = parseFloat(delta);
+  const unit = active[0]?.unit ?? (view === "weight" ? "kg" : "%");
+
+  return (
+    <div style={{ borderRadius: "var(--r-lg)", background: "var(--surface)", border: "1px solid var(--border)", padding: "16px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-dim)", textTransform: "uppercase", margin: 0 }}>
+          Evolução corporal
+        </p>
+        {weights.length >= 2 && bodyFats.length >= 2 && (
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["weight", "fat"] as const).map((v) => (
+              <button key={v} onClick={() => setView(v)} style={{
+                padding: "3px 10px", borderRadius: "var(--r-pill)", border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                background: view === v ? "var(--primary)" : "var(--bg-2)",
+                color: view === v ? "var(--on-primary)" : "var(--text-dim)",
+              }}>
+                {v === "weight" ? "Peso" : "% Gordura"}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div dangerouslySetInnerHTML={{ __html: miniLineSvg(vals) }} style={{ marginBottom: 10 }} />
+
+      <div style={{ display: "flex", gap: 16 }}>
+        <div>
+          <p style={{ fontSize: 11, color: "var(--text-dim)", margin: "0 0 2px" }}>Início</p>
+          <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{first} {unit}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: 11, color: "var(--text-dim)", margin: "0 0 2px" }}>Agora</p>
+          <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{last} {unit}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: 11, color: "var(--text-dim)", margin: "0 0 2px" }}>Total</p>
+          <p style={{ fontSize: 15, fontWeight: 700, margin: 0, color: deltaNum < 0 ? "var(--good, #4ade80)" : deltaNum > 0 ? "var(--hot, #ef4444)" : "var(--text)" }}>
+            {deltaNum > 0 ? "+" : ""}{delta} {unit}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

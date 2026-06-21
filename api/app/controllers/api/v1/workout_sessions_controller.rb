@@ -71,6 +71,21 @@ module Api
         dominant_modality = detect_dominant_modality(recent_sessions)
         modality_stats = calculate_modality_stats(sessions.first(30), dominant_modality)
 
+        recent_fatigues = current_user.workout_sessions
+          .where("completed_at >= ?", 14.days.ago)
+          .where.not(fatigue_level: nil)
+          .pluck(:fatigue_level)
+        prev_fatigues = current_user.workout_sessions
+          .where(completed_at: 28.days.ago..14.days.ago)
+          .where.not(fatigue_level: nil)
+          .pluck(:fatigue_level)
+        fatigue_avg = recent_fatigues.any? ? (recent_fatigues.sum.to_f / recent_fatigues.size).round(1) : nil
+        fatigue_trend = if recent_fatigues.any? && prev_fatigues.any?
+          prev_avg = prev_fatigues.sum.to_f / prev_fatigues.size
+          ((fatigue_avg - prev_avg) / prev_avg * 100).round
+        end
+        suggest_deload = fatigue_avg.present? && fatigue_avg >= 4.0 && recent_fatigues.size >= 3
+
         render json: {
           total_sessions: sessions.count,
           streak: streak_svc.current_streak,
@@ -81,8 +96,39 @@ module Api
           total_volume_kg: total_volume,
           weekly_session_dates: weekly.map { |s| s.completed_at.iso8601 },
           dominant_modality: dominant_modality,
-          modality_stats: modality_stats
+          modality_stats: modality_stats,
+          fatigue_avg: fatigue_avg,
+          fatigue_trend: fatigue_trend,
+          suggest_deload: suggest_deload
         }
+      end
+
+      def monthly_summary
+        start_date = 6.months.ago.beginning_of_month
+        sessions = current_user.workout_sessions
+          .where("completed_at >= ?", start_date)
+          .select(:completed_at, :exercise_logs, :duration_minutes)
+
+        by_month = sessions.group_by { |s| s.completed_at.beginning_of_month }
+        result = (0...6).map do |i|
+          month = i.months.ago.beginning_of_month
+          month_sessions = by_month[month] || []
+          volume = month_sessions.sum do |s|
+            (s.exercise_logs || []).sum do |log|
+              ws = log["weight_by_set"] || (log["weight_kg"] ? [log["weight_kg"]] : [])
+              rs = log["reps"].is_a?(Array) ? log["reps"] : Array.new(log["sets"].to_i, log["reps"].to_i)
+              ws.each_with_index.sum { |w, idx| (w || 0).to_f * (rs[idx] || 0).to_f }
+            end
+          end
+          {
+            month: month.strftime("%Y-%m"),
+            label: I18n.l(month, format: "%b/%y"),
+            sessions: month_sessions.size,
+            volume_kg: volume.round
+          }
+        end.reverse
+
+        render json: result
       end
 
       def today

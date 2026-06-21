@@ -6,6 +6,16 @@ module Api
         render json: points.map { |p| serialize(p) }
       end
 
+      def history
+        points = current_user.health_data_points
+          .where(status: %w[confirmed saved_advanced])
+          .where(field_name: %w[weight_kg body_fat_pct muscle_mass_kg])
+          .order(collected_at: :asc)
+        render json: points.map { |p|
+          { field_name: p.field_name, value: p.value.to_f, unit: p.unit, collected_at: p.collected_at }
+        }
+      end
+
       def update
         point = current_user.health_data_points.find(params[:id])
         action = params[:action_type].to_s
