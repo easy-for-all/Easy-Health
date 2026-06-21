@@ -106,6 +106,9 @@ Rails.application.routes.draw do
         post :messages
       end
 
+      get  "coach/insights",            to: "coach_insights#index"
+      post "coach/insights/:id/read",   to: "coach_insights#read"
+
       namespace :admin do
         get :stats
         get :users
@@ -115,6 +118,32 @@ Rails.application.routes.draw do
       # Privacy & public profile
       resource :privacy_settings, only: [:show, :update]
       resource :public_profile, only: [:show, :update]
+
+      # Community
+      scope "/community" do
+        get    "feed",                    to: "community#feed"
+        post   "congrats/:id",            to: "community#congrats"
+        get    "profile",                 to: "community#profile"
+        patch  "profile",                 to: "community#update_profile"
+        post   "posts/:id/reactions",     to: "community#create_reaction"
+        delete "posts/:id/reactions",     to: "community#destroy_reaction"
+        post   "posts/:id/comments",      to: "community#create_comment"
+        delete "comments/:id",            to: "community#destroy_comment"
+      end
+
+      # Badges
+      get  "badges",                to: "badges#index"
+      get  "users/:user_id/badges", to: "badges#user_badges"
+
+      # Referral code
+      get "referral_code", to: "referral_codes#show"
+
+      # Trainer profile (personal trainer metadata: bio, CREF)
+      scope "/trainer" do
+        get   "profile", to: "trainer_profiles#show"
+        post  "profile", to: "trainer_profiles#create"
+        patch "profile", to: "trainer_profiles#update"
+      end
 
       # User search (public profiles only)
       resources :users, only: [:index, :show]
@@ -135,6 +164,10 @@ Rails.application.routes.draw do
         post "invitations", to: "invitations#create"
         resources :clients, only: [:index, :show, :destroy] do
           member { post :assign_plan }
+          resources :notes, only: [:index, :create]
+        end
+        resources :alerts, only: [:index] do
+          member { patch :mark_read }
         end
       end
 

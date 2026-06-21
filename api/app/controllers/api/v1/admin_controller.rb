@@ -91,7 +91,19 @@ module Api
           # Totals for legacy compatibility
           total_workout_plans: WorkoutPlan.count,
           total_workout_sessions: WorkoutSession.count,
-          total_uploads: UserMedia.count
+          total_uploads: UserMedia.count,
+
+          # Fitness Intelligence metrics
+          fitness_profiles_count:   FitnessProfile.count,
+          insights_generated:       (defined?(CoachInsight) ? CoachInsight.count : 0),
+          avg_consistency_score:    FitnessProfile.average(:consistency_score)&.round(2),
+          avg_adherence_score:      FitnessProfile.average(:adherence_score)&.round(2),
+          top_persona:              FitnessProfile.group(:primary_persona).count.max_by { |_, v| v }&.first,
+          top_archetype:            FitnessProfile.group(:training_archetype).count.max_by { |_, v| v }&.first,
+          top_behavior_pattern:     FitnessProfile.group(:behavior_pattern).count.max_by { |_, v| v }&.first,
+          ai_workouts_generated:    AiTrainingDecisionLog.where(status: "success").count,
+          ai_validation_failures:   AiTrainingDecisionLog.where(status: "validation_failed").count,
+          pct_users_with_insights:  total_users > 0 ? ((defined?(CoachInsight) ? CoachInsight.distinct.count(:user_id) : 0).to_f / total_users * 100).round(1) : 0
         }
       end
 
@@ -103,7 +115,7 @@ module Api
         # Evitar expor PII na listagem administrativa para reduzir risco em prints e compartilhamento de tela.
         scope = User.all
                     .left_joins(:subscription)
-                    .includes(:subscription, :workout_plans, :workout_sessions, :user_events)
+                    .includes(:subscription, :workout_plans, :workout_sessions, :user_events, :fitness_profile)
 
         scope = apply_filter(scope, filter)
         total = scope.count("users.id")
@@ -178,6 +190,7 @@ module Api
         activity       = last_activity_for(user)
         trial_status   = compute_trial_status(user, sub)
 
+        fp = user.fitness_profile
         {
           id: user.id,
           admin_display_id: admin_display_id(user),
@@ -189,7 +202,14 @@ module Api
           sessions_completed: sessions_count,
           last_activity_at: activity[:at],
           last_activity_label: activity[:label],
-          engagement_level: engagement_score(sessions_count, plans_count, user.workout_sessions)
+          engagement_level: engagement_score(sessions_count, plans_count, user.workout_sessions),
+          primary_persona:          fp&.primary_persona,
+          training_archetype:       fp&.training_archetype,
+          behavior_pattern:         fp&.behavior_pattern,
+          consistency_score:        fp&.consistency_score,
+          adherence_score:          fp&.adherence_score,
+          risk_score:               fp&.risk_score,
+          fitness_profile_last_recalculated_at: fp&.last_recalculated_at
         }
       end
 

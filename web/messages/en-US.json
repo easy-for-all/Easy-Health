@@ -226,7 +226,8 @@
   },
   "plan": {
     "title": "Training plan",
-    "noplan": "No plan created yet."
+    "noplan": "No plan created yet.",
+    "personalization_reason_prefix": "I built this workout because"
   },
   "profile": {
     "title": "Profile",
@@ -265,11 +266,20 @@
     "weightKg": "Weight (kg)",
     "heightCm": "Height (cm)",
     "language": "Language",
+    "trainingPreferences": "Training preferences",
+    "trainingPreferencesHint": "Adjust the context that makes your training better suited to you.",
+    "preferencesEmpty": "You have not shared training preferences yet.",
     "goals": {
       "lose_weight": "Lose weight",
       "gain_muscle": "Gain muscle",
       "maintain": "Maintain weight",
-      "health": "Overall health"
+      "health": "Overall health",
+      "body_definition": "Body definition",
+      "conditioning": "Improve conditioning",
+      "strength": "Gain strength",
+      "mobility": "Improve mobility",
+      "safe_return": "Return safely to training",
+      "health_longevity": "Health and longevity"
     },
     "levels": {
       "beginner": "Beginner",
@@ -296,5 +306,12 @@
     "hiit": "HIIT",
     "push": "Upper body (Push)",
     "pull": "Upper body (Pull)"
+  },
+  "coach": {
+    "insights": {
+      "title": "Your Coach learned about you",
+      "empty": "No recommendations at the moment",
+      "mark_read": "Mark as read"
+    }
   }
 }

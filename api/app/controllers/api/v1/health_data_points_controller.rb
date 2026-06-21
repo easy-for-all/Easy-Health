@@ -33,6 +33,10 @@ module Api
                         status: :unprocessable_entity
         end
 
+        if action.in?(%w[confirm save_advanced])
+          FitnessIntelligence.recalculate_safely(user: current_user, source: "health_data_point_#{action}")
+        end
+
         render json: serialize(point)
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Not found" }, status: :not_found

@@ -26,8 +26,8 @@ module Api
         custom_splits        = params[:custom_splits].presence
         training_location    = params[:training_location].presence
 
-        if days_per_week && !days_per_week.between?(2, 6)
-          return render_error("training_days_per_week must be between 2 and 6")
+        if days_per_week && !days_per_week.between?(1, 6)
+          return render_error("training_days_per_week must be between 1 and 6")
         end
 
         profile_attrs = {}
@@ -41,6 +41,7 @@ module Api
         profile_attrs[:training_location]      = training_location    if training_location
         current_user.health_profile&.update!(profile_attrs) if profile_attrs.any?
 
+        FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_plan_regenerated")
         service = WorkoutPlanGeneratorService.new(
           current_user,
           days_per_week:        days_per_week,
@@ -131,13 +132,30 @@ module Api
         log = plan.ai_training_decision_log
         days = plan.workout_days.order(Arel.sql("COALESCE(position, day_of_week) ASC")).to_a
         last_completed = last_completed_at_by_day(days.map(&:id))
-        {
+        payload = {
           id: plan.id,
           active: plan.active,
           created_at: plan.created_at,
-          ai_rationale:       log&.rationale,
-          ai_training_method: log&.training_method,
+          ai_rationale:           log&.rationale,
+          ai_training_method:     log&.training_method,
+          personalization_reason: log&.output_summary&.dig("personalization_reason"),
+          user_explanation:       log&.output_summary&.dig("user_explanation"),
+          coach_notes:            log&.output_summary&.dig("coach_notes"),
           days: days.map { |d| serialize_day(d, last_completed[d.id]) }
+        }
+        payload[:strategy] = strategy_summary(plan.workout_strategy) if FitnessIntelligence.enabled?
+        payload
+      end
+
+      def strategy_summary(workout_strategy)
+        return nil unless workout_strategy
+
+        strategy = workout_strategy.strategy
+        {
+          version: workout_strategy.strategy_version,
+          training_split: strategy["training_split"],
+          primary_focus: Array(strategy["primary_focus"]),
+          user_facing_explanation: strategy["user_facing_explanation"]
         }
       end
 

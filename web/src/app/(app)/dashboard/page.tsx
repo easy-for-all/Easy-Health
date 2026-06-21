@@ -11,6 +11,7 @@ import { WorkoutDoneCard } from "@/shared/components/workout/workout-done-card";
 import { InsightCard } from "@/shared/components/workout/insight-card";
 import { StreakCard } from "@/shared/components/workout/streak-card";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
+import { CoachInsightsSection } from "@/shared/components/coach-insights-section";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 
 type PersonalRecord = {
@@ -209,6 +210,9 @@ export default function DashboardPage() {
             href={todayDay ? `/workout/today?day=${todayDay.id}` : "/workout/today"}
           />
         )}
+
+        {/* Coach Insights — aprendizados sobre o usuário */}
+        <CoachInsightsSection />
 
         {/* AI Insight */}
         {aiInsight && !aiDismissed && (

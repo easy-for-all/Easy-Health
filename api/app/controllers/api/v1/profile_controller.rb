@@ -34,14 +34,28 @@ module Api
             if current_user.health_profile.present?
               current_user.health_profile.update_columns(
                 age: nil, weight_kg: nil, height_cm: nil,
-                goal: nil, fitness_level: nil
+                goal: nil, fitness_level: nil,
+                training_days_per_week: nil,
+                training_location: "unknown",
+                activity_preferences: [],
+                preferred_training_styles: [],
+                preferred_body_focus: [],
+                available_equipment: [],
+                avoided_exercise_ids: [],
+                session_duration_minutes: nil,
+                intensity_preference: nil,
+                training_context: nil,
+                limitations: []
               )
+              current_user.user_favorite_exercises.destroy_all
               deleted[type] = 1
             else
               deleted[type] = 0
             end
           end
         end
+
+        FitnessIntelligence.recalculate_safely(user: current_user, source: "profile_data_deleted")
 
         render json: { message: "Data deleted successfully", deleted: deleted }, status: :ok
       rescue => e

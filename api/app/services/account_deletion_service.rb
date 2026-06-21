@@ -10,6 +10,7 @@ class AccountDeletionService
 
       # Destroy personal data (cascades via dependent: :destroy)
       @user.health_profile&.destroy!
+      @user.fitness_profile&.destroy!
       @user.workout_plans.destroy_all
       @user.workout_sessions.destroy_all
       @user.user_media.each { |m| m.file.purge_later; m.destroy! }

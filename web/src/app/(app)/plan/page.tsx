@@ -127,6 +127,7 @@ export default function PlanPage() {
       api.get<PlanSummary[]>("/api/v1/workout_plans").catch(() => []),
     ]).then(([p, hp, plans]) => {
       setPlan(p);
+      setPlanRationale(p?.personalization_reason ?? p?.strategy?.user_facing_explanation ?? p?.ai_rationale ?? null);
       setProfile(hp);
       setAllPlans(plans ?? []);
       if (hp) {
@@ -269,7 +270,7 @@ export default function PlanPage() {
       clearInterval(interval);
       setPlan(newPlan);
       setPlanSummary(newPlan.summary ?? null);
-      setPlanRationale(newPlan.ai_rationale ?? null);
+      setPlanRationale(newPlan.personalization_reason ?? newPlan.strategy?.user_facing_explanation ?? newPlan.ai_rationale ?? null);
       trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: mod });
       trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: mod });
       setPhase("view");
@@ -328,7 +329,7 @@ export default function PlanPage() {
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 14.5, fontWeight: 700, margin: "0 0 6px" }}>Coach EasyHealth</p>
                 <AITrainerBubble
-                  message={planSummary ?? planRationale ?? "Seu plano está pronto!"}
+                  message={planRationale ?? planSummary ?? "Seu plano está pronto!"}
                   mood="speaking"
                   show
                   side="left"

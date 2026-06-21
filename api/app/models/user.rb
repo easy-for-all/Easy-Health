@@ -8,7 +8,9 @@ class User < ApplicationRecord
   TRIAL_DURATION_DAYS = 7
 
   has_one :health_profile, dependent: :destroy
+  has_one :fitness_profile, dependent: :destroy
   has_many :workout_plans, dependent: :destroy
+  has_many :workout_strategies, dependent: :destroy
   has_many :workout_sessions, dependent: :destroy
   has_many :user_favorite_exercises, dependent: :destroy
   has_many :favorite_exercises, through: :user_favorite_exercises, source: :exercise
@@ -16,6 +18,7 @@ class User < ApplicationRecord
   has_many :health_data_points, dependent: :destroy
   has_many :ai_usage_logs, dependent: :destroy
   has_many :ai_training_decision_logs, dependent: :destroy
+  has_many :coach_insights, dependent: :destroy
   has_many :ai_chat_messages, dependent: :destroy
   has_many :user_training_preferences, dependent: :destroy
   has_many :exercise_suggestion_logs, dependent: :destroy
@@ -24,6 +27,13 @@ class User < ApplicationRecord
   has_one :public_profile, dependent: :destroy
   has_many :shared_workouts, foreign_key: :owner_id, dependent: :destroy
   has_many :user_events, dependent: :destroy
+  has_many :user_badges, dependent: :destroy
+  has_many :community_posts, dependent: :destroy
+  has_many :community_reactions, dependent: :destroy
+  has_many :community_comments, dependent: :destroy
+  has_one  :trainer_profile, dependent: :destroy
+  has_many :personal_notes_as_trainer, class_name: "PersonalNote", foreign_key: :personal_id, dependent: :destroy
+  has_many :personal_notes_as_client,  class_name: "PersonalNote", foreign_key: :client_id,   dependent: :destroy
 
   # Personal trainer associations
   has_many :personal_client_relationships,

@@ -5,16 +5,18 @@ module AiAgents
     MAX_SESSIONS   = 10
     MAX_EXERCISES_IN_PROMPT = 5
 
-    def initialize(user, days_per_week:, profile:, fav_exercise_ids: [], available_exercises: {})
+    def initialize(user, days_per_week:, profile:, fav_exercise_ids: [], available_exercises: {},
+                   prebuilt_prompt: nil)
       super(user)
       @days_per_week       = days_per_week
       @profile             = profile
       @fav_exercise_ids    = fav_exercise_ids
       @available_exercises = available_exercises
+      @prebuilt_prompt     = prebuilt_prompt
     end
 
     def call
-      prompt = build_prompt
+      prompt = @prebuilt_prompt.presence || build_prompt
       raw    = call_claude(prompt, :workout_planning)
       return nil if raw.blank?
 

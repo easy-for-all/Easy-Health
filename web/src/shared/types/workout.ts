@@ -42,6 +42,15 @@ export interface WorkoutPlan {
   days: WorkoutDay[];
   ai_rationale?: string | null;
   ai_training_method?: string | null;
+  personalization_reason?: string | null;
+  user_explanation?: string | null;
+  coach_notes?: string | null;
+  strategy?: {
+    version: string;
+    training_split: string;
+    primary_focus: string[];
+    user_facing_explanation: string;
+  } | null;
 }
 
 export interface WorkoutSession {
@@ -76,4 +85,3 @@ export interface CardioExerciseLog {
   intensity: string | null;
   feeling?: string | null;
 }
-

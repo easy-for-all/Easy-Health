@@ -103,6 +103,8 @@ module Api
             extra[:body_composition_map] = { id: composition.data_point.id } if composition.data_point
           end
 
+          FitnessIntelligence.recalculate_safely(user: current_user, source: "user_media_uploaded")
+
           render json: media_json(media).merge(extra), status: :created
         else
           render json: { errors: media.errors.full_messages }, status: :unprocessable_entity
@@ -113,6 +115,7 @@ module Api
         media = current_user.user_media.find(params[:id])
         media.file.purge_later if media.file.attached?
         media.destroy!
+        FitnessIntelligence.recalculate_safely(user: current_user, source: "user_media_removed")
         Rails.logger.info "[UserMedia] file_purged user_id=#{current_user.id} media_id=#{params[:id]}"
         head :no_content
       rescue ActiveRecord::RecordNotFound

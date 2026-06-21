@@ -46,6 +46,7 @@ module Api
         if session.save
           mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
           UserEventService.track(user: current_user, event: :workout_completed, metadata: { session_id: session.id, duration_minutes: session.duration_minutes })
+          FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_completed")
           render json: session_json(session), status: :created
         else
           Rails.logger.error("[WorkoutSessionCreateError] user=#{current_user.id} errors=#{session.errors.full_messages.inspect}")
