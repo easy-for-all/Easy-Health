@@ -100,9 +100,10 @@ module Api
         page    = [params[:page].to_i, 1].max
         per     = 25
 
+        # Evitar expor PII na listagem administrativa para reduzir risco em prints e compartilhamento de tela.
         scope = User.all
                     .left_joins(:subscription)
-                    .includes(:subscription, :workout_plans, :workout_sessions)
+                    .includes(:subscription, :workout_plans, :workout_sessions, :user_events)
 
         scope = apply_filter(scope, filter)
         total = scope.count("users.id")
@@ -116,6 +117,12 @@ module Api
           page: page,
           per: per
         }
+      end
+
+      def user_detail
+        user = User.includes(:subscription, :workout_plans, :workout_sessions, :user_events)
+                   .find(params[:id])
+        render json: full_user_detail(user)
       end
 
       private
@@ -152,38 +159,51 @@ module Api
           scope.left_joins(:workout_sessions)
                .where("workout_sessions.id IS NULL OR workout_sessions.completed_at <= ?", 7.days.ago)
                .distinct
+        when "engagement_high"
+          scope.joins(:workout_sessions).group("users.id").having("COUNT(workout_sessions.id) >= 3")
+        when "engagement_medium"
+          scope.joins(:workout_sessions).group("users.id").having("COUNT(workout_sessions.id) BETWEEN 1 AND 2")
+        when "engagement_low"
+          scope.left_joins(:workout_plans, :workout_sessions)
+               .where(workout_plans: { id: nil }, workout_sessions: { id: nil })
         else
           scope
         end
       end
 
       def user_row(user)
-        sub = user.subscription
+        sub            = user.subscription
         sessions_count = user.workout_sessions.size
         plans_count    = user.workout_plans.size
-        last_session   = user.workout_sessions.max_by(&:completed_at)
-
-        recurring = user.workout_sessions
-                        .map { |s| s.completed_at&.to_date }
-                        .compact.uniq.size >= 2
-
-        engagement = if sessions_count >= 5 then "high"
-                     elsif sessions_count >= 2 then "medium"
-                     else "low"
-                     end
-
-        trial_status = if sub&.status&.in?(%w[active trialing])
-                         sub.status == "trialing" ? "stripe_trial" : "premium"
-                       elsif user.trial_active?
-                         "trial_active"
-                       elsif user.trial_expired?
-                         "trial_expired"
-                       else
-                         "no_trial"
-                       end
+        activity       = last_activity_for(user)
+        trial_status   = compute_trial_status(user, sub)
 
         {
           id: user.id,
+          admin_display_id: admin_display_id(user),
+          display_name: display_name(user),
+          created_at: user.created_at.iso8601,
+          trial_status: trial_status,
+          trial_days_remaining: user.trial_days_remaining,
+          workouts_created: plans_count,
+          sessions_completed: sessions_count,
+          last_activity_at: activity[:at],
+          last_activity_label: activity[:label],
+          engagement_level: engagement_score(sessions_count, plans_count, user.workout_sessions)
+        }
+      end
+
+      def full_user_detail(user)
+        sub            = user.subscription
+        sessions_count = user.workout_sessions.size
+        plans_count    = user.workout_plans.size
+        activity       = last_activity_for(user)
+        trial_status   = compute_trial_status(user, sub)
+
+        {
+          id: user.id,
+          admin_display_id: admin_display_id(user),
+          display_name: display_name(user),
           name: user.name,
           email: user.email,
           created_at: user.created_at.iso8601,
@@ -192,10 +212,67 @@ module Api
           trial_ends_at: user.trial_ends_at&.iso8601,
           workouts_created: plans_count,
           sessions_completed: sessions_count,
-          last_session_at: last_session&.completed_at&.iso8601,
-          is_recurring: recurring,
-          engagement_level: engagement
+          last_activity_at: activity[:at],
+          last_activity_label: activity[:label],
+          engagement_level: engagement_score(sessions_count, plans_count, user.workout_sessions),
+          recent_events: user.user_events
+                             .sort_by(&:created_at).last(10).reverse
+                             .map { |e| { name: e.event_name, created_at: e.created_at.iso8601 } }
         }
+      end
+
+      def compute_trial_status(user, sub)
+        if sub&.status&.in?(%w[active trialing])
+          sub.status == "trialing" ? "stripe_trial" : "premium"
+        elsif user.trial_active?
+          "trial_active"
+        elsif user.trial_expired?
+          "trial_expired"
+        else
+          "no_trial"
+        end
+      end
+
+      def admin_display_id(user)
+        "EH-#{user.id.to_s.rjust(6, '0')}"
+      end
+
+      def display_name(user)
+        return "Usuário #{admin_display_id(user)}" if user.name.blank?
+        parts = user.name.strip.split
+        return parts.first if parts.size == 1
+        "#{parts.first} #{parts.last[0]}."
+      end
+
+      def last_activity_for(user)
+        last_event   = user.user_events.max_by(&:created_at)
+        last_session = user.workout_sessions.max_by(&:completed_at)
+        last_time    = [last_event&.created_at, last_session&.completed_at].compact.max
+        { at: last_time&.iso8601, label: last_time ? relative_time_label(last_time) : "Nunca" }
+      end
+
+      def relative_time_label(time)
+        diff = Time.current - time
+        if    diff < 1.hour   then "Agora"
+        elsif diff < 2.hours  then "Há 1 hora"
+        elsif diff < 24.hours then "Há #{(diff / 1.hour).round} horas"
+        elsif diff < 48.hours then "Ontem"
+        elsif diff < 7.days   then "Há #{(diff / 1.day).round} dias"
+        else time.strftime("%d/%m/%Y")
+        end
+      end
+
+      def engagement_score(sessions_count, plans_count, sessions)
+        active_days_7d = sessions
+                         .select { |s| s.completed_at && s.completed_at > 7.days.ago }
+                         .map { |s| s.completed_at.to_date }.uniq.size
+        if sessions_count >= 3 || active_days_7d >= 3
+          "high"
+        elsif plans_count > 0 || sessions_count >= 1 || active_days_7d > 0
+          "medium"
+        else
+          "low"
+        end
       end
     end
   end

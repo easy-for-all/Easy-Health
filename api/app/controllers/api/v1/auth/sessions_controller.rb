@@ -47,22 +47,6 @@ module Api
           cookies.delete(:_eh_auth, domain: ".easyhealth.art", path: "/")
         end
 
-        def user_json(user)
-          avatar_url = blob_path(user.avatar)
-          {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            admin: user.admin?,
-            created_at: user.created_at,
-            avatar_url: avatar_url,
-            billing_status: user.billing_status,
-            account_type: user.account_type,
-            profile_visibility: user.profile_visibility,
-            community_enabled: user.community_enabled,
-            referral_code: user.referral_code
-          }
-        end
       end
     end
   end

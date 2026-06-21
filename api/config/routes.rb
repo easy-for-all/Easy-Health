@@ -109,6 +109,7 @@ Rails.application.routes.draw do
       namespace :admin do
         get :stats
         get :users
+        get "users/:id", action: :user_detail
       end
 
       # Privacy & public profile
