@@ -2088,6 +2088,7 @@ function DoneScreen({
   const [savedNotes, setSavedNotes] = useState("");
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [currentStreak, setCurrentStreak] = useState<number | null>(null);
   const exercises = useMemo(() => day.exercises ?? [], [day.exercises]);
 
   const totalVolume = useMemo(() => {
@@ -2172,6 +2173,13 @@ function DoneScreen({
         setSavedFatigue(fatigueLevel);
         setSavedNotes(notes);
         setIsSaved(true);
+        // Signal dashboard to refetch fresh stats on next visit
+        try { sessionStorage.setItem("dashboard_stale", "1"); } catch { /* ok */ }
+        router.refresh();
+        // Fetch updated streak to show in done screen
+        api.get<{ streak: number }>("/api/v1/workout_sessions/stats").then((s) => {
+          setCurrentStreak(s.streak);
+        }).catch(() => { /* non-critical */ });
       } catch {
         setSaveError("Erro ao salvar o treino. Tente novamente.");
       } finally {
@@ -2368,6 +2376,19 @@ function DoneScreen({
             </motion.div>
           );
         })}
+
+        {/* Streak badge */}
+        {currentStreak != null && currentStreak > 0 && (
+          <motion.div
+            variants={staggerItem}
+            className="flex items-center justify-center gap-2 rounded-xl bg-orange-500/10 py-3 px-4 border border-orange-500/20"
+          >
+            <span className="text-xl">🔥</span>
+            <span className="text-sm font-bold text-orange-400">
+              Sequência atual: {currentStreak} {currentStreak === 1 ? "dia" : "dias"}
+            </span>
+          </motion.div>
+        )}
 
         {/* Fatigue + notes */}
         <motion.div variants={staggerItem} className="rounded-xl border border-slate-800 bg-slate-900 p-4">

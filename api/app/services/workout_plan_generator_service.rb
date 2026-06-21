@@ -327,6 +327,7 @@ class WorkoutPlanGeneratorService
     scope = Exercise.where(exercise_type: "musculacao")
     scope = scope.where(home_compatible: true)   if @training_location == "home"
     scope = scope.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT) if @training_location == "outdoor"
+    scope = scope.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?
 
     scope.group(:muscle_group).count
   end
@@ -444,6 +445,7 @@ class WorkoutPlanGeneratorService
           end
 
     rel = rel.merge(Exercise.browseable)
+    rel = rel.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?
 
     fav_priority = if fav_ids.any?
       Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END")

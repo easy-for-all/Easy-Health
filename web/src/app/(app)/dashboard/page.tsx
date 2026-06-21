@@ -57,29 +57,40 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([
-      api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-      api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[]; dominant_modality?: string; modality_stats?: Record<string, number | null> }>(
-        "/api/v1/workout_sessions/stats"
-      ).catch(() => null),
-      api.get<{ suggestion: string; reason: string }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
-      api.get<WorkoutSession | Record<string, never>>("/api/v1/workout_sessions/today").catch(() => null),
-    ]).then(([p, s, ai, todayRaw]) => {
-      if (!p) setNoProfile(true);
-      setPlan(p);
-      setStreak(s?.streak ?? 0);
-      setWeeklySessions(s?.weekly_sessions ?? 0);
-      setWeeklyGoal(s?.weekly_goal ?? 3);
-      setWeeklySessionDates(s?.weekly_session_dates ?? []);
-      if (s?.dominant_modality) setDominantModality(s.dominant_modality);
-      if (s?.modality_stats) setModalityStats(s.modality_stats as Record<string, number | null>);
-      if (ai?.suggestion) {
-        setAiInsight(`${ai.suggestion}${ai.reason ? ` <b>—</b> ${ai.reason}` : ""}`);
+    function loadData() {
+      return Promise.all([
+        api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
+        api.get<{ streak: number; total_sessions: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[]; dominant_modality?: string; modality_stats?: Record<string, number | null> }>(
+          "/api/v1/workout_sessions/stats"
+        ).catch(() => null),
+        api.get<{ suggestion: string; reason: string }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
+        api.get<WorkoutSession | Record<string, never>>("/api/v1/workout_sessions/today").catch(() => null),
+      ]).then(([p, s, ai, todayRaw]) => {
+        if (!p) setNoProfile(true);
+        setPlan(p);
+        setStreak(s?.streak ?? 0);
+        setWeeklySessions(s?.weekly_sessions ?? 0);
+        setWeeklyGoal(s?.weekly_goal ?? 3);
+        setWeeklySessionDates(s?.weekly_session_dates ?? []);
+        if (s?.dominant_modality) setDominantModality(s.dominant_modality);
+        if (s?.modality_stats) setModalityStats(s.modality_stats as Record<string, number | null>);
+        if (ai?.suggestion) {
+          setAiInsight(`${ai.suggestion}${ai.reason ? ` <b>—</b> ${ai.reason}` : ""}`);
+        }
+        if (todayRaw && "id" in todayRaw) {
+          setTodaySession(todayRaw as WorkoutSession);
+        }
+      }).finally(() => setLoading(false));
+    }
+
+    // Refetch immediately if returning from a just-completed workout
+    try {
+      if (sessionStorage.getItem("dashboard_stale") === "1") {
+        sessionStorage.removeItem("dashboard_stale");
       }
-      if (todayRaw && "id" in todayRaw) {
-        setTodaySession(todayRaw as WorkoutSession);
-      }
-    }).finally(() => setLoading(false));
+    } catch { /* ok */ }
+
+    loadData();
   }, []);
 
   if (loading) return <LoadingScreen />;

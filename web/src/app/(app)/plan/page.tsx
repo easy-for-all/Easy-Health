@@ -88,7 +88,7 @@ type Phase =
   | "loading" | "view"
   | "wizard_profile" | "wizard_days" | "wizard_location" | "wizard_modality"
   | "wizard_split"   | "wizard_cardio_type" | "wizard_cardio_format"
-  | "wizard_custom"  | "wizard_generating";
+  | "wizard_custom"  | "wizard_generating"  | "wizard_error";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -108,6 +108,8 @@ export default function PlanPage() {
   const [planSummary, setPlanSummary]     = useState<string | null>(null);
   const [planRationale, setPlanRationale] = useState<string | null>(null);
   const [generationSteps, setGenerationSteps] = useState<string[]>(buildGenerationSteps("musculacao", "gym"));
+  type GenerateArgs = [Modality, SplitType, CardioType | undefined, CardioFormat | undefined, { name: string; muscle_groups: string[] }[] | undefined];
+  const lastGenerateArgs = useRef<GenerateArgs | null>(null);
 
   // Wizard state
   const [daysPerWeek, setDaysPerWeek] = useState(3);
@@ -215,6 +217,8 @@ export default function PlanPage() {
     cFormat: CardioFormat | undefined,
     cSplits?: { name: string; muscle_groups: string[] }[]
   ) {
+    lastGenerateArgs.current = [mod, split, cType, cFormat, cSplits];
+
     const steps = buildGenerationSteps(mod, trainingLocation, cType);
     setGenerationSteps(steps);
     setPhase("wizard_generating");
@@ -259,7 +263,7 @@ export default function PlanPage() {
 
     try {
       const [newPlan] = await Promise.all([
-        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body),
+        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body, { timeout: 90_000 }),
         new Promise<void>((resolve) => setTimeout(resolve, steps.length * STEP_MS)),
       ]);
       clearInterval(interval);
@@ -275,8 +279,8 @@ export default function PlanPage() {
         window.location.replace("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "Erro ao gerar planejamento");
-      setPhase("wizard_modality");
+      setError(err instanceof Error ? err.message : "Erro ao gerar planejamento. Tente novamente.");
+      setPhase("wizard_error");
     }
   }
 
@@ -291,7 +295,7 @@ export default function PlanPage() {
 
   return (
     <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
-      {phase !== "wizard_generating" && (
+      {phase !== "wizard_generating" && phase !== "wizard_error" && (
         <header style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>
             {phase === "view" ? "Seu Plano" : "Criar Plano"}
@@ -426,8 +430,16 @@ export default function PlanPage() {
 
       {phase === "wizard_generating" && <GeneratingView step={genStep} steps={generationSteps} />}
 
-      {error && phase === "wizard_modality" && (
-        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      {phase === "wizard_error" && (
+        <GenerateErrorView
+          error={error}
+          onRetry={() => {
+            if (lastGenerateArgs.current) {
+              handleGenerate(...lastGenerateArgs.current);
+            }
+          }}
+          onBack={() => setPhase("wizard_modality")}
+        />
       )}
 
       {selectedDayId != null && (
@@ -1460,6 +1472,8 @@ function PlanDayDetailDrawer({
 }
 
 function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
+  const allDone = step >= steps.length - 1;
+
   return (
     <div className="gen-stage" style={{ margin: "-52px -20px 0", minHeight: "100svh" }}>
       {/* Large pulsing orb */}
@@ -1476,7 +1490,7 @@ function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
           Criando seu plano...
         </h2>
         <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
-          {steps[step] ?? "Finalizando..."}
+          {allDone ? "A IA está refinando seu plano, aguarde..." : (steps[step] ?? "Finalizando...")}
         </p>
       </div>
 
@@ -1496,7 +1510,58 @@ function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
             </motion.div>
           );
         })}
+        {allDone && (
+          <motion.div
+            className="gen-ln active"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 1.4, repeat: Infinity }}
+          >
+            <span className="gck" />
+            Aguardando resposta da IA...
+          </motion.div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function GenerateErrorView({
+  error, onRetry, onBack,
+}: { error: string; onRetry: () => void; onBack: () => void }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      minHeight: "60vh", textAlign: "center", padding: "0 24px",
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
+      <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, margin: "0 0 8px" }}>
+        Não conseguimos gerar seu plano
+      </h2>
+      <p style={{ fontSize: 14, color: "var(--text-muted)", margin: "0 0 24px", maxWidth: 320 }}>
+        {error || "Ocorreu um erro inesperado. Você pode tentar novamente."}
+      </p>
+      <button
+        onClick={onRetry}
+        style={{
+          width: "100%", maxWidth: 320, padding: "14px", borderRadius: "var(--r-lg)",
+          background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+          color: "var(--on-primary)", fontWeight: 700, fontSize: 15, border: "none", cursor: "pointer",
+          marginBottom: 12,
+        }}
+      >
+        Tentar novamente
+      </button>
+      <button
+        onClick={onBack}
+        style={{
+          width: "100%", maxWidth: 320, padding: "12px", borderRadius: "var(--r-lg)",
+          background: "var(--surface)", color: "var(--text-muted)", fontWeight: 600, fontSize: 14,
+          border: "1px solid var(--border)", cursor: "pointer",
+        }}
+      >
+        ← Escolher modalidade
+      </button>
     </div>
   );
 }
