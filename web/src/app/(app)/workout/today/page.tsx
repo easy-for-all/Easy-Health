@@ -113,7 +113,7 @@ const FEELINGS = [
 ];
 
 export default function WorkoutTodayPage() {
-  return <UpgradeGate allowFreeWorkout><WorkoutTodayContent /></UpgradeGate>;
+  return <UpgradeGate><WorkoutTodayContent /></UpgradeGate>;
 }
 
 function WorkoutTodayContent() {

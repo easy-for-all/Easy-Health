@@ -3,6 +3,7 @@ module Api
     class BaseController < ApplicationController
       include AiLogging
       include RateLimiter
+      include RequiresActiveAccess
 
       before_action :authenticate_user!
       before_action :set_sentry_user_context

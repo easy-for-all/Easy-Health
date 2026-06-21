@@ -1,6 +1,8 @@
 module Api
   module V1
     class UserMediaController < BaseController
+      before_action :require_active_access!, only: [:create, :reanalyze]
+
       ALLOWED_TYPES = {
         "body_photo" => %w[image/jpeg image/png image/webp].freeze,
         "exam"       => %w[image/jpeg image/png application/pdf].freeze
@@ -56,6 +58,8 @@ module Api
 
         if media.save
           Rails.logger.info "[UserMedia] upload_completed user_id=#{current_user.id} media_id=#{media.id} category=#{category}"
+          event = category == "exam" ? :exam_uploaded : :photo_uploaded
+          UserEventService.track(user: current_user, event: event, metadata: { media_id: media.id })
           extra = { face_blurred: result&.dig(:face_blurred) || false }
 
           if category == "exam"

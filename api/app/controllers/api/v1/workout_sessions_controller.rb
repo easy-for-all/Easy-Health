@@ -3,6 +3,8 @@ module Api
     class WorkoutSessionsController < BaseController
       PER_PAGE = 20
 
+      before_action :require_active_access!, only: [:create, :stats, :personal_records, :monthly_summary]
+
       def index
         page = [params[:page].to_i, 1].max
         sessions = current_user.workout_sessions
@@ -23,10 +25,6 @@ module Api
       end
 
       def create
-        unless current_user.can_access_workout?
-          render json: { error: "Plano ativo necessário." }, status: :forbidden and return
-        end
-
         Rails.logger.info("[WorkoutSessionCreate] user=#{current_user.id} workout_day_id=#{params[:workout_day_id].inspect} source=#{params[:source].inspect} duration=#{params[:duration_minutes].inspect}")
 
         session = current_user.workout_sessions.build(session_params)
@@ -47,6 +45,7 @@ module Api
 
         if session.save
           mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
+          UserEventService.track(user: current_user, event: :workout_completed, metadata: { session_id: session.id, duration_minutes: session.duration_minutes })
           render json: session_json(session), status: :created
         else
           Rails.logger.error("[WorkoutSessionCreateError] user=#{current_user.id} errors=#{session.errors.full_messages.inspect}")

@@ -17,4 +17,8 @@ export interface BillingStatus {
   cancel_at_period_end: boolean;
   stripe_customer_id: string | null;
   free_workout_used: boolean;
+  app_trial_active: boolean;
+  app_trial_ends_at: string | null;
+  app_trial_days_remaining: number;
+  access_locked: boolean;
 }

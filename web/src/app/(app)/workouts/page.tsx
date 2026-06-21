@@ -67,7 +67,7 @@ function relativeDate(dateStr: string): string {
 
 export default function WorkoutsPage() {
   return (
-    <UpgradeGate allowFreeWorkout>
+    <UpgradeGate>
       <WorkoutsContent />
     </UpgradeGate>
   );

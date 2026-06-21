@@ -3,6 +3,8 @@ module Api
     class QuickWorkoutsController < BaseController
       include ExerciseImageHelper
 
+      before_action :require_active_access!
+
       DIFFICULTY_PARAMS = {
         "iniciante" => { sets: 3, reps: 10, rest_seconds: 90 },
         "moderado"  => { sets: 4, reps: 10, rest_seconds: 75 },

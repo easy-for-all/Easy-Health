@@ -10,13 +10,17 @@ export interface RequestOptions {
 
 export class ApiError extends Error {
   status: number;
+  errorCode?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, errorCode?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.errorCode = errorCode;
   }
 }
+
+export const TRIAL_EXPIRED_EVENT = "app:trial_expired";
 
 async function request<T>(method: HttpMethod, path: string, body?: unknown, options?: RequestOptions): Promise<T> {
   const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS;
@@ -31,8 +35,12 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown, opti
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const message = data?.error ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
-    const err = new ApiError(message, res.status);
+    const errorCode = typeof data?.error === "string" ? data.error : undefined;
+    const message = errorCode ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
+    const err = new ApiError(message, res.status, errorCode);
+    if (res.status === 402 && errorCode === "trial_expired" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(TRIAL_EXPIRED_EVENT));
+    }
     throw err;
   }
 
@@ -49,8 +57,12 @@ async function upload<T>(method: HttpMethod, path: string, formData: FormData): 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const message = data?.error ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
-    throw new ApiError(message, res.status);
+    const errorCode = typeof data?.error === "string" ? data.error : undefined;
+    const message = errorCode ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
+    if (res.status === 402 && errorCode === "trial_expired" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(TRIAL_EXPIRED_EVENT));
+    }
+    throw new ApiError(message, res.status, errorCode);
   }
 
   return data as T;

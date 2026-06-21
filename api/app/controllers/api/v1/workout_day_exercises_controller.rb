@@ -1,6 +1,7 @@
 module Api
   module V1
     class WorkoutDayExercisesController < BaseController
+      before_action :require_active_access!, only: [:swap]
       before_action(only: [:swap, :update, :reorder]) { check_rate_limit!(:update_workout) }
 
       def swap

@@ -1,6 +1,7 @@
 module Api
   module V1
     class WorkoutPlansController < BaseController
+      before_action :require_active_access!, only: [:regenerate]
       before_action(only: [:regenerate]) { check_rate_limit!(:generate_workout) }
 
       def index
@@ -52,6 +53,7 @@ module Api
           training_location:    training_location
         )
         plan = service.call
+        UserEventService.track(user: current_user, event: :workout_created, metadata: { plan_id: plan.id })
         render json: serialize_plan(plan).merge(summary: service.plan_summary), status: :ok
       rescue ActiveRecord::RecordInvalid => e
         render_error(e.record.errors.full_messages.to_sentence)
