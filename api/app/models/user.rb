@@ -23,6 +23,7 @@ class User < ApplicationRecord
   has_one :subscription, dependent: :destroy
   has_one :public_profile, dependent: :destroy
   has_many :shared_workouts, foreign_key: :owner_id, dependent: :destroy
+  has_many :user_events, dependent: :destroy
 
   # Personal trainer associations
   has_many :personal_client_relationships,

@@ -9,12 +9,8 @@ module Api
 
           if user.save
             sign_in(user)
-            render json: {
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              created_at: user.created_at
-            }, status: :created
+            user.reload
+            render json: user_json(user), status: :created
           else
             render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
           end

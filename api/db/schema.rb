@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_20_100001) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_21_100002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "vector"
@@ -304,6 +304,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_20_100001) do
     t.index ["user_id"], name: "index_subscriptions_on_user_id", unique: true
   end
 
+  create_table "user_events", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.string "event_name", null: false
+    t.jsonb "metadata", default: {}
+    t.bigint "user_id", null: false
+    t.index ["event_name", "created_at"], name: "index_user_events_on_event_name_and_created_at"
+    t.index ["user_id", "event_name"], name: "index_user_events_on_user_id_and_event_name"
+    t.index ["user_id"], name: "index_user_events_on_user_id"
+  end
+
   create_table "user_favorite_exercises", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "exercise_id", null: false
@@ -357,6 +367,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_20_100001) do
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.string "reset_password_token_digest"
+    t.datetime "trial_ends_at"
+    t.datetime "trial_started_at"
     t.string "uid"
     t.datetime "updated_at", null: false
     t.index ["account_type"], name: "index_users_on_account_type"
@@ -364,6 +376,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_20_100001) do
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
     t.index ["referral_code"], name: "index_users_on_referral_code", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
+    t.index ["trial_ends_at"], name: "index_users_on_trial_ends_at"
   end
 
   create_table "workout_day_exercises", force: :cascade do |t|
@@ -437,6 +450,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_20_100001) do
   add_foreign_key "public_profiles", "users"
   add_foreign_key "shared_workouts", "users", column: "owner_id"
   add_foreign_key "subscriptions", "users"
+  add_foreign_key "user_events", "users"
   add_foreign_key "user_favorite_exercises", "exercises"
   add_foreign_key "user_favorite_exercises", "users"
   add_foreign_key "user_media", "users"

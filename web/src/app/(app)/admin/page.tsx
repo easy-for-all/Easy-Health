@@ -32,17 +32,23 @@ type AdminStats = {
 
 type AdminUser = {
   id: number;
-  name: string;
-  email: string;
+  admin_display_id: string;
+  display_name: string;
   created_at: string;
   trial_status: "trial_active" | "trial_expired" | "premium" | "stripe_trial" | "no_trial";
   trial_days_remaining: number;
-  trial_ends_at: string | null;
   workouts_created: number;
   sessions_completed: number;
-  last_session_at: string | null;
-  is_recurring: boolean;
+  last_activity_at: string | null;
+  last_activity_label: string;
   engagement_level: "low" | "medium" | "high";
+};
+
+type AdminUserDetail = AdminUser & {
+  name: string;
+  email: string;
+  trial_ends_at: string | null;
+  recent_events: Array<{ name: string; created_at: string }>;
 };
 
 type UsersResponse = {
@@ -63,6 +69,9 @@ const FILTERS = [
   { value: "3plus_sessions", label: "Executou 3+ treinos" },
   { value: "active_7d", label: "Ativo últimos 7 dias" },
   { value: "inactive_7d", label: "Inativo últimos 7 dias" },
+  { value: "engagement_high", label: "Engaj. Alto" },
+  { value: "engagement_medium", label: "Engaj. Médio" },
+  { value: "engagement_low", label: "Engaj. Baixo" },
 ];
 
 const STATUS_LABELS: Record<AdminUser["trial_status"], { label: string; cls: string }> = {
@@ -73,6 +82,30 @@ const STATUS_LABELS: Record<AdminUser["trial_status"], { label: string; cls: str
   no_trial: { label: "Sem trial", cls: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400" },
 };
 
+const ENGAGEMENT_LABELS: Record<AdminUser["engagement_level"], { label: string; cls: string }> = {
+  high: { label: "Alto", cls: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" },
+  medium: { label: "Médio", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" },
+  low: { label: "Baixo", cls: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400" },
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  signup_completed: "Cadastro",
+  trial_started: "Trial iniciado",
+  onboarding_completed: "Onboarding concluído",
+  workout_created: "Treino criado",
+  workout_started: "Treino iniciado",
+  workout_completed: "Treino concluído",
+  progress_viewed: "Progresso visualizado",
+  favorite_added: "Favorito adicionado",
+  photo_uploaded: "Foto enviada",
+  exam_uploaded: "Exame enviado",
+  bioimpedance_added: "Bioimpedância adicionada",
+  paywall_viewed: "Paywall visto",
+  checkout_started: "Checkout iniciado",
+  subscription_created: "Assinatura criada",
+  trial_expired: "Trial expirado",
+};
+
 function StatCard({ label, value, description, pct }: { label: string; value: number | undefined; description: string; pct?: boolean }) {
   const display = value === undefined ? "—" : pct ? `${value}%` : value.toLocaleString("pt-BR");
   return (
@@ -80,6 +113,15 @@ function StatCard({ label, value, description, pct }: { label: string; value: nu
       <p className="text-3xl font-bold text-primary-600">{display}</p>
       <p className="mt-1 text-sm font-semibold text-[var(--text)]">{label}</p>
       <p className="mt-0.5 text-xs text-[var(--text-dim)]">{description}</p>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-2 last:border-0">
+      <span className="shrink-0 text-xs text-[var(--text-muted)]">{label}</span>
+      <span className="text-right text-xs font-medium text-[var(--text)]">{value}</span>
     </div>
   );
 }
@@ -95,6 +137,10 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(1);
+
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [userDetail, setUserDetail] = useState<AdminUserDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -118,6 +164,20 @@ export default function AdminPage() {
       .catch(() => {})
       .finally(() => setUsersLoading(false));
   }, [user, filter, page]);
+
+  function openUserDetail(id: number) {
+    setSelectedUserId(id);
+    setUserDetail(null);
+    setDetailLoading(true);
+    api.get<AdminUserDetail>(`/api/v1/admin/users/${id}`)
+      .then(setUserDetail)
+      .finally(() => setDetailLoading(false));
+  }
+
+  function closeDetail() {
+    setSelectedUserId(null);
+    setUserDetail(null);
+  }
 
   if (authLoading || loading) return <LoadingScreen />;
   if (!user?.admin) return null;
@@ -219,20 +279,20 @@ export default function AdminPage() {
                     <th className="px-4 py-3 font-medium text-center">Dias</th>
                     <th className="px-4 py-3 font-medium text-center">Treinos</th>
                     <th className="px-4 py-3 font-medium text-center">Sessões</th>
-                    <th className="px-4 py-3 font-medium text-center">Recorrente</th>
                     <th className="px-4 py-3 font-medium text-center">Engaj.</th>
-                    <th className="px-4 py-3 font-medium">Última sessão</th>
+                    <th className="px-4 py-3 font-medium">Última atividade</th>
+                    <th className="px-4 py-3 font-medium text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {usersData?.users.map((u) => {
                     const status = STATUS_LABELS[u.trial_status];
+                    const engaj = ENGAGEMENT_LABELS[u.engagement_level];
                     return (
                       <tr key={u.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-hover)]">
                         <td className="px-4 py-3">
-                          <p className="font-medium text-[var(--text)]">{u.name}</p>
-                          <p className="text-xs text-[var(--text-muted)]">{u.email}</p>
-                          <p className="text-xs text-[var(--text-dim)]">{new Date(u.created_at).toLocaleDateString("pt-BR")}</p>
+                          <p className="font-medium text-[var(--text)]">{u.display_name}</p>
+                          <p className="text-xs text-[var(--text-dim)]">{u.admin_display_id}</p>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.cls}`}>
@@ -245,22 +305,20 @@ export default function AdminPage() {
                         <td className="px-4 py-3 text-center font-medium text-[var(--text)]">{u.workouts_created}</td>
                         <td className="px-4 py-3 text-center font-medium text-[var(--text)]">{u.sessions_completed}</td>
                         <td className="px-4 py-3 text-center">
-                          {u.is_recurring
-                            ? <span className="text-green-500 font-bold">Sim</span>
-                            : <span className="text-[var(--text-dim)]">Não</span>
-                          }
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            u.engagement_level === "high" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                            : u.engagement_level === "medium" ? "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300"
-                            : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                          }`}>
-                            {u.engagement_level === "high" ? "Alto" : u.engagement_level === "medium" ? "Médio" : "Baixo"}
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${engaj.cls}`}>
+                            {engaj.label}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
-                          {u.last_session_at ? new Date(u.last_session_at).toLocaleDateString("pt-BR") : "—"}
+                          {u.last_activity_label}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => openUserDetail(u.id)}
+                            className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)] transition-colors hover:border-primary-500 hover:text-primary-600"
+                          >
+                            Ver
+                          </button>
                         </td>
                       </tr>
                     );
@@ -313,6 +371,87 @@ export default function AdminPage() {
         </section>
 
       </div>
+
+      {/* User Detail Modal */}
+      {selectedUserId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) closeDetail(); }}
+        >
+          <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl">
+            <button
+              onClick={closeDetail}
+              className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] transition-colors"
+            >
+              ✕
+            </button>
+
+            <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+              Dados pessoais — uso interno
+            </p>
+
+            {detailLoading ? (
+              <div className="py-8 text-center text-sm text-[var(--text-muted)]">Carregando...</div>
+            ) : userDetail ? (
+              <div className="space-y-3">
+                <div className="mb-4">
+                  <p className="text-base font-semibold text-[var(--text)]">{userDetail.display_name}</p>
+                  <p className="text-xs text-[var(--text-dim)]">{userDetail.admin_display_id}</p>
+                </div>
+
+                <DetailRow label="Nome completo" value={userDetail.name || "—"} />
+                <DetailRow label="E-mail" value={userDetail.email} />
+                <DetailRow label="Cadastro" value={new Date(userDetail.created_at).toLocaleDateString("pt-BR")} />
+                <DetailRow
+                  label="Status"
+                  value={
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_LABELS[userDetail.trial_status].cls}`}>
+                      {STATUS_LABELS[userDetail.trial_status].label}
+                    </span>
+                  }
+                />
+                {userDetail.trial_status === "trial_active" && (
+                  <DetailRow label="Dias restantes" value={`${userDetail.trial_days_remaining} dias`} />
+                )}
+                {userDetail.trial_ends_at && (
+                  <DetailRow label="Trial expira" value={new Date(userDetail.trial_ends_at).toLocaleDateString("pt-BR")} />
+                )}
+                <DetailRow label="Treinos criados" value={userDetail.workouts_created} />
+                <DetailRow label="Sessões concluídas" value={userDetail.sessions_completed} />
+                <DetailRow label="Última atividade" value={userDetail.last_activity_label} />
+                <DetailRow
+                  label="Engajamento"
+                  value={
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ENGAGEMENT_LABELS[userDetail.engagement_level].cls}`}>
+                      {ENGAGEMENT_LABELS[userDetail.engagement_level].label}
+                    </span>
+                  }
+                />
+
+                {userDetail.recent_events.length > 0 && (
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                      Eventos recentes
+                    </p>
+                    <div className="space-y-1.5 rounded-xl border border-[var(--border)] p-3">
+                      {userDetail.recent_events.map((ev, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-[var(--text)]">{EVENT_LABELS[ev.name] ?? ev.name}</span>
+                          <span className="text-[var(--text-dim)]">
+                            {new Date(ev.created_at).toLocaleDateString("pt-BR")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-sm text-[var(--text-muted)]">Erro ao carregar dados.</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
