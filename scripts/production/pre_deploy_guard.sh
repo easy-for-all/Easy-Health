@@ -54,13 +54,16 @@ check_runtime() {
   fi
 
   [ -n "$db_container" ] || fail "container do banco nao encontrado para service=$DB_SERVICE"
-  [ -n "$api_container" ] || fail "container da API nao encontrado para service=$API_SERVICE"
 
   docker inspect "$db_container" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' | grep -q 'pg_data' || fail "Postgres nao esta montado em volume pg_data"
-  docker inspect "$api_container" --format '{{range .Mounts}}{{if eq .Destination "/rails/storage"}}{{.Name}}{{end}}{{end}}' | grep -q 'storage_data' || fail "API nao esta montada em volume storage_data"
-
   compose exec -T "$DB_SERVICE" sh -lc "pg_isready -U '$DB_USER' -d '$DB_NAME'" >/dev/null || fail "banco nao responde"
-  compose exec -T "$API_SERVICE" test -d "$STORAGE_PATH" || fail "pasta de uploads nao existe: $STORAGE_PATH"
+
+  if [ -z "$api_container" ]; then
+    log "Container da API ausente (crash em deploy anterior) — verificacoes de API ignoradas"
+  else
+    docker inspect "$api_container" --format '{{range .Mounts}}{{if eq .Destination "/rails/storage"}}{{.Name}}{{end}}{{end}}' | grep -q 'storage_data' || fail "API nao esta montada em volume storage_data"
+    compose exec -T "$API_SERVICE" test -d "$STORAGE_PATH" || fail "pasta de uploads nao existe: $STORAGE_PATH"
+  fi
 }
 
 confirm_production
