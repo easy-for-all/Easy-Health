@@ -244,7 +244,7 @@ namespace :exercises do
       muscle_group   = map_muscle.call(Array(data["primaryMuscles"]).first.to_s)
       equipment_type = map_equipment.call(data["equipment"].to_s)
       exercise_type  = map_category.call(data["category"].to_s, muscle_group)
-      difficulty     = data["level"] == "expert" ? "advanced" : (data["level"].presence || "intermediate")
+      difficulty_level = data["level"] == "expert" ? "advanced" : (data["level"].presence == "beginner" ? "beginner" : "intermediate")
       home_compat    = data["equipment"].to_s.downcase.match?(/body only|bands?/)
       instructions_text = Array(data["instructions"]).join("\n")
       description       = Array(data["instructions"]).first.to_s[0..249].presence || name
@@ -263,13 +263,13 @@ namespace :exercises do
       end
 
       exercise = Exercise.new(
-        name:            name,
-        exercise_type:   exercise_type,
-        equipment_type:  equipment_type,
-        difficulty:      difficulty,
-        home_compatible: home_compat,
-        instructions:    instructions_text.presence,
-        description:     description,
+        name:             name,
+        exercise_type:    exercise_type,
+        equipment_type:   equipment_type,
+        difficulty_level: difficulty_level,
+        home_compatible:  home_compat,
+        instructions:     instructions_text.presence,
+        description:      description,
       )
       exercise.muscle_group = muscle_group if muscle_group
       exercise.image_url    = image_url    if image_url
@@ -326,6 +326,50 @@ namespace :exercises do
       end
 
     puts "\nDone. Replaced: #{replaced}, Removed: #{removed}"
+  end
+
+  desc "Tag existing exercises with difficulty_level based on name patterns and equipment"
+  task tag_difficulty: :environment do
+    tagged = 0
+
+    # Advanced: high-skill Olympic lifts, calisthenics skills, complex barbell movements
+    ADVANCED_PATTERNS = [
+      "muscle up", "muscle-up", "handstand", "pistol squat", "one-arm",
+      "clean and jerk", "snatch", "power clean", "hang clean", "jerk",
+      "front squat barbell", "overhead squat", "turkish get-up",
+      "back lever", "front lever", "planche", "human flag",
+    ].freeze
+
+    # Intermediate: compound barbell/cable lifts that require technique
+    INTERMEDIATE_PATTERNS = [
+      "deadlift", "barbell squat", "barbell row", "barbell curl",
+      "overhead press", "push press", "romanian deadlift",
+      "pull-up", "pullup", "pull up", "dip", "weighted dip",
+      "cable", "trap bar", "t-bar row",
+    ].freeze
+
+    Exercise.find_each do |ex|
+      name_lower = ex.name.downcase
+
+      new_level = if ADVANCED_PATTERNS.any? { |p| name_lower.include?(p) }
+        "advanced"
+      elsif INTERMEDIATE_PATTERNS.any? { |p| name_lower.include?(p) }
+        "intermediate"
+      elsif ex.equipment_type == "barbell"
+        "intermediate"
+      end
+
+      next unless new_level && ex.difficulty_level != new_level
+
+      ex.update_column(:difficulty_level, new_level)
+      tagged += 1
+      puts "  [#{new_level}] #{ex.name}"
+    end
+
+    puts "\nDone. Tagged: #{tagged} exercises."
+    puts "  Advanced:     #{Exercise.where(difficulty_level: 'advanced').count}"
+    puts "  Intermediate: #{Exercise.where(difficulty_level: 'intermediate').count}"
+    puts "  Beginner/nil: #{Exercise.where(difficulty_level: ['beginner', nil]).count}"
   end
 
   desc "Fix image_url for existing seeded exercises and copy missing images"
