@@ -2,7 +2,9 @@ module Api
   module V1
     class HealthController < ApplicationController
       def show
-        render json: { status: "ok", time: Time.current }
+        db_ok = ActiveRecord::Base.connection.execute("SELECT 1").any? rescue false
+        status = db_ok ? :ok : :service_unavailable
+        render json: { status: db_ok ? "ok" : "degraded", db: db_ok, time: Time.current }, status: status
       end
     end
   end
