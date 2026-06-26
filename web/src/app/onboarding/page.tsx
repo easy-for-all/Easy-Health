@@ -188,30 +188,41 @@ export default function OnboardingPage() {
   async function handleFinish() {
     setError("");
     setLoading(true);
+    const payload = {
+      goal: form.goal,
+      fitness_level: form.fitness_level,
+      age: Number(form.age),
+      weight_kg: Number(form.weight_kg),
+      height_cm: Number(form.height_cm),
+      gender: form.gender || null,
+      preferred_body_focus: form.preferred_body_focus,
+      preferred_training_styles: form.preferred_training_styles,
+      training_location: form.training_location || "unknown",
+      available_equipment: form.available_equipment,
+      session_duration_minutes: form.session_duration_minutes,
+      training_days_per_week: form.training_days_per_week,
+      intensity_preference: form.intensity_preference || null,
+      favorite_exercise_ids: form.favorite_exercises.map((exercise) => exercise.id),
+      avoided_exercise_ids: form.avoided_exercises.map((exercise) => exercise.id),
+      limitations: form.limitations,
+      training_context: form.gender === "female" ? form.training_context || null : null,
+    };
     try {
-      await api.post("/api/v1/health_profile", {
-        goal: form.goal,
-        fitness_level: form.fitness_level,
-        age: Number(form.age),
-        weight_kg: Number(form.weight_kg),
-        height_cm: Number(form.height_cm),
-        gender: form.gender || null,
-        preferred_body_focus: form.preferred_body_focus,
-        preferred_training_styles: form.preferred_training_styles,
-        training_location: form.training_location || "unknown",
-        available_equipment: form.available_equipment,
-        session_duration_minutes: form.session_duration_minutes,
-        training_days_per_week: form.training_days_per_week,
-        intensity_preference: form.intensity_preference || null,
-        favorite_exercise_ids: form.favorite_exercises.map((exercise) => exercise.id),
-        avoided_exercise_ids: form.avoided_exercises.map((exercise) => exercise.id),
-        limitations: form.limitations,
-        training_context: form.gender === "female" ? form.training_context || null : null,
-      });
+      try {
+        await api.post("/api/v1/health_profile", payload);
+      } catch (postErr: unknown) {
+        // Backend may redirect to update, but as a defensive fallback also try PATCH
+        const status = (postErr as { status?: number })?.status;
+        if (status === 422) {
+          await api.patch("/api/v1/health_profile", payload);
+        } else {
+          throw postErr;
+        }
+      }
       trackEvent(EVENTS.ONBOARDING_COMPLETED);
       router.push("/plan");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar perfil");
+    } catch {
+      setError("Não conseguimos salvar agora. Tente novamente em instantes.");
     } finally {
       setLoading(false);
     }

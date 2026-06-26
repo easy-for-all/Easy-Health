@@ -14,11 +14,16 @@ module Api
         current_exercise_ids = wde.workout_day.workout_day_exercises.where.not(id: wde.id).pluck(:exercise_id)
 
         if current_exercise_ids.include?(replacement.id)
-          return render json: { error: "Exercise is already in this workout day" }, status: :unprocessable_entity
+          return render json: { error: "Exercício já está neste treino.", error_code: "already_in_workout" }, status: :unprocessable_entity
         end
 
-        unless same_target?(wde.exercise, replacement)
-          return render json: { error: "Replacement must target the same muscle group as the original exercise" }, status: :unprocessable_entity
+        force = params[:force].to_s == "true"
+        unless force || same_target?(wde.exercise, replacement)
+          return render json: {
+            error: "O exercício selecionado é de grupo muscular diferente. Confirmar mesmo assim?",
+            error_code: "muscle_group_mismatch",
+            can_force: true
+          }, status: :unprocessable_entity
         end
 
         wde.update!(exercise: replacement)
@@ -134,7 +139,7 @@ module Api
       private
 
       def update_params
-        params.permit(:sets, :reps, :rest_seconds, :duration_minutes, :intensity)
+        params.permit(:sets, :reps, :rest_seconds, :duration_minutes, :intensity, :weight_kg)
       end
 
       def cardio_create_params

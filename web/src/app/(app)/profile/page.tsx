@@ -27,8 +27,16 @@ import type {
   TrainingStyle,
 } from "@/shared/types/health-profile";
 import "@/shared/components/workout/workout-ui.css";
+import { relativeDayLabel } from "@/shared/utils/relative-date";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+const UPLOAD_STATUS_MESSAGES = [
+  "Analisando composição visual…",
+  "Comparando com registros anteriores…",
+  "Protegendo sua privacidade…",
+  "Preparando evolução corporal…",
+];
 
 type Stats = { total_sessions: number; streak: number; best_streak?: number; last_activity_at?: string | null };
 type MediaCategory = "body_photo" | "exam";
@@ -91,6 +99,8 @@ export default function ProfilePage() {
   const [avatarError, setAvatarError] = useState("");
   const [mediaUploadError, setMediaUploadError] = useState("");
   const [faceBlurredNotice, setFaceBlurredNotice] = useState(false);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
+  const [uploadStatusIndex, setUploadStatusIndex] = useState(0);
   const [pendingDataPoints, setPendingDataPoints] = useState<ExtractedDataPoint[]>([]);
   const [confirmingDp, setConfirmingDp] = useState<number | null>(null);
   const [bodyAnalysis, setBodyAnalysis] = useState<{ id: number; observation: string; confidence: number | null } | null>(null);
@@ -98,6 +108,9 @@ export default function ProfilePage() {
   const [lightboxPhoto, setLightboxPhoto] = useState<UserMedia | null>(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [cleanDataOpen, setCleanDataOpen] = useState(false);
+  const [deletePhotoConfirmId, setDeletePhotoConfirmId] = useState<number | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null);
+  const [deletePhotoError, setDeletePhotoError] = useState("");
   const [showUpdatePlanPrompt, setShowUpdatePlanPrompt] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [bodyHistory, setBodyHistory] = useState<{ field_name: string; value: number; unit: string | null; collected_at: string }[]>([]);
@@ -196,6 +209,18 @@ export default function ProfilePage() {
     setUploadingMedia(true);
     setMediaUploadError("");
     setFaceBlurredNotice(false);
+    setUploadStatusIndex(0);
+
+    if (file.type.startsWith("image/") && mediaTab === "body_photo") {
+      const previewUrl = URL.createObjectURL(file);
+      setUploadPreviewUrl(previewUrl);
+    }
+
+    // Rotate status messages every 1.5s during upload
+    const statusInterval = setInterval(() => {
+      setUploadStatusIndex((i) => (i + 1) % UPLOAD_STATUS_MESSAGES.length);
+    }, 1500);
+
     try {
       const processed = file.type.startsWith("image/") ? await compressImage(file, 1920, 0.85) : file;
       const formData = new FormData();
@@ -232,8 +257,27 @@ export default function ProfilePage() {
     } catch {
       setMediaUploadError("Erro ao enviar arquivo. Tente novamente.");
     } finally {
+      clearInterval(statusInterval);
       setUploadingMedia(false);
+      setUploadPreviewUrl(null);
       if (mediaInputRef.current) mediaInputRef.current.value = "";
+    }
+  }
+
+  async function handleDeletePhoto(id: number) {
+    setDeletePhotoConfirmId(null);
+    setDeletePhotoError("");
+    const snapshot = mediaItems;
+    setMediaItems((prev) => prev.filter((m) => m.id !== id));
+    setDeletingPhotoId(id);
+    if (lightboxPhoto?.id === id) setLightboxPhoto(null);
+    try {
+      await api.delete(`/api/v1/user_media/${id}`);
+    } catch {
+      setMediaItems(snapshot);
+      setDeletePhotoError("Não foi possível apagar a foto. Tente novamente.");
+    } finally {
+      setDeletingPhotoId(null);
     }
   }
 
@@ -533,6 +577,48 @@ export default function ProfilePage() {
           onChange={handleMediaUpload}
         />
 
+        {/* Scanner animation during body photo upload */}
+        {uploadPreviewUrl && uploadingMedia && (
+          <div className="mb-4 relative overflow-hidden rounded-xl" style={{ height: 220 }}>
+            <img
+              src={uploadPreviewUrl}
+              alt="Preview"
+              className="h-full w-full object-cover"
+              style={{ filter: "brightness(0.6)" }}
+            />
+            <div
+              className="absolute inset-0"
+              style={{ background: "linear-gradient(to bottom, rgba(59,130,246,0.08), rgba(0,0,0,0.2))" }}
+            />
+            {/* Scanline */}
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                height: 2,
+                background: "rgba(96,165,250,0.9)",
+                boxShadow: "0 0 8px 2px rgba(96,165,250,0.5)",
+                animation: "scanline 2s linear infinite",
+              }}
+            />
+            <div className="absolute inset-0 flex flex-col items-center justify-end pb-5">
+              <p className="text-center text-xs font-medium text-blue-200" style={{ animation: "fadeIn 0.5s ease" }}>
+                {UPLOAD_STATUS_MESSAGES[uploadStatusIndex]}
+              </p>
+            </div>
+            <style>{`
+              @keyframes scanline {
+                0% { top: 0%; }
+                100% { top: 100%; }
+              }
+              @keyframes fadeIn {
+                from { opacity: 0; } to { opacity: 1; }
+              }
+            `}</style>
+          </div>
+        )}
+
         {mediaUploadError && (
           <div className="mb-3 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">
             {mediaUploadError}
@@ -642,7 +728,7 @@ export default function ProfilePage() {
         {/* Body photos: before/after + history button */}
         {mediaTab === "body_photo" && (
           bodyPhotos.length === 0 ? (
-            <p className="text-center text-sm text-gray-400">{t("noPhotos")}</p>
+            <p className="text-center text-sm text-gray-400">Adicione sua primeira foto para acompanhar sua evolução.</p>
           ) : (
             <>
               <div className="mb-3 rounded-xl border border-primary-500/30 bg-primary-500/10 p-3">
@@ -659,7 +745,7 @@ export default function ProfilePage() {
                       )}
                       <p className="mt-1 text-xs font-semibold text-slate-400">{t("before")}</p>
                       <p className="text-xs text-slate-500">
-                        {new Date(bodyPhotos[bodyPhotos.length - 1].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                        {relativeDayLabel(bodyPhotos[bodyPhotos.length - 1].captured_at)}
                       </p>
                     </button>
                   ) : (
@@ -677,7 +763,7 @@ export default function ProfilePage() {
                     )}
                     <p className="mt-1 text-xs font-semibold text-slate-400">{t("now")}</p>
                     <p className="text-xs text-gray-400">
-                      {new Date(bodyPhotos[0].captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                      {relativeDayLabel(bodyPhotos[0].captured_at)}
                     </p>
                   </button>
                 </div>
@@ -726,7 +812,7 @@ export default function ProfilePage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-white">{item.file_name ?? "Arquivo"}</p>
                     <p className="text-xs text-slate-500">
-                      {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+                      {relativeDayLabel(item.captured_at)}
                       {item.file_size ? ` · ${(item.file_size / 1024).toFixed(0)} KB` : ""}
                     </p>
                   </div>
@@ -746,7 +832,7 @@ export default function ProfilePage() {
                   <div className="mt-1 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs text-slate-500">
-                        {new Date(item.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                        {relativeDayLabel(item.captured_at)}
                       </p>
                       {item.file_name && <p className="truncate text-xs text-gray-400">{item.file_name}</p>}
                     </div>
@@ -845,27 +931,38 @@ export default function ProfilePage() {
                 ✕
               </button>
             </div>
+            {deletePhotoError && (
+              <p className="mb-3 rounded-xl bg-red-900/40 px-3 py-2 text-xs text-red-400">{deletePhotoError}</p>
+            )}
             <div className="grid grid-cols-3 gap-2">
               {bodyPhotos.map((photo) => (
-                <button
-                  key={photo.id}
-                  onClick={() => {
-                    setPhotoHistoryOpen(false);
-                    setLightboxPhoto(photo);
-                  }}
-                  className="text-center"
-                >
-                  {photo.file_url && (
-                    <img
-                      src={`${API_URL}${photo.file_url}`}
-                      alt="Foto corporal"
-                      className="h-28 w-full rounded-xl object-cover"
-                    />
-                  )}
+                <div key={photo.id} className="relative text-center">
+                  <button
+                    onClick={() => {
+                      setPhotoHistoryOpen(false);
+                      setLightboxPhoto(photo);
+                    }}
+                    className="w-full"
+                  >
+                    {photo.file_url && (
+                      <img
+                        src={`${API_URL}${photo.file_url}`}
+                        alt="Foto corporal"
+                        className={`h-28 w-full rounded-xl object-cover transition ${deletingPhotoId === photo.id ? "opacity-40" : ""}`}
+                      />
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeletePhotoConfirmId(photo.id); }}
+                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white hover:bg-red-600/80"
+                    title="Apagar foto"
+                  >
+                    🗑
+                  </button>
                   <p className="mt-1 text-xs text-slate-500">
-                    {new Date(photo.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+                    {relativeDayLabel(photo.captured_at)}
                   </p>
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -884,6 +981,14 @@ export default function ProfilePage() {
           >
             ✕
           </button>
+          {lightboxPhoto.category === "body_photo" && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setDeletePhotoConfirmId(lightboxPhoto.id); }}
+              className="absolute left-4 top-4 flex h-10 items-center gap-1.5 rounded-full bg-white/20 px-3 text-sm text-white hover:bg-red-600/70"
+            >
+              🗑 Apagar
+            </button>
+          )}
           <img
             src={`${API_URL}${lightboxPhoto.file_url}`}
             alt="Visualização"
@@ -892,9 +997,39 @@ export default function ProfilePage() {
           />
           {lightboxPhoto.captured_at && (
             <p className="absolute bottom-6 text-sm text-white/70">
-              {new Date(lightboxPhoto.captured_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}
+              {relativeDayLabel(lightboxPhoto.captured_at)}
             </p>
           )}
+        </div>
+      )}
+
+      {/* ─── Confirmação de apagar foto ─────────────────────────────────────── */}
+      {deletePhotoConfirmId !== null && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60"
+          onClick={() => setDeletePhotoConfirmId(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-2xl bg-slate-900 p-6 pb-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-center text-base font-bold text-white">Apagar foto?</p>
+            <p className="mb-6 text-center text-sm text-slate-400">Esta ação não pode ser desfeita.</p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => handleDeletePhoto(deletePhotoConfirmId)}
+                className="w-full rounded-full bg-red-600 py-3 text-sm font-bold text-white hover:bg-red-700"
+              >
+                Apagar foto
+              </button>
+              <button
+                onClick={() => setDeletePhotoConfirmId(null)}
+                className="w-full rounded-full border border-slate-700 py-3 text-sm font-semibold text-slate-400"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

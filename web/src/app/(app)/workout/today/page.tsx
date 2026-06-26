@@ -18,6 +18,7 @@ import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared
 import { ShareButton } from "@/shared/components/workout-share/share-button";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
+import { relativeDate, relativeDayLabel } from "@/shared/utils/relative-date";
 import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 import { useCoach } from "@/features/coach/coach-context";
 import { AgentOrb } from "@/shared/components/agent-orb";
@@ -25,7 +26,7 @@ import "@/shared/components/workout/workout-ui.css";
 import { workoutEngine, usesTimerScreen, usesRecoveryScreen } from "@/features/workout/workout-engine";
 import { CardioPanel, IntervalPanel, RecoveryPanel } from "./workout-engine-screens";
 
-type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "done";
+type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "pre_done" | "done";
 type ExerciseOption = {
   id: number;
   name: string;
@@ -77,6 +78,13 @@ interface RestCtx {
   isLastExercise: boolean;
   weightKg?: number;
   isWarmup?: boolean;
+  // Contextual workout progress fields
+  exercisesRemaining?: number;
+  setsRemainingTotal?: number;
+  progressPct?: number;
+  estimatedMinutesLeft?: number;
+  nextExerciseName?: string;
+  nextExerciseTip?: string;
 }
 
 const GENERIC_REST_MESSAGES = [
@@ -88,16 +96,56 @@ const GENERIC_REST_MESSAGES = [
 ];
 
 function getRestMessage(ctx: RestCtx): string {
-  const { setNumber, totalSets, isLastExercise, isWarmup, weightKg, exerciseName } = ctx;
+  const {
+    setNumber, totalSets, isLastExercise, isWarmup, weightKg, exerciseName,
+    exercisesRemaining, setsRemainingTotal, progressPct, estimatedMinutesLeft,
+    nextExerciseName, nextExerciseTip,
+  } = ctx;
 
   if (isWarmup) return "Aquecimento feito. Agora inicie a carga principal com técnica.";
-  if (isLastExercise && setNumber === totalSets) return `Última série do treino! Dê o máximo em ${exerciseName}.`;
-  if (setNumber === totalSets) return "Última série deste exercício. Foco total agora.";
-  if (setNumber === totalSets - 1) return "Falta uma série. Mantenha a intensidade.";
+
+  if (isLastExercise && setNumber === totalSets) {
+    return `Última série do treino! Dê o máximo em ${exerciseName}.`;
+  }
+
+  if (setNumber === totalSets) {
+    if (nextExerciseName) {
+      const tip = nextExerciseTip ? ` ${nextExerciseTip}` : "";
+      return `Última série deste exercício. Próximo: **${nextExerciseName}**.${tip}`;
+    }
+    return "Última série deste exercício. Foco total agora.";
+  }
+
+  if (setNumber === totalSets - 1) {
+    if (nextExerciseName) return `Falta uma série. Depois: **${nextExerciseName}**.`;
+    return "Falta uma série. Mantenha a intensidade.";
+  }
+
   if (setNumber === 1 && weightKg && weightKg > 0) {
     return `Boa primeira série com ${weightKg}kg. Se a execução ficou estável, mantenha ou suba levemente.`;
   }
-  if (setNumber === 1) return "Boa primeira série. Observe a execução e ajuste se necessário.";
+
+  if (setNumber === 1) {
+    if (exercisesRemaining !== undefined && progressPct !== undefined) {
+      return `Iniciando ${exerciseName}. Você já passou de ${Math.round(progressPct)}% do treino.`;
+    }
+    return "Boa primeira série. Observe a execução e ajuste se necessário.";
+  }
+
+  // Use contextual info when available
+  if (setsRemainingTotal !== undefined && setsRemainingTotal > 0) {
+    if (estimatedMinutesLeft && estimatedMinutesLeft > 0) {
+      return `Faltam ${setsRemainingTotal} série${setsRemainingTotal > 1 ? "s" : ""}. Restam cerca de ${estimatedMinutesLeft} min.`;
+    }
+    if (exercisesRemaining !== undefined && exercisesRemaining > 0) {
+      return `Faltam ${exercisesRemaining} exercício${exercisesRemaining > 1 ? "s" : ""} e ${setsRemainingTotal} série${setsRemainingTotal > 1 ? "s" : ""}. Continue firme.`;
+    }
+  }
+
+  if (progressPct !== undefined && progressPct >= 50) {
+    return `Você já passou da metade. Mantenha o ritmo.`;
+  }
+
   if (isLastExercise) return "Treino quase concluído. Mantenha a intensidade até o fim.";
 
   const idx = (setNumber * (exerciseName.length % 5 + 1)) % GENERIC_REST_MESSAGES.length;
@@ -189,6 +237,7 @@ function WorkoutTodayContent() {
             muscleGroup: ex.muscle_group,
             exerciseType: ex.exercise_type,
             currentIndex,
+            totalExercises: day.exercises.length,
             setInfo: (() => {
               const ps = runtimeFor(exerciseRuntime, ex).planned_sets;
               return ps ? `Série ${currentSet} de ${ps}` : `Série ${currentSet}`;
@@ -200,7 +249,7 @@ function WorkoutTodayContent() {
     } else if (phase === "overview" || phase === "warmup") {
       setScreen("day");
       registerExec(null, null);
-    } else if (phase === "done" || phase === "choose") {
+    } else if (phase === "done" || phase === "pre_done" || phase === "choose") {
       setScreen("dashboard");
       registerExec(null, null);
     }
@@ -288,7 +337,7 @@ function WorkoutTodayContent() {
         const storedDayId = sessionStorage.getItem("wk_day_id");
         const storedPhase = sessionStorage.getItem("wk_phase") as Phase | null;
 
-        if (storedStartTs && storedDayId && storedPhase && storedPhase !== "done" && storedPhase !== "choose") {
+        if (storedStartTs && storedDayId && storedPhase && storedPhase !== "done" && storedPhase !== "pre_done" && storedPhase !== "choose") {
           try {
             const { day: loaded } = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${storedDayId}`);
 
@@ -363,7 +412,7 @@ function WorkoutTodayContent() {
   // Persist workout state so it can be restored if user navigates away mid-workout
   useEffect(() => {
     if (!startTime || !day) return;
-    if (phase === "choose" || phase === "done") return;
+    if (phase === "choose" || phase === "done" || phase === "pre_done") return;
     try {
       sessionStorage.setItem("wk_phase", phase);
       sessionStorage.setItem("wk_current_index", String(currentIndex));
@@ -809,7 +858,18 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "cooldown") {
-    return <CooldownScreen day={day!} onFinish={() => setPhase("done")} />;
+    return <CooldownScreen day={day!} onFinish={() => setPhase("pre_done")} />;
+  }
+
+  if (phase === "pre_done") {
+    return (
+      <PreDoneScreen
+        day={day!}
+        exerciseRuntime={exerciseRuntime}
+        onFinish={() => setPhase("done")}
+        onAddExercise={() => setPhase("overview")}
+      />
+    );
   }
 
   if (phase === "done") {
@@ -887,23 +947,48 @@ function WorkoutTodayContent() {
               <p style={{ marginTop: 24, fontSize: 14, color: "var(--text-muted)" }}>Próximo: <strong style={{ color: "var(--text)" }}>{exercise.name}</strong></p>
 
               {/* AI Trainer tip during rest */}
-              <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
-                <AgentOrb size="card" glyph />
-                <AITrainerBubble
-                  message={getRestMessage({
-                    exerciseName: exercise.name,
-                    setNumber: currentSet,
-                    totalSets: runtimeFor(exerciseRuntime, exercise).planned_sets,
-                    muscleGroup: exercise.muscle_group,
-                    isLastExercise: currentIndex === (day!.exercises?.length ?? 1) - 1,
-                    weightKg: parseFloat(runtimeFor(exerciseRuntime, exercise).weight_by_set[currentSet - 1] || "0") || undefined,
-                    isWarmup: runtimeFor(exerciseRuntime, exercise).warmup_by_set?.[currentSet - 1],
-                  })}
-                  mood="speaking"
-                  show
-                  side="left"
-                />
-              </div>
+              {(() => {
+                const rt = runtimeFor(exerciseRuntime, exercise);
+                const totalExercises = day!.exercises?.length ?? 1;
+                const isLastEx = currentIndex === totalExercises - 1;
+                const nextEx = day!.exercises?.[currentIndex + 1];
+                const setsInCurrentRemaining = rt.planned_sets - currentSet;
+                const setsInNextExercises = (day!.exercises ?? [])
+                  .slice(currentIndex + 1)
+                  .reduce((acc, ex) => acc + (runtimeFor(exerciseRuntime, ex).planned_sets || ex.sets || 0), 0);
+                const setsRemainingTotal = setsInCurrentRemaining + setsInNextExercises;
+                const totalSetsAll = (day!.exercises ?? []).reduce((acc, ex) => acc + (runtimeFor(exerciseRuntime, ex).planned_sets || ex.sets || 0), 0);
+                const completedSetsAll = (day!.exercises ?? []).slice(0, currentIndex).reduce((acc, ex) => acc + (runtimeFor(exerciseRuntime, ex).planned_sets || ex.sets || 0), 0) + currentSet;
+                const progressPct = totalSetsAll > 0 ? (completedSetsAll / totalSetsAll) * 100 : 0;
+                const avgRestMin = (restTotal || 60) / 60;
+                const estimatedMinutesLeft = Math.round(setsRemainingTotal * (avgRestMin + 0.75));
+                const nextTip = nextEx?.instructions?.split(/[.!]/)?.[0]?.trim();
+                return (
+                  <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
+                    <AgentOrb size="card" glyph />
+                    <AITrainerBubble
+                      message={getRestMessage({
+                        exerciseName: exercise.name,
+                        setNumber: currentSet,
+                        totalSets: rt.planned_sets,
+                        muscleGroup: exercise.muscle_group,
+                        isLastExercise: isLastEx,
+                        weightKg: parseFloat(rt.weight_by_set[currentSet - 1] || "0") || undefined,
+                        isWarmup: rt.warmup_by_set?.[currentSet - 1],
+                        exercisesRemaining: totalExercises - currentIndex - 1,
+                        setsRemainingTotal,
+                        progressPct: Math.round(progressPct),
+                        estimatedMinutesLeft: estimatedMinutesLeft > 0 ? estimatedMinutesLeft : undefined,
+                        nextExerciseName: nextEx?.name,
+                        nextExerciseTip: nextTip,
+                      })}
+                      mood="speaking"
+                      show
+                      side="left"
+                    />
+                  </div>
+                );
+              })()}
 
               <PressButton
                 onClick={skipRest}
@@ -1084,8 +1169,7 @@ function WorkoutTodayContent() {
           const prev = lastExerciseLog(sessions, exercise.exercise_id);
           if (!prev) {
             if (exercise.last_performed_at) {
-              const d = Math.floor((Date.now() - new Date(exercise.last_performed_at).getTime()) / 86400000);
-              const label = d === 0 ? "hoje" : d === 1 ? "ontem" : `há ${d} dias`;
+              const label = relativeDayLabel(exercise.last_performed_at);
               return <p className="mt-1 text-xs text-slate-500">Última vez: {label}</p>;
             }
             return null;
@@ -1562,13 +1646,7 @@ function lastSessionForDay(sessions: WorkoutSession[], dayId: number): WorkoutSe
     .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())[0] ?? null;
 }
 
-function relativeDate(dateStr: string): string {
-  const daysAgo = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-  if (daysAgo === 0) return "feito hoje";
-  if (daysAgo === 1) return "feito ontem";
-  if (daysAgo < 7) return `há ${daysAgo} dias`;
-  return "há mais de 7 dias";
-}
+// relativeDate is imported from @/shared/utils/relative-date
 
 function ChooseScreen({
   plan,
@@ -1775,10 +1853,24 @@ function OverviewScreen({
     setAddMode(false);
   }
 
-  async function doSwap(wdeId: number, replacementId: number) {
-    const updated = await api.post<WorkoutDayExercise>(`/api/v1/workout_day_exercises/${wdeId}/swap`, { replacement_exercise_id: replacementId });
-    onChangeDay({ ...day, exercises: exercises.map((e) => e.workout_day_exercise_id === wdeId ? updated : e) });
-    setSwapMode(null);
+  async function doSwap(wdeId: number, replacementId: number, force = false): Promise<void> {
+    try {
+      const updated = await api.post<WorkoutDayExercise>(`/api/v1/workout_day_exercises/${wdeId}/swap`, {
+        replacement_exercise_id: replacementId,
+        force,
+      });
+      onChangeDay({ ...day, exercises: exercises.map((e) => e.workout_day_exercise_id === wdeId ? updated : e) });
+      setSwapMode(null);
+    } catch (err: unknown) {
+      const body = (err as { body?: { error_code?: string; can_force?: boolean } })?.body;
+      if (body?.error_code === "muscle_group_mismatch" && body?.can_force) {
+        if (confirm("O exercício é de grupo muscular diferente. Deseja substituir mesmo assim?")) {
+          await doSwap(wdeId, replacementId, true);
+        }
+      }
+      // For other errors (duplicate etc), let them propagate to SwapModal's error handler
+      else throw err;
+    }
   }
 
   async function doAdd(exerciseId: number) {
@@ -2088,6 +2180,159 @@ function OverviewScreen({
       </div>
     )}
   </>
+  );
+}
+
+// ─── PreDoneScreen ────────────────────────────────────────────────────────────
+
+const CARDIO_TYPES = new Set(["cardio", "corrida", "bike", "caminhada", "hiit", "funcional"]);
+
+function analyzeWorkout(day: WorkoutDay, runtime: Record<number, ExerciseRuntime>) {
+  const exercises = day.exercises ?? [];
+  const hasCore = exercises.some((e) => e.muscle_group === "core");
+  const hasCardio = exercises.some((e) => CARDIO_TYPES.has(e.exercise_type));
+  const totalSets = exercises.reduce((sum, e) => sum + (runtime[e.workout_day_exercise_id]?.planned_sets ?? 0), 0);
+  return { hasCore, hasCardio, totalSets, count: exercises.length };
+}
+
+function PreDoneScreen({
+  day,
+  exerciseRuntime,
+  onFinish,
+  onAddExercise,
+}: {
+  day: WorkoutDay;
+  exerciseRuntime: Record<number, ExerciseRuntime>;
+  onFinish: () => void;
+  onAddExercise: () => void;
+}) {
+  const { hasCore, hasCardio, totalSets, count } = analyzeWorkout(day, exerciseRuntime);
+
+  const suggestions: { icon: string; label: string; detail: string; action: () => void }[] = [];
+  if (!hasCore) {
+    suggestions.push({
+      icon: "🔥",
+      label: "Adicionar core",
+      detail: "Abdômen e estabilizadores não foram trabalhados hoje.",
+      action: onAddExercise,
+    });
+  }
+  if (!hasCardio) {
+    suggestions.push({
+      icon: "💨",
+      label: "Fazer cardio",
+      detail: "Inclua 10–15 min de cardio para queima adicional.",
+      action: onAddExercise,
+    });
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: "100dvh",
+        background: "var(--bg)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px 20px",
+        gap: 0,
+      }}
+    >
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div style={{ fontSize: 48, marginBottom: 8 }}>💪</div>
+        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "var(--text)" }}>
+          Treino concluído!
+        </h2>
+        <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 6 }}>
+          {count} exercício{count !== 1 ? "s" : ""} · {totalSets} série{totalSets !== 1 ? "s" : ""}
+        </p>
+      </div>
+
+      {/* Suggestions */}
+      {suggestions.length > 0 && (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 380,
+            marginBottom: 24,
+            background: "var(--surface)",
+            borderRadius: "var(--r-lg)",
+            border: "1px solid var(--border)",
+            padding: "16px",
+          }}
+        >
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-dim)", textTransform: "uppercase", margin: "0 0 12px" }}>
+            Sugestão do coach
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {suggestions.map((s) => (
+              <button
+                key={s.label}
+                onClick={s.action}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  background: "var(--primary-soft)",
+                  border: "1px solid var(--primary-dim, oklch(0.4 0.1 258 / 0.3))",
+                  borderRadius: "var(--r-md)",
+                  padding: "12px 14px",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <span style={{ fontSize: 22, flexShrink: 0 }}>{s.icon}</span>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "var(--primary)", margin: 0 }}>{s.label}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "2px 0 0" }}>{s.detail}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CTA */}
+      <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 10 }}>
+        <button
+          onClick={onFinish}
+          style={{
+            width: "100%",
+            padding: "15px",
+            borderRadius: "var(--r-full)",
+            background: "var(--primary)",
+            color: "#fff",
+            fontSize: 15,
+            fontWeight: 700,
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          Finalizar treino
+        </button>
+        {suggestions.length === 0 && (
+          <button
+            onClick={onAddExercise}
+            style={{
+              width: "100%",
+              padding: "13px",
+              borderRadius: "var(--r-full)",
+              background: "transparent",
+              color: "var(--text-dim)",
+              fontSize: 14,
+              fontWeight: 600,
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+            }}
+          >
+            Adicionar mais um exercício
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

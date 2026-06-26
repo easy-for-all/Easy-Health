@@ -87,9 +87,12 @@ module Api
         suggest_deload = fatigue_avg.present? && fatigue_avg >= 4.0 && recent_fatigues.size >= 3
 
         calories_week = weekly.sum { |s| s.calories_estimated.to_i }
+        sessions_last_30_days = current_user.workout_sessions
+          .where("completed_at >= ?", 30.days.ago).count
 
         render json: {
           total_sessions: sessions.count,
+          sessions_last_30_days: sessions_last_30_days,
           streak: streak_svc.current_streak,
           best_streak: streak_svc.best_streak,
           last_activity_at: streak_svc.last_activity_at,
@@ -309,7 +312,7 @@ module Api
         when "musculacao", "funcional"
           {
             total_volume_kg: calculate_total_volume(sessions),
-            total_sessions: sessions.count
+            sessions_count: sessions.count
           }
         when "corrida", "bike", "caminhada", "cardio"
           durations = logs.filter_map { |l| l["duration_minutes"].to_f if l["duration_minutes"].to_f > 0 }
@@ -318,20 +321,20 @@ module Api
             total_duration_minutes: durations.sum.round,
             total_distance_km: distances.sum.round(1),
             avg_speed_kmh: logs.filter_map { |l| l["avg_speed_kmh"].to_f if l["avg_speed_kmh"].to_f > 0 }.then { |sp| sp.any? ? (sp.sum / sp.size).round(1) : nil },
-            total_sessions: sessions.count
+            sessions_count: sessions.count
           }
         when "timed"
           elapsed = logs.filter_map { |l| l["elapsed_seconds"].to_i if l["elapsed_seconds"].to_i > 0 }
           {
             max_hold_seconds: elapsed.max || 0,
             avg_hold_seconds: elapsed.any? ? (elapsed.sum / elapsed.size.to_f).round : 0,
-            total_sessions: sessions.count
+            sessions_count: sessions.count
           }
         when "hiit"
           durations = logs.filter_map { |l| l["duration_minutes"].to_f if l["duration_minutes"].to_f > 0 }
           {
             total_duration_minutes: durations.sum.round,
-            total_sessions: sessions.count
+            sessions_count: sessions.count
           }
         else
           { total_sessions: sessions.count }

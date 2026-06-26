@@ -10,6 +10,8 @@ export type CoachMessage = {
   alternatives?: ExerciseAlternative[];
   appliedAlternativeId?: number;
   quickReplies?: string[];
+  suggestedWeightKg?: number;
+  weightApplied?: boolean;
 };
 
 export type ExerciseAlternative = {
@@ -38,6 +40,7 @@ export type ExecContext = {
   muscleGroup: string | null;
   exerciseType?: string;
   currentIndex: number;
+  totalExercises?: number;
   setInfo?: string;
 };
 
@@ -55,6 +58,7 @@ interface CoachContextType {
   setScreen: (screen: string) => void;
   registerExec: (ctx: ExecContext | null, onSwap: SwapCallback | null) => void;
   applySwap: (msgId: string, alternative: ExerciseAlternative) => void;
+  applyWeightSuggestion: (msgId: string, weightKg: number) => Promise<void>;
 }
 
 const CoachContext = createContext<CoachContextType | null>(null);
@@ -265,6 +269,12 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
 
         const detectedModality = MODALITY_CHANGE_REGEX.test(text) ? detectRequestedCardio(text) : null;
 
+        const progressFields: Record<string, number> = {};
+        if (execContext?.totalExercises && execContext.totalExercises > 0) {
+          progressFields.workout_progress_pct = Math.round((execContext.currentIndex / execContext.totalExercises) * 100);
+          progressFields.exercises_remaining = execContext.totalExercises - execContext.currentIndex - 1;
+        }
+
         const context = {
           screen: currentScreen,
           exercise_name: execContext?.exerciseName ?? "",
@@ -272,6 +282,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
           exercise_type: execContext?.exerciseType ?? "",
           set_info: execContext?.setInfo ?? "",
           ...(detectedModality ? { intent: "modality_change", detected_modality: detectedModality } : {}),
+          ...progressFields,
         };
 
         const data = await api.post<{ reply: string }>("/api/v1/coach/messages", {
@@ -279,9 +290,19 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
           context,
         });
 
+        // Detect weight suggestions in coach reply (e.g. "Aumente para 11kg")
+        let suggestedWeightKg: number | undefined;
+        if (currentScreen === "exec" && execContext) {
+          const weightMatch = data.reply.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
+          if (weightMatch) {
+            const parsed = parseFloat(weightMatch[1].replace(",", "."));
+            if (parsed > 0 && parsed < 500) suggestedWeightKg = parsed;
+          }
+        }
+
         setMessages((prev) => [
           ...prev,
-          { id: uid(), role: "assistant", content: data.reply },
+          { id: uid(), role: "assistant", content: data.reply, suggestedWeightKg },
         ]);
       } catch {
         setMessages((prev) => [
@@ -305,6 +326,32 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
       sendMessageInternal(text);
     },
     [sendMessageInternal]
+  );
+
+  const applyWeightSuggestion = useCallback(
+    async (msgId: string, weightKg: number) => {
+      if (!execContext) return;
+      try {
+        await api.patch(`/api/v1/workout_day_exercises/${execContext.workoutDayExerciseId}`, { weight_kg: weightKg });
+        setMessages((prev) =>
+          prev.map((m) => m.id === msgId ? { ...m, weightApplied: true } : m)
+        );
+        const confirm: CoachMessage = {
+          id: uid(),
+          role: "assistant",
+          content: `Carga atualizada para **${weightKg}kg** na próxima sessão. 💪`,
+        };
+        setMessages((prev) => [...prev, confirm]);
+      } catch {
+        const errMsg: CoachMessage = {
+          id: uid(),
+          role: "assistant",
+          content: "Não consegui aplicar a carga agora. Ajuste manualmente no treino.",
+        };
+        setMessages((prev) => [...prev, errMsg]);
+      }
+    },
+    [execContext]
   );
 
   const applySwap = useCallback(
@@ -340,6 +387,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
         setScreen,
         registerExec,
         applySwap,
+        applyWeightSuggestion,
       }}
     >
       {children}

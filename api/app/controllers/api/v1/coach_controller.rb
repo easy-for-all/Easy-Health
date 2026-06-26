@@ -27,7 +27,9 @@ module Api
         end
 
         context = (params[:context] || {}).permit(
-          :screen, :exercise_name, :muscle_group, :set_info
+          :screen, :exercise_name, :muscle_group, :set_info,
+          :exercise_type, :intent, :detected_modality,
+          :workout_progress_pct, :exercises_remaining
         ).to_h
 
         training_context = ::Ai::UserTrainingContextBuilder.new(current_user).call

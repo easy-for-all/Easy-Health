@@ -108,6 +108,11 @@ module AiAgents
         lines << "Intenção detectada: #{@context[:intent]}" \
                  "#{" — modalidade solicitada: #{@context[:detected_modality]}" if @context[:detected_modality].present?}"
       end
+      if @context[:workout_progress_pct].present?
+        progress = @context[:workout_progress_pct]
+        remaining = @context[:exercises_remaining]
+        lines << "Progresso do treino: #{progress}% concluído#{remaining ? " (#{remaining} exercícios restantes)" : ""}"
+      end
       lines.join("\n")
     end
 
