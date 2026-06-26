@@ -13,6 +13,7 @@ import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { RenameWorkoutModal } from "@/shared/components/workout/rename-workout-modal";
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
+import { relativeDate, relativeDayLabel } from "@/shared/utils/relative-date";
 
 const MUSCLE_COLORS: Record<string, string> = {
   chest: "bg-red-500/20 text-red-300",
@@ -32,10 +33,8 @@ function workoutDisplayName(day: WorkoutDay, idx: number): string {
 
 function formatLastCompleted(dateStr: string | null | undefined): string | undefined {
   if (!dateStr) return undefined;
-  const daysAgo = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-  if (daysAgo === 0) return "Última vez: hoje";
-  if (daysAgo === 1) return "Última vez: ontem";
-  if (daysAgo < 7) return `Última vez: há ${daysAgo} dias`;
+  const label = relativeDayLabel(dateStr);
+  if (label) return `Última vez: ${label}`;
   return `Última vez: ${new Date(dateStr).toLocaleDateString("pt-BR")}`;
 }
 
@@ -57,13 +56,7 @@ function lastSessionForDay(sessions: WorkoutSession[], dayId: number): WorkoutSe
   );
 }
 
-function relativeDate(dateStr: string): string {
-  const daysAgo = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-  if (daysAgo === 0) return "feito hoje";
-  if (daysAgo === 1) return "feito ontem";
-  if (daysAgo < 7) return `há ${daysAgo} dias`;
-  return "há mais de 7 dias";
-}
+// relativeDate imported from @/shared/utils/relative-date
 
 export default function WorkoutsPage() {
   return (

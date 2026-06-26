@@ -142,6 +142,7 @@ export function SwapModal({
   const [aiIdentification, setAiIdentification] = useState<EquipmentIdentification | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [searchLang, setSearchLang] = useState<"pt" | "en">("pt");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -454,25 +455,38 @@ export function SwapModal({
 
         {/* Toggle de idioma + campo de busca */}
         <div className="mb-3 flex items-center gap-2">
-          <div className="flex rounded-xl border border-gray-200 overflow-hidden">
-            <button
-              onClick={() => handleLangChange("pt")}
-              className={`px-3 py-2 text-xs font-semibold transition ${searchLang === "pt" ? "bg-primary-500 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
-            >
-              🇧🇷 PT
-            </button>
-            <button
-              onClick={() => handleLangChange("en")}
-              className={`px-3 py-2 text-xs font-semibold transition ${searchLang === "en" ? "bg-primary-500 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
-            >
-              🇺🇸 EN
-            </button>
+          <div
+            style={{
+              overflow: "hidden",
+              maxWidth: searchFocused || swapSearch.trim() ? 0 : 120,
+              opacity: searchFocused || swapSearch.trim() ? 0 : 1,
+              transition: "max-width 0.2s ease, opacity 0.2s ease",
+              pointerEvents: searchFocused || swapSearch.trim() ? "none" : "auto",
+              flexShrink: 0,
+            }}
+          >
+            <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+              <button
+                onClick={() => handleLangChange("pt")}
+                className={`px-3 py-2 text-xs font-semibold transition ${searchLang === "pt" ? "bg-primary-500 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+              >
+                🇧🇷 PT
+              </button>
+              <button
+                onClick={() => handleLangChange("en")}
+                className={`px-3 py-2 text-xs font-semibold transition ${searchLang === "en" ? "bg-primary-500 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+              >
+                🇺🇸 EN
+              </button>
+            </div>
           </div>
           <input
             type="text"
             placeholder={searchLang === "en" ? "Search by name..." : "Buscar por nome..."}
             value={swapSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none"
           />
         </div>

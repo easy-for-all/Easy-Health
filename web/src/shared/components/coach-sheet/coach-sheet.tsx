@@ -127,7 +127,7 @@ function AltCard({
 }
 
 function MessageBubble({ msg }: { msg: CoachMessage }) {
-  const { applySwap, close, sendMessage, busy } = useCoach();
+  const { applySwap, applyWeightSuggestion, close, sendMessage, busy } = useCoach();
   const isAi = msg.role === "assistant";
 
   if (isAi) {
@@ -158,6 +158,18 @@ function MessageBubble({ msg }: { msg: CoachMessage }) {
                   Ver na tela do treino →
                 </button>
               )}
+            </div>
+          )}
+          {msg.suggestedWeightKg && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => applyWeightSuggestion(msg.id, msg.suggestedWeightKg!)}
+                disabled={msg.weightApplied}
+                className={`coach-alt-swap-btn ${msg.weightApplied ? "coach-alt-swap-btn--applied" : ""}`}
+                style={{ fontSize: 12 }}
+              >
+                {msg.weightApplied ? `✓ ${msg.suggestedWeightKg}kg aplicado` : `Aplicar ${msg.suggestedWeightKg}kg`}
+              </button>
             </div>
           )}
           {msg.quickReplies && msg.quickReplies.length > 0 && (

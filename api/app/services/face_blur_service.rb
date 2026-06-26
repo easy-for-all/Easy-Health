@@ -3,9 +3,9 @@ class FaceBlurService
   # face_bbox: { "x" => float, "y" => float, "w" => float, "h" => float } (0.0–1.0 fractions)
   # Returns processed image bytes (JPEG) or the original bytes if processing fails.
 
-  EXPANSION = 0.10  # expand detected bbox by 10% on each side
+  EXPANSION = 0.05  # expand detected bbox by 5% on each side (was 10% — too large)
   PIXELATE_FACTOR = 0.04  # scale down to 4% then back up (heavy pixelation)
-  FALLBACK_TOP_FRACTION = 0.25  # blur top 25% if bbox unavailable but face detected
+  FALLBACK_TOP_FRACTION = 0.15  # blur top 15% if bbox unavailable (was 25% — included body)
 
   def initialize(image_data:, face_bbox:, has_face:)
     @image_data = image_data
@@ -63,8 +63,11 @@ class FaceBlurService
         (h_frac * img_h).to_i
       ]
     elsif @has_face
-      # Fallback: pixelate top portion of the image
-      [0, 0, img_w, (FALLBACK_TOP_FRACTION * img_h).to_i]
+      # Fallback: pixelate only the top-center area (head position estimate)
+      # Horizontally: center 50% of image width; vertically: top 15%
+      fallback_w = (img_w * 0.50).to_i
+      fallback_x = ((img_w - fallback_w) / 2).to_i
+      [fallback_x, 0, fallback_w, (FALLBACK_TOP_FRACTION * img_h).to_i]
     end
   end
 end

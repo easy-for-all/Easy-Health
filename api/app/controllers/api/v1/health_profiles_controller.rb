@@ -9,10 +9,7 @@ module Api
       end
 
       def create
-        if current_user.health_profile
-          render_error("Profile already exists. Use PATCH to update.")
-          return
-        end
+        return update if current_user.health_profile
 
         profile = current_user.build_health_profile(normalized_profile_params)
         if save_profile_with_exercise_preferences(profile)
