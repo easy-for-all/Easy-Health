@@ -39,7 +39,7 @@ const securityHeaders = [
 const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ["framer-motion", "canvas-confetti", "html-to-image"],
-  devIndicators: false,
+  devIndicators: false as const,
   allowedDevOrigins: ["easyhealth.art"],
 
   async headers() {
