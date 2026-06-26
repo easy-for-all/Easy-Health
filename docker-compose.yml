@@ -27,7 +27,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      RAILS_ENV: development
+      RAILS_ENV: production
       DB_HOST: db
       DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-postgres}

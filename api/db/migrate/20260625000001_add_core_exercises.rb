@@ -1,5 +1,9 @@
 class AddCoreExercises < ActiveRecord::Migration[8.1]
   def up
+    unless column_exists?(:exercises, :source_dataset)
+      add_column :exercises, :source_dataset, :string
+    end
+
     core_exercises = [
       {
         name: "Crunch Abdominal",
