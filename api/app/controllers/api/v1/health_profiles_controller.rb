@@ -14,7 +14,7 @@ module Api
         profile = current_user.build_health_profile(normalized_profile_params)
         if save_profile_with_exercise_preferences(profile)
           FitnessIntelligence.recalculate_safely(user: current_user, source: "health_profile_created")
-          WorkoutPlanGeneratorService.new(current_user).call
+          GenerateWorkoutPlanJob.perform_later(current_user.id)
           render json: profile_json(profile), status: :created
         elsif !performed?
           render json: { errors: profile.errors.full_messages }, status: :unprocessable_entity
