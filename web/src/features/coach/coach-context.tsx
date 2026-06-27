@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { api } from "@/shared/lib/api";
+import { stripMarkdown } from "@/shared/utils/strip-markdown";
 
 export type CoachMessage = {
   id: string;
@@ -99,7 +100,7 @@ function uid() {
 function buildInitialGreeting(screen: string, execCtx: ExecContext | null): CoachMessage {
   let content: string;
   if (screen === "exec" && execCtx) {
-    content = `Estou aqui durante o **${execCtx.exerciseName}**. Como posso ajudar?`;
+    content = `Estou aqui durante o ${execCtx.exerciseName}. Como posso ajudar?`;
   } else if (screen === "day" || screen === "plan") {
     content = "Oi! Posso montar ou ajustar seu treino. O que precisa?";
   } else {
@@ -175,7 +176,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
               id: uid(),
               role: "assistant",
               content:
-                "Para criar um treino rápido, acesse **Treinos → Treino Rápido** no menu. Ou pode continuar o treino atual!",
+                "Para criar um treino rápido, acesse Treinos → Treino Rápido no menu. Ou pode continuar o treino atual!",
               quickReplies: ["Manter treino atual"],
             },
           ]);
@@ -198,7 +199,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
             {
               id: uid(),
               role: "assistant",
-              content: `Aqui estão opções de cardio para substituir o **${execContext!.exerciseName}**:`,
+              content: `Aqui estão opções de cardio para substituir ${execContext!.exerciseName}:`,
               alternatives: alts,
             },
           ]);
@@ -224,7 +225,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
             {
               id: uid(),
               role: "assistant",
-              content: `Entendido! Aqui estão opções de **${requested}** para substituir o **${execContext!.exerciseName}**. Ou prefere criar um treino separado?`,
+              content: `Entendido! Aqui estão opções de ${requested} para substituir ${execContext!.exerciseName}. Ou prefere criar um treino separado?`,
               alternatives: alts,
               quickReplies: [`Criar treino rápido de ${requested}`, "Manter treino atual"],
             },
@@ -254,7 +255,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
               role: "assistant",
               content: noMore
                 ? (result.message ?? "Não encontrei novas opções. Posso ampliar os critérios?")
-                : `Aqui estão opções para substituir o **${execContext!.exerciseName}**:`,
+                : `Aqui estão opções para substituir ${execContext!.exerciseName}:`,
               alternatives: noMore ? [] : alts,
             },
           ]);
@@ -302,7 +303,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
 
         setMessages((prev) => [
           ...prev,
-          { id: uid(), role: "assistant", content: data.reply, suggestedWeightKg },
+          { id: uid(), role: "assistant", content: stripMarkdown(data.reply), suggestedWeightKg },
         ]);
       } catch {
         setMessages((prev) => [
@@ -339,7 +340,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
         const confirm: CoachMessage = {
           id: uid(),
           role: "assistant",
-          content: `Carga atualizada para **${weightKg}kg** na próxima sessão. 💪`,
+          content: `Carga atualizada para ${weightKg}kg na próxima sessão.`,
         };
         setMessages((prev) => [...prev, confirm]);
       } catch {
@@ -366,7 +367,7 @@ export function CoachProvider({ children }: { children: React.ReactNode }) {
       const confirm: CoachMessage = {
         id: uid(),
         role: "assistant",
-        content: `**${alternative.name}** aplicado! Continue o treino quando estiver pronto. 💪`,
+        content: `${alternative.name} aplicado! Continue o treino quando estiver pronto.`,
       };
       setMessages((prev) => [...prev, confirm]);
     },

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { stripMarkdown } from "@/shared/utils/strip-markdown";
 import type { TrainerMood } from "./ai-trainer-avatar";
 
 type Props = {
@@ -29,15 +30,16 @@ export function AITrainerBubble({
       return;
     }
 
+    const clean = stripMarkdown(message);
     setDisplayText("");
     setIsTyping(true);
 
     let i = 0;
-    const speed = Math.max(18, Math.min(40, Math.floor(1400 / message.length)));
+    const speed = Math.max(18, Math.min(40, Math.floor(1400 / clean.length)));
     const timer = setInterval(() => {
       i++;
-      setDisplayText(message.slice(0, i));
-      if (i >= message.length) {
+      setDisplayText(clean.slice(0, i));
+      if (i >= clean.length) {
         clearInterval(timer);
         setIsTyping(false);
       }

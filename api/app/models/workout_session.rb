@@ -1,10 +1,14 @@
 class WorkoutSession < ApplicationRecord
+  COMPLETION_STATUSES = %w[completed completed_partial abandoned].freeze
+
   belongs_to :user
   belongs_to :workout_day, optional: true
 
   validates :completed_at, presence: true
   validates :duration_minutes, presence: true, numericality: { only_integer: true, greater_than: 0 }
   validates :fatigue_level, numericality: { only_integer: true, in: 1..5 }, allow_nil: true
+  validates :completion_status, inclusion: { in: COMPLETION_STATUSES }, allow_nil: true
+  validates :completion_rate, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
 
   after_create :maybe_create_community_post
   after_commit :trigger_fitness_recalibration, on: :create
