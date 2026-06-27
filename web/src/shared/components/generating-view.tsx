@@ -3,11 +3,11 @@
 import { motion } from "framer-motion";
 import "@/shared/components/ui/ui.css";
 
-export function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
+export function GeneratingView({ step, steps, offsetParent = false }: { step: number; steps: string[]; offsetParent?: boolean }) {
   const allDone = step >= steps.length - 1;
 
   return (
-    <div className="gen-stage" style={{ margin: "-52px -20px 0", minHeight: "100svh" }}>
+    <div className="gen-stage" style={{ margin: offsetParent ? "-52px -20px 0" : 0, minHeight: "100svh" }}>
       <div className="ai-orb-lg">
         <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
           style={{ width: 40, height: 40, position: "relative", zIndex: 1 }}>

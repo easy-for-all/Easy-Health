@@ -477,7 +477,7 @@ export default function PlanPage() {
         />
       )}
 
-      {phase === "wizard_generating" && <GeneratingView step={genStep} steps={generationSteps} />}
+      {phase === "wizard_generating" && <GeneratingView step={genStep} steps={generationSteps} offsetParent />}
 
       {phase === "wizard_error" && (
         <GenerateErrorView
