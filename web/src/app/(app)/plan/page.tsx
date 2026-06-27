@@ -13,6 +13,7 @@ import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 import { AITrainerBubble } from "@/shared/components/ai-trainer";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { OptionCard } from "@/shared/components/ui/option-card";
+import { GeneratingView } from "@/shared/components/generating-view";
 import "@/shared/components/ui/ui.css";
 
 function resolveImageSrc(src: string): string {
@@ -96,6 +97,7 @@ export default function PlanPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const forceWizard = searchParams.get("wizard") === "1";
+  const fromOnboarding = searchParams.get("from_onboarding") === "1";
   const [phase, setPhase]          = useState<Phase>("loading");
   const [plan, setPlan]            = useState<WorkoutPlan | null>(null);
   const [allPlans, setAllPlans]    = useState<PlanSummary[]>([]);
@@ -110,6 +112,7 @@ export default function PlanPage() {
   const [generationSteps, setGenerationSteps] = useState<string[]>(buildGenerationSteps("musculacao", "gym"));
   type GenerateArgs = [Modality, SplitType, CardioType | undefined, CardioFormat | undefined, { name: string; muscle_groups: string[] }[] | undefined];
   const lastGenerateArgs = useRef<GenerateArgs | null>(null);
+  const didAutoGenerate = useRef(false);
 
   // Wizard state
   const [daysPerWeek, setDaysPerWeek] = useState(3);
@@ -130,16 +133,61 @@ export default function PlanPage() {
       setPlanRationale(p?.personalization_reason ?? p?.strategy?.user_facing_explanation ?? p?.ai_rationale ?? null);
       setProfile(hp);
       setAllPlans(plans ?? []);
-      if (hp) {
-        setDaysPerWeek(hp.training_days_per_week ?? 3);
-      }
+      const days = hp?.training_days_per_week ?? 3;
+      if (hp) setDaysPerWeek(days);
       if (p && !forceWizard) {
         router.replace("/workouts");
+      } else if (fromOnboarding && !p && hp) {
+        autoGenerateFromOnboarding(days);
       } else {
         setPhase(hp ? "wizard_profile" : "wizard_days");
       }
     });
   }, []);
+
+  async function autoGenerateFromOnboarding(days: number) {
+    if (didAutoGenerate.current) return;
+    didAutoGenerate.current = true;
+
+    const steps = buildGenerationSteps("ai_choice", "gym");
+    setGenerationSteps(steps);
+    setPhase("wizard_generating");
+    genStepRef.current = 0;
+    setGenStep(0);
+    setError("");
+
+    const STEP_MS = 600;
+    const interval = setInterval(() => {
+      const next = Math.min(genStepRef.current + 1, steps.length - 1);
+      genStepRef.current = next;
+      setGenStep(next);
+    }, STEP_MS);
+
+    try {
+      const [newPlan] = await Promise.all([
+        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", {
+          training_days_per_week: days,
+          modality: "ai_choice",
+        }, { timeout: 90_000 }),
+        new Promise<void>((resolve) => setTimeout(resolve, steps.length * STEP_MS)),
+      ]);
+      clearInterval(interval);
+      setPlan(newPlan);
+      setPlanSummary(newPlan.summary ?? null);
+      setPlanRationale(newPlan.personalization_reason ?? newPlan.strategy?.user_facing_explanation ?? newPlan.ai_rationale ?? null);
+      trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: "ai_choice" });
+      trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: "ai_choice" });
+      setPhase("view");
+    } catch (err) {
+      clearInterval(interval);
+      if (err instanceof ApiError && err.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Erro ao gerar planejamento. Tente novamente.");
+      setPhase("wizard_error");
+    }
+  }
 
   async function handleToggleFavorite(dayId: number) {
     try {
@@ -1469,61 +1517,6 @@ function PlanDayDetailDrawer({
         </div>
       )}
     </>
-  );
-}
-
-function GeneratingView({ step, steps }: { step: number; steps: string[] }) {
-  const allDone = step >= steps.length - 1;
-
-  return (
-    <div className="gen-stage" style={{ margin: "-52px -20px 0", minHeight: "100svh" }}>
-      {/* Large pulsing orb */}
-      <div className="ai-orb-lg">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
-          style={{ width: 40, height: 40, position: "relative", zIndex: 1 }}>
-          <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
-          <path d="M19 14l.7 1.9L21.6 17l-1.9.7L19 19.6l-.7-1.9L16.4 17l1.9-.7L19 14z" />
-        </svg>
-      </div>
-
-      <div>
-        <h2 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, margin: "0 0 6px", letterSpacing: "-0.015em" }}>
-          Criando seu plano...
-        </h2>
-        <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
-          {allDone ? "A IA está refinando seu plano, aguarde..." : (steps[step] ?? "Finalizando...")}
-        </p>
-      </div>
-
-      <div className="gen-steps">
-        {steps.map((msg, idx) => {
-          const cls = idx < step ? "gen-ln complete" : idx === step ? "gen-ln active" : "gen-ln";
-          return (
-            <motion.div
-              key={idx}
-              className={cls}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.08, duration: 0.25 }}
-            >
-              <span className="gck" />
-              {msg}
-            </motion.div>
-          );
-        })}
-        {allDone && (
-          <motion.div
-            className="gen-ln active"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 1.4, repeat: Infinity }}
-          >
-            <span className="gck" />
-            Aguardando resposta da IA...
-          </motion.div>
-        )}
-      </div>
-    </div>
   );
 }
 
