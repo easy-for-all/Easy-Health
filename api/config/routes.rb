@@ -67,6 +67,7 @@ Rails.application.routes.draw do
           get :today
           get :monthly_summary
           get :last_performances
+          get :load_suggestion
         end
       end
 

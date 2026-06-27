@@ -120,6 +120,12 @@ module Api
         head :no_content
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Not found" }, status: :not_found
+      rescue ActiveRecord::RecordNotDestroyed => e
+        Rails.logger.error "[UserMedia] destroy_failed user_id=#{current_user.id} media_id=#{params[:id]} error=#{e.message}"
+        render json: { error: "Não foi possível remover o arquivo." }, status: :unprocessable_entity
+      rescue => e
+        Rails.logger.error "[UserMedia] destroy_error user_id=#{current_user.id} media_id=#{params[:id]} #{e.class}: #{e.message}"
+        render json: { error: "Erro interno ao remover o arquivo." }, status: :internal_server_error
       end
 
       def reanalyze

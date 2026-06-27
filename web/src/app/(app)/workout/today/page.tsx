@@ -26,7 +26,7 @@ import "@/shared/components/workout/workout-ui.css";
 import { workoutEngine, usesTimerScreen, usesRecoveryScreen } from "@/features/workout/workout-engine";
 import { CardioPanel, IntervalPanel, RecoveryPanel } from "./workout-engine-screens";
 
-type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "pre_done" | "done";
+type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "closing_optional" | "pre_done" | "done";
 type ExerciseOption = {
   id: number;
   name: string;
@@ -88,62 +88,60 @@ interface RestCtx {
 }
 
 const GENERIC_REST_MESSAGES = [
-  "Boa série! Controle a respiração e mantenha o foco.",
-  "Ótima execução. Recupere bem para manter o volume.",
-  "Cada série conta. Prepare-se para a próxima com atenção.",
-  "Respire fundo. O descanso faz parte do treino.",
-  "Mantenha a técnica — consistência gera resultado.",
+  "Respire. Daqui a pouco voltamos.",
+  "Recuperando energia...",
+  "Prepare-se para a próxima série.",
+  "Descanso iniciado. Mantenha o foco.",
+  "Próxima série em instantes.",
 ];
 
 function getRestMessage(ctx: RestCtx): string {
   const {
     setNumber, totalSets, isLastExercise, isWarmup, weightKg, exerciseName,
     exercisesRemaining, setsRemainingTotal, progressPct, estimatedMinutesLeft,
-    nextExerciseName, nextExerciseTip,
+    nextExerciseName,
   } = ctx;
 
-  if (isWarmup) return "Aquecimento feito. Agora inicie a carga principal com técnica.";
+  if (isWarmup) return "Aquecimento concluído. Inicie a carga principal com técnica.";
 
   if (isLastExercise && setNumber === totalSets) {
-    return `Última série do treino! Dê o máximo em ${exerciseName}.`;
+    return `Última série de ${exerciseName}. Foque em manter a execução limpa.`;
   }
 
   if (setNumber === totalSets) {
     if (nextExerciseName) {
-      const tip = nextExerciseTip ? ` ${nextExerciseTip}` : "";
-      return `Última série deste exercício. Próximo: **${nextExerciseName}**.${tip}`;
+      return `${exerciseName} concluído. Agora vamos para ${nextExerciseName}.`;
     }
-    return "Última série deste exercício. Foco total agora.";
+    return "Última série deste exercício. Foco total.";
   }
 
   if (setNumber === totalSets - 1) {
-    if (nextExerciseName) return `Falta uma série. Depois: **${nextExerciseName}**.`;
+    if (nextExerciseName) return `Falta uma série. Depois passamos para ${nextExerciseName}.`;
     return "Falta uma série. Mantenha a intensidade.";
   }
 
   if (setNumber === 1 && weightKg && weightKg > 0) {
-    return `Boa primeira série com ${weightKg}kg. Se a execução ficou estável, mantenha ou suba levemente.`;
+    return `Primeira série com ${weightKg}kg concluída. Mantenha o controle.`;
   }
 
   if (setNumber === 1) {
     if (exercisesRemaining !== undefined && progressPct !== undefined) {
-      return `Iniciando ${exerciseName}. Você já passou de ${Math.round(progressPct)}% do treino.`;
+      return `Iniciando ${exerciseName}. ${Math.round(progressPct)}% do treino concluído.`;
     }
-    return "Boa primeira série. Observe a execução e ajuste se necessário.";
+    return "Primeira série concluída. Observe a execução e ajuste se necessário.";
   }
 
-  // Use contextual info when available
   if (setsRemainingTotal !== undefined && setsRemainingTotal > 0) {
     if (estimatedMinutesLeft && estimatedMinutesLeft > 0) {
       return `Faltam ${setsRemainingTotal} série${setsRemainingTotal > 1 ? "s" : ""}. Restam cerca de ${estimatedMinutesLeft} min.`;
     }
     if (exercisesRemaining !== undefined && exercisesRemaining > 0) {
-      return `Faltam ${exercisesRemaining} exercício${exercisesRemaining > 1 ? "s" : ""} e ${setsRemainingTotal} série${setsRemainingTotal > 1 ? "s" : ""}. Continue firme.`;
+      return `Faltam ${exercisesRemaining} exercício${exercisesRemaining > 1 ? "s" : ""} e ${setsRemainingTotal} série${setsRemainingTotal > 1 ? "s" : ""}.`;
     }
   }
 
   if (progressPct !== undefined && progressPct >= 50) {
-    return `Você já passou da metade. Mantenha o ritmo.`;
+    return "Você passou da metade. Continue firme.";
   }
 
   if (isLastExercise) return "Treino quase concluído. Mantenha a intensidade até o fim.";
@@ -198,6 +196,8 @@ function WorkoutTodayContent() {
   const reorderAddTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cardioTimeLeft, setCardioTimeLeft] = useState(0);
   const [timedElapsed, setTimedElapsed] = useState(0);
+  const [extraBlockType, setExtraBlockType] = useState<"cardio" | "abs" | null>(null);
+  const [extraBlockData, setExtraBlockData] = useState<Record<string, unknown> | null>(null);
   const [timedRunning, setTimedRunning] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cardioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -858,7 +858,22 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "cooldown") {
-    return <CooldownScreen day={day!} onFinish={() => setPhase("pre_done")} />;
+    return <CooldownScreen day={day!} onFinish={() => setPhase("closing_optional")} />;
+  }
+
+  if (phase === "closing_optional") {
+    const allExs = day!.exercises ?? [];
+    const hasCardioAlready = allExs.some(ex => isCardio(ex));
+    const hasCoreAlready = allExs.some(ex => ex.muscle_group === "core");
+    return (
+      <ClosingOptionalScreen
+        hasCardioAlready={hasCardioAlready}
+        hasCoreAlready={hasCoreAlready}
+        onFinish={() => setPhase("pre_done")}
+        onExtraCardio={(data) => { setExtraBlockType("cardio"); setExtraBlockData(data); setPhase("pre_done"); }}
+        onExtraAbs={(data) => { setExtraBlockType("abs"); setExtraBlockData(data); setPhase("pre_done"); }}
+      />
+    );
   }
 
   if (phase === "pre_done") {
@@ -873,7 +888,7 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "done") {
-    return <DoneScreen day={day!} startTime={startTime ?? new Date()} runtime={exerciseRuntime} onSaved={endSession} />;
+    return <DoneScreen day={day!} startTime={startTime ?? new Date()} runtime={exerciseRuntime} onSaved={endSession} lastStartedIndex={currentIndex} extraBlockType={extraBlockType} extraBlockData={extraBlockData} />;
   }
 
   const exercises = day!.exercises ?? [];
@@ -944,15 +959,16 @@ function WorkoutTodayContent() {
                 <p className={`rest-timer ${isUrgent ? "alert" : ""}`}>{restLeft}s</p>
               </div>
 
-              <p style={{ marginTop: 24, fontSize: 14, color: "var(--text-muted)" }}>Próximo: <strong style={{ color: "var(--text)" }}>{exercise.name}</strong></p>
-
-              {/* AI Trainer tip during rest */}
+              {/* Rest context card + AI tip */}
               {(() => {
                 const rt = runtimeFor(exerciseRuntime, exercise);
                 const totalExercises = day!.exercises?.length ?? 1;
                 const isLastEx = currentIndex === totalExercises - 1;
                 const nextEx = day!.exercises?.[currentIndex + 1];
+                const nextSet = currentSet + 1;
+                const isLastSetOfExercise = currentSet >= rt.planned_sets;
                 const setsInCurrentRemaining = rt.planned_sets - currentSet;
+                const exercisesRemaining = totalExercises - currentIndex - 1;
                 const setsInNextExercises = (day!.exercises ?? [])
                   .slice(currentIndex + 1)
                   .reduce((acc, ex) => acc + (runtimeFor(exerciseRuntime, ex).planned_sets || ex.sets || 0), 0);
@@ -962,31 +978,59 @@ function WorkoutTodayContent() {
                 const progressPct = totalSetsAll > 0 ? (completedSetsAll / totalSetsAll) * 100 : 0;
                 const avgRestMin = (restTotal || 60) / 60;
                 const estimatedMinutesLeft = Math.round(setsRemainingTotal * (avgRestMin + 0.75));
-                const nextTip = nextEx?.instructions?.split(/[.!]/)?.[0]?.trim();
+                const nextWeight = rt.weight_by_set[nextSet - 1] || rt.weight_by_set[currentSet - 1] || "";
+                const nextReps = rt.reps_by_set[nextSet - 1] || rt.reps_by_set[currentSet - 1] || 0;
                 return (
-                  <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
-                    <AgentOrb size="card" glyph />
-                    <AITrainerBubble
-                      message={getRestMessage({
-                        exerciseName: exercise.name,
-                        setNumber: currentSet,
-                        totalSets: rt.planned_sets,
-                        muscleGroup: exercise.muscle_group,
-                        isLastExercise: isLastEx,
-                        weightKg: parseFloat(rt.weight_by_set[currentSet - 1] || "0") || undefined,
-                        isWarmup: rt.warmup_by_set?.[currentSet - 1],
-                        exercisesRemaining: totalExercises - currentIndex - 1,
-                        setsRemainingTotal,
-                        progressPct: Math.round(progressPct),
-                        estimatedMinutesLeft: estimatedMinutesLeft > 0 ? estimatedMinutesLeft : undefined,
-                        nextExerciseName: nextEx?.name,
-                        nextExerciseTip: nextTip,
-                      })}
-                      mood="speaking"
-                      show
-                      side="left"
-                    />
-                  </div>
+                  <>
+                    {/* Structured context card */}
+                    <div style={{ marginTop: 20, width: "100%", maxWidth: 320, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "14px 16px" }}>
+                      <p style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>{exercise.name}</p>
+                      {!isLastSetOfExercise ? (
+                        <>
+                          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 2 }}>
+                            Próxima: Série {nextSet} de {rt.planned_sets}
+                            {nextWeight ? ` · ${nextWeight}kg` : ""}
+                            {nextReps ? ` · ${nextReps} reps` : ""}
+                          </p>
+                          <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                            {setsInCurrentRemaining} série{setsInCurrentRemaining > 1 ? "s" : ""} restante{setsInCurrentRemaining > 1 ? "s" : ""}
+                            {exercisesRemaining > 0 ? ` · ${exercisesRemaining} exercício${exercisesRemaining > 1 ? "s" : ""} depois` : ""}
+                          </p>
+                        </>
+                      ) : (
+                        <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 2 }}>Última série concluída</p>
+                      )}
+                      {nextEx && isLastSetOfExercise && (
+                        <p style={{ fontSize: 12, color: "var(--primary)", marginTop: 6, fontWeight: 600 }}>
+                          Depois: {nextEx.name}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* AI tip */}
+                    <div style={{ marginTop: 14, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
+                      <AgentOrb size="card" glyph />
+                      <AITrainerBubble
+                        message={getRestMessage({
+                          exerciseName: exercise.name,
+                          setNumber: currentSet,
+                          totalSets: rt.planned_sets,
+                          muscleGroup: exercise.muscle_group,
+                          isLastExercise: isLastEx,
+                          weightKg: parseFloat(rt.weight_by_set[currentSet - 1] || "0") || undefined,
+                          isWarmup: rt.warmup_by_set?.[currentSet - 1],
+                          exercisesRemaining,
+                          setsRemainingTotal,
+                          progressPct: Math.round(progressPct),
+                          estimatedMinutesLeft: estimatedMinutesLeft > 0 ? estimatedMinutesLeft : undefined,
+                          nextExerciseName: nextEx?.name,
+                        })}
+                        mood="speaking"
+                        show
+                        side="left"
+                      />
+                    </div>
+                  </>
                 );
               })()}
 
@@ -1007,12 +1051,25 @@ function WorkoutTodayContent() {
   }
 
   if (phase === "exercise_feedback") {
+    const nextFeedbackEx = exercises[currentIndex + 1];
+    const feedbackExercisesLeft = exercises.length - currentIndex - 1;
     return (
-      <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
+      <div className="flex min-h-svh flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
         <div className="flex flex-1 flex-col justify-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-primary-500">Exercício concluído</p>
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-sm font-semibold uppercase tracking-wide text-primary-500">Exercício concluído</p>
+            <span className="text-xs text-slate-500">{currentIndex + 1}/{exercises.length}</span>
+          </div>
           <h1 className="mt-2 text-3xl font-bold text-white">{exercise.name}</h1>
-          <p className="mt-2 text-slate-400">Como você se sentiu nesse exercício?</p>
+          {nextFeedbackEx ? (
+            <p className="mt-2 text-sm text-slate-400">
+              Próximo: <span className="text-white font-semibold">{nextFeedbackEx.name}</span>
+              {feedbackExercisesLeft > 1 && <span className="text-slate-500"> (+{feedbackExercisesLeft - 1} depois)</span>}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-primary-400 font-semibold">Último exercício do treino!</p>
+          )}
+          <p className="mt-3 text-slate-400">Como você se sentiu nesse exercício?</p>
           <div className="mt-6 grid grid-cols-2 gap-3">
             {FEELINGS.map((feeling) => (
               <button
@@ -1056,7 +1113,13 @@ function WorkoutTodayContent() {
       <div style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-2)", borderBottom: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: "12px 16px 10px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)" }}>{currentIndex + 1}/{exercises.length}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)" }}>
+              Ex. {currentIndex + 1}/{exercises.length}
+            </span>
+            <span style={{ fontSize: 12, color: "var(--text-dim)" }}>·</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)" }}>
+              S. {currentSet}/{runtimeFor(exerciseRuntime, exercise).planned_sets}
+            </span>
             <button
               onClick={() => setShowReorderModal(true)}
               style={{ fontSize: 13, color: "var(--text-dim)", background: "none", border: 0, cursor: "pointer" }}
@@ -1800,6 +1863,7 @@ function OverviewScreen({
   const [addDupeMsg, setAddDupeMsg] = useState<string | null>(null);
   const [infoModal, setInfoModal] = useState<WorkoutDayExercise | null>(null);
   const [gifModal, setGifModal] = useState<WorkoutDayExercise | null>(null);
+  const [loadSuggestions, setLoadSuggestions] = useState<Record<number, { action: string; suggested_weight: number | null; reason: string } | "loading">>({});
   const exercises = day.exercises ?? [];
   const [globalRest, setGlobalRest] = useState<number>(exercises[0]?.rest_seconds ?? 90);
   const addSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1809,6 +1873,19 @@ function OverviewScreen({
     if (isCardio(exercise) || isTimed(exercise)) return sum + 1;
     return sum + runtimeFor(runtime, exercise).planned_sets;
   }, 0);
+
+  async function fetchLoadSuggestion(exerciseId: number) {
+    if (loadSuggestions[exerciseId] !== undefined) return;
+    setLoadSuggestions(prev => ({ ...prev, [exerciseId]: "loading" }));
+    try {
+      const data = await api.get<{ action: string; suggested_weight: number | null; reason: string }>(
+        `/api/v1/workout_sessions/load_suggestion?exercise_id=${exerciseId}`
+      );
+      setLoadSuggestions(prev => ({ ...prev, [exerciseId]: data }));
+    } catch {
+      setLoadSuggestions(prev => ({ ...prev, [exerciseId]: { action: "maintain", suggested_weight: null, reason: "" } }));
+    }
+  }
 
   async function openAdd() {
     const allIds = exercises.map((e) => e.exercise_id).join(",");
@@ -1987,7 +2064,23 @@ function OverviewScreen({
                     if (!prev) return <p className="text-xs text-gray-300">Nunca feito</p>;
                     const date = new Date(prev.session.completed_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
                     const weight = prev.log.weight_kg ? ` · ${prev.log.weight_kg} kg` : "";
-                    return <p className="text-xs text-gray-300">Última: {date}{weight}</p>;
+                    const suggestion = !isCardio(ex) && !isTimed(ex) ? loadSuggestions[ex.exercise_id] : undefined;
+                    return (
+                      <div>
+                        <p className="text-xs text-gray-300">Última: {date}{weight}</p>
+                        {suggestion === undefined && !isCardio(ex) && !isTimed(ex) && (
+                          <button onClick={() => fetchLoadSuggestion(ex.exercise_id)} className="mt-0.5 text-xs text-primary-400 hover:underline">
+                            💡 Ver sugestão de carga
+                          </button>
+                        )}
+                        {suggestion === "loading" && <p className="mt-0.5 text-xs text-slate-500">Calculando...</p>}
+                        {suggestion && suggestion !== "loading" && suggestion.action && (
+                          <p className={`mt-0.5 text-xs font-semibold ${suggestion.action === "increase" ? "text-green-400" : "text-slate-400"}`}>
+                            {suggestion.action === "increase" ? `↑ Teste ${suggestion.suggested_weight}kg hoje` : "→ Mantenha a carga"}
+                          </p>
+                        )}
+                      </div>
+                    );
                   })()}
                 </div>
                 <div className="flex flex-col items-end gap-1">
@@ -2341,11 +2434,17 @@ function DoneScreen({
   startTime,
   runtime,
   onSaved,
+  lastStartedIndex,
+  extraBlockType,
+  extraBlockData,
 }: {
   day: WorkoutDay;
   startTime: Date;
   runtime: Record<number, ExerciseRuntime>;
   onSaved?: () => void;
+  lastStartedIndex?: number;
+  extraBlockType?: "cardio" | "abs" | null;
+  extraBlockData?: Record<string, unknown> | null;
 }) {
   const router = useRouter();
   const { user, updateUser } = useAuth();
@@ -2365,6 +2464,47 @@ function DoneScreen({
   const [updating, setUpdating] = useState(false);
   const [currentStreak, setCurrentStreak] = useState<number | null>(null);
   const exercises = useMemo(() => day.exercises ?? [], [day.exercises]);
+
+  const completionData = useMemo(() => {
+    const maxReached = lastStartedIndex ?? exercises.length - 1;
+    let plannedSets = 0;
+    let completedSets = 0;
+    const skipped: Array<{ exercise_id: number; name: string; planned_sets: number; muscle_group: string | null }> = [];
+
+    exercises.forEach((ex, idx) => {
+      const state = runtimeFor(runtime, ex);
+      const isCardioEx = isCardio(ex);
+      const isTimedEx = isTimed(ex);
+
+      if (isCardioEx || isTimedEx) {
+        plannedSets += 1;
+        const hasData = isTimedEx
+          ? (state.elapsed_seconds ?? 0) > 0
+          : (state.duration_minutes ?? 0) > 0;
+        if (hasData) completedSets += 1;
+        else if (idx > maxReached) skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: 1, muscle_group: ex.muscle_group });
+        return;
+      }
+
+      const ps = state.planned_sets || ex.sets || 1;
+      plannedSets += ps;
+
+      if (idx > maxReached) {
+        skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: ps, muscle_group: ex.muscle_group });
+        return;
+      }
+
+      const doneCount = state.reps_by_set.filter((r, i) => r > 0 || Number(state.weight_by_set[i]) > 0).length;
+      completedSets += Math.min(doneCount, ps);
+      if (doneCount === 0) {
+        skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: ps, muscle_group: ex.muscle_group });
+      }
+    });
+
+    const rate = plannedSets > 0 ? Math.round((completedSets / plannedSets) * 100) : 100;
+    const status = rate >= 100 ? "completed" : rate === 0 ? "abandoned" : "completed_partial";
+    return { completionStatus: status, completionRate: rate, completedSetsCount: completedSets, plannedSetsCount: plannedSets, skippedExercises: skipped };
+  }, [exercises, runtime, lastStartedIndex]);
 
   const totalVolume = useMemo(() => {
     let total = 0;
@@ -2396,6 +2536,16 @@ function DoneScreen({
           fatigue_level: fatigueLevel,
           notes: notes || null,
           completed_at: finishedAt.toISOString(),
+          completion_status: completionData.completionStatus,
+          completion_rate: completionData.completionRate,
+          completed_sets_count: completionData.completedSetsCount,
+          planned_sets_count: completionData.plannedSetsCount,
+          skipped_exercises: completionData.skippedExercises,
+          ...(extraBlockType ? {
+            extra_block_type: extraBlockType,
+            extra_block_data: extraBlockData ?? {},
+            extra_started_at: finishedAt.toISOString(),
+          } : {}),
           exercise_logs: exercises.map((exercise) => {
             const state = runtimeFor(runtime, exercise);
             const wdeId = isQuick || exercise.workout_day_exercise_id < 0 ? null : exercise.workout_day_exercise_id;
@@ -2584,7 +2734,7 @@ function DoneScreen({
   const calCols = savedCalories != null && savedCalories > 0 ? "grid-cols-2" : "grid-cols-3";
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "var(--nav-pb)" }}>
+    <div className="flex min-h-svh flex-col bg-[#0a0f1e] px-4 pt-6" style={{ paddingBottom: "calc(var(--nav-pb) + 32px)" }}>
       <ConfettiBurst preset="workout" />
 
       <motion.div
@@ -2645,14 +2795,30 @@ function DoneScreen({
         initial="hidden"
         animate="visible"
       >
+        {/* Partial completion banner */}
+        {completionData.completionStatus === "completed_partial" && (
+          <motion.div variants={staggerItem} className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-3">
+            <p className="text-sm font-semibold text-orange-400">Treino parcial — {completionData.completionRate}% concluído</p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {completionData.completedSetsCount} de {completionData.plannedSetsCount} séries realizadas
+            </p>
+          </motion.div>
+        )}
+
         {/* Exercise summary */}
         <motion.p variants={staggerItem} className="text-sm font-semibold text-slate-300 dark:text-gray-300">Resumo por exercício</motion.p>
         {exercises.map((exercise) => {
           const state = runtimeFor(runtime, exercise);
+          const wasSkipped = completionData.skippedExercises.some(s => s.exercise_id === exercise.exercise_id);
           return (
-            <motion.div variants={staggerItem} key={exercise.workout_day_exercise_id} className="rounded-xl border border-slate-800 bg-slate-900 p-3 dark:border-gray-800 dark:bg-gray-900">
-              <span className="text-sm font-medium text-white">{exercise.name}</span>
-              {isCardio(exercise) ? (
+            <motion.div variants={staggerItem} key={exercise.workout_day_exercise_id} className={`rounded-xl border p-3 ${wasSkipped ? "border-orange-900/50 bg-orange-950/30" : "border-slate-800 bg-slate-900 dark:border-gray-800 dark:bg-gray-900"}`}>
+              <div className="flex items-center gap-2">
+                <span className="text-xs">{wasSkipped ? "⚠️" : "✅"}</span>
+                <span className="text-sm font-medium text-white">{exercise.name}</span>
+              </div>
+              {wasSkipped ? (
+                <p className="mt-1 text-xs text-orange-400/70">Não realizado</p>
+              ) : isCardio(exercise) ? (
                 <p className="mt-1 text-xs text-slate-500">
                   Duração: {state.duration_minutes ?? exercise.duration_minutes ?? "—"} min
                   {state.intensity ? ` · ${state.intensity}` : ""}
@@ -2667,6 +2833,24 @@ function DoneScreen({
             </motion.div>
           );
         })}
+
+        {/* Extra block summary */}
+        {extraBlockType && extraBlockData && (
+          <motion.div variants={staggerItem} className="rounded-xl border border-primary-500/30 bg-primary-500/10 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary-400 mb-1">Extra pós-treino</p>
+            {extraBlockType === "cardio" && (
+              <p className="text-sm text-white">
+                {CARDIO_MODALITIES.find(m => m.key === (extraBlockData.modality as string))?.icon ?? "🚴"}{" "}
+                {extraBlockData.modality as string} · {extraBlockData.duration_minutes as number} min · {extraBlockData.intensity as string}
+              </p>
+            )}
+            {extraBlockType === "abs" && (
+              <p className="text-sm text-white">
+                Core · {(extraBlockData.exercises as string[]).join(", ")}
+              </p>
+            )}
+          </motion.div>
+        )}
 
         {/* Streak badge */}
         {currentStreak != null && currentStreak > 0 && (
@@ -3017,4 +3201,176 @@ function firstWeight(weights: string[]) {
 function formatWeights(weights: string[]) {
   const labels = weights.map((value, idx) => `S${idx + 1}: ${value ? `${value} kg` : "-"}`);
   return labels.join(" · ");
+}
+
+// ── ClosingOptionalScreen ────────────────────────────────────────────────────
+const CARDIO_MODALITIES = [
+  { key: "bike", label: "Bike", icon: "🚴" },
+  { key: "esteira", label: "Esteira", icon: "🏃" },
+  { key: "escada", label: "Escada", icon: "🪜" },
+  { key: "remo", label: "Remo", icon: "🚣" },
+  { key: "eliptico", label: "Elíptico", icon: "⚙️" },
+];
+
+const ABS_OPTIONS = [
+  { key: "prancha", label: "Prancha", icon: "🧘", timed: true },
+  { key: "crunch", label: "Abdominal crunch", icon: "💪", timed: false },
+  { key: "elevacao_pernas", label: "Elevação de pernas", icon: "🦵", timed: false },
+  { key: "infra", label: "Abdominal infra", icon: "📐", timed: false },
+  { key: "obliquo", label: "Abdominal oblíquo", icon: "↗️", timed: false },
+  { key: "bicicleta", label: "Abdominal bicicleta", icon: "🚲", timed: false },
+];
+
+function ClosingOptionalScreen({
+  hasCardioAlready,
+  hasCoreAlready,
+  onFinish,
+  onExtraCardio,
+  onExtraAbs,
+}: {
+  hasCardioAlready: boolean;
+  hasCoreAlready: boolean;
+  onFinish: () => void;
+  onExtraCardio: (data: Record<string, unknown>) => void;
+  onExtraAbs: (data: Record<string, unknown>) => void;
+}) {
+  const [step, setStep] = useState<"choose" | "cardio" | "abs">("choose");
+  const [cardioModality, setCardioModality] = useState("bike");
+  const [cardioDuration, setCardioDuration] = useState(12);
+  const [cardioIntensity, setCardioIntensity] = useState("moderado");
+  const [selectedAbs, setSelectedAbs] = useState<string[]>([]);
+
+  const showCardio = !hasCardioAlready;
+  const showAbs = !hasCoreAlready;
+
+  if (!showCardio && !showAbs) {
+    onFinish();
+    return null;
+  }
+
+  if (step === "cardio") {
+    return (
+      <div className="flex min-h-svh flex-col bg-[#0a0f1e] px-4 pt-8" style={{ paddingBottom: "var(--nav-pb)" }}>
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary-500 mb-1">Cardio extra</p>
+        <h2 className="text-2xl font-bold text-white mb-6">Configure o cardio</h2>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-slate-400 mb-2">Modalidade</p>
+            <div className="flex flex-wrap gap-2">
+              {CARDIO_MODALITIES.map(m => (
+                <button key={m.key} onClick={() => setCardioModality(m.key)}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold border transition-all ${cardioModality === m.key ? "bg-primary-500 border-primary-500 text-white" : "border-slate-700 text-slate-300 bg-slate-900"}`}
+                >
+                  {m.icon} {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm text-slate-400 mb-2">Duração: <strong className="text-white">{cardioDuration} min</strong></p>
+            <input type="range" min={5} max={60} step={5} value={cardioDuration} onChange={e => setCardioDuration(Number(e.target.value))} className="w-full" />
+          </div>
+
+          <div>
+            <p className="text-sm text-slate-400 mb-2">Intensidade</p>
+            <div className="flex gap-2">
+              {["leve", "moderado", "intenso"].map(i => (
+                <button key={i} onClick={() => setCardioIntensity(i)}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-semibold border ${cardioIntensity === i ? "bg-primary-500 border-primary-500 text-white" : "border-slate-700 text-slate-300 bg-slate-900"}`}
+                >
+                  {i.charAt(0).toUpperCase() + i.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-auto pt-6 space-y-3">
+          <button onClick={() => onExtraCardio({ modality: cardioModality, duration_minutes: cardioDuration, intensity: cardioIntensity })}
+            className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
+          >
+            Registrar cardio
+          </button>
+          <button onClick={onFinish} className="w-full py-3 text-sm text-slate-500">Pular e finalizar</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "abs") {
+    return (
+      <div className="flex min-h-svh flex-col bg-[#0a0f1e] px-4 pt-8" style={{ paddingBottom: "var(--nav-pb)" }}>
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary-500 mb-1">Core extra</p>
+        <h2 className="text-2xl font-bold text-white mb-6">Escolha os exercícios</h2>
+
+        <div className="space-y-2">
+          {ABS_OPTIONS.map(opt => (
+            <button key={opt.key}
+              onClick={() => setSelectedAbs(prev => prev.includes(opt.key) ? prev.filter(k => k !== opt.key) : [...prev, opt.key])}
+              className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all ${selectedAbs.includes(opt.key) ? "border-primary-500 bg-primary-500/10" : "border-slate-800 bg-slate-900"}`}
+            >
+              <span className="text-xl">{opt.icon}</span>
+              <span className={`text-sm font-semibold ${selectedAbs.includes(opt.key) ? "text-primary-400" : "text-white"}`}>{opt.label}</span>
+              {opt.timed && <span className="ml-auto text-xs text-slate-500">⏱ timed</span>}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-auto pt-6 space-y-3">
+          <button
+            onClick={() => selectedAbs.length > 0
+              ? onExtraAbs({ exercises: selectedAbs.map(k => ABS_OPTIONS.find(o => o.key === k)!.label) })
+              : onFinish()
+            }
+            className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
+          >
+            {selectedAbs.length > 0 ? `Registrar ${selectedAbs.length} exercício${selectedAbs.length > 1 ? "s" : ""}` : "Pular"}
+          </button>
+          <button onClick={onFinish} className="w-full py-3 text-sm text-slate-500">Pular e finalizar</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center bg-[#0a0f1e] px-6" style={{ paddingBottom: "var(--nav-pb)" }}>
+      <div className="text-center mb-8">
+        <div className="text-4xl mb-3">💪</div>
+        <h2 className="text-2xl font-bold text-white">Treino principal concluído!</h2>
+        <p className="mt-2 text-slate-400 text-sm">Quer fechar com algo extra?</p>
+      </div>
+
+      <div className="w-full max-w-sm space-y-3">
+        {showCardio && (
+          <button onClick={() => setStep("cardio")}
+            className="flex w-full items-center gap-4 rounded-2xl border border-slate-700 bg-slate-900 p-4 text-left hover:border-primary-500/50 transition-all"
+          >
+            <span className="text-2xl">🚴</span>
+            <div>
+              <p className="font-semibold text-white">Fazer cardio</p>
+              <p className="text-xs text-slate-500">Bike, esteira, remo e mais</p>
+            </div>
+          </button>
+        )}
+        {showAbs && (
+          <button onClick={() => setStep("abs")}
+            className="flex w-full items-center gap-4 rounded-2xl border border-slate-700 bg-slate-900 p-4 text-left hover:border-primary-500/50 transition-all"
+          >
+            <span className="text-2xl">🔥</span>
+            <div>
+              <p className="font-semibold text-white">Fazer abdominais</p>
+              <p className="text-xs text-slate-500">Prancha, crunch, elevação e mais</p>
+            </div>
+          </button>
+        )}
+        <button onClick={onFinish}
+          className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
+        >
+          Finalizar treino agora
+        </button>
+      </div>
+    </div>
+  );
 }

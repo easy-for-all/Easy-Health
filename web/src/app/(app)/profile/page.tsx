@@ -267,15 +267,20 @@ export default function ProfilePage() {
   async function handleDeletePhoto(id: number) {
     setDeletePhotoConfirmId(null);
     setDeletePhotoError("");
-    const snapshot = mediaItems;
-    setMediaItems((prev) => prev.filter((m) => m.id !== id));
     setDeletingPhotoId(id);
-    if (lightboxPhoto?.id === id) setLightboxPhoto(null);
     try {
       await api.delete(`/api/v1/user_media/${id}`);
-    } catch {
-      setMediaItems(snapshot);
-      setDeletePhotoError("Não foi possível apagar a foto. Tente novamente.");
+      if (lightboxPhoto?.id === id) setLightboxPhoto(null);
+      setMediaItems((prev) => prev.filter((m) => m.id !== id));
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      if (status === 404) {
+        setMediaItems((prev) => prev.filter((m) => m.id !== id));
+      } else if (status === 403) {
+        setDeletePhotoError("Acesso não autorizado. Verifique sua assinatura.");
+      } else {
+        setDeletePhotoError("Não foi possível apagar a foto. Tente novamente.");
+      }
     } finally {
       setDeletingPhotoId(null);
     }

@@ -225,6 +225,14 @@ module Api
         render json: records.values
       end
 
+      def load_suggestion
+        exercise_id = params[:exercise_id]
+        return render json: { error: "exercise_id required" }, status: :bad_request unless exercise_id.present?
+
+        result = LoadProgressionService.new(user: current_user, exercise_id: exercise_id).call
+        render json: result
+      end
+
       private
 
       def mark_free_workout_used
@@ -246,6 +254,15 @@ module Api
           :notes,
           :completed_at,
           :fatigue_level,
+          :completion_status,
+          :completion_rate,
+          :completed_sets_count,
+          :planned_sets_count,
+          :extra_block_type,
+          :extra_started_at,
+          :extra_completed_at,
+          skipped_exercises: [:exercise_id, :name, :planned_sets, :muscle_group],
+          extra_block_data: {},
           exercise_logs: [
             :workout_day_exercise_id,
             :exercise_id,
@@ -279,7 +296,16 @@ module Api
           fatigue_level: s.fatigue_level,
           exercise_logs: s.exercise_logs || [],
           notes: s.notes,
-          calories_estimated: s.calories_estimated
+          calories_estimated: s.calories_estimated,
+          completion_status: s.completion_status || "completed",
+          completion_rate: s.completion_rate,
+          completed_sets_count: s.completed_sets_count,
+          planned_sets_count: s.planned_sets_count,
+          skipped_exercises: s.skipped_exercises || [],
+          extra_block_type: s.extra_block_type,
+          extra_block_data: s.extra_block_data || {},
+          extra_started_at: s.extra_started_at,
+          extra_completed_at: s.extra_completed_at
         }
       end
 
