@@ -13,13 +13,7 @@ namespace :make_webhook do
     puts ""
   end
 
-  desc <<~DESC
-    Fire a test event to Make webhook for a user.
-    Usage:
-      rake make_webhook:fire USER=<email|id> EVENT=<event_name>
-      rake make_webhook:fire USER=test@example.com EVENT=workout_completed
-    Available events: #{RelationshipEventTracker::EVENTS.join(', ')}
-  DESC
+  desc "Fire a test event to Make webhook for a user. Usage: rake make_webhook:fire USER=<email|id> EVENT=<event_name>"
   task fire: :environment do
     user   = resolve_user(ENV["USER"])
     event  = ENV["EVENT"].to_s.strip

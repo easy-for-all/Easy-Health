@@ -5,7 +5,7 @@ module Api
         before_action :authenticate_user!
 
         def current
-          Coach::Recommendations::WeightProgressionService.new(user: current_user).call
+          ::Coach::Recommendations::WeightProgressionService.new(user: current_user).call
 
           recommendation = CoachRecommendation.for_user(current_user)
             .pending
