@@ -8,7 +8,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
+  signUp: (name: string, email: string, password: string, marketingConsent?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (patch: Partial<User>) => void;
 }
@@ -48,12 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }
 
-  async function signUp(name: string, email: string, password: string) {
+  async function signUp(name: string, email: string, password: string, marketingConsent?: boolean) {
     const u = await api.post<User>("/api/v1/auth/sign_up", {
       name,
       email,
       password,
       password_confirmation: password,
+      marketing_consent: marketingConsent ?? false,
     });
     setUser(u);
   }

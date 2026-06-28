@@ -48,6 +48,7 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsWarning, setTermsWarning] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
@@ -83,7 +84,7 @@ export default function SignUpPage() {
     setError("");
     setLoading(true);
     try {
-      await signUp(submittedName, submittedEmail, submittedPassword);
+      await signUp(submittedName, submittedEmail, submittedPassword, marketingConsent);
       trackEvent(EVENTS.SIGNUP_COMPLETED);
       trackConversion(CONVERSIONS.SIGNUP);
       const pending = getPendingPlan();
@@ -240,6 +241,18 @@ export default function SignUpPage() {
               <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-400 hover:underline">
                 Política de Privacidade
               </a>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={marketingConsent}
+              onChange={(e) => setMarketingConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-slate-600 text-primary-500 focus:ring-primary-500"
+            />
+            <span className="text-sm text-slate-400">
+              Aceito receber dicas personalizadas, lembretes de treino e novidades da EasyHealth por e-mail
             </span>
           </label>
 
