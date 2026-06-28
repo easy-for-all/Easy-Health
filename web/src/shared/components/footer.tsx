@@ -64,7 +64,7 @@ export function Footer() {
           </div>
 
           <div className="flex flex-col items-center gap-2 text-sm text-slate-500 sm:items-end">
-            <div className="flex gap-4">
+            <div className="flex flex-wrap justify-center gap-4 sm:justify-end">
               <Link href="/privacy" className="hover:text-primary-400 transition">
                 Política de Privacidade
               </Link>
@@ -74,6 +74,14 @@ export function Footer() {
               <a href="mailto:suporte@easyhealth.com.br" className="hover:text-primary-400 transition">
                 Fale Conosco
               </a>
+            </div>
+            <div className="flex flex-wrap justify-center gap-4 sm:justify-end">
+              <Link href="/delete-account" className="hover:text-primary-400 transition">
+                Excluir Conta
+              </Link>
+              <Link href="/delete-data" className="hover:text-primary-400 transition">
+                Exclusão de Dados
+              </Link>
             </div>
             <p>© {new Date().getFullYear()} EasyHealth</p>
           </div>
