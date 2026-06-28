@@ -48,6 +48,16 @@ module Api
 
         Stripe::Subscription.update(sub.stripe_subscription_id, cancel_at_period_end: true)
         sub.update!(cancel_at_period_end: true)
+        UserEventService.track(
+          user: current_user,
+          event: :subscription_canceled,
+          metadata: {
+            subscription_id: sub.id,
+            stripe_subscription_id: sub.stripe_subscription_id,
+            cancel_at_period_end: true
+          },
+          idempotency_key: "subscription_canceled:#{sub.id}:scheduled"
+        )
 
         render json: { message: "Subscription will be canceled at period end", subscription: billing_sub_json(sub) }
       rescue Stripe::StripeError => e

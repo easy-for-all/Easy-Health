@@ -42,6 +42,7 @@ module Api
         current_user.health_profile&.update!(profile_attrs) if profile_attrs.any?
 
         FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_plan_regenerated")
+        had_workout_plan = current_user.workout_plans.exists?
         service = WorkoutPlanGeneratorService.new(
           current_user,
           days_per_week:        days_per_week,
@@ -54,7 +55,22 @@ module Api
           training_location:    training_location
         )
         plan = service.call
-        UserEventService.track(user: current_user, event: :workout_created, metadata: { plan_id: plan.id })
+        UserEventService.track(
+          user: current_user,
+          event: :workout_created,
+          metadata: { workout_plan_id: plan.id },
+          occurred_at: plan.created_at,
+          idempotency_key: "workout_created:#{current_user.id}:#{plan.id}"
+        )
+        unless had_workout_plan
+          UserEventService.track(
+            user: current_user,
+            event: :first_workout_created,
+            metadata: { workout_plan_id: plan.id },
+            occurred_at: plan.created_at,
+            idempotency_key: "first_workout_created:#{current_user.id}:#{plan.id}"
+          )
+        end
         render json: serialize_plan(plan).merge(summary: service.plan_summary), status: :ok
       rescue ActiveRecord::RecordInvalid => e
         render_error(e.record.errors.full_messages.to_sentence)

@@ -75,6 +75,8 @@
     "public_desc": "Profile visible in the community",
     "community": "Join the community",
     "community_desc": "Your activities will appear on the public feed",
+    "marketing_consent": "Workout tips and updates by email",
+    "marketing_consent_desc": "Receive workout reminders, personalized tips and EasyHealth news",
     "referral_code": "Your referral code",
     "referral_copy": "Copy code",
     "referral_copied": "Copied!",

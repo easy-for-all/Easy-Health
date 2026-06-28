@@ -180,6 +180,7 @@ RSpec.describe ExerciseIntelligenceService do
         exercise_type:  "musculacao",
         equipment_type: "cable",
         difficulty:     "intermediate",
+        gif_url:        "/exercise-images/triceps_corda.gif",
       )
     end
 
@@ -197,6 +198,7 @@ RSpec.describe ExerciseIntelligenceService do
           exercise_type:  "musculacao",
           equipment_type: "bodyweight",
           difficulty:     "beginner",
+          gif_url:        "/exercise-images/triceps_banco.gif",
         )
       end
 
@@ -228,6 +230,7 @@ RSpec.describe ExerciseIntelligenceService do
           exercise_type:  "musculacao",
           equipment_type: "barbell",
           difficulty:     "intermediate",
+          gif_url:        "/exercise-images/triceps_testa.gif",
         )
       end
 

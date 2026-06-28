@@ -12,6 +12,7 @@ import { InsightCard } from "@/shared/components/workout/insight-card";
 import { StreakCard } from "@/shared/components/workout/streak-card";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { CoachInsightsSection } from "@/shared/components/coach-insights-section";
+import { CoachRecommendationCard } from "@/shared/components/coach-recommendation-card";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 import { relativeDayLabel, isToday } from "@/shared/utils/relative-date";
 
@@ -211,6 +212,9 @@ export default function DashboardPage() {
             href={todayDay ? `/workout/today?day=${todayDay.id}` : "/workout/today"}
           />
         )}
+
+        {/* Coach Recommendation — recomendação acionável de progressão */}
+        <CoachRecommendationCard />
 
         {/* Coach Insights — aprendizados sobre o usuário */}
         <CoachInsightsSection />

@@ -96,6 +96,9 @@ Rails.application.routes.draw do
 
       namespace :webhooks do
         post "stripe", to: "stripe#create"
+        namespace :make do
+          post "relationship-message", to: "relationship_messages#create"
+        end
       end
 
       namespace :ai_agents do
@@ -109,6 +112,10 @@ Rails.application.routes.draw do
 
       get  "coach/insights",            to: "coach_insights#index"
       post "coach/insights/:id/read",   to: "coach_insights#read"
+
+      get  "coach/recommendations/current",     to: "coach/recommendations#current"
+      post "coach/recommendations/:id/accept",  to: "coach/recommendations#accept"
+      post "coach/recommendations/:id/dismiss", to: "coach/recommendations#dismiss"
 
       namespace :admin do
         get :stats

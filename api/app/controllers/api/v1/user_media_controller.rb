@@ -59,7 +59,22 @@ module Api
         if media.save
           Rails.logger.info "[UserMedia] upload_completed user_id=#{current_user.id} media_id=#{media.id} category=#{category}"
           event = category == "exam" ? :exam_uploaded : :photo_uploaded
-          UserEventService.track(user: current_user, event: event, metadata: { media_id: media.id })
+          UserEventService.track(
+            user: current_user,
+            event: event,
+            metadata: { media_id: media.id, category: category },
+            occurred_at: media.created_at,
+            idempotency_key: "#{event}:#{current_user.id}:#{media.id}"
+          )
+          if category == "body_photo"
+            UserEventService.track(
+              user: current_user,
+              event: :body_photo_uploaded,
+              metadata: { media_id: media.id },
+              occurred_at: media.created_at,
+              idempotency_key: "body_photo_uploaded:#{current_user.id}:#{media.id}"
+            )
+          end
           extra = { face_blurred: result&.dig(:face_blurred) || false }
 
           if category == "exam"
@@ -113,8 +128,18 @@ module Api
 
       def destroy
         media = current_user.user_media.find(params[:id])
+        category = media.category
+        media_id = media.id
         media.file.purge_later if media.file.attached?
         media.destroy!
+        if category == "body_photo"
+          UserEventService.track(
+            user: current_user,
+            event: :body_photo_deleted,
+            metadata: { media_id: media_id },
+            idempotency_key: "body_photo_deleted:#{current_user.id}:#{media_id}"
+          )
+        end
         FitnessIntelligence.recalculate_safely(user: current_user, source: "user_media_removed")
         Rails.logger.info "[UserMedia] file_purged user_id=#{current_user.id} media_id=#{params[:id]}"
         head :no_content

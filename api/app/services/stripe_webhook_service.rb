@@ -115,6 +115,12 @@ class StripeWebhookService
 
     sub.update!(status: "canceled", canceled_at: Time.current)
     Rails.logger.info("[Stripe] subscription canceled stripe_sub=#{stripe_sub.id}")
+    UserEventService.track(
+      user: sub.user,
+      event: :subscription_canceled,
+      metadata: { subscription_id: sub.id, stripe_subscription_id: stripe_sub.id },
+      idempotency_key: "subscription_canceled:#{sub.id}:#{stripe_sub.id}"
+    )
   end
 
   def self.handle_invoice_paid(invoice)
@@ -134,7 +140,13 @@ class StripeWebhookService
       current_period_end: period_end ? Time.zone.at(period_end) : sub.current_period_end
     )
     Rails.logger.info("[Stripe] invoice paid stripe_sub=#{subscription_id} → active")
-    UserEventService.track(user: sub.user, event: :subscription_created) if was_inactive
+    event = was_inactive ? :subscription_created : :subscription_renewed
+    UserEventService.track(
+      user: sub.user,
+      event: event,
+      metadata: { subscription_id: sub.id, stripe_subscription_id: subscription_id, invoice_id: invoice.id },
+      idempotency_key: "#{event}:#{sub.id}:#{invoice.id}"
+    )
   end
 
   def self.handle_invoice_payment_failed(invoice)

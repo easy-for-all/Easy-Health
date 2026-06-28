@@ -6,7 +6,7 @@ module Api
       end
 
       def update
-        permitted = params.permit(:profile_visibility, :community_enabled, :account_type)
+        permitted = params.permit(:profile_visibility, :community_enabled, :account_type, :marketing_consent)
 
         if permitted[:account_type].present? && !User::ACCOUNT_TYPES.include?(permitted[:account_type])
           return render_error("Invalid account type")
@@ -26,10 +26,11 @@ module Api
 
       def privacy_json
         {
-          account_type: current_user.account_type,
+          account_type:       current_user.account_type,
           profile_visibility: current_user.profile_visibility,
-          community_enabled: current_user.community_enabled,
-          referral_code: current_user.referral_code
+          community_enabled:  current_user.community_enabled,
+          marketing_consent:  current_user.marketing_consent,
+          referral_code:      current_user.referral_code
         }
       end
     end
