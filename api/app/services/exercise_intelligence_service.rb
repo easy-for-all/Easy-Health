@@ -331,10 +331,10 @@ class ExerciseIntelligenceService
     when INTENT_HOME
       base = base.where(home_compatible: true)
     when INTENT_LIGHTER
-      base = base.where(difficulty: %w[beginner intermediate])
+      base = base.where.not(difficulty_level: "advanced")
                  .where(muscle_group: current_exercise.muscle_group)
     when INTENT_HEAVIER
-      base = base.where(difficulty: %w[intermediate advanced])
+      base = base.where.not(difficulty_level: "beginner")
                  .where(muscle_group: current_exercise.muscle_group)
     when INTENT_PAIN
       base = base.where(muscle_group: current_exercise.muscle_group)
@@ -402,11 +402,11 @@ class ExerciseIntelligenceService
     end
 
     if intent[:intensity] == "lighter"
-      s[:difficulty_match] = 10 if %w[beginner intermediate].include?(exercise.difficulty)
-      s[:difficulty_miss]  = -20 if exercise.difficulty == "advanced"
+      s[:difficulty_match] = 10 if %w[beginner intermediate].include?(exercise.difficulty_level)
+      s[:difficulty_miss]  = -20 if exercise.difficulty_level == "advanced"
     elsif intent[:intensity] == "heavier"
-      s[:difficulty_match] = 10 if %w[intermediate advanced].include?(exercise.difficulty)
-      s[:difficulty_miss]  = -20 if exercise.difficulty == "beginner"
+      s[:difficulty_match] = 10 if %w[intermediate advanced].include?(exercise.difficulty_level)
+      s[:difficulty_miss]  = -20 if exercise.difficulty_level == "beginner"
     end
 
     total = s.values.sum

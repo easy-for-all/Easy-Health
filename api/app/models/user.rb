@@ -19,6 +19,7 @@ class User < ApplicationRecord
   has_many :ai_usage_logs, dependent: :destroy
   has_many :ai_training_decision_logs, dependent: :destroy
   has_many :coach_insights, dependent: :destroy
+  has_many :coach_recommendations, dependent: :destroy
   has_many :ai_chat_messages, dependent: :destroy
   has_many :user_training_preferences, dependent: :destroy
   has_many :exercise_suggestion_logs, dependent: :destroy
@@ -27,6 +28,7 @@ class User < ApplicationRecord
   has_one :public_profile, dependent: :destroy
   has_many :shared_workouts, foreign_key: :owner_id, dependent: :destroy
   has_many :user_events, dependent: :destroy
+  has_many :user_segments, dependent: :destroy
   has_many :user_badges, dependent: :destroy
   has_many :community_posts, dependent: :destroy
   has_many :community_reactions, dependent: :destroy
@@ -167,8 +169,25 @@ class User < ApplicationRecord
       trial_started_at: created_at,
       trial_ends_at: created_at + TRIAL_DURATION_DAYS.days
     )
-    UserEventService.track(user: self, event: :trial_started)
-    UserEventService.track(user: self, event: :signup_completed)
+    UserEventService.track(
+      user: self,
+      event: :user_created,
+      occurred_at: created_at,
+      idempotency_key: "user_created:#{id}"
+    )
+    UserEventService.track(
+      user: self,
+      event: :trial_started,
+      occurred_at: trial_started_at,
+      metadata: { trial_ends_at: trial_ends_at },
+      idempotency_key: "trial_started:#{id}:#{trial_started_at.to_date}"
+    )
+    UserEventService.track(
+      user: self,
+      event: :signup_completed,
+      occurred_at: created_at,
+      idempotency_key: "signup_completed:#{id}"
+    )
   end
 
   def create_public_profile_record

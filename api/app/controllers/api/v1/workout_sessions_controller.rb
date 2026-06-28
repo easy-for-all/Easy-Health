@@ -45,7 +45,7 @@ module Api
 
         if session.save
           mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
-          UserEventService.track(user: current_user, event: :workout_completed, metadata: { session_id: session.id, duration_minutes: session.duration_minutes })
+          track_workout_session_event(session)
           FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_completed")
           render json: session_json(session), status: :created
         else
@@ -239,6 +239,44 @@ module Api
         current_user.update_columns(
           free_workout_used: true,
           first_workout_completed_at: Time.current
+        )
+      end
+
+      def track_workout_session_event(session)
+        status = session.completion_status.presence || "completed"
+        event = case status
+                when "completed_partial" then :workout_completed_partial
+                when "abandoned" then :workout_abandoned
+                else :workout_completed
+                end
+
+        metadata = {
+          workout_session_id: session.id,
+          workout_day_id: session.workout_day_id,
+          duration_minutes: session.duration_minutes,
+          completion_status: status,
+          completion_rate: session.completion_rate,
+          completed_sets_count: session.completed_sets_count,
+          planned_sets_count: session.planned_sets_count
+        }.compact
+
+        UserEventService.track(
+          user: current_user,
+          event: event,
+          metadata: metadata,
+          occurred_at: session.completed_at,
+          idempotency_key: "#{event}:#{current_user.id}:#{session.id}"
+        )
+
+        return unless status == "completed"
+        return unless current_user.workout_sessions.where(completion_status: "completed").count == 1
+
+        UserEventService.track(
+          user: current_user,
+          event: :first_workout_completed,
+          metadata: metadata,
+          occurred_at: session.completed_at,
+          idempotency_key: "first_workout_completed:#{current_user.id}:#{session.id}"
         )
       end
 

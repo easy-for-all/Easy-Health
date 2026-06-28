@@ -12,6 +12,14 @@ module Api
                                   .left_joins(:subscription)
                                   .where("subscriptions.status IS NULL OR subscriptions.status NOT IN ('active','trialing')")
                                   .count
+        trial_expiring_24h_count = User.where(trial_ends_at: Time.current..24.hours.from_now)
+                                       .left_joins(:subscription)
+                                       .where("subscriptions.status IS NULL OR subscriptions.status NOT IN ('active','trialing')")
+                                       .count
+        trial_expiring_48h_count = User.where(trial_ends_at: Time.current..48.hours.from_now)
+                                       .left_joins(:subscription)
+                                       .where("subscriptions.status IS NULL OR subscriptions.status NOT IN ('active','trialing')")
+                                       .count
         premium_count       = User.joins(:subscription).where(subscriptions: { status: "active" }).count
 
         # Legacy Stripe trialing
@@ -20,12 +28,29 @@ module Api
         # Workout engagement
         users_created_workouts   = User.joins(:workout_plans).distinct.count
         users_completed_workouts = User.joins(:workout_sessions).distinct.count
+        users_plan_not_started   = User.joins(:workout_plans)
+                                       .left_joins(:workout_sessions)
+                                       .where(workout_sessions: { id: nil })
+                                       .distinct
+                                       .count
 
         users_with_2plus_sessions = WorkoutSession.group(:user_id).having("COUNT(*) >= 2").count.size
         users_with_3plus_sessions = WorkoutSession.group(:user_id).having("COUNT(*) >= 3").count.size
 
         active_last_7_days  = WorkoutSession.where("completed_at > ?", 7.days.ago).distinct.count(:user_id)
         active_last_30_days = WorkoutSession.where("completed_at > ?", 30.days.ago).distinct.count(:user_id)
+        active_segment_counts = UserSegment.active.group(:segment_name).count
+        make_events_today = UserEvent.where(make_delivery_status: "delivered", created_at: Time.current.beginning_of_day..).count
+        make_events_failed = UserEvent.where(make_delivery_status: "failed").count
+        recent_relationship_events = UserEvent.order(created_at: :desc).limit(10).map do |event|
+          {
+            id: event.id,
+            user_id: event.user_id,
+            event_name: event.event_name,
+            occurred_at: event.occurred_at&.iso8601,
+            make_delivery_status: event.make_delivery_status
+          }
+        end
 
         # Retention D1/D7/D30 — base: users registered before the cutoff
         d1_base    = User.where("created_at <= ?", 1.day.ago).count
@@ -64,18 +89,30 @@ module Api
           # Trial / subscription status
           trial_active_count: trial_active_count,
           trial_expired_count: trial_expired_count,
+          trial_expiring_24h_count: trial_expiring_24h_count,
+          trial_expiring_48h_count: trial_expiring_48h_count,
+          trial_expired_without_subscription_count: trial_expired_count,
           premium_count: premium_count,
           stripe_trialing_count: stripe_trialing_count,
 
           # Workout engagement
           users_created_workouts: users_created_workouts,
           users_completed_workouts: users_completed_workouts,
+          users_plan_not_started: users_plan_not_started,
           users_with_2plus_sessions: users_with_2plus_sessions,
           users_with_3plus_sessions: users_with_3plus_sessions,
 
           # Activity
           active_last_7_days: active_last_7_days,
           active_last_30_days: active_last_30_days,
+          inactive_3_days_count: active_segment_counts["inactive_3_days"].to_i,
+          inactive_7_days_count: active_segment_counts["inactive_7_days"].to_i,
+          inactive_15_days_count: active_segment_counts["inactive_15_days"].to_i,
+          churn_risk_count: active_segment_counts["churn_risk"].to_i,
+          completed_partial_recently_count: active_segment_counts["completed_partial_recently"].to_i,
+          make_events_delivered_today: make_events_today,
+          make_events_failed: make_events_failed,
+          recent_relationship_events: recent_relationship_events,
 
           # Retention
           retention_d1: d1_base > 0 ? (d1_retained.to_f / d1_base * 100).round(1) : 0,
@@ -115,7 +152,7 @@ module Api
         # Evitar expor PII na listagem administrativa para reduzir risco em prints e compartilhamento de tela.
         scope = User.all
                     .left_joins(:subscription)
-                    .includes(:subscription, :workout_plans, :workout_sessions, :user_events, :fitness_profile)
+                    .includes(:subscription, :workout_plans, :workout_sessions, :user_events, :user_segments, :fitness_profile)
 
         scope = apply_filter(scope, filter)
         total = scope.count("users.id")
@@ -132,7 +169,7 @@ module Api
       end
 
       def user_detail
-        user = User.includes(:subscription, :workout_plans, :workout_sessions, :user_events)
+        user = User.includes(:subscription, :workout_plans, :workout_sessions, :user_events, :user_segments)
                    .find(params[:id])
         render json: full_user_detail(user)
       end
@@ -178,6 +215,9 @@ module Api
         when "engagement_low"
           scope.left_joins(:workout_plans, :workout_sessions)
                .where(workout_plans: { id: nil }, workout_sessions: { id: nil })
+        when /\Asegment:(.+)\z/
+          scope.joins(:user_segments)
+               .where(user_segments: { segment_name: Regexp.last_match(1), active: true })
         else
           scope
         end
@@ -203,6 +243,7 @@ module Api
           last_activity_at: activity[:at],
           last_activity_label: activity[:label],
           engagement_level: engagement_score(sessions_count, plans_count, user.workout_sessions),
+          active_segments: user.user_segments.select(&:active?).map(&:segment_name).sort,
           primary_persona:          fp&.primary_persona,
           training_archetype:       fp&.training_archetype,
           behavior_pattern:         fp&.behavior_pattern,
@@ -235,9 +276,10 @@ module Api
           last_activity_at: activity[:at],
           last_activity_label: activity[:label],
           engagement_level: engagement_score(sessions_count, plans_count, user.workout_sessions),
+          active_segments: user.user_segments.select(&:active?).map(&:segment_name).sort,
           recent_events: user.user_events
                              .sort_by(&:created_at).last(10).reverse
-                             .map { |e| { name: e.event_name, created_at: e.created_at.iso8601 } }
+                             .map { |e| { name: e.event_name, created_at: e.created_at.iso8601, make_delivery_status: e.make_delivery_status } }
         }
       end
 

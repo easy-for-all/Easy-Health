@@ -10,14 +10,26 @@ type AdminStats = {
   total_users: number;
   trial_active_count: number;
   trial_expired_count: number;
+  trial_expiring_24h_count?: number;
+  trial_expiring_48h_count?: number;
+  trial_expired_without_subscription_count?: number;
   premium_count: number;
   stripe_trialing_count: number;
   users_created_workouts: number;
   users_completed_workouts: number;
+  users_plan_not_started?: number;
   users_with_2plus_sessions: number;
   users_with_3plus_sessions: number;
   active_last_7_days: number;
   active_last_30_days: number;
+  inactive_3_days_count?: number;
+  inactive_7_days_count?: number;
+  inactive_15_days_count?: number;
+  churn_risk_count?: number;
+  completed_partial_recently_count?: number;
+  make_events_delivered_today?: number;
+  make_events_failed?: number;
+  recent_relationship_events?: Array<{ id: number; user_id: number; event_name: string; occurred_at: string | null; make_delivery_status: string }>;
   retention_d1: number;
   retention_d7: number;
   retention_d30: number;
@@ -42,13 +54,14 @@ type AdminUser = {
   last_activity_at: string | null;
   last_activity_label: string;
   engagement_level: "low" | "medium" | "high";
+  active_segments?: string[];
 };
 
 type AdminUserDetail = AdminUser & {
   name: string;
   email: string;
   trial_ends_at: string | null;
-  recent_events: Array<{ name: string; created_at: string }>;
+  recent_events: Array<{ name: string; created_at: string; make_delivery_status?: string }>;
 };
 
 type UsersResponse = {
@@ -69,6 +82,10 @@ const FILTERS = [
   { value: "3plus_sessions", label: "Executou 3+ treinos" },
   { value: "active_7d", label: "Ativo últimos 7 dias" },
   { value: "inactive_7d", label: "Inativo últimos 7 dias" },
+  { value: "segment:inactive_3_days", label: "Inativo 3d" },
+  { value: "segment:inactive_15_days", label: "Inativo 15d" },
+  { value: "segment:churn_risk", label: "Churn risk" },
+  { value: "segment:completed_partial_recently", label: "Parcial recente" },
   { value: "engagement_high", label: "Engaj. Alto" },
   { value: "engagement_medium", label: "Engaj. Médio" },
   { value: "engagement_low", label: "Engaj. Baixo" },
@@ -103,7 +120,23 @@ const EVENT_LABELS: Record<string, string> = {
   paywall_viewed: "Paywall visto",
   checkout_started: "Checkout iniciado",
   subscription_created: "Assinatura criada",
+  subscription_renewed: "Assinatura renovada",
+  subscription_canceled: "Assinatura cancelada",
   trial_expired: "Trial expirado",
+  trial_day_1: "Trial D1",
+  trial_day_3: "Trial D3",
+  trial_day_6: "Trial D6",
+  first_workout_created: "Primeiro treino criado",
+  first_workout_completed: "Primeiro treino concluído",
+  workout_completed_partial: "Treino parcial",
+  workout_abandoned: "Treino abandonado",
+  user_inactive_3_days: "Inativo 3 dias",
+  user_inactive_7_days: "Inativo 7 dias",
+  user_inactive_15_days: "Inativo 15 dias",
+  body_photo_uploaded: "Foto corporal enviada",
+  body_photo_deleted: "Foto corporal excluída",
+  plan_created_but_not_used: "Plano sem uso",
+  trial_expired_without_subscription: "Trial expirado sem assinatura",
 };
 
 function StatCard({ label, value, description, pct }: { label: string; value: number | undefined; description: string; pct?: boolean }) {
@@ -217,11 +250,27 @@ export default function AdminPage() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">Engajamento</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatCard label="Criaram treino" value={stats?.users_created_workouts} description="Usuários com plano gerado" />
+            <StatCard label="Treino sem execução" value={stats?.users_plan_not_started} description="Plano criado sem sessão" />
             <StatCard label="Executaram treino" value={stats?.users_completed_workouts} description="Pelo menos 1 sessão" />
             <StatCard label="2+ treinos" value={stats?.users_with_2plus_sessions} description="Realizaram 2 ou mais" />
             <StatCard label="3+ treinos" value={stats?.users_with_3plus_sessions} description="Usuários engajados" />
             <StatCard label="Ativos 7d" value={stats?.active_last_7_days} description="Sessão nos últimos 7 dias" />
             <StatCard label="Ativos 30d" value={stats?.active_last_30_days} description="Sessão nos últimos 30 dias" />
+          </div>
+        </section>
+
+        {/* Relationship journey */}
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">Jornada</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label="Expira 24h" value={stats?.trial_expiring_24h_count} description="Trial ativo" />
+            <StatCard label="Expira 48h" value={stats?.trial_expiring_48h_count} description="Trial ativo" />
+            <StatCard label="Inativos 7d" value={stats?.inactive_7_days_count} description="Segmento ativo" />
+            <StatCard label="Churn risk" value={stats?.churn_risk_count} description="Assinantes em risco" />
+            <StatCard label="Parcial recente" value={stats?.completed_partial_recently_count} description="Últimos 7 dias" />
+            <StatCard label="Make hoje" value={stats?.make_events_delivered_today} description="Eventos entregues" />
+            <StatCard label="Make falhou" value={stats?.make_events_failed} description="Eventos com erro" />
+            <StatCard label="Trial sem assinatura" value={stats?.trial_expired_without_subscription_count} description="Expirados" />
           </div>
         </section>
 
@@ -310,7 +359,12 @@ export default function AdminPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
-                          {u.last_activity_label}
+                          <div>{u.last_activity_label}</div>
+                          {u.active_segments && u.active_segments.length > 0 && (
+                            <div className="mt-1 max-w-[180px] truncate text-[10px] text-[var(--text-dim)]">
+                              {u.active_segments.slice(0, 3).join(", ")}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -437,8 +491,9 @@ export default function AdminPage() {
                       {userDetail.recent_events.map((ev, i) => (
                         <div key={i} className="flex items-center justify-between text-xs">
                           <span className="text-[var(--text)]">{EVENT_LABELS[ev.name] ?? ev.name}</span>
-                          <span className="text-[var(--text-dim)]">
+                          <span className="text-right text-[var(--text-dim)]">
                             {new Date(ev.created_at).toLocaleDateString("pt-BR")}
+                            {ev.make_delivery_status && ` · ${ev.make_delivery_status}`}
                           </span>
                         </div>
                       ))}

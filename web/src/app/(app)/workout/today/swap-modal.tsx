@@ -81,10 +81,10 @@ const SEARCH_SYNONYMS: Record<string, string[]> = {
 };
 
 function expandSearchTerm(term: string): string {
-  const normalized = term.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const normalized = term.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
   const synonyms = SEARCH_SYNONYMS[normalized];
-  if (synonyms) return synonyms[0]; // use the most common form for API search
-  return term;
+  if (synonyms) return synonyms[0];
+  return normalized;
 }
 
 function parseEquipmentIntent(text: string): string | null {
@@ -169,13 +169,14 @@ export function SwapModal({
   const fetchFavorites = useCallback(async (wde: WorkoutDayExercise) => {
     setFavoritesLoading(true);
     try {
+      const excludeIds = [...new Set([wde.exercise_id, ...allWorkoutExerciseIds])].join(",");
       const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
-      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&only_favorites=true`);
+      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&only_favorites=true&exclude_ids=${excludeIds}`);
       setAlternatives(data);
     } finally {
       setFavoritesLoading(false);
     }
-  }, []);
+  }, [allWorkoutExerciseIds]);
 
   useEffect(() => {
     openSwapFetch(exercise);
@@ -187,8 +188,9 @@ export function SwapModal({
     try {
       const excludeIds = [...new Set([exercise.exercise_id, ...allWorkoutExerciseIds, ...additionalExcludes])].join(",");
       const expandedName = expandSearchTerm(name);
-      // When searching by name/intent, don't restrict by muscle_group to allow broader results
       const params = new URLSearchParams({ name: expandedName, exclude_ids: excludeIds });
+      if (swapFilter?.muscle_group) params.set("muscle_group", swapFilter.muscle_group);
+      if (swapFilter?.exercise_type) params.set("exercise_type", swapFilter.exercise_type);
       const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${params.toString()}`);
       setAlternatives(data);
       trackShownIds(data);
@@ -198,7 +200,7 @@ export function SwapModal({
     } finally {
       setSearchLoading(false);
     }
-  }, [exercise.exercise_id, exercise.muscle_group, exercise.exercise_type, allWorkoutExerciseIds]);
+  }, [exercise.exercise_id, exercise.muscle_group, exercise.exercise_type, allWorkoutExerciseIds, swapFilter]);
 
   async function fetchByFilter(filter: { muscle_group?: string; exercise_type?: string }) {
     const compatibleGroup = exercise.muscle_group ?? null;
@@ -249,7 +251,6 @@ export function SwapModal({
 
   function handleSearchChange(value: string) {
     setSwapSearch(value);
-    setSwapFilter(null);
     setNoMoreOptions(false);
     setNoMoreMessage(null);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -301,6 +302,15 @@ export function SwapModal({
   function handleResetAndSearch() {
     setShownIds(new Set());
     setNoMoreOptions(false);
+    openSwapFetch(exercise);
+  }
+
+  function handleClearFilters() {
+    setSwapSearch("");
+    setSwapFilter(null);
+    setOnlyFavorites(false);
+    setNoMoreOptions(false);
+    setNoMoreMessage(null);
     openSwapFetch(exercise);
   }
 
@@ -609,7 +619,15 @@ export function SwapModal({
                 </button>
               </>
             ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma alternativa encontrada.</p>
+              <>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum exercício encontrado com esses filtros.</p>
+                <button
+                  onClick={handleClearFilters}
+                  className="mt-2 text-xs font-semibold text-primary-500 underline"
+                >
+                  Limpar filtros
+                </button>
+              </>
             )}
           </div>
         ) : (

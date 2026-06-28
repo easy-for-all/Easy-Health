@@ -46,6 +46,16 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleMarketingConsentToggle(value: boolean) {
+    setSaving(true);
+    try {
+      await updatePrivacy({ marketing_consent: value });
+      showSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleProfileToggle(field: string, value: boolean) {
     setSaving(true);
     try {
@@ -118,6 +128,12 @@ export default function SettingsPage() {
               onChange={handleCommunityToggle}
               label={t("community")}
               description={t("community_desc")}
+            />
+            <PrivacyToggle
+              checked={settings.marketing_consent}
+              onChange={handleMarketingConsentToggle}
+              label={t("marketing_consent")}
+              description={t("marketing_consent_desc")}
             />
           </div>
         </section>

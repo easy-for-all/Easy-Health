@@ -10,9 +10,10 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+  enable_extension "unaccent"
   enable_extension "vector"
 
   create_table "active_storage_attachments", force: :cascade do |t|
@@ -325,10 +326,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
-# Could not dump table "knowledge_chunks" because of following StandardError
-#   Unknown type 'vector(1536)' for column 'embedding'
-
-
   create_table "knowledge_documents", force: :cascade do |t|
     t.boolean "active", default: true, null: false
     t.string "category", null: false
@@ -401,6 +398,38 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
     t.index ["user_id"], name: "index_public_profiles_on_user_id", unique: true
   end
 
+  create_table "relationship_messages", force: :cascade do |t|
+    t.string "channel", null: false
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.string "event_name", null: false
+    t.datetime "failed_at"
+    t.string "idempotency_key"
+    t.string "journey_key"
+    t.jsonb "metadata_json", default: {}
+    t.string "provider", null: false
+    t.string "provider_message_id"
+    t.jsonb "provider_response_json", default: {}
+    t.string "recipient_email"
+    t.datetime "sent_at"
+    t.datetime "skipped_at"
+    t.string "status", default: "pending", null: false
+    t.string "step_key"
+    t.string "subject"
+    t.string "template_key"
+    t.datetime "updated_at", null: false
+    t.bigint "user_event_id"
+    t.bigint "user_id", null: false
+    t.index ["event_name"], name: "index_relationship_messages_on_event_name"
+    t.index ["idempotency_key"], name: "index_relationship_messages_on_idempotency_key", unique: true
+    t.index ["journey_key"], name: "index_relationship_messages_on_journey_key"
+    t.index ["provider_message_id"], name: "index_relationship_messages_on_provider_message_id"
+    t.index ["status"], name: "index_relationship_messages_on_status"
+    t.index ["template_key"], name: "index_relationship_messages_on_template_key"
+    t.index ["user_event_id"], name: "index_relationship_messages_on_user_event_id"
+    t.index ["user_id"], name: "index_relationship_messages_on_user_id"
+  end
+
   create_table "shared_workouts", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "expires_at"
@@ -471,9 +500,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
   create_table "user_events", force: :cascade do |t|
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.string "event_name", null: false
+    t.string "idempotency_key"
+    t.integer "make_attempts_count", default: 0, null: false
+    t.string "make_delivery_status", default: "disabled", null: false
+    t.datetime "make_last_attempt_at"
+    t.text "make_last_error"
     t.jsonb "metadata", default: {}
+    t.datetime "occurred_at", null: false
+    t.jsonb "payload_json", default: {}, null: false
+    t.string "source", default: "easyhealth_backend", null: false
+    t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.index ["event_name", "created_at"], name: "index_user_events_on_event_name_and_created_at"
+    t.index ["idempotency_key"], name: "index_user_events_on_idempotency_key"
+    t.index ["make_delivery_status", "created_at"], name: "index_user_events_on_make_status_and_created_at"
+    t.index ["user_id", "event_name", "idempotency_key"], name: "index_user_events_on_user_event_idempotency", unique: true, where: "(idempotency_key IS NOT NULL)"
     t.index ["user_id", "event_name"], name: "index_user_events_on_user_id_and_event_name"
     t.index ["user_id"], name: "index_user_events_on_user_id"
   end
@@ -499,6 +540,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
     t.index ["user_id"], name: "index_user_media_on_user_id"
   end
 
+  create_table "user_segments", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.datetime "calculated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "created_at", null: false
+    t.jsonb "metadata_json", default: {}, null: false
+    t.string "reason"
+    t.string "segment_name", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["calculated_at"], name: "index_user_segments_on_calculated_at"
+    t.index ["segment_name", "active"], name: "index_user_segments_on_segment_name_and_active"
+    t.index ["user_id", "segment_name"], name: "index_user_segments_on_user_id_and_segment_name", unique: true
+    t.index ["user_id"], name: "index_user_segments_on_user_id"
+  end
+
   create_table "user_training_preferences", force: :cascade do |t|
     t.decimal "confidence", precision: 3, scale: 2, default: "1.0"
     t.datetime "created_at", null: false
@@ -520,9 +576,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
     t.datetime "created_at", null: false
     t.datetime "deletion_requested_at"
     t.string "email", default: "", null: false
+    t.datetime "email_bounced_at"
     t.string "encrypted_password", default: "", null: false
     t.datetime "first_workout_completed_at"
     t.boolean "free_workout_used", default: false, null: false
+    t.datetime "last_marketing_email_sent_at"
+    t.boolean "marketing_consent", default: false, null: false
     t.string "name", default: "", null: false
     t.string "profile_visibility", default: "private", null: false
     t.string "provider"
@@ -534,13 +593,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
     t.datetime "trial_ends_at"
     t.datetime "trial_started_at"
     t.string "uid"
+    t.datetime "unsubscribed_at"
     t.datetime "updated_at", null: false
     t.index ["account_type"], name: "index_users_on_account_type"
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["email_bounced_at"], name: "index_users_on_email_bounced_at"
+    t.index ["marketing_consent"], name: "index_users_on_marketing_consent"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
     t.index ["referral_code"], name: "index_users_on_referral_code", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["trial_ends_at"], name: "index_users_on_trial_ends_at"
+    t.index ["unsubscribed_at"], name: "index_users_on_unsubscribed_at"
   end
 
   create_table "workout_day_exercises", force: :cascade do |t|
@@ -582,15 +645,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
   create_table "workout_sessions", force: :cascade do |t|
     t.integer "calories_estimated"
     t.datetime "completed_at"
+    t.integer "completed_sets_count"
+    t.decimal "completion_rate", precision: 5, scale: 2
+    t.string "completion_status", default: "completed", null: false
     t.datetime "created_at", null: false
     t.integer "duration_minutes"
     t.jsonb "exercise_logs", default: [], null: false
+    t.jsonb "extra_block_data", default: {}, null: false
+    t.string "extra_block_type"
+    t.datetime "extra_completed_at"
+    t.datetime "extra_started_at"
     t.integer "fatigue_level"
     t.text "notes"
+    t.integer "planned_sets_count"
+    t.jsonb "skipped_exercises", default: [], null: false
     t.string "source"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "workout_day_id"
+    t.index ["completion_status"], name: "index_workout_sessions_on_completion_status"
     t.index ["user_id"], name: "index_workout_sessions_on_user_id"
     t.index ["workout_day_id"], name: "index_workout_sessions_on_workout_day_id"
   end
@@ -630,30 +703,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_21_222519) do
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
-  add_foreign_key "knowledge_chunks", "knowledge_documents"
-  add_foreign_key "personal_alerts", "users", column: "client_id"
-  add_foreign_key "personal_alerts", "users", column: "personal_id"
-  add_foreign_key "personal_client_relationships", "users", column: "client_id"
-  add_foreign_key "personal_client_relationships", "users", column: "personal_id"
-  add_foreign_key "personal_notes", "users", column: "client_id"
-  add_foreign_key "personal_notes", "users", column: "personal_id"
-  add_foreign_key "public_profiles", "users"
-  add_foreign_key "shared_workouts", "users", column: "owner_id"
-  add_foreign_key "subscriptions", "users"
-  add_foreign_key "trainer_profiles", "users"
-  add_foreign_key "user_badges", "users"
-  add_foreign_key "user_events", "users"
-  add_foreign_key "user_favorite_exercises", "exercises"
-  add_foreign_key "user_favorite_exercises", "users"
-  add_foreign_key "user_media", "users"
-  add_foreign_key "user_training_preferences", "users"
-  add_foreign_key "workout_day_exercises", "exercises"
-  add_foreign_key "workout_day_exercises", "workout_days"
-  add_foreign_key "workout_days", "workout_plans"
-  add_foreign_key "workout_plans", "users"
-  add_foreign_key "workout_sessions", "users"
-  add_foreign_key "workout_sessions", "workout_days"
-  add_foreign_key "workout_strategies", "fitness_profiles"
-  add_foreign_key "workout_strategies", "users"
-  add_foreign_key "workout_strategies", "workout_plans"
+  add_foreign_key "user_segments", "users"
 end

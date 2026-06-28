@@ -46,6 +46,7 @@ export interface PrivacySettings {
   account_type: AccountType;
   profile_visibility: ProfileVisibility;
   community_enabled: boolean;
+  marketing_consent: boolean;
   referral_code: string;
 }
 

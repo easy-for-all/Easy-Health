@@ -12,15 +12,18 @@ module Api
         exercises = exercises.where(equipment_type: params[:equipment_type]) if params[:equipment_type].present?
         if params[:name].present?
           exercises = exercises.where(
-            "name ILIKE :t OR name_en ILIKE :t OR description ILIKE :t",
+            "unaccent(name) ILIKE unaccent(:t) OR unaccent(name_en) ILIKE unaccent(:t) OR unaccent(description) ILIKE unaccent(:t)",
             t: "%#{params[:name]}%"
           )
         end
 
         if params[:only_favorites] == "true"
           exercises = exercises.where(id: favorite_ids.to_a)
-        else
-          exercises = exercises.where.not(id: params[:exclude_ids].to_s.split(",")) if params[:exclude_ids].present?
+        end
+
+        if params[:exclude_ids].present?
+          exclude = params[:exclude_ids].to_s.split(",").map(&:to_i).select(&:positive?)
+          exercises = exercises.where.not(id: exclude)
         end
 
         sorted = exercises.sort_by { |e| favorite_ids.include?(e.id) ? 0 : 1 }
