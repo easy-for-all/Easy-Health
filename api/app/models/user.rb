@@ -79,7 +79,8 @@ class User < ApplicationRecord
         uid: auth.uid,
         email: auth.info.email,
         name: auth.info.name.presence || auth.info.email.split("@").first,
-        password: Devise.friendly_token[0, 20]
+        password: Devise.friendly_token[0, 20],
+        marketing_consent: true
       )
     end
 
