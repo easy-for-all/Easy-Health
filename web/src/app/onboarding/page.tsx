@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { OptionCard } from "@/shared/components/ui/option-card";
 import { ExercisePreferencePicker } from "@/features/profile/exercise-preference-picker";
-import { GeneratingView } from "@/shared/components/generating-view";
 import type {
   BodyFocus,
   Equipment,
@@ -20,15 +19,6 @@ import type {
   TrainingStyle,
 } from "@/shared/types/health-profile";
 import "@/shared/components/ui/ui.css";
-
-const GENERATION_STEPS = [
-  "Analisando seu perfil",
-  "Configurando dias de treino",
-  "Definindo divisão muscular",
-  "Selecionando exercícios",
-  "Ajustando séries e cargas",
-  "Finalizando planejamento",
-];
 
 type Duration = 15 | 25 | 35 | 45 | 60;
 
@@ -152,9 +142,6 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [genStep, setGenStep] = useState(0);
-  const genStepRef = useRef(0);
   const [customLimitation, setCustomLimitation] = useState("");
   const [form, setForm] = useState<FormData>({
     goal: "", fitness_level: "", age: "30", weight_kg: "75", height_cm: "175", gender: "",
@@ -234,31 +221,12 @@ export default function OnboardingPage() {
         }
       }
       trackEvent(EVENTS.ONBOARDING_COMPLETED);
-
-      // Show generating animation while plan is being created in background
-      setLoading(false);
-      setGenerating(true);
-      genStepRef.current = 0;
-      setGenStep(0);
-
-      const STEP_MS = 700;
-      const interval = setInterval(() => {
-        const next = Math.min(genStepRef.current + 1, GENERATION_STEPS.length - 1);
-        genStepRef.current = next;
-        setGenStep(next);
-      }, STEP_MS);
-
-      // Wait enough time to show the animation, then navigate
-      await new Promise<void>((resolve) => setTimeout(resolve, GENERATION_STEPS.length * STEP_MS + 800));
-      clearInterval(interval);
       router.push("/plan?from_onboarding=1");
     } catch {
       setLoading(false);
-      setError("Não conseguimos salvar agora. Tente novamente em instantes.");
+      setError("Não conseguimos salvar seu perfil. Tente novamente em instantes.");
     }
   }
-
-  if (generating) return <GeneratingView step={genStep} steps={GENERATION_STEPS} />;
 
   if (step === 1) return <Screen step={1}>
     <h2 className="wizard-title">Qual é seu objetivo principal agora?</h2>
