@@ -49,6 +49,7 @@ docs/
 !docs/
 !docs/production-deploy.md
 !docs/production-backup-and-restore.md
+!docs/android-internal-testing-deploy.md
 
 # =========================
 # CLAUDE / LOCAL (internal AI tooling — not for public tracking)
@@ -68,3 +69,9 @@ public/generated-exercise-videos/
 data/exercises_selected/
 data/all_exercises.txt
 data/common_exercises.txt
+easyhealth-release.jks
+*.jks
+*.keystore
+key.properties
+service-account.json
+google-play-service-account.json
