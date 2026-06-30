@@ -6,10 +6,20 @@ import type { CoachRecommendation } from "@/shared/types/coach-recommendation";
 
 type CardStatus = "loading" | "idle" | "pending" | "accepting" | "accepted" | "dismissing" | "dismissed";
 
-export function CoachRecommendationCard() {
+interface Props {
+  onResolved?: () => void;
+}
+
+export function CoachRecommendationCard({ onResolved }: Props = {}) {
   const [recommendation, setRecommendation] = useState<CoachRecommendation | null>(null);
   const [status, setStatus] = useState<CardStatus>("loading");
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (status === "idle") {
+      onResolved?.();
+    }
+  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     api

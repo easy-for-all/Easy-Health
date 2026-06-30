@@ -15,11 +15,12 @@ Rails.application.routes.draw do
       get "health", to: "health#show"
 
       namespace :auth do
-        post   "sign_up",  to: "registrations#create"
-        post   "sign_in",  to: "sessions#create"
-        delete "sign_out", to: "sessions#destroy"
-        get    "me",       to: "sessions#show"
-        delete "account",  to: "registrations#destroy"
+        post   "sign_up",          to: "registrations#create"
+        post   "sign_in",          to: "sessions#create"
+        delete "sign_out",         to: "sessions#destroy"
+        get    "me",               to: "sessions#show"
+        delete "account",          to: "registrations#destroy"
+        get    "mobile_callback",  to: "mobile_callbacks#exchange"
 
         scope "/password" do
           post "forgot", to: "passwords#forgot"
