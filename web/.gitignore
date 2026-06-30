@@ -41,11 +41,8 @@ yarn-error.log*
 next-env.d.ts
 .env.production
 
-# android — build outputs and local secrets (android/ dir itself is versioned)
-android/local.properties
-android/.gradle/
-android/app/build/
-android/build/
+# android — entire folder is local only, regenerated in CI via cap add android
+android/
 *.keystore
 *.jks
 key.properties

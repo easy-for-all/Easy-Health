@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Easy Health</string>
-    <string name="title_activity_main">Easy Health</string>
-    <string name="package_name">art.easyhealth.app</string>
-    <string name="custom_url_scheme">art.easyhealth.app</string>
-</resources>

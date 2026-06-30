@@ -37,6 +37,16 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Add Android platform
+        working-directory: web
+        run: npx cap add android
+
+      - name: Apply custom build config
+        working-directory: web
+        run: |
+          cp android-config/app-build.gradle android/app/build.gradle
+          cp android-config/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
+
       - name: Sync Capacitor
         working-directory: web
         run: npx cap sync android
