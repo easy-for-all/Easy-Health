@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { api, ApiError, TRIAL_EXPIRED_EVENT } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
+import { Capacitor } from "@capacitor/core";
 
 interface AuthContextValue {
   user: User | null;
@@ -18,6 +19,33 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let cleanup: (() => void) | undefined;
+    import("@capacitor/app").then(({ App }) => {
+      const listenerPromise = App.addListener("appUrlOpen", async (event) => {
+        try {
+          const url = new URL(event.url);
+          if (url.protocol === "easyhealth:" && url.hostname === "auth-callback") {
+            const token = url.searchParams.get("token");
+            if (!token) return;
+            const { Browser } = await import("@capacitor/browser");
+            await Browser.close().catch(() => undefined);
+            const user = await api.get<User & { new_user?: boolean }>(`/api/v1/auth/mobile_callback?token=${token}`);
+            setUser(user);
+            window.location.replace(user.new_user ? "/onboarding" : "/dashboard");
+          }
+        } catch {
+          window.location.replace("/login?error=oauth_failed");
+        }
+      });
+      cleanup = () => { listenerPromise.then((l) => l.remove()); };
+    });
+
+    return () => cleanup?.();
+  }, []);
 
   useEffect(() => {
     const publicPaths = ["/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];

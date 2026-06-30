@@ -8,6 +8,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
 import { trackCheckoutStarted } from "@/shared/lib/analytics";
+import { Capacitor } from "@capacitor/core";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -17,6 +18,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+
+  async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (!Capacitor.isNativePlatform()) return;
+    e.preventDefault();
+    const { Browser } = await import("@capacitor/browser");
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2?mobile=1`;
+    await Browser.open({ url });
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,6 +81,7 @@ export default function LoginPage() {
         {/* Google OAuth */}
         <a
           href={`${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2`}
+          onClick={handleGoogleAuth}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
             width: "100%", padding: "14px 16px", borderRadius: "var(--r-pill)",

@@ -7,6 +7,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
 import { trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
+import { Capacitor } from "@capacitor/core";
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -54,6 +55,14 @@ export default function SignUpPage() {
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
 
   const passwordValid = password.length >= 8;
+
+  async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (!Capacitor.isNativePlatform()) return;
+    e.preventDefault();
+    const { Browser } = await import("@capacitor/browser");
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2?mobile=1`;
+    await Browser.open({ url });
+  }
 
   useEffect(() => {
     trackEvent(EVENTS.SIGNUP_STARTED);
@@ -145,6 +154,7 @@ export default function SignUpPage() {
         {/* Google OAuth */}
         <a
           href={`${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2`}
+          onClick={handleGoogleAuth}
           className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-700 bg-slate-900 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
           <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">

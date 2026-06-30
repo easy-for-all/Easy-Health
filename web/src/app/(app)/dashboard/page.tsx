@@ -11,8 +11,7 @@ import { WorkoutDoneCard } from "@/shared/components/workout/workout-done-card";
 import { InsightCard } from "@/shared/components/workout/insight-card";
 import { StreakCard } from "@/shared/components/workout/streak-card";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
-import { CoachInsightsSection } from "@/shared/components/coach-insights-section";
-import { CoachRecommendationCard } from "@/shared/components/coach-recommendation-card";
+import { CoachHomeCard } from "@/shared/components/coach-home-card";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 import { relativeDayLabel, isToday } from "@/shared/utils/relative-date";
 
@@ -213,11 +212,8 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* Coach Recommendation — recomendação acionável de progressão */}
-        <CoachRecommendationCard />
-
-        {/* Coach Insights — aprendizados sobre o usuário */}
-        <CoachInsightsSection />
+        {/* Coach — prioridade: RecommendationCard > InsightsSection */}
+        <CoachHomeCard />
 
         {/* AI Insight */}
         {aiInsight && !aiDismissed && (
