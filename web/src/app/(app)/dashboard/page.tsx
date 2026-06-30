@@ -8,7 +8,6 @@ import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { HeroWorkout } from "@/shared/components/workout/hero-workout";
 import { WorkoutDoneCard } from "@/shared/components/workout/workout-done-card";
-import { InsightCard } from "@/shared/components/workout/insight-card";
 import { StreakCard } from "@/shared/components/workout/streak-card";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { CoachHomeCard } from "@/shared/components/coach-home-card";
@@ -54,9 +53,6 @@ export default function DashboardPage() {
   const [weeklySessions, setWeeklySessions] = useState(0);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [weeklySessionDates, setWeeklySessionDates] = useState<string[]>([]);
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
-  const [aiActionType, setAiActionType] = useState<string | null>(null);
-  const [aiDismissed, setAiDismissed] = useState(false);
   const [todaySession, setTodaySession] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [noProfile, setNoProfile] = useState(false);
@@ -78,10 +74,9 @@ export default function DashboardPage() {
         api.get<{ streak: number; total_sessions: number; sessions_last_30_days: number; weekly_sessions: number; weekly_goal: number; weekly_session_dates?: string[]; dominant_modality?: string; modality_stats?: Record<string, number | null>; fatigue_avg?: number | null; fatigue_trend?: number | null; suggest_deload?: boolean }>(
           "/api/v1/workout_sessions/stats"
         ).catch(() => null),
-        api.get<{ recommendations?: { action: string; suggestion: string; reason: string; priority: string }[] }>("/api/v1/ai_agents/personal_trainer").catch(() => null),
         api.get<WorkoutSession | Record<string, never>>("/api/v1/workout_sessions/today").catch(() => null),
         api.get<PersonalRecord[]>("/api/v1/workout_sessions/personal_records").catch(() => []),
-      ]).then(([p, s, ai, todayRaw, prs]) => {
+      ]).then(([p, s, todayRaw, prs]) => {
         if (!p) setNoProfile(true);
         setPlan(p);
         setStreak(s?.streak ?? 0);
@@ -93,11 +88,6 @@ export default function DashboardPage() {
         setFatigueAvg(s?.fatigue_avg ?? null);
         setFatigueTrend(s?.fatigue_trend ?? null);
         setSuggestDeload(s?.suggest_deload ?? false);
-        const topRec = ai?.recommendations?.find((r) => r.priority === "high") ?? ai?.recommendations?.[0];
-        if (topRec?.suggestion) {
-          setAiInsight(`${topRec.suggestion}${topRec.reason ? ` <b>—</b> ${topRec.reason}` : ""}`);
-          setAiActionType(topRec.action ?? null);
-        }
         if (todayRaw && "id" in todayRaw) {
           setTodaySession(todayRaw as WorkoutSession);
         }
@@ -214,24 +204,6 @@ export default function DashboardPage() {
 
         {/* Coach — prioridade: RecommendationCard > InsightsSection */}
         <CoachHomeCard />
-
-        {/* AI Insight */}
-        {aiInsight && !aiDismissed && (
-          <InsightCard
-            text={aiInsight}
-            onDismiss={() => setAiDismissed(true)}
-            actionLabel={
-              aiActionType === "deload" ? "Ver treino rápido →" :
-              aiActionType === "progressao" || aiActionType === "aumentar_peso" || aiActionType === "reduzir_peso" ? "Ver minha evolução →" :
-              undefined
-            }
-            actionHref={
-              aiActionType === "deload" ? "/workout/quick" :
-              aiActionType === "progressao" || aiActionType === "aumentar_peso" || aiActionType === "reduzir_peso" ? "/history" :
-              undefined
-            }
-          />
-        )}
 
         {/* Streak */}
         <StreakCard
