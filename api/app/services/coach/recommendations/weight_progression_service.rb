@@ -27,6 +27,7 @@ module Coach
 
         result = LoadProgressionService.new(user: @user, exercise_id: exercise_id).call
         return unless result[:action] == "increase" && result[:suggested_weight].present?
+        return if already_planned?(exercise_id, result[:suggested_weight])
 
         exercise = Exercise.find_by(id: exercise_id)
         return unless exercise
@@ -51,8 +52,24 @@ module Coach
 
       def pending_exists?(exercise_id)
         CoachRecommendation.for_user(@user)
-          .pending
           .where(exercise_id: exercise_id, recommendation_type: RECOMMENDATION_TYPE)
+          .where(
+            "status = 'pending' OR (status = 'accepted' AND accepted_at > ?)",
+            7.days.ago
+          )
+          .exists?
+      end
+
+      def already_planned?(exercise_id, suggested_weight)
+        return false unless suggested_weight
+
+        active_plan = @user.workout_plans.find_by(active: true)
+        return false unless active_plan
+
+        active_plan.workout_days
+          .joins(:workout_day_exercises)
+          .where(workout_day_exercises: { exercise_id: exercise_id })
+          .where("workout_day_exercises.planned_weight >= ?", suggested_weight)
           .exists?
       end
 

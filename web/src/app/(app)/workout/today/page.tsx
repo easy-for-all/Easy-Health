@@ -72,82 +72,42 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 // ── Rest timer dynamic messages ─────────────────────────────────────────────
 interface RestCtx {
   exerciseName: string;
-  setNumber: number;
-  totalSets: number;
   muscleGroup?: string | null;
   isLastExercise: boolean;
-  weightKg?: number;
   isWarmup?: boolean;
-  // Contextual workout progress fields
-  exercisesRemaining?: number;
-  setsRemainingTotal?: number;
-  progressPct?: number;
-  estimatedMinutesLeft?: number;
-  nextExerciseName?: string;
-  nextExerciseTip?: string;
 }
 
-const GENERIC_REST_MESSAGES = [
-  "Respire. Daqui a pouco voltamos.",
-  "Recuperando energia...",
-  "Prepare-se para a próxima série.",
-  "Descanso iniciado. Mantenha o foco.",
-  "Próxima série em instantes.",
+const REST_MOTIVATIONAL_MESSAGES = [
+  "Respira fundo. Você está indo muito bem.",
+  "Recupere o fôlego. A próxima série vai ser ainda melhor.",
+  "Mantenha o foco. Cada série conta.",
+  "Descanse e prepare-se. Você está construindo algo grande.",
+  "Acredite no processo. Você está evoluindo.",
+  "Um passo de cada vez. Continue firme.",
+  "Você está mais forte do que imagina.",
+  "Essa pausa é parte do treino. Use-a bem.",
+  "Concentre-se. A próxima série é sua.",
+  "Disciplina é o que faz a diferença.",
+  "Dor passageira, progresso duradouro.",
+  "Respira. Você tem isso.",
+  "Cada repetição te deixa mais perto do objetivo.",
+  "O desconforto de hoje é o resultado de amanhã.",
+  "Você escolheu estar aqui. Isso já é vitória.",
+  "Mantenha a técnica. Qualidade antes de quantidade.",
+  "Foco total na próxima série.",
+  "Você está fazendo o trabalho. Continue.",
+  "Mente forte, corpo forte.",
+  "Recupere. Respire. Vá em frente.",
 ];
 
 function getRestMessage(ctx: RestCtx): string {
-  const {
-    setNumber, totalSets, isLastExercise, isWarmup, weightKg, exerciseName,
-    exercisesRemaining, setsRemainingTotal, progressPct, estimatedMinutesLeft,
-    nextExerciseName,
-  } = ctx;
+  const { exerciseName, isLastExercise, isWarmup } = ctx;
 
-  if (isWarmup) return "Aquecimento concluído. Inicie a carga principal com técnica.";
+  if (isWarmup) return "Aquecimento concluído. Inicie a carga principal com técnica limpa.";
+  if (isLastExercise) return "Treino quase encerrado. Dê tudo na última etapa.";
 
-  if (isLastExercise && setNumber === totalSets) {
-    return `Última série de ${exerciseName}. Foque em manter a execução limpa.`;
-  }
-
-  if (setNumber === totalSets) {
-    if (nextExerciseName) {
-      return `${exerciseName} concluído. Agora vamos para ${nextExerciseName}.`;
-    }
-    return "Última série deste exercício. Foco total.";
-  }
-
-  if (setNumber === totalSets - 1) {
-    if (nextExerciseName) return `Falta uma série. Depois passamos para ${nextExerciseName}.`;
-    return "Falta uma série. Mantenha a intensidade.";
-  }
-
-  if (setNumber === 1 && weightKg && weightKg > 0) {
-    return `Primeira série com ${weightKg}kg concluída. Mantenha o controle.`;
-  }
-
-  if (setNumber === 1) {
-    if (exercisesRemaining !== undefined && progressPct !== undefined) {
-      return `Iniciando ${exerciseName}. ${Math.round(progressPct)}% do treino concluído.`;
-    }
-    return "Primeira série concluída. Observe a execução e ajuste se necessário.";
-  }
-
-  if (setsRemainingTotal !== undefined && setsRemainingTotal > 0) {
-    if (estimatedMinutesLeft && estimatedMinutesLeft > 0) {
-      return `Faltam ${setsRemainingTotal} série${setsRemainingTotal > 1 ? "s" : ""}. Restam cerca de ${estimatedMinutesLeft} min.`;
-    }
-    if (exercisesRemaining !== undefined && exercisesRemaining > 0) {
-      return `Faltam ${exercisesRemaining} exercício${exercisesRemaining > 1 ? "s" : ""} e ${setsRemainingTotal} série${setsRemainingTotal > 1 ? "s" : ""}.`;
-    }
-  }
-
-  if (progressPct !== undefined && progressPct >= 50) {
-    return "Você passou da metade. Continue firme.";
-  }
-
-  if (isLastExercise) return "Treino quase concluído. Mantenha a intensidade até o fim.";
-
-  const idx = (setNumber * (exerciseName.length % 5 + 1)) % GENERIC_REST_MESSAGES.length;
-  return GENERIC_REST_MESSAGES[idx];
+  const idx = exerciseName.length % REST_MOTIVATIONAL_MESSAGES.length;
+  return REST_MOTIVATIONAL_MESSAGES[idx];
 }
 
 const FEELINGS = [
@@ -959,78 +919,25 @@ function WorkoutTodayContent() {
                 <p className={`rest-timer ${isUrgent ? "alert" : ""}`}>{restLeft}s</p>
               </div>
 
-              {/* Rest context card + AI tip */}
+              {/* AI tip */}
               {(() => {
                 const rt = runtimeFor(exerciseRuntime, exercise);
-                const totalExercises = day!.exercises?.length ?? 1;
-                const isLastEx = currentIndex === totalExercises - 1;
-                const nextEx = day!.exercises?.[currentIndex + 1];
-                const nextSet = currentSet + 1;
-                const isLastSetOfExercise = currentSet >= rt.planned_sets;
-                const setsInCurrentRemaining = rt.planned_sets - currentSet;
-                const exercisesRemaining = totalExercises - currentIndex - 1;
-                const setsInNextExercises = (day!.exercises ?? [])
-                  .slice(currentIndex + 1)
-                  .reduce((acc, ex) => acc + (runtimeFor(exerciseRuntime, ex).planned_sets || ex.sets || 0), 0);
-                const setsRemainingTotal = setsInCurrentRemaining + setsInNextExercises;
-                const totalSetsAll = (day!.exercises ?? []).reduce((acc, ex) => acc + (runtimeFor(exerciseRuntime, ex).planned_sets || ex.sets || 0), 0);
-                const completedSetsAll = (day!.exercises ?? []).slice(0, currentIndex).reduce((acc, ex) => acc + (runtimeFor(exerciseRuntime, ex).planned_sets || ex.sets || 0), 0) + currentSet;
-                const progressPct = totalSetsAll > 0 ? (completedSetsAll / totalSetsAll) * 100 : 0;
-                const avgRestMin = (restTotal || 60) / 60;
-                const estimatedMinutesLeft = Math.round(setsRemainingTotal * (avgRestMin + 0.75));
-                const nextWeight = rt.weight_by_set[nextSet - 1] || rt.weight_by_set[currentSet - 1] || "";
-                const nextReps = rt.reps_by_set[nextSet - 1] || rt.reps_by_set[currentSet - 1] || 0;
+                const isLastEx = currentIndex === (day!.exercises?.length ?? 1) - 1;
                 return (
-                  <>
-                    {/* Structured context card */}
-                    <div style={{ marginTop: 20, width: "100%", maxWidth: 320, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "14px 16px" }}>
-                      <p style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>{exercise.name}</p>
-                      {!isLastSetOfExercise ? (
-                        <>
-                          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 2 }}>
-                            Próxima: Série {nextSet} de {rt.planned_sets}
-                            {nextWeight ? ` · ${nextWeight}kg` : ""}
-                            {nextReps ? ` · ${nextReps} reps` : ""}
-                          </p>
-                          <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                            {setsInCurrentRemaining} série{setsInCurrentRemaining > 1 ? "s" : ""} restante{setsInCurrentRemaining > 1 ? "s" : ""}
-                            {exercisesRemaining > 0 ? ` · ${exercisesRemaining} exercício${exercisesRemaining > 1 ? "s" : ""} depois` : ""}
-                          </p>
-                        </>
-                      ) : (
-                        <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 2 }}>Última série concluída</p>
-                      )}
-                      {nextEx && isLastSetOfExercise && (
-                        <p style={{ fontSize: 12, color: "var(--primary)", marginTop: 6, fontWeight: 600 }}>
-                          Depois: {nextEx.name}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* AI tip */}
-                    <div style={{ marginTop: 14, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
-                      <AgentOrb size="card" glyph />
-                      <AITrainerBubble
-                        message={getRestMessage({
-                          exerciseName: exercise.name,
-                          setNumber: currentSet,
-                          totalSets: rt.planned_sets,
-                          muscleGroup: exercise.muscle_group,
-                          isLastExercise: isLastEx,
-                          weightKg: parseFloat(rt.weight_by_set[currentSet - 1] || "0") || undefined,
-                          isWarmup: rt.warmup_by_set?.[currentSet - 1],
-                          exercisesRemaining,
-                          setsRemainingTotal,
-                          progressPct: Math.round(progressPct),
-                          estimatedMinutesLeft: estimatedMinutesLeft > 0 ? estimatedMinutesLeft : undefined,
-                          nextExerciseName: nextEx?.name,
-                        })}
-                        mood="speaking"
-                        show
-                        side="left"
-                      />
-                    </div>
-                  </>
+                  <div style={{ marginTop: 20, display: "flex", alignItems: "flex-start", gap: 12, maxWidth: 320 }}>
+                    <AgentOrb size="card" glyph />
+                    <AITrainerBubble
+                      message={getRestMessage({
+                        exerciseName: exercise.name,
+                        muscleGroup: exercise.muscle_group,
+                        isLastExercise: isLastEx,
+                        isWarmup: rt.warmup_by_set?.[currentSet - 1],
+                      })}
+                      mood="speaking"
+                      show
+                      side="left"
+                    />
+                  </div>
                 );
               })()}
 

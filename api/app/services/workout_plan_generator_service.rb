@@ -257,7 +257,7 @@ class WorkoutPlanGeneratorService
 
       raise "Workout plan was not generated" if plan.workout_days.empty?
       total_exercises = plan.workout_days.sum { |d| d.workout_day_exercises.count }
-      raise "No exercises found — run db:seed in production" if total_exercises.zero?
+      raise "No exercises could be assigned to this plan (modality: #{@activity_preferences&.join(', ')}, level: #{@fitness_level}). Check exercise availability and user profile filters." if total_exercises.zero?
 
       plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
 
@@ -634,7 +634,6 @@ class WorkoutPlanGeneratorService
           else relation
           end
 
-    rel = rel.merge(Exercise.browseable)
     rel = rel.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?
     rel = strategy_filtered_scope(rel, strategy) if strategy
 
