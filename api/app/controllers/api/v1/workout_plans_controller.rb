@@ -74,6 +74,9 @@ module Api
         render json: serialize_plan(plan).merge(summary: service.plan_summary), status: :ok
       rescue ActiveRecord::RecordInvalid => e
         render_error(e.record.errors.full_messages.to_sentence)
+      rescue StandardError => e
+        Rails.logger.error("[WorkoutPlansController#regenerate] #{e.class}: #{e.message}")
+        render json: { error: "Não foi possível gerar o plano. Tente novamente." }, status: :internal_server_error
       end
 
       def today

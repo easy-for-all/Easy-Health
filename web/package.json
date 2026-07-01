@@ -7,7 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "android:setup": "bash scripts/setup-android.sh",
+    "android:sync": "cp android-config/app-build.gradle android/app/build.gradle && npx cap sync android",
+    "android:open": "bash scripts/open-android.sh",
+    "android:build:debug": "npm run android:sync && cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon",
+    "android:build:aab": "bash build-android-local.sh",
+    "android:clean": "cd android && ./gradlew clean --no-daemon"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
@@ -15,6 +21,7 @@
     "@capacitor/browser": "^8.0.3",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
+    "@capacitor/push-notifications": "^8.1.1",
     "@swc/helpers": "^0.5.21",
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.40.0",

@@ -71,6 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    if (!Capacitor.isNativePlatform()) return;
+
+    import("@/shared/lib/pushNotifications").then(({ initPushNotifications }) => {
+      initPushNotifications().catch((err) => {
+        console.error("[Push] Init failed", err);
+      });
+    });
+  }, [user?.id]);
+
   async function signIn(email: string, password: string) {
     const u = await api.post<User>("/api/v1/auth/sign_in", { email, password });
     setUser(u);

@@ -54,6 +54,7 @@ class User < ApplicationRecord
   has_many :personal_trainers,
            through: :trainer_client_relationships,
            source: :personal
+  has_many :device_tokens, dependent: :destroy
 
   after_create :create_public_profile_record
   after_create :generate_referral_code

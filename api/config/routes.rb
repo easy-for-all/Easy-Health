@@ -156,6 +156,7 @@ Rails.application.routes.draw do
 
       # User search (public profiles only)
       resources :users, only: [:index, :show]
+      resources :device_tokens, only: [:create]
 
       # Workout sharing
       resources :shared_workouts, only: [:index, :create, :destroy]
