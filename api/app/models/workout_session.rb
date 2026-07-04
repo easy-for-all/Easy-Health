@@ -1,17 +1,27 @@
 class WorkoutSession < ApplicationRecord
   COMPLETION_STATUSES = %w[completed completed_partial abandoned].freeze
+  # Technical lifecycle of the session, orthogonal to completion_status (which
+  # describes execution quality). Only "completed" sessions may feed history,
+  # last-weight, or progression lookups (see ExerciseHistoryService).
+  STATUSES = %w[in_progress completed cancelled].freeze
 
   belongs_to :user
   belongs_to :workout_day, optional: true
+  has_many :exercise_sessions, dependent: :destroy
 
-  validates :completed_at, presence: true
-  validates :duration_minutes, presence: true, numericality: { only_integer: true, greater_than: 0 }
+  validates :status, inclusion: { in: STATUSES }
+  validates :completed_at, presence: true, if: -> { status == "completed" }
+  validates :duration_minutes, presence: true, numericality: { only_integer: true, greater_than: 0 }, if: -> { status == "completed" }
   validates :fatigue_level, numericality: { only_integer: true, in: 1..5 }, allow_nil: true
   validates :completion_status, inclusion: { in: COMPLETION_STATUSES }, allow_nil: true
   validates :completion_rate, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
 
-  after_create :maybe_create_community_post
-  after_commit :trigger_fitness_recalibration, on: :create
+  # Guarded by status so the in_progress -> completed transition (finish action)
+  # fires these exactly once, and starting a session (in_progress) never does.
+  after_create :maybe_create_community_post, if: -> { status == "completed" }
+  after_update :maybe_create_community_post, if: -> { saved_change_to_status?(to: "completed") }
+  after_commit :trigger_fitness_recalibration, on: :create, if: -> { status == "completed" }
+  after_commit :trigger_fitness_recalibration, on: :update, if: -> { saved_change_to_status?(to: "completed") }
 
   private
 

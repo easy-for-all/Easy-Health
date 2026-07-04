@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_05_100003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -235,6 +235,48 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_000001) do
     t.index ["exercise_id"], name: "index_equipment_identifications_on_exercise_id"
     t.index ["image_checksum"], name: "index_equipment_identifications_on_image_checksum"
     t.index ["user_id"], name: "index_equipment_identifications_on_user_id"
+  end
+
+  create_table "exercise_sessions", force: :cascade do |t|
+    t.string "avg_pace_per_km"
+    t.decimal "avg_speed_kmh", precision: 5, scale: 2
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.decimal "distance_km", precision: 6, scale: 2
+    t.integer "duration_minutes"
+    t.integer "elapsed_seconds"
+    t.bigint "exercise_id", null: false
+    t.string "exercise_kind", default: "strength", null: false
+    t.string "feeling"
+    t.string "intensity"
+    t.integer "order_index", null: false
+    t.integer "planned_reps"
+    t.integer "planned_sets"
+    t.decimal "planned_weight_kg", precision: 6, scale: 2
+    t.integer "rest_seconds"
+    t.datetime "started_at", null: false
+    t.string "status", default: "in_progress", null: false
+    t.integer "target_seconds"
+    t.datetime "updated_at", null: false
+    t.bigint "workout_day_exercise_id"
+    t.bigint "workout_session_id", null: false
+    t.index ["exercise_id", "status"], name: "index_exercise_sessions_on_exercise_id_and_status"
+    t.index ["exercise_id"], name: "index_exercise_sessions_on_exercise_id"
+    t.index ["workout_day_exercise_id"], name: "index_exercise_sessions_on_workout_day_exercise_id"
+    t.index ["workout_session_id"], name: "index_exercise_sessions_on_workout_session_id"
+  end
+
+  create_table "exercise_sets", force: :cascade do |t|
+    t.datetime "completed_at", null: false
+    t.datetime "created_at", null: false
+    t.bigint "exercise_session_id", null: false
+    t.boolean "is_warmup", default: false, null: false
+    t.integer "reps"
+    t.integer "set_number", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "weight_kg", precision: 6, scale: 2
+    t.index ["exercise_session_id", "set_number"], name: "idx_exercise_sets_unique_set_number", unique: true
+    t.index ["exercise_session_id"], name: "index_exercise_sets_on_exercise_session_id"
   end
 
   create_table "exercise_suggestion_logs", force: :cascade do |t|
@@ -696,10 +738,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_000001) do
     t.integer "planned_sets_count"
     t.jsonb "skipped_exercises", default: []
     t.string "source"
+    t.string "status", default: "completed", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "workout_day_id"
     t.index ["completion_status"], name: "index_workout_sessions_on_completion_status"
+    t.index ["status"], name: "index_workout_sessions_on_status"
     t.index ["user_id"], name: "index_workout_sessions_on_user_id"
     t.index ["workout_day_id"], name: "index_workout_sessions_on_workout_day_id"
   end
@@ -737,6 +781,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_000001) do
   add_foreign_key "device_tokens", "users"
   add_foreign_key "equipment_identifications", "exercises"
   add_foreign_key "equipment_identifications", "users"
+  add_foreign_key "exercise_sessions", "exercises"
+  add_foreign_key "exercise_sessions", "workout_day_exercises"
+  add_foreign_key "exercise_sessions", "workout_sessions"
+  add_foreign_key "exercise_sets", "exercise_sessions"
   add_foreign_key "exercise_suggestion_logs", "users"
   add_foreign_key "fitness_profiles", "users"
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
