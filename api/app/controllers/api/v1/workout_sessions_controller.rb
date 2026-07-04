@@ -120,31 +120,10 @@ module Api
         exercise_ids = params[:exercise_ids].to_s.split(",").map(&:to_i)
         return render json: {} if exercise_ids.blank?
 
-        recent = current_user.workout_sessions
-          .where(status: "completed")
-          .where("exercise_logs IS NOT NULL AND exercise_logs != '[]'::jsonb")
-          .order(completed_at: :desc)
-          .limit(30)
-          .select(:id, :exercise_logs, :completed_at)
-
         result = {}
         exercise_ids.each do |ex_id|
-          session = recent.find { |s| (s.exercise_logs || []).any? { |l| l["exercise_id"] == ex_id } }
-          next unless session
-
-          log = (session.exercise_logs || []).find { |l| l["exercise_id"] == ex_id }
-          next unless log
-
-          result[ex_id.to_s] = {
-            weight_by_set:    log["weight_by_set"] || [],
-            reps:             log["reps"] || [],
-            sets:             log["sets"],
-            feeling:          log["feeling"],
-            duration_minutes: log["duration_minutes"],
-            elapsed_seconds:  log["elapsed_seconds"],
-            intensity:        log["intensity"],
-            completed_at:     session.completed_at
-          }
+          summary = ExerciseHistoryService.new(user: current_user, exercise_id: ex_id).last_performance_summary
+          result[ex_id.to_s] = summary if summary
         end
 
         render json: result

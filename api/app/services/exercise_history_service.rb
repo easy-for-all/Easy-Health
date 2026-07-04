@@ -63,6 +63,36 @@ class ExerciseHistoryService
     progression[:reason]
   end
 
+  # Normalized "what happened last time" summary, regardless of whether the
+  # data lives in the relational tables or only in the legacy JSONB. Used by
+  # endpoints that show set-by-set detail (not just a single weight/label).
+  def last_performance_summary
+    if last_completed_session
+      sets = last_completed_session.exercise_sets.order(:set_number)
+      {
+        weight_by_set: sets.map(&:weight_kg),
+        reps: sets.map(&:reps),
+        sets: sets.size,
+        feeling: last_completed_session.feeling,
+        duration_minutes: last_completed_session.duration_minutes,
+        elapsed_seconds: last_completed_session.elapsed_seconds,
+        intensity: last_completed_session.intensity,
+        completed_at: last_completed_session.completed_at
+      }
+    elsif legacy_entry
+      {
+        weight_by_set: legacy_entry.weight_by_set,
+        reps: legacy_entry.reps_by_set,
+        sets: legacy_entry.raw["sets"],
+        feeling: legacy_entry.feeling,
+        duration_minutes: legacy_entry.duration_minutes,
+        elapsed_seconds: legacy_entry.elapsed_seconds,
+        intensity: legacy_entry.intensity,
+        completed_at: legacy_session.completed_at
+      }
+    end
+  end
+
   def total_volume_for_session(workout_session)
     ExerciseSet
       .joins(:exercise_session)
