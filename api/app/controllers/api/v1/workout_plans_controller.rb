@@ -248,6 +248,7 @@ module Api
           FROM workout_sessions,
             jsonb_array_elements(exercise_logs) AS elem
           WHERE user_id = #{user.id.to_i}
+            AND status = 'completed'
             AND (elem->>'exercise_id')::integer = ANY(ARRAY[#{exercise_ids.map(&:to_i).join(',')}])
           ORDER BY (elem->>'exercise_id')::integer, completed_at DESC
         SQL
@@ -262,7 +263,7 @@ module Api
         return {} if day_ids.empty?
 
         WorkoutSession
-          .where(user_id: current_user.id, workout_day_id: day_ids)
+          .where(user_id: current_user.id, workout_day_id: day_ids, status: "completed")
           .select("DISTINCT ON (workout_day_id) workout_day_id, completed_at")
           .order("workout_day_id, completed_at DESC")
           .each_with_object({}) { |s, h| h[s.workout_day_id] = s.completed_at }

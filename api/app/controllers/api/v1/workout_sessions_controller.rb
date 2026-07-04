@@ -13,6 +13,7 @@ module Api
         sessions = sessions.where("completed_at >= ?", 7.days.ago) if params[:recent].present?
         sessions = sessions.where(completed_at: params[:from]..) if params[:from].present?
         sessions = sessions.where(completed_at: ..params[:to])   if params[:to].present?
+        sessions = sessions.where(status: params[:status]) if params[:status].present?
         total = sessions.count
         sessions = sessions
           .limit(PER_PAGE)
@@ -29,6 +30,12 @@ module Api
 
         session = current_user.workout_sessions.build(session_params)
         session.completed_at ||= Time.current
+        # Legacy clients only ever call this action once, at the very end of a
+        # workout, and never set the technical lifecycle status directly - it
+        # must be derived from completion_status so an abandoned workout is
+        # excluded from history/last-weight lookups instead of defaulting to
+        # "completed" like a real finished session would.
+        session.status = session.completion_status == "abandoned" ? "cancelled" : "completed"
 
         workout_day = nil
         if session.workout_day_id.present?
@@ -114,6 +121,7 @@ module Api
         return render json: {} if exercise_ids.blank?
 
         recent = current_user.workout_sessions
+          .where(status: "completed")
           .where("exercise_logs IS NOT NULL AND exercise_logs != '[]'::jsonb")
           .order(completed_at: :desc)
           .limit(30)
@@ -173,6 +181,7 @@ module Api
       def today
         session = current_user.workout_sessions
           .includes(:workout_day)
+          .where(status: "completed")
           .where("completed_at >= ?", Time.current.beginning_of_day)
           .order(completed_at: :desc)
           .first
@@ -192,6 +201,7 @@ module Api
 
       def personal_records
         sessions = current_user.workout_sessions
+          .where(status: "completed")
           .where("exercise_logs IS NOT NULL")
           .order(completed_at: :desc)
 

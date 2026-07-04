@@ -60,6 +60,61 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
 
       expect(response).to have_http_status(:unprocessable_entity)
     end
+
+    it "maps completion_status: abandoned to the technical status cancelled" do
+      post "/api/v1/workout_sessions", params: session_payload(completion_status: "abandoned")
+
+      expect(response).to have_http_status(:created)
+      expect(WorkoutSession.last.status).to eq("cancelled")
+    end
+
+    it "maps completion_status: completed_partial to the technical status completed" do
+      post "/api/v1/workout_sessions", params: session_payload(completion_status: "completed_partial")
+
+      expect(response).to have_http_status(:created)
+      expect(WorkoutSession.last.status).to eq("completed")
+    end
+  end
+
+  describe "regression: an abandoned session never counts as history" do
+    let(:log) do
+      {
+        "exercise_id" => 42,
+        "name" => "Rosca com Halteres",
+        "weight_by_set" => [ 12.0, 12.0 ],
+        "reps" => [ 10, 10 ],
+        "is_warmup_by_set" => [ false, false ]
+      }
+    end
+
+    it "excludes cancelled (abandoned) sessions from last_performances, even when more recent than a completed one" do
+      user.workout_sessions.create!(completed_at: 10.days.ago, duration_minutes: 40, status: "completed", exercise_logs: [ log.merge("weight_by_set" => [ 15.0, 15.0 ]) ])
+      user.workout_sessions.create!(completed_at: Time.current, duration_minutes: 2, status: "cancelled", completion_status: "abandoned", exercise_logs: [ log ])
+
+      get "/api/v1/workout_sessions/last_performances", params: { exercise_ids: "42" }
+
+      expect(response).to have_http_status(:ok)
+      body = JSON.parse(response.body)
+      expect(body["42"]["weight_by_set"]).to eq([ 15.0, 15.0 ])
+    end
+
+    it "excludes cancelled sessions from personal_records" do
+      user.workout_sessions.create!(completed_at: Time.current, duration_minutes: 2, status: "cancelled", completion_status: "abandoned", exercise_logs: [ log.merge("weight_by_set" => [ 999.0 ]) ])
+
+      get "/api/v1/workout_sessions/personal_records"
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to be_empty
+    end
+
+    it "excludes cancelled sessions from today" do
+      user.workout_sessions.create!(completed_at: Time.current, duration_minutes: 2, status: "cancelled", completion_status: "abandoned", exercise_logs: [])
+
+      get "/api/v1/workout_sessions/today"
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq({})
+    end
   end
 
   describe "GET /api/v1/workout_sessions/load_suggestion" do
