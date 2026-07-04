@@ -361,10 +361,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_000001) do
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
-# Could not dump table "knowledge_chunks" because of following StandardError
-#   Unknown type 'vector(1536)' for column 'embedding'
-
-
   create_table "knowledge_documents", force: :cascade do |t|
     t.boolean "active", default: true, null: false
     t.string "category", null: false
@@ -746,7 +742,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_000001) do
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
-  add_foreign_key "knowledge_chunks", "knowledge_documents"
   add_foreign_key "personal_alerts", "users", column: "client_id"
   add_foreign_key "personal_alerts", "users", column: "personal_id"
   add_foreign_key "personal_client_relationships", "users", column: "client_id"
