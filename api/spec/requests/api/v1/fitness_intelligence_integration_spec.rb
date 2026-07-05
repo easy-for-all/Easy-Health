@@ -10,7 +10,6 @@ RSpec.describe "Fitness intelligence integration", type: :request do
     allow(WorkoutPlanGeneratorService).to receive(:new).and_return(generator)
 
     post "/api/v1/health_profile", params: valid_health_profile_params
-    GenerateWorkoutPlanJob.perform_now(user.id) unless user.reload.active_workout_plan
 
     expect(response).to have_http_status(:created)
     expect(JSON.parse(response.body)).to include("goal" => "gain_muscle")
@@ -177,6 +176,7 @@ RSpec.describe "Fitness intelligence integration", type: :request do
     expect(AiAgents::WorkoutPlannerService).not_to receive(:new)
 
     post "/api/v1/health_profile", params: valid_health_profile_params
+    GenerateWorkoutPlanJob.perform_now(user.id) unless user.reload.active_workout_plan
 
     expect(response).to have_http_status(:created)
     first_plan = user.reload.active_workout_plan
