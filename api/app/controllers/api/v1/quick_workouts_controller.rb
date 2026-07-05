@@ -66,6 +66,7 @@ module Api
               exercises: chosen_exercises.each_with_index.map do |ex, idx|
                 timed = ex.exercise_type == "timed"
                 cardio = WorkoutDayExercise::CARDIO_TYPES.include?(ex.exercise_type)
+                history = ExerciseHistoryService.new(user: current_user, exercise_id: ex.id)
                 {
                   workout_day_exercise_id: -(idx + 1),
                   exercise_id: ex.id,
@@ -80,12 +81,18 @@ module Api
                   muscle_image_url: muscle_image_url(ex.muscle_group),
                   sets: timed || cardio ? nil : params_sr[:sets],
                   reps: timed || cardio ? nil : params_sr[:reps],
+                  planned_weight_kg: nil,
                   rest_seconds: timed ? nil : params_sr[:rest_seconds],
                   duration_minutes: (timed || cardio) ? (ex.duration_minutes || 60) : nil,
                   intensity: cardio ? "moderado" : nil,
                   order_index: idx,
                   is_favorite: fav_ids.include?(ex.id),
-                  last_performed_at: nil
+                  last_performed_at: history.last_completed_at,
+                  last_execution_label: history.last_execution_label,
+                  last_completed_at: history.last_completed_at,
+                  last_weight_kg: history.last_used_weight,
+                  suggested_weight_kg: history.suggested_starting_weight,
+                  progression_reason: history.progression_reason
                 }
               end
             }
