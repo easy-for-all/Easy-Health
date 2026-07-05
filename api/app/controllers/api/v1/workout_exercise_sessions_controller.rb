@@ -10,7 +10,7 @@ module Api
         workout_session = current_user.workout_sessions.find_by(id: params[:workout_session_id])
         return render json: { error: "Not found" }, status: :not_found unless workout_session
 
-        exercise = Exercise.find_by(id: params[:exercise_id])
+        exercise = Exercise.browseable.find_by(id: params[:exercise_id])
         return render json: { errors: [ "exercise not found" ] }, status: :unprocessable_entity unless exercise
 
         wde = params[:workout_day_exercise_id].present? ? WorkoutDayExercise.find_by(id: params[:workout_day_exercise_id]) : nil

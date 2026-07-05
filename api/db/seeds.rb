@@ -62,12 +62,16 @@ exercises = [
   { name: "Afundo Reverso",           exercise_type: "musculacao", muscle_group: "legs", equipment_type: "bodyweight", difficulty: "beginner",      home_compatible: true,  image_url: "#{LOCAL_IMG}/Crossover_Reverse_Lunge/0.jpg",  description: "Dê um passo para trás dobrando o joelho traseiro próximo ao chão; empurre de volta à posição inicial." },
 ]
 
-exercises.each do |e|
-  exercise = Exercise.find_or_initialize_by(name: e[:name])
-  exercise.assign_attributes(e)
-  exercise.save!
+if ENV["SEED_LEGACY_EXERCISE_DB"] == "1"
+  exercises.each do |e|
+    exercise = Exercise.find_or_initialize_by(name: e[:name])
+    exercise.assign_attributes(e)
+    exercise.save!
+  end
+  puts "#{Exercise.count} exercises seeded from legacy /exercise-images/db catalog"
+else
+  puts "Skipping legacy /exercise-images/db exercise seed. Run `bin/rails exercises:link_gifdotreino` for the GIF catalog."
 end
-puts "#{Exercise.count} exercises seeded"
 
 User.find_or_create_by(email: "test@example.com") do |u|
   u.name = "Test User"

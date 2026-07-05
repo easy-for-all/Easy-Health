@@ -137,7 +137,13 @@ class ExerciseAssetImporter
 
     exercise = find_exercise(name)
     if exercise
-      exercise.update_columns(gif_url: gif_url, gif_path: dest_path.to_s)
+      exercise.update_columns(
+        gif_url: gif_url,
+        gif_path: dest_path.to_s,
+        image_url: nil,
+        image_fallback_url: nil,
+        source_dataset: "gifdotreino"
+      )
       @stats[:exercises_updated] += 1
     else
       Exercise.create!(
@@ -146,6 +152,7 @@ class ExerciseAssetImporter
         muscle_group:   mapping[:muscle_group],
         equipment_type: "gym",
         difficulty:     "intermediate",
+        difficulty_level: "intermediate",
         gif_url:        gif_url,
         gif_path:       dest_path.to_s,
         description:    description.truncate(500),

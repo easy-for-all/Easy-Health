@@ -14,7 +14,7 @@ class ExerciseGifAuditJob < ApplicationJob
           exercise.update_columns(
             gif_url: equivalent.gif_url,
             gif_path: equivalent.gif_path,
-            image_url: equivalent.image_url.presence || exercise.image_url
+            image_url: nil
           )
         end
         results[:replaced] += 1
@@ -43,9 +43,7 @@ class ExerciseGifAuditJob < ApplicationJob
   private
 
   def gif_valid?(exercise)
-    return false if exercise.gif_url.blank?
-    return true if exercise.gif_url.start_with?("/exercise-images/")
-    false
+    exercise.gifdotreino_source?
   end
 
   def find_equivalent(exercise)
@@ -54,8 +52,7 @@ class ExerciseGifAuditJob < ApplicationJob
     normalized = normalize_name(exercise.name)
 
     Exercise.where.not(id: exercise.id)
-            .where.not(gif_url: [nil, ""])
-            .where(gif_url: Exercise.arel_table[:gif_url].matches("/exercise-images/%"))
+            .merge(Exercise.gifdotreino_source)
             .find { |candidate| name_similarity(normalized, normalize_name(candidate.name)) >= SIMILAR_THRESHOLD }
   end
 

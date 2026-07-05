@@ -16,7 +16,7 @@ class WorkoutDay < ApplicationRecord
     exercises_with_ids = workout_day_exercises.includes(:exercise).select { |wde| wde.exercise_id.present? }
     return if exercises_with_ids.empty?
 
-    without_gif = exercises_with_ids.reject { |wde| wde.exercise&.gif_url.present? }
+    without_gif = exercises_with_ids.reject { |wde| wde.exercise&.gifdotreino_source? }
     return if without_gif.empty?
 
     invalid_ratio = without_gif.size.to_f / exercises_with_ids.size

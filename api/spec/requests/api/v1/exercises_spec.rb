@@ -13,7 +13,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
       exercise_type:  "musculacao",
       equipment_type: "cable",
       difficulty:     "intermediate",
-      gif_url:        "/exercise-images/triceps_corda.gif",
+      gif_url:        "/exercise-images/gifdotreino/triceps/triceps-corda.gif",
     )
   end
 
@@ -24,7 +24,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
       exercise_type:  "musculacao",
       equipment_type: "bodyweight",
       difficulty:     "beginner",
-      gif_url:        "/exercise-images/triceps_banco.gif",
+      gif_url:        "/exercise-images/gifdotreino/triceps/triceps-banco.gif",
     )
   end
 
@@ -35,7 +35,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
       exercise_type:  "musculacao",
       equipment_type: "barbell",
       difficulty:     "intermediate",
-      gif_url:        "/exercise-images/supino_reto.gif",
+      gif_url:        "/exercise-images/gifdotreino/peitoral/supino-reto.gif",
     )
   end
 
@@ -46,6 +46,21 @@ RSpec.describe "Api::V1::Exercises", type: :request do
       ids = JSON.parse(response.body).map { |e| e["id"] }
       expect(ids).to include(triceps_cable.id, triceps_bench.id)
       expect(ids).not_to include(chest_barbell.id)
+    end
+
+    it "does not return exercises outside the gifdotreino catalog" do
+      invalid = Exercise.create!(
+        name: "Tríceps JPG",
+        muscle_group: "triceps",
+        exercise_type: "musculacao",
+        equipment_type: "cable",
+        image_url: "/exercise-images/db/Triceps/0.jpg"
+      )
+
+      get "/api/v1/exercises", params: { muscle_group: "triceps" }, headers: headers
+
+      ids = JSON.parse(response.body).map { |e| e["id"] }
+      expect(ids).not_to include(invalid.id)
     end
 
     it "searches by PT-BR name with accents" do
@@ -62,7 +77,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
         exercise_type:  "musculacao",
         equipment_type: "cable",
         difficulty:     "intermediate",
-        gif_url:        "/exercise-images/shoulders.gif",
+        gif_url:        "/exercise-images/gifdotreino/ombros/shoulders.gif",
       )
       get "/api/v1/exercises", params: { name: "abducao" }, headers: headers
       expect(response).to have_http_status(:ok)
@@ -172,7 +187,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
           exercise_type:  "cardio",
           equipment_type: "cardio",
           difficulty:     "beginner",
-          gif_url:        "/exercise-images/bike.gif",
+          gif_url:        "/exercise-images/gifdotreino/cardio/bike.gif",
         )
       end
 
@@ -199,7 +214,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
           exercise_type:   "musculacao",
           equipment_type:  "barbell",
           difficulty_level: "advanced",
-          gif_url:         "/exercise-images/chest.gif",
+          gif_url:         "/exercise-images/gifdotreino/peitoral/chest.gif",
         )
       end
 
@@ -210,7 +225,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
           exercise_type:   "musculacao",
           equipment_type:  "machine",
           difficulty_level: "beginner",
-          gif_url:         "/exercise-images/chest.gif",
+          gif_url:         "/exercise-images/gifdotreino/peitoral/chest.gif",
         )
       end
 
@@ -236,7 +251,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
           exercise_type:   "musculacao",
           equipment_type:  "dumbbell",
           difficulty_level: "beginner",
-          gif_url:         "/exercise-images/triceps.gif",
+          gif_url:         "/exercise-images/gifdotreino/triceps/triceps.gif",
         )
       end
 
@@ -247,7 +262,7 @@ RSpec.describe "Api::V1::Exercises", type: :request do
           exercise_type:   "musculacao",
           equipment_type:  "dumbbell",
           difficulty_level: "advanced",
-          gif_url:         "/exercise-images/triceps.gif",
+          gif_url:         "/exercise-images/gifdotreino/triceps/triceps.gif",
         )
       end
 

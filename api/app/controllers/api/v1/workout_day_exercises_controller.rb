@@ -10,7 +10,7 @@ module Api
           .where(workout_plans: { user_id: current_user.id })
           .find(params[:id])
 
-        replacement = Exercise.find(params[:replacement_exercise_id])
+        replacement = Exercise.browseable.find(params[:replacement_exercise_id])
         current_exercise_ids = wde.workout_day.workout_day_exercises.where.not(id: wde.id).pluck(:exercise_id)
 
         if current_exercise_ids.include?(replacement.id)
@@ -95,7 +95,7 @@ module Api
           .where(workout_plans: { user_id: current_user.id, active: true })
           .find(params[:workout_day_id])
 
-        exercise = Exercise.find(params[:exercise_id])
+        exercise = Exercise.browseable.find(params[:exercise_id])
         current_exercise_ids = day.workout_day_exercises.pluck(:exercise_id)
 
         if current_exercise_ids.include?(exercise.id)

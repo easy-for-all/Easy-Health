@@ -28,6 +28,29 @@ RSpec.describe WorkoutPlanGeneratorService do
     expect(plan.workout_days.first.name).to eq("Full Body")
   end
 
+  it "ignores non-gifdotreino exercises when assigning a workout plan" do
+    user = create(:user)
+    create(:health_profile, user: user, training_days_per_week: 1, training_location: "full_gym")
+    valid = create_browseable_exercise("Supino seguro", "chest")
+    Exercise.create!(
+      name: "Supino JPG",
+      exercise_type: "musculacao",
+      muscle_group: "chest",
+      equipment_type: "gym",
+      image_url: "/exercise-images/db/Bench/0.jpg"
+    )
+    create_browseable_exercise("Remada segura", "back")
+    create_browseable_exercise("Agachamento seguro", "legs")
+    create_browseable_exercise("Prancha segura", "core")
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+    plan = described_class.new(user, modality: "musculacao", split_type: "full_body").call
+
+    assigned_ids = plan.workout_days.flat_map { |day| day.workout_day_exercises.pluck(:exercise_id) }
+    expect(assigned_ids).to include(valid.id)
+    expect(Exercise.where(id: assigned_ids).pluck(:gif_url)).to all(start_with("/exercise-images/gifdotreino/"))
+  end
+
   it "uses the local strategy, excludes safety tags and avoids AI planning when enabled" do
     user = create(:user)
     health_profile = create(
@@ -120,7 +143,7 @@ RSpec.describe WorkoutPlanGeneratorService do
       equipment_type: "bodyweight",
       difficulty_level: "beginner",
       home_compatible: true,
-      gif_url: "/exercise-images/#{name.parameterize}.gif",
+      gif_url: "/exercise-images/gifdotreino/test/#{name.parameterize}.gif",
       safety_tags: safety_tags
     )
   end

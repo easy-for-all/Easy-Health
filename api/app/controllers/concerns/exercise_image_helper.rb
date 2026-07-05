@@ -6,17 +6,13 @@ module ExerciseImageHelper
     "trapezius" => "back"
   }.freeze
 
-  GYM_EQUIPMENT_TYPES    = %w[gym dumbbell barbell cable machine].freeze
-  OFFICIAL_IMAGE_PREFIXES = %w[/exercise-images/db/ /exercise-images/gifdotreino/].freeze
+  GYM_EQUIPMENT_TYPES = %w[gym dumbbell barbell cable machine].freeze
 
   def exercise_image_url(exercise)
-    if gym_exercise?(exercise)
-      official = [exercise.gif_url, exercise.image_url].find { |u| official_local_url?(u) && local_file_exists?(u) }
-      official || "/exercise-images/#{exercise.exercise_type || 'treino'}.svg"
-    else
-      exercise.image_url.presence || exercise.gif_url.presence ||
-        "/exercise-images/#{exercise.exercise_type || 'treino'}.svg"
-    end
+    gif = exercise.gif_url
+    return gif if official_local_gif?(gif)
+
+    "/exercise-images/#{exercise.exercise_type || 'treino'}.svg"
   end
 
   def muscle_image_url(muscle_group)
@@ -31,8 +27,8 @@ module ExerciseImageHelper
       GYM_EQUIPMENT_TYPES.include?(exercise.equipment_type)
   end
 
-  def official_local_url?(url)
-    url.present? && OFFICIAL_IMAGE_PREFIXES.any? { |prefix| url.start_with?(prefix) }
+  def official_local_gif?(url)
+    Exercise.gifdotreino_url?(url) && local_file_exists?(url)
   end
 
   def local_file_exists?(url)

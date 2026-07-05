@@ -2,8 +2,21 @@ require "rails_helper"
 
 RSpec.describe "Api::V1::WorkoutExerciseSessions", type: :request do
   let(:user) { create(:user, paid_plan: true) }
-  let(:exercise) { Exercise.create!(name: "Rosca com Halteres", exercise_type: "musculacao", muscle_group: "biceps") }
-  let(:cardio_exercise) { Exercise.create!(name: "Corrida", exercise_type: "corrida") }
+  let(:exercise) do
+    Exercise.create!(
+      name: "Rosca com Halteres",
+      exercise_type: "musculacao",
+      muscle_group: "biceps",
+      gif_url: "/exercise-images/gifdotreino/biceps/rosca-com-halteres.gif"
+    )
+  end
+  let(:cardio_exercise) do
+    Exercise.create!(
+      name: "Corrida",
+      exercise_type: "corrida",
+      gif_url: "/exercise-images/gifdotreino/cardio/corrida.gif"
+    )
+  end
   let(:workout_session) { user.workout_sessions.create!(status: "in_progress") }
 
   def authed(verb, path, params: {})

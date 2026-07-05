@@ -204,7 +204,7 @@ class WorkoutPlanGeneratorService
         if day_tmpl[:exercise_type]
           ex_type   = day_tmpl[:exercise_type]
           exercises = exercise_scope(
-            Exercise.where(exercise_type: ex_type),
+            Exercise.browseable.where(exercise_type: ex_type),
             fav_exercise_ids,
             strategy: active_strategy
           ).limit(day_exercise_limit)
@@ -213,7 +213,7 @@ class WorkoutPlanGeneratorService
           # so complement with HIIT bodyweight exercises
           if exercises.empty? && ex_type == "funcional" && @training_location == "outdoor"
             exercises = exercise_scope(
-              Exercise.where(exercise_type: %w[funcional hiit]),
+              Exercise.browseable.where(exercise_type: %w[funcional hiit]),
               fav_exercise_ids,
               strategy: active_strategy
             ).limit(day_exercise_limit)
@@ -240,7 +240,7 @@ class WorkoutPlanGeneratorService
 
             group_limit = [ EXERCISES_PER_GROUP, day_exercise_limit - idx_exercise ].min
             exercise_scope(
-              Exercise.where(exercise_type: "musculacao", muscle_group: group),
+              Exercise.browseable.where(exercise_type: "musculacao", muscle_group: group),
               fav_exercise_ids,
               strategy: active_strategy
             )
@@ -512,7 +512,7 @@ class WorkoutPlanGeneratorService
   end
 
   def available_exercises_by_group
-    scope = Exercise.where(exercise_type: "musculacao")
+    scope = Exercise.browseable.where(exercise_type: "musculacao")
     scope = scope.where(home_compatible: true)   if @training_location == "home"
     scope = scope.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT) if @training_location == "outdoor"
     scope = scope.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?
@@ -628,10 +628,12 @@ class WorkoutPlanGeneratorService
   end
 
   def exercise_scope(relation, fav_ids = [], strategy: nil)
+    rel = relation.merge(Exercise.browseable)
+
     rel = case @training_location
-          when "home"    then relation.where(home_compatible: true)
-          when "outdoor" then relation.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT)
-          else relation
+          when "home"    then rel.where(home_compatible: true)
+          when "outdoor" then rel.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT)
+          else rel
           end
 
     rel = rel.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?

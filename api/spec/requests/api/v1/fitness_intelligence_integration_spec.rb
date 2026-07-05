@@ -10,6 +10,7 @@ RSpec.describe "Fitness intelligence integration", type: :request do
     allow(WorkoutPlanGeneratorService).to receive(:new).and_return(generator)
 
     post "/api/v1/health_profile", params: valid_health_profile_params
+    GenerateWorkoutPlanJob.perform_now(user.id) unless user.reload.active_workout_plan
 
     expect(response).to have_http_status(:created)
     expect(JSON.parse(response.body)).to include("goal" => "gain_muscle")
@@ -39,7 +40,12 @@ RSpec.describe "Fitness intelligence integration", type: :request do
   it "refreshes the profile when an exercise is favorited" do
     create(:health_profile, user: user)
     FitnessIntelligence::ProfileBuilder.new(user).call(source: "spec_setup")
-    exercise = Exercise.create!(name: "Puxada", exercise_type: "musculacao", muscle_group: "back")
+    exercise = Exercise.create!(
+      name: "Puxada",
+      exercise_type: "musculacao",
+      muscle_group: "back",
+      gif_url: "/exercise-images/gifdotreino/costas/puxada.gif"
+    )
 
     post "/api/v1/exercises/#{exercise.id}/favorite"
 
@@ -52,8 +58,18 @@ RSpec.describe "Fitness intelligence integration", type: :request do
   it "persists declared preferences, syncs favorites, and refreshes the same fitness profile" do
     generator = instance_double(WorkoutPlanGeneratorService, call: nil)
     allow(WorkoutPlanGeneratorService).to receive(:new).and_return(generator)
-    favorite = Exercise.create!(name: "Supino", exercise_type: "musculacao", muscle_group: "chest")
-    avoided = Exercise.create!(name: "Burpee", exercise_type: "funcional", muscle_group: "core")
+    favorite = Exercise.create!(
+      name: "Supino",
+      exercise_type: "musculacao",
+      muscle_group: "chest",
+      gif_url: "/exercise-images/gifdotreino/peitoral/supino.gif"
+    )
+    avoided = Exercise.create!(
+      name: "Burpee",
+      exercise_type: "funcional",
+      muscle_group: "core",
+      gif_url: "/exercise-images/gifdotreino/funcional-e-hit/burpee.gif"
+    )
 
     post "/api/v1/health_profile", params: valid_health_profile_params.merge(
       goal: "strength",
@@ -83,7 +99,12 @@ RSpec.describe "Fitness intelligence integration", type: :request do
 
   it "keeps favorites when an update omits favorite_exercise_ids" do
     health_profile = create(:health_profile, user: user)
-    favorite = Exercise.create!(name: "Leg press", exercise_type: "musculacao", muscle_group: "legs")
+    favorite = Exercise.create!(
+      name: "Leg press",
+      exercise_type: "musculacao",
+      muscle_group: "legs",
+      gif_url: "/exercise-images/gifdotreino/pernas/leg-press.gif"
+    )
     user.user_favorite_exercises.create!(exercise: favorite)
     FitnessIntelligence::ProfileBuilder.new(user).call(source: "spec_setup")
 
@@ -106,7 +127,12 @@ RSpec.describe "Fitness intelligence integration", type: :request do
       intensity_preference: "balanced",
       training_context: "postpartum"
     )
-    exercise = Exercise.create!(name: "Puxada limpa", exercise_type: "musculacao", muscle_group: "back")
+    exercise = Exercise.create!(
+      name: "Puxada limpa",
+      exercise_type: "musculacao",
+      muscle_group: "back",
+      gif_url: "/exercise-images/gifdotreino/costas/puxada-limpa.gif"
+    )
     user.user_favorite_exercises.create!(exercise: exercise)
 
     delete "/api/v1/profile/data", params: { data_types: [ "health_profile_optional" ] }
@@ -192,7 +218,7 @@ RSpec.describe "Fitness intelligence integration", type: :request do
   end
 
   def create_strategy_catalog
-    %w[chest back legs core].each do |muscle_group|
+    %w[chest back shoulders biceps triceps legs core].each do |muscle_group|
       Exercise.create!(
         name: "Estratégia #{muscle_group}",
         exercise_type: "musculacao",
@@ -200,7 +226,7 @@ RSpec.describe "Fitness intelligence integration", type: :request do
         equipment_type: "bodyweight",
         difficulty_level: "beginner",
         home_compatible: true,
-        gif_url: "/exercise-images/#{muscle_group}.gif"
+        gif_url: "/exercise-images/gifdotreino/test/#{muscle_group}.gif"
       )
     end
   end
