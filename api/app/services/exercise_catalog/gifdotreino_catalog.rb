@@ -109,20 +109,21 @@ module ExerciseCatalog
       name_slug = path.basename(".gif").to_s
       mapping = GROUP_MAP.fetch(group_slug) { { muscle_group: "core", exercise_type: "funcional", equipment_type: "bodyweight", home_compatible: true } }
 
-      {
+      attrs = {
         name: display_name(name_slug),
         exercise_type: mapping[:exercise_type],
         muscle_group: mapping[:muscle_group],
         equipment_type: mapping[:equipment_type],
         home_compatible: mapping[:home_compatible],
         difficulty: "intermediate",
-        difficulty_level: "intermediate",
-        gif_url: "#{Exercise::GIFDOTREINO_URL_PREFIX}#{group_slug}/#{name_slug}.gif",
-        gif_path: path.to_s,
-        image_url: nil,
-        image_fallback_url: nil,
-        source_dataset: "gifdotreino"
+        gif_url: "#{Exercise::GIFDOTREINO_URL_PREFIX}#{group_slug}/#{name_slug}.gif"
       }
+      attrs[:gif_path] = path.to_s if exercise_column?(:gif_path)
+      attrs[:image_url] = nil if exercise_column?(:image_url)
+      attrs[:image_fallback_url] = nil if exercise_column?(:image_fallback_url)
+      attrs[:source_dataset] = "gifdotreino" if exercise_column?(:source_dataset)
+      attrs[:difficulty_level] = "intermediate" if exercise_column?(:difficulty_level)
+      attrs
     end
 
     def display_name(name_slug)
@@ -301,6 +302,10 @@ module ExerciseCatalog
         strategy_refs_updated: 0,
         workout_days_invalidated: 0
       }
+    end
+
+    def exercise_column?(name)
+      Exercise.column_names.include?(name.to_s)
     end
 
     def normalize(value)

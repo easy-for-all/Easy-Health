@@ -154,7 +154,14 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
   end
 
   describe "real-time execution lifecycle" do
-    let(:exercise) { Exercise.create!(name: "Rosca com Halteres", exercise_type: "musculacao", muscle_group: "biceps") }
+    let(:exercise) do
+      Exercise.create!(
+        name: "Rosca com Halteres",
+        exercise_type: "musculacao",
+        muscle_group: "biceps",
+        gif_url: "/exercise-images/gifdotreino/biceps/rosca-com-halteres.gif"
+      )
+    end
 
     # This app's request-spec session does not carry the signed-in user across
     # multiple sequential requests within the same example, so each call in a
