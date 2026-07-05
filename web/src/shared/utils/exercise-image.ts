@@ -1,5 +1,5 @@
 const GYM_EQUIPMENT_TYPES = ["gym", "dumbbell", "barbell", "cable", "machine"] as const;
-const OFFICIAL_IMAGE_PREFIXES = ["/exercise-images/db/", "/exercise-images/gifdotreino/"] as const;
+const GIFDOTREINO_PREFIX = "/exercise-images/gifdotreino/";
 
 type ExerciseForImage = {
   exercise_type?: string | null;
@@ -15,11 +15,9 @@ export function isGymExercise(exercise: Pick<ExerciseForImage, "exercise_type" |
   );
 }
 
-// Returns the image URL only if it is from the official Git-versioned source.
-// For gym/musculacao exercises, external URLs are blocked and null is returned instead.
+// Returns the image URL only if it is from the official gifdotreino source.
 export function getGymSafeImageUrl(exercise: ExerciseForImage): string | null {
-  const url = isGymExercise(exercise) ? exercise.gif_url || exercise.image_url : exercise.image_url;
+  const url = exercise.gif_url || exercise.image_url;
   if (!url) return null;
-  if (!isGymExercise(exercise)) return url;
-  return OFFICIAL_IMAGE_PREFIXES.some((prefix) => url.startsWith(prefix)) ? url : null;
+  return url.startsWith(GIFDOTREINO_PREFIX) && url.toLowerCase().endsWith(".gif") ? url : null;
 }

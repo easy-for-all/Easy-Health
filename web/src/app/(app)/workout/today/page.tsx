@@ -1013,6 +1013,7 @@ function WorkoutTodayContent() {
     return sum;
   }, 0);
   const setProgress = totalPlannedSets > 0 ? Math.min(100, Math.round((completedSets / totalPlannedSets) * 100)) : 0;
+  const exerciseMediaUrl = getGymSafeImageUrl(exercise);
 
   return (
     <>
@@ -1071,14 +1072,14 @@ function WorkoutTodayContent() {
         className="flex flex-1 flex-col"
       >
         {/* Exercise media — large GIF when available */}
-        {exercise.gif_url ? (
+        {exerciseMediaUrl ? (
           <div
             className="relative w-full cursor-pointer overflow-hidden rounded-2xl"
             style={{ maxHeight: "clamp(160px, 38svh, 280px)" }}
             onClick={() => setGifModalExercise(exercise)}
           >
             <img
-              src={exercise.gif_url}
+              src={exerciseMediaUrl}
               alt={exercise.name}
               className="w-full object-cover rounded-2xl"
               style={{ height: "clamp(160px, 38svh, 280px)" }}
@@ -1113,7 +1114,7 @@ function WorkoutTodayContent() {
 
         {/* Action chips — Lumen style */}
         <div className="exec-actions" style={{ marginTop: 8 }}>
-          {!exercise.gif_url && exercise.image_url && (
+          {!exercise.gif_url && exerciseMediaUrl && (
             <button onClick={() => setGifModalExercise(exercise)} className="exec-chip">
               <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Ver
@@ -1351,7 +1352,7 @@ function WorkoutTodayContent() {
           />
         ) : (
           <img
-            src={gifModalExercise.gif_url ?? gifModalExercise.image_url}
+            src={getGymSafeImageUrl(gifModalExercise) ?? exerciseFallback(gifModalExercise)}
             alt={gifModalExercise.name}
             className="max-h-[70vh] max-w-full rounded-xl object-contain"
           />
@@ -1989,7 +1990,7 @@ function OverviewScreen({
                 </div>
               </div>
               <div className="mt-2 flex gap-2">
-                {(ex.gif_url || ex.image_url) && (
+                {getGymSafeImageUrl(ex) && (
                   <button
                     onClick={() => setGifModal(ex)}
                     className="flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-600"
@@ -2156,7 +2157,7 @@ function OverviewScreen({
         {gifModal.video_url ? (
           <video src={gifModal.video_url} autoPlay loop muted playsInline className="max-h-[70vh] max-w-full rounded-xl object-contain" />
         ) : (
-          <img src={gifModal.gif_url ?? gifModal.image_url} alt={gifModal.name} className="max-h-[70vh] max-w-full rounded-xl object-contain" />
+          <img src={getGymSafeImageUrl(gifModal) ?? exerciseFallback(gifModal)} alt={gifModal.name} className="max-h-[70vh] max-w-full rounded-xl object-contain" />
         )}
         <p className="mt-4 text-xs text-white/50">Toque para fechar</p>
       </div>

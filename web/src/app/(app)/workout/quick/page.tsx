@@ -59,15 +59,14 @@ export default function QuickWorkoutPage() {
   }
 
   async function generate(selectedDifficulty: Difficulty) {
-    if (!modality || !duration || !location) return;
     setGenerating(true);
     setError("");
 
     try {
       const data = await api.post<{ day: WorkoutDay }>("/api/v1/quick_workouts", {
-        modality,
-        duration_minutes: duration,
-        location,
+        modality: modality ?? "ai_choice",
+        duration_minutes: duration ?? 30,
+        location: location ?? "academia",
         difficulty: selectedDifficulty,
         equipment,
       });

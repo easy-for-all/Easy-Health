@@ -8,6 +8,7 @@ import {
   type CoachMessage,
   type ExerciseAlternative,
 } from "@/features/coach/coach-context";
+import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 import "./coach-sheet.css";
 
 // ─── Quick chip sets ─────────────────────────────────────────────────────────
@@ -78,7 +79,7 @@ function AltCard({
   dimmed: boolean;
   onApply: () => void;
 }) {
-  const imgSrc = alt.gif_url || alt.image_url || `/exercise-images/${alt.exercise_type || "treino"}.svg`;
+  const imgSrc = getGymSafeImageUrl(alt) || `/exercise-images/${alt.exercise_type || "treino"}.svg`;
   const muscleLabel = alt.muscle_group ? (MUSCLE_LABELS[alt.muscle_group] ?? alt.muscle_group) : null;
   const typeLabel = EXERCISE_TYPE_LABELS[alt.exercise_type] ?? null;
 
