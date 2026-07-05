@@ -36,7 +36,7 @@ class StripeCheckoutService
   def self.find_or_create_customer(user)
     sub = user.subscription
 
-    return sub.stripe_customer_id if sub&.stripe_customer_id.present?
+    return sub.stripe_customer_id if sub&.stripe_customer_id&.start_with?("cus_")
 
     customer = Stripe::Customer.create(
       email: user.email,

@@ -67,6 +67,17 @@ class User < ApplicationRecord
   validates :email, presence: true, uniqueness: { case_sensitive: false }
   validates :account_type, inclusion: { in: ACCOUNT_TYPES }
   validates :profile_visibility, inclusion: { in: PROFILE_VISIBILITIES }
+  validate :email_not_blocked, on: :create
+
+  def active_for_authentication?
+    super && anonymized_at.nil?
+  end
+
+  def inactive_message
+    anonymized_at.present? ? :account_deleted : super
+  end
+
+  class BlockedEmailError < StandardError; end
 
   def self.from_omniauth(auth)
     user = find_by(provider: auth.provider, uid: auth.uid)
@@ -75,6 +86,8 @@ class User < ApplicationRecord
     if user
       user.update(provider: auth.provider, uid: auth.uid) unless user.provider.present?
     else
+      raise BlockedEmailError if BlockedEmail.blocked?(auth.info.email)
+
       user = create!(
         provider: auth.provider,
         uid: auth.uid,
@@ -164,6 +177,10 @@ class User < ApplicationRecord
   end
 
   private
+
+  def email_not_blocked
+    errors.add(:email, "não pode mais ser usado para criar uma conta") if BlockedEmail.blocked?(email)
+  end
 
   def start_app_trial
     return if trial_started_at.present?

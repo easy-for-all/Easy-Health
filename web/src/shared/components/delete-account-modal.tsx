@@ -45,11 +45,16 @@ export function DeleteAccountModal({ onClose, onSignOut }: DeleteAccountModalPro
 
         <h2 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">Excluir Conta</h2>
 
-        <p className="mb-5 text-sm text-gray-600 dark:text-gray-400">
+        <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
           Esta ação é irreversível. Ao excluir sua conta, seu acesso será removido e seus dados
           pessoais serão apagados conforme permitido por lei. Alguns registros mínimos poderão ser
           mantidos para cumprimento de obrigações legais, fiscais, auditoria, antifraude ou
           comprovação de pagamentos.
+        </p>
+
+        <p className="mb-5 text-sm font-medium text-red-600 dark:text-red-400">
+          Este e-mail (e a conta Google associada, se houver) não poderá ser usado para criar uma
+          nova conta no EasyHealth.
         </p>
 
         <p className="mb-2 text-sm font-medium text-gray-700">

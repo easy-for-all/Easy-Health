@@ -10,6 +10,13 @@ module Api
         def google_oauth2
           Rails.logger.info("[GoogleOAuth] started uid=#{request.env.dig('omniauth.auth', 'uid')}")
           user = User.from_omniauth(request.env["omniauth.auth"])
+
+          if user.anonymized_at.present?
+            Rails.logger.info("[GoogleOAuthCallback] blocked login for anonymized user_id=#{user.id}")
+            redirect_to "#{FRONTEND}/login?error=account_deleted", allow_other_host: true
+            return
+          end
+
           sign_in(user)
           cookies[:_eh_auth] = { value: "1", domain: ".easyhealth.art", path: "/", secure: true, httponly: false, same_site: :lax }
           new_user = user.previously_new_record? || (user.created_at > 5.minutes.ago && user.health_profile.nil?)
@@ -23,6 +30,9 @@ module Api
           else
             redirect_to "#{FRONTEND}#{new_user ? '/onboarding' : '/dashboard'}", allow_other_host: true
           end
+        rescue User::BlockedEmailError
+          Rails.logger.info("[GoogleOAuthCallback] blocked email attempted signup")
+          redirect_to "#{FRONTEND}/login?error=account_deleted", allow_other_host: true
         rescue => e
           Rails.logger.error("[GoogleOAuthError] #{e.class}: #{e.message}")
           redirect_to "#{FRONTEND}/login?error=oauth_failed", allow_other_host: true
