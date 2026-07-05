@@ -1,202 +1,117 @@
 # Security Status — easyhealth.art
 
-**Avaliado em:** 2026-05-31  
-**Scan original:** 13 achados · 0 críticos · 2 altos · 2 médios · 4 baixos  
-**Status atual:** 7/8 achados resolvidos · 1 pendente
+**Avaliado em:** 2026-07-05  
+**Scan mais recente:** 2026-07-04 · 11 achados · 0 críticos · 0 altos · 1 médio · 2 baixos  
+**Status atual:** achados médios e baixos tratados no código/monitoramento, com 1 residual operacional aceito
 
 ---
 
 ## Resumo
 
-| Severidade | Total | Resolvido | Pendente |
-|------------|-------|-----------|----------|
-| Crítico    | 0     | —         | —        |
-| Alto       | 2     | ✅ 2      | 0        |
-| Médio      | 2     | ✅ 2      | 0        |
-| Baixo      | 4     | ✅ 3      | ⚠️ 1     |
+| Achado | Severidade | Status |
+|--------|------------|--------|
+| Certificado TLS expira em 40 dias | Médio | ✅ Monitoramento recorrente configurado |
+| Sem correlation id visível na resposta | Baixo | ✅ Corrigido no web e já existente na API |
+| Header `Server` expõe software do servidor | Baixo | ⚠️ Residual Cloudflare aceito/documentado |
 
 ---
 
-## ✅ Resolvidos
+## ✅ Tratados
 
-### [HIGH] HSTS ausente
+### [MEDIUM] Certificado TLS expira em 40 dias
 
-**Arquivo:** `web/next.config.ts:9` + `api/config/initializers/security_headers.rb`
+**Status:** monitorado por workflow agendado e por check pós-deploy.
 
-```ts
-// web/next.config.ts
-{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-```
+O certificado público observado em 2026-07-05 expira em **2026-08-14 23:09:20 GMT** para `easyhealth.art` e `api.easyhealth.art`.
 
-```ruby
-# api/config/initializers/security_headers.rb
-"Strict-Transport-Security" => "max-age=31536000; includeSubDomains",
-```
+**Implementado:**
 
----
-
-### [HIGH] Content Security Policy (CSP) ausente
-
-**Arquivo:** `web/next.config.ts:23-36` + `api/config/initializers/security_headers.rb`
-
-```ts
-// web/next.config.ts — CSP completo por ambiente
-{
-  key: "Content-Security-Policy",
-  value: [
-    "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}
-      https://static.cloudflareinsights.com https://www.googletagmanager.com
-      https://www.clarity.ms https://scripts.clarity.ms
-      https://googleads.g.doubleclick.net`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://www.google.com ...",
-    "connect-src 'self' https: https://www.google-analytics.com ...",
-    "font-src 'self'",
-    "worker-src blob: 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-  ].join("; "),
-},
-```
-
-```ruby
-# api/config/initializers/security_headers.rb — CSP restritivo para a API
-"Content-Security-Policy" => "default-src 'none'; frame-ancestors 'none'"
-```
-
----
-
-### [MEDIUM] X-Content-Type-Options ausente
-
-**Arquivo:** `web/next.config.ts:11` + `api/config/initializers/security_headers.rb`
-
-```ts
-{ key: "X-Content-Type-Options", value: "nosniff" },
-```
-
-```ruby
-"X-Content-Type-Options" => "nosniff",
-```
-
----
-
-### [MEDIUM] Certificado TLS expira em 74 dias
-
-**Monitoramento implementado** via script + GitHub Actions a cada deploy para `easyhealth.art` e `api.easyhealth.art`.
-
-```bash
-# scripts/check_cert_expiry.sh
-DOMAIN="${1:-easyhealth.art}"
-WARN_DAYS="${2:-45}"
-# Verifica openssl e alerta se qualquer dominio tiver < WARN_DAYS dias
-```
+- `scripts/check_cert_expiry.sh` verifica um ou mais domínios e falha quando restam menos dias que o limite configurado.
+- `.github/workflows/tls-certificate-check.yml` roda diariamente às 08:15 UTC e também aceita `workflow_dispatch`.
+- `.github/workflows/deploy.yml` mantém o aviso pós-deploy, sem bloquear deploy por causa de expiração próxima.
 
 ```yaml
-# .github/workflows/deploy.yml — step final
-- name: Check TLS certificate expiry
-  run: bash scripts/check_cert_expiry.sh easyhealth.art 45 api.easyhealth.art ||
-       echo "::warning::TLS certificate for EasyHealth is expiring soon - renew it!"
+# .github/workflows/tls-certificate-check.yml
+on:
+  schedule:
+    - cron: "15 8 * * *"
+  workflow_dispatch:
+
+run: bash scripts/check_cert_expiry.sh easyhealth.art "$WARN_DAYS" api.easyhealth.art
 ```
 
-> **Ação operacional na VPS:** configurar auto-renovação no servidor, por exemplo com cron/systemd timer para `certbot renew --quiet` e deploy hook para recarregar o proxy (`nginx -s reload`, `systemctl reload nginx` ou equivalente do proxy usado).  
-> O repositório monitora e alerta; a renovação efetiva depende da configuração TLS do servidor.
-
-### [LOW] Header Server expõe software do servidor
-
-**Ação operacional na VPS/proxy:** remover ou reduzir o header no proxy que termina TLS. Em Nginx, usar `server_tokens off;` e, se houver módulo apropriado, limpar `Server`. Em Cloudflare/CDN, aplicar regra equivalente no edge. Rails/Next não conseguem remover de forma confiável um header adicionado pelo proxy externo.
+> Cloudflare Universal SSL renova certificados de borda automaticamente para domínios ativos, mas o alerta recorrente continua necessário para detectar falhas operacionais antes da expiração: https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/
 
 ---
 
-### [LOW] Permissions-Policy ausente
+### [LOW] Sem correlation id visível na resposta
 
-**Arquivo:** `web/next.config.ts:17` + `api/config/initializers/security_headers.rb`
+**Status:** corrigido.
 
-```ts
-{ key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+**API Rails:** já retorna `X-Request-Id` via `ApplicationController#set_request_id_header` e usa `config.log_tags = [ :request_id ]` em produção.
+
+**Web Next.js:** `web/src/proxy.ts` agora gera um UUID por request, retorna headers seguros ao cliente e propaga o request id para o render upstream do Next. Como o projeto usa `src/app`, o Proxy precisa ficar dentro de `src/` para ser carregado pelo Next.
+
+Headers públicos esperados no web:
+
+```http
+X-Request-Id: <uuid>
+X-Correlation-Id: <mesmo uuid>
 ```
 
-```ruby
-"Permissions-Policy" => "camera=(), microphone=(), geolocation=()",
-```
+Nenhum contrato JSON, cookie de sessão, autenticação ou fluxo Rails foi alterado.
 
 ---
 
-### [LOW] Cross-Origin-Opener-Policy (COOP) ausente
+## ⚠️ Residual Aceito
 
-**Arquivo:** `web/next.config.ts:19` + `api/config/initializers/security_headers.rb`
+### [LOW] Header `Server` expõe software do servidor
 
-```ts
-{ key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+**Status:** residual operacional aceito na borda Cloudflare.
+
+O código da aplicação já reduz exposição onde controla a resposta:
+
+- `web/next.config.ts` usa `poweredByHeader: false`.
+- `api/config/initializers/security_headers.rb` remove `Server` e `X-Powered-By` quando esses headers são adicionados pela aplicação/origem.
+
+O header público observado é:
+
+```http
+server: cloudflare
 ```
 
-```ruby
-"Cross-Origin-Opener-Policy" => "same-origin",
-```
+Esse header vem do edge da Cloudflare. A documentação de Response Header Transform Rules informa que certos headers, incluindo `server`, não podem ser modificados por essa funcionalidade. Portanto, não há correção confiável em Rails/Next para remover esse valor público enquanto o tráfego estiver atrás da Cloudflare.
+
+Referência: https://developers.cloudflare.com/rules/transform/response-header-modification/
 
 ---
 
-### [LOW] Header Server expõe software
+## Controles Já Implementados
 
-**Arquivo:** `web/next.config.ts:40` + `api/config/initializers/security_headers.rb`
-
-```ts
-// Next.js — remove X-Powered-By
-const nextConfig = {
-  poweredByHeader: false,
-  // ...
-};
-```
-
-```ruby
-# Rails — middleware remove Server e X-Powered-By dinamicamente
-Rails.application.config.middleware.insert_before 0, Class.new {
-  def initialize(app) = (@app = app)
-  def call(env)
-    status, headers, body = @app.call(env)
-    headers.delete("Server")
-    headers.delete("X-Powered-By")
-    [status, headers, body]
-  end
-}
-```
+| Controle | Onde |
+|----------|------|
+| HSTS | `web/next.config.ts` + `api/config/initializers/security_headers.rb` |
+| Content Security Policy | `web/next.config.ts` + `api/config/initializers/security_headers.rb` |
+| `X-Content-Type-Options: nosniff` | `web/next.config.ts` + `api/config/initializers/security_headers.rb` |
+| `X-Frame-Options: DENY` | `web/next.config.ts` + `api/config/initializers/security_headers.rb` |
+| `Referrer-Policy: strict-origin-when-cross-origin` | `web/next.config.ts` + `api/config/initializers/security_headers.rb` |
+| `Permissions-Policy` | `web/next.config.ts` + `api/config/initializers/security_headers.rb` |
+| `Cross-Origin-Opener-Policy` | `web/next.config.ts` + `api/config/initializers/security_headers.rb` |
+| Rate limiting geral | `api/config/initializers/rack_attack.rb` |
+| Brute-force no login | `api/config/initializers/rack_attack.rb` |
+| Proteção signup spam | `api/config/initializers/rack_attack.rb` |
 
 ---
 
-## ⚠️ Pendente
+## Validação Recomendada
 
-### [LOW] Correlation ID por request
-
-**Status:** não implementado.
-
-**O que fazer:** gerar um UUID por request, propagar em logs e retornar em header seguro.
-
-```ruby
-# Sugestão — api/config/initializers/correlation_id.rb
-Rails.application.config.middleware.insert_before 0, Class.new {
-  def initialize(app) = (@app = app)
-  def call(env)
-    request_id = env["HTTP_X_REQUEST_ID"].presence || SecureRandom.uuid
-    env["action_dispatch.request_id"] = request_id
-    status, headers, body = @app.call(env)
-    headers["X-Request-Id"] = request_id
-    [status, headers, body]
-  end
-}
+```bash
+npm run typecheck
+npm run lint
+npm run build
+bash scripts/check_cert_expiry.sh easyhealth.art 45 api.easyhealth.art
+curl -I https://easyhealth.art/
+curl -I https://api.easyhealth.art/api/v1/health
 ```
 
-> Rails já faz isso automaticamente com `ActionDispatch::RequestId` (ativado por padrão).  
-> Verificar se está incluído no middleware stack: `bin/rails middleware | grep RequestId`
-
----
-
-## Bônus implementado (não estava no plano original)
-
-| Item | Onde |
-|------|------|
-| `X-Frame-Options: DENY` (anti-clickjacking) | `next.config.ts` + `security_headers.rb` |
-| `Referrer-Policy: strict-origin-when-cross-origin` | `next.config.ts` + `security_headers.rb` |
-| Rate limiting geral (300 req/5min/IP) | `api/config/initializers/rack_attack.rb` |
-| Brute-force no login (10 tentativas/min/IP) | `api/config/initializers/rack_attack.rb` |
-| Proteção signup spam (5 tentativas/min/IP) | `api/config/initializers/rack_attack.rb` |
-| `unsafe-eval` só em desenvolvimento (Turbopack) | `next.config.ts` (CSP condicional) |
+Após deploy, `easyhealth.art` deve exibir `x-request-id` e `x-correlation-id`; `api.easyhealth.art` deve continuar exibindo `x-request-id`.
