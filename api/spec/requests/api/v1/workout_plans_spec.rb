@@ -33,6 +33,27 @@ RSpec.describe "Api::V1::WorkoutPlans", type: :request do
       body = JSON.parse(response.body)
       exercise_json = body["day"]["exercises"].first
       expect(Time.parse(exercise_json["last_performed_at"])).to be_within(1.minute).of(5.days.ago)
+      # The reported bug, restated through the new explicit fields: the in-progress/cancelled
+      # attempts must never surface as "last time"/"last weight", only the real completed session.
+      expect(exercise_json["last_execution_label"]).to eq("Há 5 dias")
+      expect(exercise_json["last_weight_kg"]).to eq(12.0)
+    end
+
+    it "exposes planned_weight_kg from the workout_day_exercise" do
+      day.workout_day_exercises.first.update!(planned_weight: 20)
+
+      get "/api/v1/workout_days/#{day.id}"
+
+      exercise_json = JSON.parse(response.body)["day"]["exercises"].first
+      expect(exercise_json["planned_weight_kg"].to_f).to eq(20.0)
+    end
+
+    it "says 'Primeira vez neste exercício' when there is no history at all" do
+      get "/api/v1/workout_days/#{day.id}"
+
+      exercise_json = JSON.parse(response.body)["day"]["exercises"].first
+      expect(exercise_json["last_execution_label"]).to eq("Primeira vez neste exercício")
+      expect(exercise_json["last_weight_kg"]).to be_nil
     end
 
     it "does not surface a cancelled session as the day's last_completed_at" do
