@@ -14,12 +14,23 @@ namespace :account do
 
     sub = user.subscription
     abort "User #{user.id} has no subscription record to recover Stripe data from." unless sub
-    abort "User #{user.id}'s subscription has no stripe_subscription_id — original " \
-          "email/name can't be recovered from Stripe. Confirm details with the customer " \
-          "directly instead of running this task." if sub.stripe_subscription_id.blank?
 
-    stripe_subscription = Stripe::Subscription.retrieve(sub.stripe_subscription_id)
-    stripe_customer = Stripe::Customer.retrieve(stripe_subscription.customer)
+    stripe_subscription = nil
+    stripe_customer =
+      if sub.stripe_subscription_id.present?
+        stripe_subscription = Stripe::Subscription.retrieve(sub.stripe_subscription_id)
+        Stripe::Customer.retrieve(stripe_subscription.customer)
+      else
+        # Legacy accounts may have gone through checkout without a webhook ever
+        # writing stripe_subscription_id locally. The Stripe Customer created in
+        # StripeCheckoutService always carries metadata.user_id, so fall back to
+        # searching by that instead of giving up.
+        Stripe::Customer.search(query: "metadata['user_id']:'#{user.id}'").data.first
+      end
+
+    abort "No Stripe customer found for user #{user.id} (checked stripe_subscription_id and " \
+          "metadata.user_id search) — original email/name can't be recovered from Stripe. " \
+          "Confirm details with the customer directly instead of running this task." unless stripe_customer
 
     real_email = stripe_customer.email
     real_name  = stripe_customer.name.presence || user.name
@@ -29,7 +40,7 @@ namespace :account do
     puts "  recovered email:            #{real_email}"
     puts "  recovered name:             #{real_name}"
     puts "  stripe_customer_id:         #{stripe_customer.id}"
-    puts "  stripe subscription status: #{stripe_subscription.status}"
+    puts "  stripe subscription status: #{stripe_subscription ? stripe_subscription.status : "unknown (found via metadata search, no stripe_subscription_id on record)"}"
 
     if ENV["CONFIRM"] != "yes"
       puts "\nDry run only — no changes made. Re-run with CONFIRM=yes to apply."
