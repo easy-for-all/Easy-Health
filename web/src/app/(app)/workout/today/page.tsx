@@ -18,7 +18,8 @@ import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared
 import { ShareButton } from "@/shared/components/workout-share/share-button";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
-import { relativeDate, relativeDayLabel } from "@/shared/utils/relative-date";
+import { relativeDate } from "@/shared/utils/relative-date";
+import { historyWeight } from "@/features/workout/use-exercise-history";
 import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 import { useCoach } from "@/features/coach/coach-context";
 import { AgentOrb } from "@/shared/components/agent-orb";
@@ -274,7 +275,7 @@ function WorkoutTodayContent() {
 
     Promise.all([
       api.get<WorkoutPlan>("/api/v1/workout_plan").catch(() => null),
-      api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions?recent=1").catch(() => ({ sessions: [], total: 0 })),
+      api.get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions?recent=1&status=completed").catch(() => ({ sessions: [], total: 0 })),
     ]).then(async ([p, history]) => {
       setPlan(p);
       setSessions(history.sessions ?? []);
@@ -283,7 +284,7 @@ function WorkoutTodayContent() {
         if (target) {
           try {
             const { day: loaded } = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${target.id}`);
-            const runtime = Object.fromEntries((loaded.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex, lastUsedWeight(history.sessions ?? [], ex.exercise_id))]));
+            const runtime = Object.fromEntries((loaded.exercises ?? []).map((ex) => [ex.workout_day_exercise_id, createRuntime(ex, historyWeight(ex))]));
             setDay(loaded);
             setExerciseRuntime(runtime);
             setCurrentIndex(0);
@@ -315,7 +316,7 @@ function WorkoutTodayContent() {
             }
 
             // Build runtime: defaults merged with saved state
-            const defaultRuntime = Object.fromEntries(exercises.map((ex) => [ex.workout_day_exercise_id, createRuntime(ex, lastUsedWeight(history.sessions ?? [], ex.exercise_id))]));
+            const defaultRuntime = Object.fromEntries(exercises.map((ex) => [ex.workout_day_exercise_id, createRuntime(ex, historyWeight(ex))]));
             const storedRuntimeRaw = sessionStorage.getItem("wk_exercise_runtime");
             let restoredRuntime = defaultRuntime;
             if (storedRuntimeRaw) {
@@ -435,7 +436,7 @@ function WorkoutTodayContent() {
       const data = await api.get<{ day: WorkoutDay }>(`/api/v1/workout_days/${workoutDay.id}`);
       const runtime = Object.fromEntries((data.day.exercises ?? []).map((exercise) => [
         exercise.workout_day_exercise_id,
-        createRuntime(exercise, lastUsedWeight(sessions, exercise.exercise_id)),
+        createRuntime(exercise, historyWeight(exercise)),
       ]));
       setDay(data.day);
       setExerciseRuntime(runtime);
@@ -803,7 +804,7 @@ function WorkoutTodayContent() {
             ...prev,
             ...Object.fromEntries((nextDay.exercises ?? []).filter((exercise) => !prev[exercise.workout_day_exercise_id]).map((exercise) => [
               exercise.workout_day_exercise_id,
-              createRuntime(exercise, lastUsedWeight(sessions, exercise.exercise_id)),
+              createRuntime(exercise, historyWeight(exercise)),
             ])),
           }));
         }}
@@ -1136,44 +1137,23 @@ function WorkoutTodayContent() {
           <h2 className="text-2xl font-bold text-white leading-tight">{exercise.name}</h2>
         </div>
         {(() => {
-          const prev = lastExerciseLog(sessions, exercise.exercise_id);
-          if (!prev) {
-            if (exercise.last_performed_at) {
-              const label = relativeDayLabel(exercise.last_performed_at);
-              return <p className="mt-1 text-xs text-slate-500">Última vez: {label}</p>;
-            }
-            return null;
+          // Server-computed via ExerciseHistoryService: it already excludes the
+          // current in-progress session and any cancelled/abandoned ones, so
+          // this never shows "done today" while the set below is still pending.
+          const label = exercise.last_execution_label;
+          if (!label || label === "Primeira vez neste exercício") {
+            return <p className="mt-1 text-xs text-slate-500">Primeira vez neste exercício</p>;
           }
-          const log = prev.log;
-          const warmupFlags: boolean[] = (log as { is_warmup_by_set?: boolean[] }).is_warmup_by_set ?? [];
-          const normalWeights = Array.isArray(log.weight_by_set)
-            ? log.weight_by_set.filter((_, i) => !warmupFlags[i]).filter((w): w is number => w != null && w > 0)
-            : [];
-          const maxWeight = normalWeights.length > 0
-            ? Math.max(...normalWeights)
-            : (log.weight_kg && log.weight_kg > 0 ? log.weight_kg : null);
-          const setsCount = log.sets ?? (Array.isArray(log.weight_by_set) ? log.weight_by_set.length : null);
-          const repsVal = Array.isArray(log.reps) ? (log.reps[0] ?? null) : (log.reps ?? null);
-          const feelingEmoji: Record<string, string> = { "bem": "😊", "cansado": "😓", "pesado": "⚠️", "dolorido": "🤕", "com dor": "🚨" };
-          const feelEmoji = log.feeling ? (feelingEmoji[log.feeling] ?? null) : null;
-          const suggestion = maxWeight && log.feeling !== "com dor" && log.feeling !== "cansado"
-            ? maxWeight + (maxWeight >= 30 ? 2.5 : 1)
-            : null;
-          const dateLabel = relativeDate(prev.session.completed_at);
+          const weight = exercise.last_weight_kg != null ? Number(exercise.last_weight_kg) : null;
           return (
             <div className="mt-2 rounded-lg border border-slate-700/60 bg-slate-800/50 px-3 py-2">
-              <p className="text-xs font-medium text-slate-400 mb-1">Da última vez · {dateLabel}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                {maxWeight && (
-                  <span className="text-sm font-bold text-white">
-                    {maxWeight} kg{setsCount && repsVal ? ` · ${setsCount}×${repsVal}` : setsCount ? ` · ${setsCount} séries` : ""}
-                  </span>
-                )}
-                {feelEmoji && <span className="text-base">{feelEmoji}</span>}
-              </div>
-              {suggestion && (
+              <p className="text-xs font-medium text-slate-400 mb-1">{label}</p>
+              {weight != null && weight > 0 && (
+                <span className="text-sm font-bold text-white">{weight} kg</span>
+              )}
+              {exercise.progression_reason && (
                 <p className="mt-1 text-xs font-semibold" style={{ color: "var(--primary, #60a5fa)" }}>
-                  💡 Tente {suggestion} kg hoje
+                  💡 {exercise.progression_reason}
                 </p>
               )}
             </div>
@@ -1774,7 +1754,9 @@ function OverviewScreen({
   const exercises = day.exercises ?? [];
   const [globalRest, setGlobalRest] = useState<number>(exercises[0]?.rest_seconds ?? 90);
   const addSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSession = day.id !== null ? lastSessionForDay(sessions, day.id) : null;
+  // Server-computed (filters in_progress/cancelled sessions) - no artificial
+  // 7-day window like scanning the local `sessions` list would impose.
+  const lastCompletedAt = day.last_completed_at ?? null;
   const recentSessionsCount = sessions.length;
   const plannedSetsCount = exercises.reduce((sum, exercise) => {
     if (isCardio(exercise) || isTimed(exercise)) return sum + 1;
@@ -1918,11 +1900,11 @@ function OverviewScreen({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-primary-200">
-              {lastSession ? "Continue sua sequência" : "Primeiro registro deste treino"}
+              {lastCompletedAt ? "Continue sua sequência" : "Primeiro registro deste treino"}
             </p>
             <p className="mt-1 text-xs leading-relaxed text-slate-300">
-              {lastSession
-                ? `Última vez ${relativeDate(lastSession.completed_at)}. Repita ou ajuste as cargas para manter evolução.`
+              {lastCompletedAt
+                ? `Última vez ${relativeDate(lastCompletedAt)}. Repita ou ajuste as cargas para manter evolução.`
                 : "Complete hoje para desbloquear histórico, volume e comparações na próxima sessão."}
             </p>
           </div>
@@ -1967,14 +1949,14 @@ function OverviewScreen({
                   <p className="font-semibold text-white">{ex.name}</p>
                   <p className="text-xs text-slate-500">{state.planned_sets} séries · {ex.reps} reps</p>
                   {(() => {
-                    const prev = lastExerciseLog(sessions, ex.exercise_id);
-                    if (!prev) return <p className="text-xs text-gray-300">Nunca feito</p>;
-                    const date = new Date(prev.session.completed_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
-                    const weight = prev.log.weight_kg ? ` · ${prev.log.weight_kg} kg` : "";
+                    if (!ex.last_execution_label || ex.last_execution_label === "Primeira vez neste exercício") {
+                      return <p className="text-xs text-gray-300">Nunca feito</p>;
+                    }
+                    const weight = ex.last_weight_kg != null && Number(ex.last_weight_kg) > 0 ? ` · ${ex.last_weight_kg} kg` : "";
                     const suggestion = !isCardio(ex) && !isTimed(ex) ? loadSuggestions[ex.exercise_id] : undefined;
                     return (
                       <div>
-                        <p className="text-xs text-gray-300">Última: {date}{weight}</p>
+                        <p className="text-xs text-gray-300">{ex.last_execution_label}{weight}</p>
                         {suggestion === undefined && !isCardio(ex) && !isTimed(ex) && (
                           <button onClick={() => fetchLoadSuggestion(ex.exercise_id)} className="mt-0.5 text-xs text-primary-400 hover:underline">
                             💡 Ver sugestão de carga
@@ -2940,34 +2922,6 @@ function CooldownScreen({ day, onFinish }: { day: WorkoutDay; onFinish: () => vo
       </button>
     </div>
   );
-}
-
-function lastExerciseLog(sessions: WorkoutSession[], exerciseId: number) {
-  const sorted = [...sessions].sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
-  for (const session of sorted) {
-    const log = session.exercise_logs?.find((l) => l.exercise_id === exerciseId);
-    if (log) return { session, log };
-  }
-  return null;
-}
-
-function lastUsedWeight(sessions: WorkoutSession[], exerciseId: number): string | undefined {
-  const result = lastExerciseLog(sessions, exerciseId);
-  if (!result) return undefined;
-  const { log } = result;
-  const bySet = log.weight_by_set;
-  const warmupFlags: boolean[] = (log as { is_warmup_by_set?: boolean[] }).is_warmup_by_set ?? [];
-  if (Array.isArray(bySet) && bySet.length > 0) {
-    // exclude warmup sets when deriving the suggested weight
-    const normalWeights = bySet.filter((_, i) => !warmupFlags[i]).filter(Boolean);
-    const last = normalWeights.at(-1);
-    if (last && Number(last) > 0) return String(last);
-    // fallback: any weight if all were warmup
-    const anyLast = bySet.filter(Boolean).at(-1);
-    if (anyLast && Number(anyLast) > 0) return String(anyLast);
-  }
-  if (log.weight_kg && log.weight_kg > 0) return String(log.weight_kg);
-  return undefined;
 }
 
 const MUSCLE_LABELS: Record<string, string> = {
