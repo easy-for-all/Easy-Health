@@ -48,14 +48,6 @@ function recommendedDayId(plan: WorkoutPlan, sessions: WorkoutSession[]): number
   return plan.days[(lastIdx + 1) % plan.days.length]?.id ?? null;
 }
 
-function lastSessionForDay(sessions: WorkoutSession[], dayId: number): WorkoutSession | null {
-  return (
-    sessions
-      .filter((s) => s.workout_day_id === dayId)
-      .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime())[0] ?? null
-  );
-}
-
 // relativeDate imported from @/shared/utils/relative-date
 
 export default function WorkoutsPage() {
@@ -90,7 +82,7 @@ function WorkoutsContent() {
         .get<{ day: WorkoutDay | null }>("/api/v1/workout_plan/today")
         .catch(() => ({ day: null })),
       api
-        .get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions?recent=1")
+        .get<{ sessions: WorkoutSession[]; total: number }>("/api/v1/workout_sessions?recent=1&status=completed")
         .catch(() => ({ sessions: [], total: 0 })),
     ]).then(([p, today, history]) => {
       setPlan(p);
@@ -416,7 +408,6 @@ function WorkoutsContent() {
 function WorkoutDayCard({
   day,
   idx,
-  sessions,
   isRecommended,
   onView,
   onStart,
@@ -425,15 +416,12 @@ function WorkoutDayCard({
 }: {
   day: WorkoutDay;
   idx: number;
-  sessions: WorkoutSession[];
   isRecommended: boolean;
   onView: () => void;
   onStart: () => void;
   onToggleFavorite: () => void;
   highlight?: boolean;
 }) {
-  const lastSession = day.id !== null ? lastSessionForDay(sessions, day.id) : null;
-
   return (
     <div
       role="button"
@@ -475,7 +463,7 @@ function WorkoutDayCard({
             </div>
           ) : null}
           <p className="mt-0.5 text-xs text-slate-600">
-            {lastSession ? relativeDate(lastSession.completed_at) : "nunca executado"}
+            {day.last_completed_at ? relativeDate(day.last_completed_at) : "nunca executado"}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">

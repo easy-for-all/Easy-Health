@@ -63,6 +63,8 @@ SLUG_MAP = {
 namespace :exercises do
   desc "Copy images from local free-exercise-db to public/exercise-images/db and update DB"
   task import_local_images: :environment do
+    abort_legacy_exercise_db_task!
+
     dest_root = Rails.root.join("public", "exercise-images", "db")
 
     # Try to find the local image source (dev host or prod with mounted volume)
@@ -104,6 +106,8 @@ namespace :exercises do
 
   desc "Sync gif_url and instructions from ExerciseDB, matching by image_url directory name"
   task sync_from_exercisedb: :environment do
+    abort_legacy_exercise_db_task!
+
     puts "Fetching full exercise data from ExerciseDB..."
     full_map = ExerciseDbService.fetch_full_map
 
@@ -139,6 +143,8 @@ namespace :exercises do
 
   desc "Sync exercise GIF images from ExerciseDB public API"
   task sync_images: :environment do
+    abort_legacy_exercise_db_task!
+
     puts "Fetching exercise data from ExerciseDB..."
     gif_map = ExerciseDbService.fetch_gif_map
 
@@ -168,6 +174,8 @@ namespace :exercises do
 
   desc "Import ALL exercises and images from local free-exercise-db"
   task import_all: :environment do
+    abort_legacy_exercise_db_task!
+
     local_db = [
       Rails.root.join("..", "external", "free-exercise-db", "exercises"),
       Pathname.new("/external/free-exercise-db/exercises"),
@@ -310,7 +318,7 @@ namespace :exercises do
       .joins(:exercise)
       .where(
         "(exercises.exercise_type = 'musculacao' OR exercises.equipment_type IN ('gym','dumbbell','barbell','cable','machine'))" \
-        " AND (exercises.gif_url IS NULL OR exercises.gif_url NOT LIKE '/exercise-images/%')"
+        " AND (exercises.gif_url IS NULL OR exercises.gif_url NOT LIKE '/exercise-images/gifdotreino/%.gif')"
       )
       .find_each do |wde|
         exercise = wde.exercise
@@ -374,6 +382,8 @@ namespace :exercises do
 
   desc "Fix image_url for existing seeded exercises and copy missing images"
   task fix_seed_images: :environment do
+    abort_legacy_exercise_db_task!
+
     local_db = [
       Rails.root.join("..", "external", "free-exercise-db", "exercises"),
       Pathname.new("/external/free-exercise-db/exercises"),
@@ -407,5 +417,11 @@ namespace :exercises do
     end
 
     puts "\nDone. Images copied: #{copied}, image_url updated: #{updated}."
+  end
+
+  def abort_legacy_exercise_db_task!
+    return if ENV["ALLOW_LEGACY_EXERCISE_DB_IMAGES"] == "1"
+
+    abort "Legacy ExerciseDB image tasks are disabled. Use exercises:link_gifdotreino, or set ALLOW_LEGACY_EXERCISE_DB_IMAGES=1 intentionally."
   end
 end

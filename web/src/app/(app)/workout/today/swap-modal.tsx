@@ -645,7 +645,7 @@ export function SwapModal({
                   className="flex flex-1 gap-3 rounded-xl border border-gray-100 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                 >
                   <SmartImage
-                    src={alt.gif_url ?? getGymSafeImageUrl(alt) ?? exerciseFallback(alt)}
+                    src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)}
                     fallbackSrc={exerciseFallback(alt)}
                     alt={alt.name}
                     className="h-16 w-20 shrink-0 rounded-xl object-cover"

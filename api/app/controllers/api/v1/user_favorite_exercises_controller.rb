@@ -4,7 +4,7 @@ module Api
       include ExerciseImageHelper
 
       def create
-        exercise = Exercise.find(params[:id])
+        exercise = Exercise.browseable.find(params[:id])
         current_user.user_favorite_exercises.find_or_create_by!(exercise: exercise)
         FitnessIntelligence.recalculate_safely(user: current_user, source: "favorite_exercise_added")
         render json: { favorited: true }
@@ -20,7 +20,7 @@ module Api
       end
 
       def index
-        favorites = current_user.user_favorite_exercises.includes(:exercise)
+        favorites = current_user.user_favorite_exercises.joins(:exercise).includes(:exercise).merge(Exercise.browseable)
         render json: favorites.map { |fav|
           ex = fav.exercise
           { id: ex.id, name: ex.name, muscle_group: ex.muscle_group, image_url: exercise_image_url(ex) }

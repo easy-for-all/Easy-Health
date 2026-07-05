@@ -12,11 +12,20 @@ export interface WorkoutDayExercise {
   muscle_image_url: string;
   sets: number;
   reps: number;
+  planned_weight_kg?: number | string | null;
   rest_seconds: number;
   duration_minutes?: number | null;
   intensity?: string | null;
   order_index: number;
   last_performed_at?: string | null;
+  // Server-computed history, from ExerciseHistoryService - the frontend must
+  // not recompute any of these by scanning sessions client-side (that was
+  // the root cause of "last time" showing up mid-execution).
+  last_execution_label?: string;
+  last_completed_at?: string | null;
+  last_weight_kg?: number | string | null;
+  suggested_weight_kg?: number | string | null;
+  progression_reason?: string | null;
 }
 
 export interface WorkoutDay {
@@ -67,6 +76,7 @@ export interface WorkoutSession {
     muscle_group?: string | null;
     weight_kg: number | null;
     weight_by_set?: Array<number | null>;
+    is_warmup_by_set?: boolean[];
     planned_sets?: number;
     sets: number;
     reps: number | number[];
@@ -84,4 +94,26 @@ export interface CardioExerciseLog {
   duration_minutes: number | null;
   intensity: string | null;
   feeling?: string | null;
+}
+
+// Snapshot returned by GET /api/v1/workout_sessions/:id - used to restore an
+// in-progress session from the server instead of trusting sessionStorage alone.
+export interface WorkoutExecutionExerciseSnapshot {
+  current_exercise_session_id: number;
+  workout_day_exercise_id: number | null;
+  exercise_id: number;
+  status: "in_progress" | "completed" | "skipped";
+  current_set_number: number;
+  current_weight_kg: number | string | null;
+  completed_sets_count: number;
+  total_sets_count: number | null;
+  total_volume_kg: number;
+}
+
+export interface WorkoutExecutionSnapshot {
+  id: number;
+  status: "in_progress" | "completed" | "cancelled";
+  current_session_id: number;
+  is_current_session_in_progress: boolean;
+  exercise_sessions: WorkoutExecutionExerciseSnapshot[];
 }

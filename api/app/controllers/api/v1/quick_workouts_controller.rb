@@ -66,6 +66,7 @@ module Api
               exercises: chosen_exercises.each_with_index.map do |ex, idx|
                 timed = ex.exercise_type == "timed"
                 cardio = WorkoutDayExercise::CARDIO_TYPES.include?(ex.exercise_type)
+                history = ExerciseHistoryService.new(user: current_user, exercise_id: ex.id)
                 {
                   workout_day_exercise_id: -(idx + 1),
                   exercise_id: ex.id,
@@ -80,12 +81,18 @@ module Api
                   muscle_image_url: muscle_image_url(ex.muscle_group),
                   sets: timed || cardio ? nil : params_sr[:sets],
                   reps: timed || cardio ? nil : params_sr[:reps],
+                  planned_weight_kg: nil,
                   rest_seconds: timed ? nil : params_sr[:rest_seconds],
                   duration_minutes: (timed || cardio) ? (ex.duration_minutes || 60) : nil,
                   intensity: cardio ? "moderado" : nil,
                   order_index: idx,
                   is_favorite: fav_ids.include?(ex.id),
-                  last_performed_at: nil
+                  last_performed_at: history.last_completed_at,
+                  last_execution_label: history.last_execution_label,
+                  last_completed_at: history.last_completed_at,
+                  last_weight_kg: history.last_used_weight,
+                  suggested_weight_kg: history.suggested_starting_weight,
+                  progression_reason: history.progression_reason
                 }
               end
             }
@@ -227,7 +234,7 @@ module Api
         exercise_type = MODALITY_TO_EXERCISE_TYPE[modality]
 
         if exercise_type
-          scope = Exercise.where(exercise_type: exercise_type)
+          scope = Exercise.browseable.where(exercise_type: exercise_type)
           scope = apply_location_filter(scope, location)
           fav_priority = fav_ids.any? ? Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END") : Arel.sql("1")
           scope = scope.order(fav_priority, gif_presence_order, :id)
@@ -236,7 +243,7 @@ module Api
           chosen = []
           per_group = [(exercise_count.to_f / muscle_groups.size).ceil, 1].max
           muscle_groups.each do |group|
-            group_scope = Exercise.where(exercise_type: "musculacao", muscle_group: group)
+            group_scope = Exercise.browseable.where(exercise_type: "musculacao", muscle_group: group)
             group_scope = apply_location_filter(group_scope, location)
             fav_priority = fav_ids.any? ? Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END") : Arel.sql("1")
             group_scope = group_scope.order(fav_priority, gif_presence_order, :id).limit(per_group)
@@ -256,7 +263,7 @@ module Api
       end
 
       def gif_presence_order
-        Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END")
+        Arel.sql("CASE WHEN gif_url LIKE '/exercise-images/gifdotreino/%.gif' THEN 0 ELSE 1 END")
       end
 
       def workout_name(modality, groups, difficulty)

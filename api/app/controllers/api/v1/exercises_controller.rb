@@ -32,7 +32,7 @@ module Api
       end
 
       def setup_guide
-        exercise = Exercise.find(params[:id])
+        exercise = Exercise.browseable.find(params[:id])
         guide = exercise.setup_guide.presence || ExerciseSetupGuideService.new(exercise).call
         if guide
           render json: { setup_guide: guide }
@@ -49,7 +49,7 @@ module Api
         end
 
         file     = params[:image]
-        exercise = Exercise.find(params[:exercise_id])
+        exercise = Exercise.browseable.find(params[:exercise_id])
 
         result = ExerciseSubstituteService.new(
           image_data:   file.read,
@@ -68,7 +68,7 @@ module Api
       end
 
       def intelligent_suggestions
-        current_exercise = Exercise.find_by(id: params[:current_exercise_id])
+        current_exercise = Exercise.browseable.find_by(id: params[:current_exercise_id])
         user_text        = params[:user_text].to_s.strip
         already_ids      = params[:already_suggested_ids].to_s.split(",").map(&:to_i).compact
 
@@ -116,7 +116,7 @@ module Api
       end
 
       def suggestion_feedback
-        exercise   = Exercise.find(params[:id])
+        exercise   = Exercise.browseable.find(params[:id])
         event_type = params[:event_type].to_s
         current_id = params[:current_exercise_id].to_i
 

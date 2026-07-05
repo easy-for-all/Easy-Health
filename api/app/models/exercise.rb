@@ -4,6 +4,8 @@ class Exercise < ApplicationRecord
   EQUIPMENT_TYPES  = %w[bodyweight gym dumbbell barbell cable machine cardio].freeze
   GYM_EQUIPMENT    = %w[gym dumbbell barbell cable machine].freeze
   DIFFICULTY_LEVELS = %w[beginner intermediate advanced].freeze
+  GIFDOTREINO_URL_PREFIX = "/exercise-images/gifdotreino/".freeze
+  GIFDOTREINO_URL_PATTERN = "#{GIFDOTREINO_URL_PREFIX}%.gif".freeze
   SAFETY_TAGS = %w[
     high_impact
     deep_knee_flexion
@@ -31,14 +33,8 @@ class Exercise < ApplicationRecord
 
   before_validation :normalize_safety_tags
 
-  # Gym/musculacao exercises are only shown when they have a valid local GIF.
-  # Other modalities (cardio, funcional, etc.) are always browseable.
-  scope :browseable, -> {
-    where(
-      "(exercise_type != 'musculacao' AND equipment_type NOT IN ('gym','dumbbell','barbell','cable','machine'))" \
-      " OR gif_url LIKE '/exercise-images/%'"
-    )
-  }
+  scope :gifdotreino_source, -> { where("gif_url LIKE ?", GIFDOTREINO_URL_PATTERN) }
+  scope :browseable, -> { gifdotreino_source }
 
   # nil difficulty means accessible to all levels.
   scope :for_fitness_level, ->(level) {
@@ -51,6 +47,15 @@ class Exercise < ApplicationRecord
       all
     end
   }
+
+  def self.gifdotreino_url?(url)
+    value = url.to_s
+    value.start_with?(GIFDOTREINO_URL_PREFIX) && value.downcase.end_with?(".gif")
+  end
+
+  def gifdotreino_source?
+    self.class.gifdotreino_url?(gif_url)
+  end
 
   private
 

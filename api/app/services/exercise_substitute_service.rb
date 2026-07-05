@@ -92,11 +92,11 @@ class ExerciseSubstituteService
     raw = identification.raw_response || {}
     names = raw["suggested_names"] || raw[:suggested_names] || []
     found = names.flat_map do |name|
-      Exercise.where("name ILIKE ?", "%#{name}%").limit(2)
+      Exercise.browseable.where("name ILIKE ?", "%#{name}%").limit(2)
     end.uniq.first(3)
 
     if found.empty? && identification.muscle_groups&.any?
-      found = Exercise.where(muscle_group: identification.muscle_groups)
+      found = Exercise.browseable.where(muscle_group: identification.muscle_groups)
         .where.not(id: @exercise.id)
         .limit(3)
     end

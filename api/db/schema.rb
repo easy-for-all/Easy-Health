@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_05_100003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -150,6 +150,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
     t.index ["user_id"], name: "index_coach_insights_on_user_id"
   end
 
+  create_table "coach_recommendations", force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.decimal "confidence", precision: 4, scale: 2
+    t.datetime "created_at", null: false
+    t.decimal "current_value", precision: 6, scale: 2
+    t.datetime "dismissed_at"
+    t.bigint "exercise_id"
+    t.string "exercise_name"
+    t.text "message"
+    t.jsonb "metadata", default: {}
+    t.jsonb "reasons", default: []
+    t.string "recommendation_type", null: false
+    t.decimal "recommended_value", precision: 6, scale: 2
+    t.string "status", default: "pending", null: false
+    t.string "title"
+    t.string "unit"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["exercise_id"], name: "index_coach_recommendations_on_exercise_id"
+    t.index ["user_id", "exercise_id", "recommendation_type", "status"], name: "idx_coach_recs_unique_pending"
+    t.index ["user_id", "status"], name: "index_coach_recommendations_on_user_id_and_status"
+    t.index ["user_id"], name: "index_coach_recommendations_on_user_id"
+  end
+
   create_table "community_comments", force: :cascade do |t|
     t.text "body", null: false
     t.bigint "community_post_id", null: false
@@ -184,6 +208,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
     t.index ["user_id"], name: "index_community_reactions_on_user_id"
   end
 
+  create_table "device_tokens", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "platform", default: "android", null: false
+    t.string "token", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["token"], name: "index_device_tokens_on_token", unique: true
+    t.index ["user_id", "platform"], name: "index_device_tokens_on_user_id_and_platform"
+    t.index ["user_id"], name: "index_device_tokens_on_user_id"
+  end
+
   create_table "equipment_identifications", force: :cascade do |t|
     t.boolean "compatible"
     t.float "confidence"
@@ -200,6 +235,48 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
     t.index ["exercise_id"], name: "index_equipment_identifications_on_exercise_id"
     t.index ["image_checksum"], name: "index_equipment_identifications_on_image_checksum"
     t.index ["user_id"], name: "index_equipment_identifications_on_user_id"
+  end
+
+  create_table "exercise_sessions", force: :cascade do |t|
+    t.string "avg_pace_per_km"
+    t.decimal "avg_speed_kmh", precision: 5, scale: 2
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.decimal "distance_km", precision: 6, scale: 2
+    t.integer "duration_minutes"
+    t.integer "elapsed_seconds"
+    t.bigint "exercise_id", null: false
+    t.string "exercise_kind", default: "strength", null: false
+    t.string "feeling"
+    t.string "intensity"
+    t.integer "order_index", null: false
+    t.integer "planned_reps"
+    t.integer "planned_sets"
+    t.decimal "planned_weight_kg", precision: 6, scale: 2
+    t.integer "rest_seconds"
+    t.datetime "started_at", null: false
+    t.string "status", default: "in_progress", null: false
+    t.integer "target_seconds"
+    t.datetime "updated_at", null: false
+    t.bigint "workout_day_exercise_id"
+    t.bigint "workout_session_id", null: false
+    t.index ["exercise_id", "status"], name: "index_exercise_sessions_on_exercise_id_and_status"
+    t.index ["exercise_id"], name: "index_exercise_sessions_on_exercise_id"
+    t.index ["workout_day_exercise_id"], name: "index_exercise_sessions_on_workout_day_exercise_id"
+    t.index ["workout_session_id"], name: "index_exercise_sessions_on_workout_session_id"
+  end
+
+  create_table "exercise_sets", force: :cascade do |t|
+    t.datetime "completed_at", null: false
+    t.datetime "created_at", null: false
+    t.bigint "exercise_session_id", null: false
+    t.boolean "is_warmup", default: false, null: false
+    t.integer "reps"
+    t.integer "set_number", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "weight_kg", precision: 6, scale: 2
+    t.index ["exercise_session_id", "set_number"], name: "idx_exercise_sets_unique_set_number", unique: true
+    t.index ["exercise_session_id"], name: "index_exercise_sets_on_exercise_session_id"
   end
 
   create_table "exercise_suggestion_logs", force: :cascade do |t|
@@ -612,6 +689,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
     t.bigint "exercise_id", null: false
     t.string "intensity"
     t.integer "order_index"
+    t.decimal "planned_weight", precision: 6, scale: 2
     t.integer "reps"
     t.integer "rest_seconds"
     t.integer "sets"
@@ -651,19 +729,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
     t.datetime "created_at", null: false
     t.integer "duration_minutes"
     t.jsonb "exercise_logs", default: [], null: false
-    t.jsonb "extra_block_data", default: {}, null: false
+    t.jsonb "extra_block_data", default: {}
     t.string "extra_block_type"
     t.datetime "extra_completed_at"
     t.datetime "extra_started_at"
     t.integer "fatigue_level"
     t.text "notes"
     t.integer "planned_sets_count"
-    t.jsonb "skipped_exercises", default: [], null: false
+    t.jsonb "skipped_exercises", default: []
     t.string "source"
+    t.string "status", default: "completed", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "workout_day_id"
     t.index ["completion_status"], name: "index_workout_sessions_on_completion_status"
+    t.index ["status"], name: "index_workout_sessions_on_status"
     t.index ["user_id"], name: "index_workout_sessions_on_user_id"
     t.index ["workout_day_id"], name: "index_workout_sessions_on_workout_day_id"
   end
@@ -691,17 +771,49 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_28_120001) do
   add_foreign_key "client_permissions", "personal_client_relationships"
   add_foreign_key "coach_insights", "fitness_profiles"
   add_foreign_key "coach_insights", "users"
+  add_foreign_key "coach_recommendations", "exercises"
+  add_foreign_key "coach_recommendations", "users"
   add_foreign_key "community_comments", "community_posts"
   add_foreign_key "community_comments", "users"
   add_foreign_key "community_posts", "users"
   add_foreign_key "community_reactions", "community_posts"
   add_foreign_key "community_reactions", "users"
+  add_foreign_key "device_tokens", "users"
   add_foreign_key "equipment_identifications", "exercises"
   add_foreign_key "equipment_identifications", "users"
+  add_foreign_key "exercise_sessions", "exercises"
+  add_foreign_key "exercise_sessions", "workout_day_exercises"
+  add_foreign_key "exercise_sessions", "workout_sessions"
+  add_foreign_key "exercise_sets", "exercise_sessions"
   add_foreign_key "exercise_suggestion_logs", "users"
   add_foreign_key "fitness_profiles", "users"
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
+  add_foreign_key "personal_alerts", "users", column: "client_id"
+  add_foreign_key "personal_alerts", "users", column: "personal_id"
+  add_foreign_key "personal_client_relationships", "users", column: "client_id"
+  add_foreign_key "personal_client_relationships", "users", column: "personal_id"
+  add_foreign_key "personal_notes", "users", column: "client_id"
+  add_foreign_key "personal_notes", "users", column: "personal_id"
+  add_foreign_key "public_profiles", "users"
+  add_foreign_key "shared_workouts", "users", column: "owner_id"
+  add_foreign_key "subscriptions", "users"
+  add_foreign_key "trainer_profiles", "users"
+  add_foreign_key "user_badges", "users"
+  add_foreign_key "user_events", "users"
+  add_foreign_key "user_favorite_exercises", "exercises"
+  add_foreign_key "user_favorite_exercises", "users"
+  add_foreign_key "user_media", "users"
   add_foreign_key "user_segments", "users"
+  add_foreign_key "user_training_preferences", "users"
+  add_foreign_key "workout_day_exercises", "exercises"
+  add_foreign_key "workout_day_exercises", "workout_days"
+  add_foreign_key "workout_days", "workout_plans"
+  add_foreign_key "workout_plans", "users"
+  add_foreign_key "workout_sessions", "users"
+  add_foreign_key "workout_sessions", "workout_days"
+  add_foreign_key "workout_strategies", "fitness_profiles"
+  add_foreign_key "workout_strategies", "users"
+  add_foreign_key "workout_strategies", "workout_plans"
 end

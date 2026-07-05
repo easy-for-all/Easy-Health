@@ -45,6 +45,7 @@ class LoadProgressionService
 
   def fetch_relevant_sessions
     @user.workout_sessions
+      .where(status: "completed")
       .where("exercise_logs @> ?", [{ exercise_id: @exercise_id }].to_json)
       .order(completed_at: :desc)
       .limit(5)

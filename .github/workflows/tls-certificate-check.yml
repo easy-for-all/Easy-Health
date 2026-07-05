@@ -1,0 +1,24 @@
+name: TLS Certificate Check
+
+on:
+  schedule:
+    - cron: "15 8 * * *"
+  workflow_dispatch:
+    inputs:
+      warn_days:
+        description: "Minimum days remaining before the check fails"
+        required: false
+        default: "45"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check TLS certificate expiry
+        env:
+          WARN_DAYS: ${{ github.event.inputs.warn_days || '45' }}
+        run: bash scripts/check_cert_expiry.sh easyhealth.art "$WARN_DAYS" api.easyhealth.art

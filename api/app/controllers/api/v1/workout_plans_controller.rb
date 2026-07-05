@@ -212,6 +212,8 @@ module Api
           invalid_workout_reason: day.invalid_workout_reason,
           last_completed_at: last_completed_at_by_day([day.id])[day.id],
           exercises: wdes.map do |wde|
+            history = ExerciseHistoryService.new(user: current_user, exercise_id: wde.exercise.id)
+
             {
               workout_day_exercise_id: wde.id,
               exercise_id: wde.exercise.id,
@@ -226,12 +228,18 @@ module Api
               muscle_image_url: muscle_image_url(wde.exercise.muscle_group),
               sets: wde.sets,
               reps: wde.reps,
+              planned_weight_kg: wde.planned_weight,
               rest_seconds: wde.rest_seconds,
               duration_minutes: wde.duration_minutes,
               intensity: wde.intensity,
               order_index: wde.order_index,
               is_favorite: favorite_ids.include?(wde.exercise.id),
-              last_performed_at: last_performed[wde.exercise.id]
+              last_performed_at: last_performed[wde.exercise.id],
+              last_execution_label: history.last_execution_label,
+              last_completed_at: history.last_completed_at,
+              last_weight_kg: history.last_used_weight,
+              suggested_weight_kg: history.suggested_starting_weight,
+              progression_reason: history.progression_reason
             }
           end
         }
@@ -248,6 +256,7 @@ module Api
           FROM workout_sessions,
             jsonb_array_elements(exercise_logs) AS elem
           WHERE user_id = #{user.id.to_i}
+            AND status = 'completed'
             AND (elem->>'exercise_id')::integer = ANY(ARRAY[#{exercise_ids.map(&:to_i).join(',')}])
           ORDER BY (elem->>'exercise_id')::integer, completed_at DESC
         SQL
@@ -262,7 +271,7 @@ module Api
         return {} if day_ids.empty?
 
         WorkoutSession
-          .where(user_id: current_user.id, workout_day_id: day_ids)
+          .where(user_id: current_user.id, workout_day_id: day_ids, status: "completed")
           .select("DISTINCT ON (workout_day_id) workout_day_id, completed_at")
           .order("workout_day_id, completed_at DESC")
           .each_with_object({}) { |s, h| h[s.workout_day_id] = s.completed_at }

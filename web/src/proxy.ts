@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = [
   "/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password",
@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const requestId = crypto.randomUUID();
 
   const isPublic = PUBLIC_PATHS.some((p) =>
     p === "/" ? pathname === "/" : pathname.startsWith(p)
@@ -16,10 +17,30 @@ export function proxy(request: NextRequest) {
   const sessionCookie = request.cookies.get("_eh_auth") ?? request.cookies.get("_easy_health_session");
 
   if (!isPublic && !sessionCookie) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return withCorrelationHeaders(
+      NextResponse.redirect(new URL("/login", request.url)),
+      requestId
+    );
   }
 
-  return NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("X-Request-Id", requestId);
+
+  return withCorrelationHeaders(
+    NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    }),
+    requestId
+  );
+}
+
+function withCorrelationHeaders(response: NextResponse, requestId: string) {
+  response.headers.set("X-Request-Id", requestId);
+  response.headers.set("X-Correlation-Id", requestId);
+
+  return response;
 }
 
 export const config = {

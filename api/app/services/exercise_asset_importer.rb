@@ -137,20 +137,27 @@ class ExerciseAssetImporter
 
     exercise = find_exercise(name)
     if exercise
-      exercise.update_columns(gif_url: gif_url, gif_path: dest_path.to_s)
+      attrs = { gif_url: gif_url }
+      attrs[:gif_path] = dest_path.to_s if exercise_column?(:gif_path)
+      attrs[:image_url] = nil if exercise_column?(:image_url)
+      attrs[:image_fallback_url] = nil if exercise_column?(:image_fallback_url)
+      attrs[:source_dataset] = "gifdotreino" if exercise_column?(:source_dataset)
+      exercise.update_columns(attrs)
       @stats[:exercises_updated] += 1
     else
-      Exercise.create!(
+      attrs = {
         name:           name,
         exercise_type:  mapping[:exercise_type],
         muscle_group:   mapping[:muscle_group],
         equipment_type: "gym",
         difficulty:     "intermediate",
         gif_url:        gif_url,
-        gif_path:       dest_path.to_s,
         description:    description.truncate(500),
-        source_dataset: "gifdotreino"
-      )
+      }
+      attrs[:difficulty_level] = "intermediate" if exercise_column?(:difficulty_level)
+      attrs[:gif_path] = dest_path.to_s if exercise_column?(:gif_path)
+      attrs[:source_dataset] = "gifdotreino" if exercise_column?(:source_dataset)
+      Exercise.create!(attrs)
       @stats[:exercises_created] += 1
     end
   rescue => e
@@ -160,6 +167,10 @@ class ExerciseAssetImporter
 
   def find_exercise(name)
     @exercise_index[normalize(name)]
+  end
+
+  def exercise_column?(name)
+    Exercise.column_names.include?(name.to_s)
   end
 
   def normalize(name)
