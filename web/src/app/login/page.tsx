@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
@@ -10,13 +10,22 @@ import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-in
 import { trackCheckoutStarted } from "@/shared/lib/analytics";
 import { Capacitor } from "@capacitor/core";
 
+const OAUTH_ERROR_MESSAGE_KEYS: Record<string, string> = {
+  account_deleted: "accountDeletedError",
+  oauth_failed: "oauthError",
+};
+
 export default function LoginPage() {
   const { signIn } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations("auth");
+  const oauthErrorCode = searchParams.get("error");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]       = useState("");
+  const [error, setError]       = useState(
+    oauthErrorCode ? t(OAUTH_ERROR_MESSAGE_KEYS[oauthErrorCode] ?? "loginError") : ""
+  );
   const [loading, setLoading]   = useState(false);
 
   async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {

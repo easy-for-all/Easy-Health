@@ -7,6 +7,7 @@ class AccountDeletionService
     ActiveRecord::Base.transaction do
       timestamp = Time.current
       user_id = @user.id
+      original_email = @user.email
 
       # Destroy personal data (cascades via dependent: :destroy)
       @user.health_profile&.destroy!
@@ -18,10 +19,10 @@ class AccountDeletionService
       @user.ai_usage_logs.destroy_all
       @user.avatar.purge_later if @user.avatar.attached?
 
-      # Anonymize subscription (keep for legal/compliance, remove personal references)
-      if @user.subscription.present?
-        @user.subscription.update_columns(stripe_customer_id: "deleted_#{user_id}")
-      end
+      # Anonymize subscription (keep stripe_subscription_id for legal/compliance
+      # reference, clear stripe_customer_id instead of writing a fake id so it
+      # never gets reused as a real Stripe customer on a future checkout)
+      @user.subscription&.update_columns(stripe_customer_id: nil)
 
       # Anonymize user record
       @user.update_columns(
@@ -31,6 +32,10 @@ class AccountDeletionService
         deletion_requested_at: timestamp,
         anonymized_at: timestamp
       )
+
+      # Block the original email (and any Google identity tied to this row)
+      # from ever being used to sign up again.
+      BlockedEmail.block!(email: original_email, user_id: user_id)
     end
   end
 end

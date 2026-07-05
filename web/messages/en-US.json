@@ -135,6 +135,8 @@
     "signingIn": "Signing in...",
     "signUp": "Create account",
     "loginError": "Login error",
+    "accountDeletedError": "This account was deleted and can't be reactivated. Create a new account with a different email to continue.",
+    "oauthError": "Couldn't sign in with Google. Please try again.",
     "noAccount": "Don't have an account?",
     "alreadyHaveAccount": "Already have an account?",
     "name": "Name",

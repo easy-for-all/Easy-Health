@@ -50,7 +50,7 @@ export default function DeleteAccountPage() {
           <section>
             <h2 className="text-xl font-semibold text-gray-900">O que poderá ser mantido</h2>
             <p className="mt-3">
-              Alguns registros relacionados a pagamentos, assinaturas, transações, suporte, segurança, prevenção a fraudes ou obrigações legais poderão ser mantidos pelo período exigido pela legislação aplicável.
+              Alguns registros relacionados a pagamentos, assinaturas, transações, suporte, segurança, prevenção a fraudes ou obrigações legais poderão ser mantidos pelo período exigido pela legislação aplicável. Após a exclusão, o e-mail (e a conta Google associada, se houver) usado na conta não poderá ser utilizado para criar uma nova conta no EasyHealth.
             </p>
           </section>
 
