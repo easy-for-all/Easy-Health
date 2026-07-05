@@ -61,7 +61,7 @@ Rails.application.routes.draw do
       post   "workout_days/:workout_day_id/exercises",        to: "workout_day_exercises#create"
       patch  "workout_days/:workout_day_id/exercises/reorder", to: "workout_day_exercises#reorder"
 
-      resources :workout_sessions, only: [:index, :create, :update] do
+      resources :workout_sessions, only: [:index, :show, :create, :update] do
         collection do
           get :stats
           get :personal_records
@@ -69,6 +69,14 @@ Rails.application.routes.draw do
           get :monthly_summary
           get :last_performances
           get :load_suggestion
+          post :start
+        end
+        member do
+          post :finish
+          post :cancel
+        end
+        resources :exercise_sessions, only: [:create, :update], controller: "workout_exercise_sessions" do
+          resources :sets, only: [:create], controller: "workout_exercise_sets"
         end
       end
 

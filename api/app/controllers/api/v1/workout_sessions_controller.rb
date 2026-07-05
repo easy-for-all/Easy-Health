@@ -3,7 +3,7 @@ module Api
     class WorkoutSessionsController < BaseController
       PER_PAGE = 20
 
-      before_action :require_active_access!, only: [:create, :stats, :personal_records, :monthly_summary]
+      before_action :require_active_access!, only: [:create, :start, :finish, :stats, :personal_records, :monthly_summary]
 
       def index
         page = [params[:page].to_i, 1].max
@@ -23,6 +23,81 @@ module Api
           sessions: sessions.map { |s| session_json(s) },
           total: total
         }
+      end
+
+      def show
+        session = current_user.workout_sessions.find_by(id: params[:id])
+        return render json: { error: "Not found" }, status: :not_found unless session
+
+        render json: execution_snapshot_json(session)
+      end
+
+      # Real-time execution: creates the session up front, as soon as the user
+      # starts a workout, instead of only at the very end. Recording sets and
+      # exercises happens incrementally via WorkoutExerciseSessionsController /
+      # WorkoutExerciseSetsController; #finish closes it out.
+      def start
+        workout_day_id = valid_workout_day_id(params[:workout_day_id])
+        session = current_user.workout_sessions.create!(status: "in_progress", workout_day_id: workout_day_id, source: params[:source])
+
+        Rails.logger.info("[WorkoutSessionStart] user=#{current_user.id} session_id=#{session.id} workout_day_id=#{workout_day_id.inspect}")
+        render json: { id: session.id, status: session.status }, status: :created
+      end
+
+      # Closes out a session recorded set-by-set via the real-time endpoints.
+      # Completion stats and exercise_logs are computed server-side from the
+      # relational data instead of trusting client-calculated values.
+      def finish
+        session = current_user.workout_sessions.find_by(id: params[:id])
+        return render json: { error: "Not found" }, status: :not_found unless session
+        return render json: { error: "Session is not in progress" }, status: :unprocessable_entity unless session.status == "in_progress"
+
+        stats = completion_stats_for(session)
+        workout_day = session.workout_day
+
+        calories = CalorieEstimationService.new(
+          duration_minutes: params[:duration_minutes] || stats[:duration_minutes],
+          workout_day: workout_day,
+          user: current_user
+        ).estimate
+
+        session.assign_attributes(
+          status: "completed",
+          completed_at: Time.current,
+          duration_minutes: params[:duration_minutes] || stats[:duration_minutes],
+          fatigue_level: params[:fatigue_level],
+          notes: params[:notes],
+          completion_status: stats[:completion_status],
+          completion_rate: stats[:completion_rate],
+          completed_sets_count: stats[:completed_sets_count],
+          planned_sets_count: stats[:planned_sets_count],
+          skipped_exercises: stats[:skipped_exercises],
+          exercise_logs: ExerciseLogCompilerService.new(session).call,
+          calories_estimated: (calories if calories.to_i > 0)
+        )
+
+        if session.save
+          finalize_completed_session!(session)
+          render json: session_json(session)
+        else
+          render json: { errors: session.errors.full_messages }, status: :unprocessable_entity
+        end
+      rescue => e
+        Rails.logger.error("[WorkoutSessionFinishError] #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+        render json: { errors: [e.message] }, status: :unprocessable_entity
+      end
+
+      # Ends a session the user did not complete. Deliberately never runs the
+      # completion side effects (community post, streak/recalibration, free
+      # workout gating) - this is the correct outcome for what legacy clients
+      # used to represent as completion_status: "abandoned" while still
+      # counting the session as a real, fully-formed one.
+      def cancel
+        session = current_user.workout_sessions.find_by(id: params[:id])
+        return render json: { error: "Not found" }, status: :not_found unless session
+
+        session.update!(status: "cancelled", completion_status: "abandoned", completed_at: Time.current)
+        render json: session_json(session)
       end
 
       def create
@@ -51,9 +126,7 @@ module Api
         session.calories_estimated = calories if calories > 0
 
         if session.save
-          mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
-          track_workout_session_event(session)
-          FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_completed")
+          finalize_completed_session!(session) if session.status == "completed"
           render json: session_json(session), status: :created
         else
           Rails.logger.error("[WorkoutSessionCreateError] user=#{current_user.id} errors=#{session.errors.full_messages.inspect}")
@@ -65,7 +138,7 @@ module Api
       end
 
       def stats
-        sessions = current_user.workout_sessions.order(completed_at: :desc)
+        sessions = current_user.workout_sessions.where(status: "completed").order(completed_at: :desc)
         range      = Progress::WeekRange.current
         week_start = range.begin.beginning_of_day
         week_end   = range.end.end_of_day
@@ -132,6 +205,7 @@ module Api
       def monthly_summary
         start_date = 6.months.ago.beginning_of_month
         sessions = current_user.workout_sessions
+          .where(status: "completed")
           .where("completed_at >= ?", start_date)
           .select(:completed_at, :exercise_logs, :duration_minutes)
 
@@ -223,6 +297,84 @@ module Api
       end
 
       private
+
+      # Runs exactly once, only when a session actually becomes "completed" -
+      # shared by the legacy single-POST #create and the real-time #finish so
+      # neither #start (in_progress) nor #cancel ever triggers it.
+      def finalize_completed_session!(session)
+        mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
+        track_workout_session_event(session)
+        FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_completed")
+      end
+
+      def valid_workout_day_id(workout_day_id)
+        return nil if workout_day_id.blank?
+
+        exists = WorkoutDay.joins(workout_plan: :user)
+          .where(workout_plans: { user_id: current_user.id })
+          .exists?(id: workout_day_id)
+        exists ? workout_day_id : nil
+      end
+
+      # Computes completion stats from the relational exercise_sessions/sets
+      # already recorded, instead of trusting a client-calculated payload.
+      def completion_stats_for(session)
+        exercise_sessions = session.exercise_sessions.includes(:exercise_sets)
+
+        planned_sets_count = exercise_sessions.sum { |es| es.planned_sets.to_i }
+        completed_sets_count = exercise_sessions.sum { |es| es.exercise_sets.size }
+        skipped_exercises = exercise_sessions.select { |es| es.status == "skipped" }.map do |es|
+          { exercise_id: es.exercise_id, name: es.exercise.name, planned_sets: es.planned_sets }
+        end
+
+        rate = planned_sets_count > 0 ? (completed_sets_count.to_f / planned_sets_count * 100).round(2) : 100.0
+        completion_status =
+          if rate >= 100
+            "completed"
+          elsif rate <= 0
+            "abandoned"
+          else
+            "completed_partial"
+          end
+
+        duration_minutes = ((Time.current - session.created_at) / 60).round
+        duration_minutes = 1 if duration_minutes < 1
+
+        {
+          planned_sets_count: planned_sets_count,
+          completed_sets_count: completed_sets_count,
+          completion_rate: rate,
+          completion_status: completion_status,
+          skipped_exercises: skipped_exercises,
+          duration_minutes: duration_minutes
+        }
+      end
+
+      def execution_snapshot_json(session)
+        {
+          id: session.id,
+          status: session.status,
+          current_session_id: session.id,
+          is_current_session_in_progress: session.status == "in_progress",
+          exercise_sessions: session.exercise_sessions.includes(:exercise_sets).order(:order_index).map do |es|
+            sets = es.exercise_sets.sort_by(&:set_number)
+            last_set = sets.last
+            working_volume = sets.reject(&:is_warmup).sum { |s| (s.weight_kg || 0) * (s.reps || 0) }
+
+            {
+              current_exercise_session_id: es.id,
+              workout_day_exercise_id: es.workout_day_exercise_id,
+              exercise_id: es.exercise_id,
+              status: es.status,
+              current_set_number: sets.size + 1,
+              current_weight_kg: last_set&.weight_kg,
+              completed_sets_count: sets.size,
+              total_sets_count: es.planned_sets,
+              total_volume_kg: working_volume
+            }
+          end
+        }
+      end
 
       def mark_free_workout_used
         current_user.update_columns(
