@@ -14,7 +14,6 @@ module Api
         profile = current_user.build_health_profile(normalized_profile_params)
         if save_profile_with_exercise_preferences(profile)
           FitnessIntelligence.recalculate_safely(user: current_user, source: "health_profile_created")
-          GenerateWorkoutPlanJob.perform_later(current_user.id)
           render json: profile_json(profile), status: :created
         elsif !performed?
           render json: { errors: profile.errors.full_messages }, status: :unprocessable_entity
@@ -38,12 +37,20 @@ module Api
                       :training_days_per_week, :training_location, :gender, :session_duration_minutes,
                       :intensity_preference, :training_context,
                       activity_preferences: [], preferred_body_focus: [], preferred_training_styles: [],
-                      available_equipment: [], avoided_exercise_ids: [], favorite_exercise_ids: [], limitations: [])
+                      available_equipment: [], avoided_exercise_ids: [], favorite_exercise_ids: [], limitations: [],
+                      profiling_prompts_answered: {})
+      end
+
+      # jsonb — sempre faz merge com o valor já salvo, nunca substitui o hash inteiro.
+      # Um PATCH parcial (ex.: só a chave "rate") não pode apagar chaves já respondidas antes.
+      def profiling_prompts_answered_delta
+        profile_params.to_h["profiling_prompts_answered"] || {}
       end
 
       def normalized_profile_params
         p = profile_params.to_h
         p.delete("favorite_exercise_ids")
+        p.delete("profiling_prompts_answered")
         if p["activity_preferences"].is_a?(Array)
           normalized = p["activity_preferences"].map { |v| ExerciseIntelligenceService.resolve_activity(v) }.compact
           p["activity_preferences"] = normalized.presence || p["activity_preferences"]
@@ -60,6 +67,9 @@ module Api
 
         HealthProfile.transaction do
           profile.assign_attributes(normalized_profile_params)
+          if profiling_prompts_answered_delta.present?
+            profile.profiling_prompts_answered = (profile.profiling_prompts_answered || {}).merge(profiling_prompts_answered_delta)
+          end
           profile.save!
           sync_favorite_exercises! if favorite_exercise_ids_provided?
         end
@@ -129,6 +139,7 @@ module Api
           intensity_preference: profile.intensity_preference,
           training_context: profile.training_context,
           limitations: profile.limitations || [],
+          profiling_prompts_answered: profile.profiling_prompts_answered || {},
           favorite_exercise_ids: current_user.user_favorite_exercises.order(:exercise_id).pluck(:exercise_id),
           favorite_exercises: exercise_summaries(current_user.favorite_exercises),
           avoided_exercises: exercise_summaries(Exercise.where(id: profile.avoided_exercise_ids))

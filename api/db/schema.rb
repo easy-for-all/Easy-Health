@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_05_114324) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_05_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -424,6 +424,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_05_114324) do
     t.string "modality", default: "ai_choice"
     t.text "preferred_body_focus", default: [], null: false, array: true
     t.text "preferred_training_styles", default: [], array: true
+    t.jsonb "profiling_prompts_answered", default: {}, null: false
     t.integer "session_duration_minutes"
     t.string "split_type", default: "ai_choice"
     t.string "training_context"

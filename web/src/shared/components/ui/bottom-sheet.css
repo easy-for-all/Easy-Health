@@ -1,0 +1,39 @@
+.bsheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in oklab, var(--bg) 65%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.bsheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 51;
+  max-height: 88svh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 26px 26px 0 0;
+  border-top: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  box-shadow: 0 -20px 60px -10px rgba(0, 0, 0, .35);
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.bsheet-grabber {
+  width: 36px;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: 999px;
+  margin: 12px auto 0;
+  flex-shrink: 0;
+}
+
+.bsheet-body {
+  overflow-y: auto;
+  padding: 18px 20px 24px;
+}

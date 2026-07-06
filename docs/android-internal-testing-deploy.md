@@ -36,6 +36,7 @@ O job de build roda automaticamente a cada push na `main`. O upload só acontece
 | `ANDROID_KEYSTORE_PASSWORD` | Senha da keystore |
 | `ANDROID_KEY_ALIAS` | Alias da chave de assinatura |
 | `ANDROID_KEY_PASSWORD` | Senha da chave de assinatura |
+| `GOOGLE_SERVICES_JSON_BASE64` | google-services.json do Firebase Console em base64 (ver web/docs/firebase-push-android.md) |
 
 ### Environment Secrets — `internal-testing`
 (Settings → Environments → internal-testing → Add secret)
