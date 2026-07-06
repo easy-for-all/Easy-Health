@@ -42,4 +42,5 @@ export interface HealthProfile {
   favorite_exercise_ids?: number[];
   favorite_exercises?: ExercisePreference[];
   avoided_exercises?: ExercisePreference[];
+  profiling_prompts_answered?: Record<string, string>;
 }

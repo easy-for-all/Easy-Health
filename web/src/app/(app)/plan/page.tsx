@@ -2,23 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { ApiError, api } from "@/shared/lib/api";
+import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
-import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 import { AITrainerBubble } from "@/shared/components/ai-trainer";
 import { AgentOrb } from "@/shared/components/agent-orb";
-import { OptionCard } from "@/shared/components/ui/option-card";
-import { GeneratingView } from "@/shared/components/generating-view";
+import { PlanCreationFlow } from "@/features/plan-creation/plan-creation-flow";
 import "@/shared/components/ui/ui.css";
-
-function resolveImageSrc(src: string): string {
-  return src;
-}
 
 const MUSCLE_COLORS: Record<string, string> = {
   chest: "bg-red-100 text-red-700",
@@ -30,46 +23,6 @@ const MUSCLE_COLORS: Record<string, string> = {
   core: "bg-teal-100 text-teal-700",
 };
 
-const GOAL_LABELS: Record<string, string> = {
-  lose_weight: "Perder peso",
-  gain_muscle: "Ganhar músculo",
-  maintain:    "Manter peso",
-  health:      "Saúde geral",
-};
-
-const LEVEL_LABELS: Record<string, string> = {
-  beginner:     "Iniciante",
-  intermediate: "Intermediário",
-  advanced:     "Avançado",
-};
-
-function buildGenerationSteps(mod: Modality, loc: TrainingLocation, cType?: CardioType): string[] {
-  const base = ["Analisando seu perfil", "Configurando dias de treino"];
-  if (mod === "cardio" || mod === "misto") {
-    base.push(
-      loc === "outdoor" ? "Mapeando exercícios ao ar livre" : "Selecionando exercícios cardio",
-      "Criando progressão de intensidade",
-      "Distribuindo treinos na semana",
-      "Finalizando planejamento"
-    );
-  } else if (mod === "funcional") {
-    base.push(
-      "Selecionando exercícios funcionais",
-      "Balanceando mobilidade e força",
-      "Distribuindo treinos na semana",
-      "Finalizando planejamento"
-    );
-  } else {
-    base.push(
-      "Definindo divisão muscular",
-      "Selecionando exercícios",
-      "Ajustando séries e cargas",
-      "Finalizando planejamento"
-    );
-  }
-  return base;
-}
-
 type PlanSummary = {
   id: number;
   active: boolean;
@@ -78,18 +31,7 @@ type PlanSummary = {
   days: { id: number; name: string; exercise_count: number }[];
 };
 
-type Modality  = "musculacao" | "cardio" | "misto" | "funcional" | "ai_choice";
-type SplitType = "ai_choice" | "full_body" | "upper_lower" | "ab" | "abc" | "ppl" | "custom";
-type CardioType   = "corrida" | "caminhada" | "bicicleta" | "eliptico" | "escada" | "remo" | "hiit" | "natacao" | "ai_choice";
-type CardioFormat = "continuo_leve" | "continuo_moderado" | "intervalado" | "hiit" | "progressivo" | "recuperacao" | "ai_choice";
-
-type TrainingLocation = "gym" | "home" | "outdoor" | "any";
-
-type Phase =
-  | "loading" | "view"
-  | "wizard_profile" | "wizard_days" | "wizard_location" | "wizard_modality"
-  | "wizard_split"   | "wizard_cardio_type" | "wizard_cardio_format"
-  | "wizard_custom"  | "wizard_generating"  | "wizard_error";
+type Phase = "loading" | "view" | "wizard";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -97,31 +39,14 @@ export default function PlanPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const forceWizard = searchParams.get("wizard") === "1";
-  const fromOnboarding = searchParams.get("from_onboarding") === "1";
-  const [phase, setPhase]          = useState<Phase>("loading");
-  const [plan, setPlan]            = useState<WorkoutPlan | null>(null);
-  const [allPlans, setAllPlans]    = useState<PlanSummary[]>([]);
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [plan, setPlan] = useState<WorkoutPlan | null>(null);
+  const [allPlans, setAllPlans] = useState<PlanSummary[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [profile, setProfile]      = useState<HealthProfile | null>(null);
-  const [error, setError]          = useState("");
+  const [profile, setProfile] = useState<HealthProfile | null>(null);
   const [selectedDayId, setSelectedDayId] = useState<number | null>(null);
-  const [genStep, setGenStep]   = useState(0);
-  const genStepRef              = useRef(0);
-  const [planSummary, setPlanSummary]     = useState<string | null>(null);
+  const [planSummary, setPlanSummary] = useState<string | null>(null);
   const [planRationale, setPlanRationale] = useState<string | null>(null);
-  const [generationSteps, setGenerationSteps] = useState<string[]>(buildGenerationSteps("musculacao", "gym"));
-  type GenerateArgs = [Modality, SplitType, CardioType | undefined, CardioFormat | undefined, { name: string; muscle_groups: string[] }[] | undefined];
-  const lastGenerateArgs = useRef<GenerateArgs | null>(null);
-  const didAutoGenerate = useRef(false);
-
-  // Wizard state
-  const [daysPerWeek, setDaysPerWeek] = useState(3);
-  const [modality,    setModality]    = useState<Modality>("musculacao");
-  const [splitType,   setSplitType]   = useState<SplitType>("ai_choice");
-  const [cardioType,  setCardioType]  = useState<CardioType>("corrida");
-  const [cardioFormat, setCardioFormat] = useState<CardioFormat>("ai_choice");
-  const [customSplits, setCustomSplits] = useState<{ name: string; muscle_groups: string[] }[]>([]);
-  const [trainingLocation, setTrainingLocation] = useState<TrainingLocation>("gym");
 
   useEffect(() => {
     Promise.all([
@@ -133,61 +58,13 @@ export default function PlanPage() {
       setPlanRationale(p?.personalization_reason ?? p?.strategy?.user_facing_explanation ?? p?.ai_rationale ?? null);
       setProfile(hp);
       setAllPlans(plans ?? []);
-      const days = hp?.training_days_per_week ?? 3;
-      if (hp) setDaysPerWeek(days);
       if (p && !forceWizard) {
         router.replace("/workouts");
-      } else if (fromOnboarding && !p && hp) {
-        autoGenerateFromOnboarding(days);
-      } else {
-        setPhase(hp ? "wizard_profile" : "wizard_days");
-      }
-    });
-  }, []);
-
-  async function autoGenerateFromOnboarding(days: number) {
-    if (didAutoGenerate.current) return;
-    didAutoGenerate.current = true;
-
-    const steps = buildGenerationSteps("ai_choice", "gym");
-    setGenerationSteps(steps);
-    setPhase("wizard_generating");
-    genStepRef.current = 0;
-    setGenStep(0);
-    setError("");
-
-    const STEP_MS = 600;
-    const interval = setInterval(() => {
-      const next = Math.min(genStepRef.current + 1, steps.length - 1);
-      genStepRef.current = next;
-      setGenStep(next);
-    }, STEP_MS);
-
-    try {
-      const [newPlan] = await Promise.all([
-        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", {
-          training_days_per_week: days,
-          modality: "ai_choice",
-        }, { timeout: 90_000 }),
-        new Promise<void>((resolve) => setTimeout(resolve, steps.length * STEP_MS)),
-      ]);
-      clearInterval(interval);
-      setPlan(newPlan);
-      setPlanSummary(newPlan.summary ?? null);
-      setPlanRationale(newPlan.personalization_reason ?? newPlan.strategy?.user_facing_explanation ?? newPlan.ai_rationale ?? null);
-      trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: "ai_choice" });
-      trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: "ai_choice" });
-      setPhase("view");
-    } catch (err) {
-      clearInterval(interval);
-      if (err instanceof ApiError && err.status === 401) {
-        window.location.replace("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "Erro ao gerar planejamento. Tente novamente.");
-      setPhase("wizard_error");
-    }
-  }
+      setPhase("wizard");
+    });
+  }, []);
 
   async function handleToggleFavorite(dayId: number) {
     try {
@@ -217,159 +94,43 @@ export default function PlanPage() {
       }
       setSelectedDayId(newDay.id);
     } catch {
-      setError("Erro ao duplicar treino.");
-    }
-  }
-
-  function startWizard() {
-    setError("");
-    setPhase(profile ? "wizard_profile" : "wizard_days");
-  }
-
-  function afterModality(m: Modality) {
-    setModality(m);
-    if (m === "ai_choice" || m === "funcional") {
-      handleGenerate(m, "ai_choice", undefined, undefined);
-      return;
-    }
-    if (m === "musculacao") { setPhase("wizard_split"); return; }
-    if (m === "cardio")     { setPhase("wizard_cardio_type"); return; }
-    if (m === "misto")      { setPhase("wizard_split"); return; }
-  }
-
-  function afterSplit(s: SplitType) {
-    setSplitType(s);
-    if (s === "custom") { setPhase("wizard_custom"); return; }
-    if (modality === "misto") { setPhase("wizard_cardio_type"); return; }
-    handleGenerate(modality, s, undefined, undefined);
-  }
-
-  function afterCardioType(ct: CardioType) {
-    setCardioType(ct);
-    setPhase("wizard_cardio_format");
-  }
-
-  function afterCardioFormat(cf: CardioFormat) {
-    setCardioFormat(cf);
-    handleGenerate(modality, splitType, cardioType, cf);
-  }
-
-  function afterCustomSplit(splits: { name: string; muscle_groups: string[] }[]) {
-    setCustomSplits(splits);
-    handleGenerate(modality, "custom", undefined, undefined, splits);
-  }
-
-  async function handleGenerate(
-    mod: Modality,
-    split: SplitType,
-    cType: CardioType | undefined,
-    cFormat: CardioFormat | undefined,
-    cSplits?: { name: string; muscle_groups: string[] }[]
-  ) {
-    lastGenerateArgs.current = [mod, split, cType, cFormat, cSplits];
-
-    const steps = buildGenerationSteps(mod, trainingLocation, cType);
-    setGenerationSteps(steps);
-    setPhase("wizard_generating");
-    genStepRef.current = 0;
-    setGenStep(0);
-    setError("");
-
-    const STEP_MS = 600;
-    const interval = setInterval(() => {
-      const next = Math.min(genStepRef.current + 1, steps.length - 1);
-      genStepRef.current = next;
-      setGenStep(next);
-    }, STEP_MS);
-
-    const body: Record<string, unknown> = {
-      training_days_per_week: daysPerWeek,
-      modality: mod,
-      split_type: split,
-    };
-    if (cType)   body.cardio_type      = cType;
-    if (cFormat) body.cardio_format    = cFormat;
-    if (cSplits) body.custom_splits    = cSplits;
-    body.training_location = trainingLocation;
-
-    // Set activity_preferences explicitly so the backend never falls back to stale profile data.
-    // Sub-types of cardio (bicicleta, eliptico, remo, escada) are not valid ActivityType values —
-    // normalize them to "cardio" while keeping cardio_type for workout generation details.
-    const toActivityPref = (ct: CardioType | undefined): string => {
-      const map: Partial<Record<CardioType, string>> = {
-        corrida: "corrida", caminhada: "caminhada",
-        natacao: "natacao", hiit: "hiit",
-      };
-      return (ct && map[ct]) ?? "cardio";
-    };
-    if (mod === "funcional")  body.activity_preferences = ["funcional"];
-    if (mod === "cardio")     body.activity_preferences = [toActivityPref(cType)];
-    if (mod === "misto")      body.activity_preferences = ["musculacao", toActivityPref(cType)];
-    if (mod === "musculacao") body.activity_preferences = ["musculacao"];
-    // ai_choice: omit so the backend uses its own logic
-
-    if (mod === "ai_choice") delete body.split_type;
-
-    try {
-      const [newPlan] = await Promise.all([
-        api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body, { timeout: 90_000 }),
-        new Promise<void>((resolve) => setTimeout(resolve, steps.length * STEP_MS)),
-      ]);
-      clearInterval(interval);
-      setPlan(newPlan);
-      setPlanSummary(newPlan.summary ?? null);
-      setPlanRationale(newPlan.personalization_reason ?? newPlan.strategy?.user_facing_explanation ?? newPlan.ai_rationale ?? null);
-      trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: newPlan.days.length, modality: mod });
-      trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: mod });
-      setPhase("view");
-    } catch (err) {
-      clearInterval(interval);
-      if (err instanceof ApiError && err.status === 401) {
-        window.location.replace("/login");
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Erro ao gerar planejamento. Tente novamente.");
-      setPhase("wizard_error");
+      // best-effort; the day list refreshes on next load if this fails
     }
   }
 
   if (phase === "loading") return <LoadingScreen />;
 
-  const WIZARD_ORDERED: Phase[] = [
-    "wizard_profile", "wizard_days", "wizard_location", "wizard_modality",
-    "wizard_split", "wizard_cardio_type", "wizard_cardio_format", "wizard_custom",
-  ];
-  const wizardStep = WIZARD_ORDERED.indexOf(phase);
-  const showProgress = wizardStep >= 0 && phase !== "wizard_generating";
+  if (phase === "wizard") {
+    return (
+      <PlanCreationFlow
+        entryMode={profile ? "replan" : "onboarding"}
+        initialProfile={profile}
+        onCancel={plan ? () => setPhase("view") : undefined}
+        onDone={(newPlan) => {
+          setPlan(newPlan);
+          setPlanSummary((newPlan as WorkoutPlan & { summary?: string }).summary ?? null);
+          setPlanRationale(newPlan.personalization_reason ?? newPlan.strategy?.user_facing_explanation ?? newPlan.ai_rationale ?? null);
+          setPhase("view");
+        }}
+      />
+    );
+  }
 
   return (
     <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
-      {phase !== "wizard_generating" && phase !== "wizard_error" && (
-        <header style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>
-            {phase === "view" ? "Seu Plano" : "Criar Plano"}
-          </h1>
-          {phase === "view" && (
-            <button
-              onClick={() => router.push("/dashboard")}
-              style={{ background: "var(--primary-soft)", color: "var(--primary)", border: "none", borderRadius: "var(--r-pill)", padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-            >
-              ✨ Dicas IA
-            </button>
-          )}
-        </header>
-      )}
+      <header style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>
+          Seu Plano
+        </h1>
+        <button
+          onClick={() => router.push("/dashboard")}
+          style={{ background: "var(--primary-soft)", color: "var(--primary)", border: "none", borderRadius: "var(--r-pill)", padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+        >
+          ✨ Dicas IA
+        </button>
+      </header>
 
-      {showProgress && (
-        <div className="progress-dots" style={{ marginBottom: 24 }}>
-          {WIZARD_ORDERED.map((_, i) => {
-            const cls = i < wizardStep ? "on" : i === wizardStep ? "cur" : "";
-            return <i key={i} className={cls} />;
-          })}
-        </div>
-      )}
-
-      {phase === "view" && plan && (
+      {plan && (
         <>
           {(planSummary || planRationale) && (
             <div style={{ marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 12, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "16px 18px" }}>
@@ -385,10 +146,10 @@ export default function PlanPage() {
               </div>
             </div>
           )}
-          {plan.created_at && <PlanAgeAlert createdAt={plan.created_at} onReplanejar={startWizard} />}
+          {plan.created_at && <PlanAgeAlert createdAt={plan.created_at} onReplanejar={() => setPhase("wizard")} />}
           <PlanView plan={plan} onDayClick={setSelectedDayId} onDuplicate={handleDuplicateDay} onToggleFavorite={handleToggleFavorite} />
           <button
-            onClick={startWizard}
+            onClick={() => setPhase("wizard")}
             style={{ marginTop: 16, width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: "14px", color: "var(--text-muted)", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
           >
             ↺ Replanejar
@@ -414,83 +175,6 @@ export default function PlanPage() {
         </>
       )}
 
-      {phase === "wizard_profile" && profile && (
-        <WizardProfile
-          profile={profile}
-          onNext={() => setPhase("wizard_days")}
-          onCancel={plan ? () => setPhase("view") : undefined}
-        />
-      )}
-
-      {phase === "wizard_days" && (
-        <WizardDays
-          selected={daysPerWeek}
-          onSelect={setDaysPerWeek}
-          onNext={() => setPhase("wizard_location")}
-          onBack={() => setPhase(profile ? "wizard_profile" : "view")}
-        />
-      )}
-
-      {phase === "wizard_location" && (
-        <WizardLocation
-          selected={trainingLocation}
-          onSelect={setTrainingLocation}
-          onNext={() => setPhase("wizard_modality")}
-          onBack={() => setPhase("wizard_days")}
-        />
-      )}
-
-      {phase === "wizard_modality" && (
-        <WizardModality
-          onSelect={afterModality}
-          onBack={() => setPhase("wizard_location")}
-        />
-      )}
-
-      {phase === "wizard_split" && (
-        <WizardSplitType
-          onSelect={afterSplit}
-          onBack={() => setPhase("wizard_modality")}
-        />
-      )}
-
-      {phase === "wizard_cardio_type" && (
-        <WizardCardioType
-          onSelect={afterCardioType}
-          onBack={() => modality === "misto" ? setPhase("wizard_split") : setPhase("wizard_modality")}
-        />
-      )}
-
-      {phase === "wizard_cardio_format" && (
-        <WizardCardioFormat
-          cardioType={cardioType}
-          onSelect={afterCardioFormat}
-          onBack={() => setPhase("wizard_cardio_type")}
-        />
-      )}
-
-      {phase === "wizard_custom" && (
-        <WizardCustomSplit
-          daysPerWeek={daysPerWeek}
-          onConfirm={afterCustomSplit}
-          onBack={() => setPhase("wizard_split")}
-        />
-      )}
-
-      {phase === "wizard_generating" && <GeneratingView step={genStep} steps={generationSteps} offsetParent />}
-
-      {phase === "wizard_error" && (
-        <GenerateErrorView
-          error={error}
-          onRetry={() => {
-            if (lastGenerateArgs.current) {
-              handleGenerate(...lastGenerateArgs.current);
-            }
-          }}
-          onBack={() => setPhase("wizard_modality")}
-        />
-      )}
-
       {selectedDayId != null && (
         <PlanDayDetailDrawer
           dayId={selectedDayId}
@@ -504,289 +188,6 @@ export default function PlanPage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-// ── Shared UI ────────────────────────────────────────────────────────────────
-
-type CardOption<T> = { value: T; label: string; description: string; icon: string };
-
-function SelectionCard<T extends string>({
-  option, selected, onSelect,
-}: { option: CardOption<T>; selected: boolean; onSelect: (v: T) => void }) {
-  return (
-    <OptionCard
-      icon={option.icon}
-      label={option.label}
-      description={option.description}
-      selected={selected}
-      onClick={() => onSelect(option.value)}
-    />
-  );
-}
-
-function WizardHeader({ title, subtitle, onBack }: { title: string; subtitle: string; onBack?: () => void }) {
-  return (
-    <>
-      {onBack && (
-        <button onClick={onBack} className="wizard-back">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          Voltar
-        </button>
-      )}
-      <h2 className="wizard-title">{title}</h2>
-      <p className="wizard-sub">{subtitle}</p>
-    </>
-  );
-}
-
-// ── Wizard steps ──────────────────────────────────────────────────────────────
-
-const MODALITY_OPTIONS: CardOption<Modality>[] = [
-  { value: "musculacao", label: "Musculação",     icon: "🏋️", description: "Treino com pesos, barras e máquinas." },
-  { value: "cardio",     label: "Cardio",          icon: "❤️", description: "Corrida, bike, elíptico e mais." },
-  { value: "misto",      label: "Musculação + Cardio", icon: "⚡", description: "Combinação de força e resistência." },
-  { value: "funcional",  label: "Funcional",       icon: "🤸", description: "Kettlebell, TRX, corda e movimentos naturais." },
-  { value: "ai_choice",  label: "IA Escolhe",      icon: "🤖", description: "Deixa a IA montar o melhor plano para você." },
-];
-
-function WizardModality({ onSelect, onBack }: { onSelect: (m: Modality) => void; onBack: () => void }) {
-  const [selected, setSelected] = useState<Modality | null>(null);
-
-  return (
-    <div>
-      <WizardHeader title="Qual modalidade?" subtitle="Escolha o tipo de treino que você quer focar." onBack={onBack} />
-      <div className="space-y-3">
-        {MODALITY_OPTIONS.map((opt) => (
-          <SelectionCard
-            key={opt.value}
-            option={opt}
-            selected={selected === opt.value}
-            onSelect={(v) => { setSelected(v); setTimeout(() => onSelect(v), 200); }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const SPLIT_OPTIONS: CardOption<SplitType>[] = [
-  { value: "ai_choice",   label: "IA Decide",              icon: "🤖", description: "A IA escolhe a melhor divisão para seu perfil." },
-  { value: "full_body",   label: "Full Body",               icon: "💪", description: "Corpo todo em cada sessão." },
-  { value: "upper_lower", label: "Superiores / Inferiores", icon: "⬆️", description: "Alterna entre parte superior e inferior." },
-  { value: "ab",          label: "AB",                      icon: "🔄", description: "Dois treinos alternados (A e B)." },
-  { value: "abc",         label: "ABC",                     icon: "🔤", description: "Três treinos em rotação (A, B e C)." },
-  { value: "ppl",         label: "Push / Pull / Legs",      icon: "🏋️", description: "Empurrar, puxar e pernas separados." },
-  { value: "custom",      label: "Personalizado",           icon: "✏️", description: "Monte suas próprias divisões musculares." },
-];
-
-function WizardSplitType({ onSelect, onBack }: { onSelect: (s: SplitType) => void; onBack: () => void }) {
-  const [selected, setSelected] = useState<SplitType | null>(null);
-
-  return (
-    <div>
-      <WizardHeader title="Como quer organizar?" subtitle="Escolha a divisão de musculação que prefere." onBack={onBack} />
-      <div className="space-y-3">
-        {SPLIT_OPTIONS.map((opt) => (
-          <SelectionCard
-            key={opt.value}
-            option={opt}
-            selected={selected === opt.value}
-            onSelect={(v) => { setSelected(v); setTimeout(() => onSelect(v), 200); }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const CARDIO_TYPE_OPTIONS: CardOption<CardioType>[] = [
-  { value: "corrida",    label: "Corrida",       icon: "🏃", description: "Esteira ou rua." },
-  { value: "caminhada",  label: "Caminhada",     icon: "🚶", description: "Caminhada ativa ou em inclinação." },
-  { value: "bicicleta",  label: "Bike",          icon: "🚲", description: "Bike estacionária ou ao ar livre." },
-  { value: "eliptico",   label: "Elíptico",      icon: "🔁", description: "Baixo impacto, alta eficiência." },
-  { value: "remo",       label: "Remo",          icon: "🚣", description: "Ergômetro ou remo funcional." },
-  { value: "hiit",       label: "HIIT",          icon: "🔥", description: "Alta intensidade com intervalos." },
-  { value: "natacao",    label: "Natação",        icon: "🏊", description: "Nado livre, borboleta e mais." },
-  { value: "ai_choice",  label: "IA Escolhe",    icon: "🤖", description: "A IA decide o melhor cardio para você." },
-];
-
-function WizardCardioType({ onSelect, onBack }: { onSelect: (ct: CardioType) => void; onBack: () => void }) {
-  const [selected, setSelected] = useState<CardioType | null>(null);
-
-  return (
-    <div>
-      <WizardHeader title="Que tipo de cardio?" subtitle="Selecione a modalidade de cardio preferida." onBack={onBack} />
-      <div className="space-y-3">
-        {CARDIO_TYPE_OPTIONS.map((opt) => (
-          <SelectionCard
-            key={opt.value}
-            option={opt}
-            selected={selected === opt.value}
-            onSelect={(v) => { setSelected(v); setTimeout(() => onSelect(v), 200); }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const CARDIO_FORMAT_OPTIONS: CardOption<CardioFormat>[] = [
-  { value: "ai_choice",        label: "IA Decide",         icon: "🤖", description: "A IA escolhe o formato ideal." },
-  { value: "continuo_leve",    label: "Contínuo Leve",     icon: "🌱", description: "Ritmo baixo, longa duração. Ótimo para recuperação." },
-  { value: "continuo_moderado",label: "Contínuo Moderado", icon: "🎯", description: "Intensidade média sustentada. Queima de gordura eficiente." },
-  { value: "intervalado",      label: "Intervalado",       icon: "🔄", description: "Alternância de esforço e descanso. Melhora condicionamento." },
-  { value: "hiit",             label: "HIIT",              icon: "⚡", description: "Alta intensidade em blocos curtos. Máximo resultado em menos tempo." },
-  { value: "progressivo",      label: "Progressivo",       icon: "📈", description: "Intensidade aumenta ao longo da sessão." },
-  { value: "recuperacao",      label: "Recuperação",       icon: "🧘", description: "Ritmo suave para dias de recuperação ativa." },
-];
-
-function WizardCardioFormat({
-  cardioType,
-  onSelect,
-  onBack,
-}: { cardioType: CardioType; onSelect: (cf: CardioFormat) => void; onBack: () => void }) {
-  const [selected, setSelected] = useState<CardioFormat | null>(null);
-  const typeLabel = CARDIO_TYPE_OPTIONS.find((o) => o.value === cardioType)?.label ?? "Cardio";
-
-  return (
-    <div>
-      <WizardHeader
-        title="Como prefere fazer?"
-        subtitle={`Escolha o formato para o treino de ${typeLabel}.`}
-        onBack={onBack}
-      />
-      <div className="space-y-3">
-        {CARDIO_FORMAT_OPTIONS.map((opt) => (
-          <SelectionCard
-            key={opt.value}
-            option={opt}
-            selected={selected === opt.value}
-            onSelect={(v) => { setSelected(v); setTimeout(() => onSelect(v), 200); }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const ALL_MUSCLE_GROUPS = [
-  { value: "chest",     label: "Peito" },
-  { value: "back",      label: "Costas" },
-  { value: "shoulders", label: "Ombros" },
-  { value: "biceps",    label: "Bíceps" },
-  { value: "triceps",   label: "Tríceps" },
-  { value: "legs",      label: "Pernas" },
-  { value: "glutes",    label: "Glúteos" },
-  { value: "calves",    label: "Panturrilhas" },
-  { value: "trapezius", label: "Trapézio" },
-  { value: "forearms",  label: "Antebraços" },
-  { value: "core",      label: "Core" },
-];
-
-function WizardCustomSplit({
-  daysPerWeek,
-  onConfirm,
-  onBack,
-}: {
-  daysPerWeek: number;
-  onConfirm: (splits: { name: string; muscle_groups: string[] }[]) => void;
-  onBack: () => void;
-}) {
-  const [splits, setSplits] = useState<{ name: string; muscle_groups: string[] }[]>([
-    { name: "Treino A", muscle_groups: [] },
-  ]);
-
-  function addSplit() {
-    if (splits.length >= daysPerWeek) return;
-    setSplits((prev) => [...prev, { name: `Treino ${LETTERS[prev.length]}`, muscle_groups: [] }]);
-  }
-
-  function removeSplit(idx: number) {
-    setSplits((prev) => prev.filter((_, i) => i !== idx));
-  }
-
-  function toggleMuscle(splitIdx: number, muscle: string) {
-    setSplits((prev) =>
-      prev.map((s, i) =>
-        i !== splitIdx ? s : {
-          ...s,
-          muscle_groups: s.muscle_groups.includes(muscle)
-            ? s.muscle_groups.filter((m) => m !== muscle)
-            : [...s.muscle_groups, muscle],
-        }
-      )
-    );
-  }
-
-  function updateName(splitIdx: number, name: string) {
-    setSplits((prev) => prev.map((s, i) => (i === splitIdx ? { ...s, name } : s)));
-  }
-
-  const canConfirm = splits.length > 0 && splits.every((s) => s.muscle_groups.length > 0);
-
-  return (
-    <div>
-      <WizardHeader
-        title="Monte suas divisões"
-        subtitle={`Defina até ${daysPerWeek} treinos com os grupos musculares de cada um.`}
-        onBack={onBack}
-      />
-
-      <div className="space-y-4">
-        {splits.map((split, idx) => (
-          <div key={idx} className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
-            <div className="mb-3 flex items-center gap-2">
-              <input
-                type="text"
-                value={split.name}
-                onChange={(e) => updateName(idx, e.target.value)}
-                className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none"
-              />
-              {splits.length > 1 && (
-                <button onClick={() => removeSplit(idx)} className="text-sm text-red-400 hover:text-red-600">
-                  Remover
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {ALL_MUSCLE_GROUPS.map((mg) => (
-                <button
-                  key={mg.value}
-                  onClick={() => toggleMuscle(idx, mg.value)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                    split.muscle_groups.includes(mg.value)
-                      ? "bg-primary-500 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-primary-100"
-                  }`}
-                >
-                  {mg.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {splits.length < daysPerWeek && (
-        <button
-          onClick={addSplit}
-          className="mt-3 w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-medium text-primary-500 hover:bg-primary-50"
-        >
-          + Adicionar treino
-        </button>
-      )}
-
-      <button
-        onClick={() => onConfirm(splits)}
-        disabled={!canConfirm}
-        className="mt-6 w-full rounded-xl bg-primary-500 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-primary-600"
-      >
-        Gerar treino
-      </button>
     </div>
   );
 }
@@ -923,101 +324,6 @@ function PlanHistoryCard({ plan }: { plan: PlanSummary }) {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function WizardProfile({
-  profile, onNext, onCancel,
-}: { profile: HealthProfile; onNext: () => void; onCancel?: () => void }) {
-  return (
-    <div>
-      {onCancel && (
-        <button onClick={onCancel} className="wizard-back">← Cancelar</button>
-      )}
-      <h2 className="wizard-title">Seu perfil de treino</h2>
-      <p className="wizard-sub">Vamos usar esses dados para montar seu planejamento.</p>
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: 18 }}>
-        <ProfileRow label="Nível"    value={LEVEL_LABELS[profile.fitness_level] ?? profile.fitness_level} />
-        <ProfileRow label="Objetivo" value={GOAL_LABELS[profile.goal] ?? profile.goal} />
-      </div>
-      <button onClick={onNext} className="wizard-cta">Continuar →</button>
-    </div>
-  );
-}
-
-function ProfileRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: "1px solid var(--border)" }}
-      className="last:border-0">
-      <span style={{ fontSize: 14.5, color: "var(--text-muted)" }}>{label}</span>
-      <span style={{ fontSize: 14.5, fontWeight: 700 }}>{value}</span>
-    </div>
-  );
-}
-
-function WizardDays({
-  selected, onSelect, onNext, onBack,
-}: { selected: number; onSelect: (n: number) => void; onNext: () => void; onBack: () => void }) {
-  return (
-    <div>
-      <button onClick={onBack} className="wizard-back">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}><polyline points="15 18 9 12 15 6" /></svg>
-        Voltar
-      </button>
-      <h2 className="wizard-title">Quantos dias por semana?</h2>
-      <p className="wizard-sub">Escolha com base na sua disponibilidade.</p>
-      <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
-        {[2, 3, 4, 5, 6].map((n) => (
-          <button
-            key={n}
-            onClick={() => onSelect(n)}
-            style={{
-              width: 56, height: 56, borderRadius: "50%",
-              fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700,
-              cursor: "pointer", transition: "all .16s",
-              background: selected === n ? "linear-gradient(180deg, var(--primary), var(--primary-2))" : "var(--surface)",
-              color: selected === n ? "var(--on-primary)" : "var(--text-muted)",
-              border: selected === n ? "none" : "1.5px solid var(--border)",
-              boxShadow: selected === n ? "var(--glow)" : "none",
-            }}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-      <p style={{ marginTop: 10, textAlign: "center", fontSize: 12, color: "var(--text-dim)" }}>dias por semana</p>
-      <button onClick={onNext} className="wizard-cta">Continuar →</button>
-    </div>
-  );
-}
-
-const LOCATION_OPTIONS: { value: TrainingLocation; label: string; description: string; icon: string }[] = [
-  { value: "gym",     label: "Academia",       description: "Aparelhos, barras e halteres",    icon: "🏋️" },
-  { value: "home",    label: "Em casa",        description: "Peso corporal, sem equipamentos", icon: "🏠" },
-  { value: "outdoor", label: "Ao ar livre",    description: "Parques, ruas e quadras",         icon: "🌳" },
-  { value: "any",     label: "Varia",          description: "Depende do dia",                  icon: "🔄" },
-];
-
-function WizardLocation({
-  selected, onSelect, onNext, onBack,
-}: { selected: TrainingLocation; onSelect: (v: TrainingLocation) => void; onNext: () => void; onBack: () => void }) {
-  return (
-    <div>
-      <WizardHeader title="Onde você vai treinar?" subtitle="Isso adapta os exercícios disponíveis no seu plano." onBack={onBack} />
-      <div className="opts">
-        {LOCATION_OPTIONS.map((opt) => (
-          <OptionCard
-            key={opt.value}
-            icon={opt.icon}
-            label={opt.label}
-            description={opt.description}
-            selected={selected === opt.value}
-            onClick={() => onSelect(opt.value)}
-          />
-        ))}
-      </div>
-      <button onClick={onNext} className="wizard-cta">Continuar →</button>
     </div>
   );
 }
@@ -1517,45 +823,5 @@ function PlanDayDetailDrawer({
         </div>
       )}
     </>
-  );
-}
-
-function GenerateErrorView({
-  error, onRetry, onBack,
-}: { error: string; onRetry: () => void; onBack: () => void }) {
-  return (
-    <div style={{
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      minHeight: "60vh", textAlign: "center", padding: "0 24px",
-    }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
-      <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, margin: "0 0 8px" }}>
-        Não conseguimos gerar seu plano
-      </h2>
-      <p style={{ fontSize: 14, color: "var(--text-muted)", margin: "0 0 24px", maxWidth: 320 }}>
-        {error || "Ocorreu um erro inesperado. Você pode tentar novamente."}
-      </p>
-      <button
-        onClick={onRetry}
-        style={{
-          width: "100%", maxWidth: 320, padding: "14px", borderRadius: "var(--r-lg)",
-          background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
-          color: "var(--on-primary)", fontWeight: 700, fontSize: 15, border: "none", cursor: "pointer",
-          marginBottom: 12,
-        }}
-      >
-        Tentar novamente
-      </button>
-      <button
-        onClick={onBack}
-        style={{
-          width: "100%", maxWidth: 320, padding: "12px", borderRadius: "var(--r-lg)",
-          background: "var(--surface)", color: "var(--text-muted)", fontWeight: 600, fontSize: 14,
-          border: "1px solid var(--border)", cursor: "pointer",
-        }}
-      >
-        ← Escolher modalidade
-      </button>
-    </div>
   );
 }

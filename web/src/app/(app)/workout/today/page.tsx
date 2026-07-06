@@ -14,6 +14,7 @@ import { ExerciseInfoModal } from "./exercise-info-modal";
 import { UpgradeGate, UpgradeBanner } from "@/shared/components/upgrade-gate";
 import { useAuth } from "@/features/auth/auth-context";
 import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
+import { ProgressiveProfilingSheet } from "@/features/workout/progressive-profiling-sheet";
 import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared/components/motion";
 import { ShareButton } from "@/shared/components/workout-share/share-button";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
@@ -2353,6 +2354,7 @@ function DoneScreen({
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [currentStreak, setCurrentStreak] = useState<number | null>(null);
+  const [showProfiling, setShowProfiling] = useState(false);
   const exercises = useMemo(() => day.exercises ?? [], [day.exercises]);
 
   const completionData = useMemo(() => {
@@ -2826,13 +2828,19 @@ function DoneScreen({
         {/* Done CTA */}
         <motion.div variants={staggerItem}>
           <PressButton
-            onClick={() => { if (!isSaved) onSaved?.(); router.push("/dashboard"); }}
+            onClick={() => { if (!isSaved) onSaved?.(); setShowProfiling(true); }}
             className="w-full rounded-2xl bg-primary-500 py-4 text-base font-semibold text-white"
           >
             {isSaved ? "Ir para o dashboard →" : "Concluir sem salvar →"}
           </PressButton>
         </motion.div>
       </motion.div>
+
+      <ProgressiveProfilingSheet
+        open={showProfiling}
+        todayExercises={exercises.map((ex) => ({ exercise_id: ex.exercise_id, name: ex.name }))}
+        onClose={() => { setShowProfiling(false); router.push("/dashboard"); }}
+      />
     </div>
   );
 }

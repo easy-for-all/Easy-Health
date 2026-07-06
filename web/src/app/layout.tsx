@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import Script from "next/script";
 import { AuthProvider } from "@/features/auth/auth-context";
 import { ThemeProvider } from "@/features/theme/theme-context";
+import { ToastProvider } from "@/shared/components/ui/toast-provider";
 import "./globals.css";
 
 const GTAG_ID = "G-FG3BDM75T1";
@@ -63,7 +64,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-full bg-[var(--bg)] text-[var(--text)] font-sans" style={{ fontFamily: "var(--font-body)" }}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </AuthProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>
