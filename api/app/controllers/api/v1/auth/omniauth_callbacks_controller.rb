@@ -18,7 +18,7 @@ module Api
           end
 
           sign_in(user)
-          cookies[:_eh_auth] = { value: "1", domain: ".easyhealth.art", path: "/", secure: true, httponly: false, same_site: :lax }
+          set_auth_indicator_cookie
           new_user = user.previously_new_record? || (user.created_at > 5.minutes.ago && user.health_profile.nil?)
           Rails.logger.info("[GoogleOAuthCallback] email=#{user.email} new_user=#{new_user}")
 

@@ -132,6 +132,8 @@ Rails.application.routes.draw do
         get "users/:id", action: :user_detail
       end
 
+      post "onboarding_events", to: "onboarding_events#create"
+
       # Privacy & public profile
       resource :privacy_settings, only: [:show, :update]
       resource :public_profile, only: [:show, :update]

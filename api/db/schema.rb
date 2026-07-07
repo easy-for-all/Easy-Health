@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_05_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -436,6 +436,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_05_120000) do
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
+  create_table "onboarding_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_name", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "occurred_at", null: false
+    t.string "onboarding_flow"
+    t.string "step_name"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["event_name", "occurred_at"], name: "index_onboarding_events_on_event_name_and_occurred_at"
+    t.index ["event_name"], name: "index_onboarding_events_on_event_name"
+    t.index ["occurred_at"], name: "index_onboarding_events_on_occurred_at"
+    t.index ["onboarding_flow", "event_name"], name: "index_onboarding_events_on_onboarding_flow_and_event_name"
+    t.index ["onboarding_flow"], name: "index_onboarding_events_on_onboarding_flow"
+    t.index ["step_name"], name: "index_onboarding_events_on_step_name"
+    t.index ["user_id"], name: "index_onboarding_events_on_user_id"
+  end
+
   create_table "personal_alerts", force: :cascade do |t|
     t.text "body"
     t.bigint "client_id"
@@ -680,6 +698,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_05_120000) do
     t.datetime "last_marketing_email_sent_at"
     t.boolean "marketing_consent", default: false, null: false
     t.string "name", default: "", null: false
+    t.string "onboarding_flow"
     t.string "profile_visibility", default: "private", null: false
     t.string "provider"
     t.string "referral_code"
@@ -696,6 +715,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_05_120000) do
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["email_bounced_at"], name: "index_users_on_email_bounced_at"
     t.index ["marketing_consent"], name: "index_users_on_marketing_consent"
+    t.index ["onboarding_flow"], name: "index_users_on_onboarding_flow"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
     t.index ["referral_code"], name: "index_users_on_referral_code", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
@@ -848,6 +868,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_05_120000) do
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
+  add_foreign_key "onboarding_events", "users"
   add_foreign_key "personal_alerts", "users", column: "client_id"
   add_foreign_key "personal_alerts", "users", column: "personal_id"
   add_foreign_key "personal_client_relationships", "users", column: "client_id"

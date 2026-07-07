@@ -82,6 +82,12 @@ module Api
         conversion_plan_to_session          = users_created_workouts > 0 ? (users_completed_workouts.to_f / users_created_workouts * 100).round(1) : 0
         conversion_session_to_subscription  = users_completed_workouts > 0 ? (users_subscribed.to_f / users_completed_workouts * 100).round(1) : 0
 
+        onboarding_analytics = OnboardingAnalyticsService.new(
+          period: params[:onboarding_period],
+          flow: params[:onboarding_flow],
+          status: params[:onboarding_status]
+        ).call
+
         render json: {
           # Totals
           total_users: total_users,
@@ -140,7 +146,10 @@ module Api
           top_behavior_pattern:     FitnessProfile.group(:behavior_pattern).count.max_by { |_, v| v }&.first,
           ai_workouts_generated:    AiTrainingDecisionLog.where(status: "success").count,
           ai_validation_failures:   AiTrainingDecisionLog.where(status: "validation_failed").count,
-          pct_users_with_insights:  total_users > 0 ? ((defined?(CoachInsight) ? CoachInsight.distinct.count(:user_id) : 0).to_f / total_users * 100).round(1) : 0
+          pct_users_with_insights:  total_users > 0 ? ((defined?(CoachInsight) ? CoachInsight.distinct.count(:user_id) : 0).to_f / total_users * 100).round(1) : 0,
+
+          # Onboarding Analytics
+          onboarding_analytics: onboarding_analytics
         }
       end
 

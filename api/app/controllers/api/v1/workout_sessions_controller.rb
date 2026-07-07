@@ -40,6 +40,14 @@ module Api
         workout_day_id = valid_workout_day_id(params[:workout_day_id])
         session = current_user.workout_sessions.create!(status: "in_progress", workout_day_id: workout_day_id, source: params[:source])
 
+        is_first_workout = current_user.workout_sessions.where(completion_status: "completed").none?
+        OnboardingEventTracker.track(
+          user: current_user,
+          event_name: "workout_started",
+          onboarding_flow: current_user.onboarding_flow,
+          metadata: { workout_session_id: session.id, is_first_workout: is_first_workout }
+        )
+
         Rails.logger.info("[WorkoutSessionStart] user=#{current_user.id} session_id=#{session.id} workout_day_id=#{workout_day_id.inspect}")
         render json: { id: session.id, status: session.status }, status: :created
       end
@@ -410,7 +418,27 @@ module Api
         )
 
         return unless status == "completed"
-        return unless current_user.workout_sessions.where(completion_status: "completed").count == 1
+
+        is_first_workout = current_user.workout_sessions.where(completion_status: "completed").count == 1
+        OnboardingEventTracker.track(
+          user: current_user,
+          event_name: "workout_completed",
+          onboarding_flow: current_user.onboarding_flow,
+          metadata: metadata.merge(is_first_workout: is_first_workout),
+          occurred_at: session.completed_at
+        )
+
+        if is_first_workout && session.completed_at && current_user.created_at && (session.completed_at - current_user.created_at) <= 24.hours
+          OnboardingEventTracker.track(
+            user: current_user,
+            event_name: "first_workout_completed_24h",
+            onboarding_flow: current_user.onboarding_flow,
+            metadata: metadata,
+            occurred_at: session.completed_at
+          )
+        end
+
+        return unless is_first_workout
 
         UserEventService.track(
           user: current_user,

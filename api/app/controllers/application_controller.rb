@@ -28,6 +28,21 @@ class ApplicationController < ActionController::API
     Rails.application.routes.url_helpers.rails_blob_path(attachment, only_path: true)
   end
 
+  def set_auth_indicator_cookie
+    cookies[:_eh_auth] = {
+      value: "1",
+      domain: ".easyhealth.art",
+      path: "/",
+      secure: Rails.env.production?,
+      httponly: false,
+      same_site: :lax
+    }
+  end
+
+  def delete_auth_indicator_cookie
+    cookies.delete(:_eh_auth, domain: ".easyhealth.art", path: "/")
+  end
+
   def user_json(user)
     {
       id: user.id,
