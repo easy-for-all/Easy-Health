@@ -9,6 +9,7 @@ module Api
 
           if user.save
             sign_in(user)
+            set_auth_indicator_cookie
             user.reload
             render json: user_json(user), status: :created
           else
@@ -23,6 +24,7 @@ module Api
           reset_session
           request.session_options[:drop] = true
           cookies.delete("_easy_health_session", path: "/", same_site: :lax)
+          delete_auth_indicator_cookie
 
           render json: { message: "Account deleted successfully" }, status: :ok
         rescue => e

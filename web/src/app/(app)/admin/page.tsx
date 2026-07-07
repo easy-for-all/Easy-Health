@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/auth-context";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
+import { OnboardingAnalyticsSection } from "./onboarding-analytics";
+import type { OnboardingAnalytics } from "./onboarding-analytics/types";
 
 type AdminStats = {
   total_users: number;
@@ -40,6 +42,7 @@ type AdminStats = {
   total_workout_plans: number;
   total_workout_sessions: number;
   total_uploads: number;
+  onboarding_analytics?: OnboardingAnalytics;
 };
 
 type AdminUser = {
@@ -294,6 +297,8 @@ export default function AdminPage() {
             <StatCard label="Trial → Assinatura" value={stats?.conversion_trial_to_subscription} description="% total de conversão" pct />
           </div>
         </section>
+
+        <OnboardingAnalyticsSection />
 
         {/* Users table */}
         <section>

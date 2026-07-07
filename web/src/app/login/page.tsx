@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -27,6 +27,7 @@ export default function LoginPage() {
     oauthErrorCode ? t(OAUTH_ERROR_MESSAGE_KEYS[oauthErrorCode] ?? "loginError") : ""
   );
   const [loading, setLoading]   = useState(false);
+  const submittingRef = useRef(false);
 
   async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
     if (!Capacitor.isNativePlatform()) return;
@@ -38,8 +39,10 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError("");
     setLoading(true);
+    submittingRef.current = true;
     try {
       await signIn(email, password);
       const pending = getPendingPlan();
@@ -59,6 +62,7 @@ export default function LoginPage() {
       else if (err instanceof TypeError) setError("Não foi possível conectar ao servidor. Tente novamente.");
       else                               setError(t("loginError"));
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }

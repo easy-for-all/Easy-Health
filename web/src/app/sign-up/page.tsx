@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
@@ -53,6 +53,7 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
+  const submittingRef = useRef(false);
 
   const passwordValid = password.length >= 8;
 
@@ -70,6 +71,7 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submittingRef.current) return;
     const formData = new FormData(e.currentTarget);
     const submittedName = String(formData.get("name") ?? "").trim();
     const submittedEmail = String(formData.get("email") ?? "").trim();
@@ -92,6 +94,7 @@ export default function SignUpPage() {
 
     setError("");
     setLoading(true);
+    submittingRef.current = true;
     try {
       await signUp(submittedName, submittedEmail, submittedPassword, marketingConsent);
       trackEvent(EVENTS.SIGNUP_COMPLETED);
@@ -117,6 +120,7 @@ export default function SignUpPage() {
         setError("Erro ao criar conta");
       }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }

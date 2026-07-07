@@ -29,24 +29,6 @@ module Api
 
           render json: { message: "Signed out successfully" }
         end
-
-        private
-
-        def set_auth_indicator_cookie
-          cookies[:_eh_auth] = {
-            value: "1",
-            domain: ".easyhealth.art",
-            path: "/",
-            secure: Rails.env.production?,
-            httponly: false,
-            same_site: :lax
-          }
-        end
-
-        def delete_auth_indicator_cookie
-          cookies.delete(:_eh_auth, domain: ".easyhealth.art", path: "/")
-        end
-
       end
     end
   end

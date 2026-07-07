@@ -5,10 +5,19 @@ import { api } from "@/shared/lib/api";
 import { BottomSheet } from "@/shared/components/ui/bottom-sheet";
 import { ChoiceGrid } from "@/shared/components/ui/choice-grid";
 import { useToast } from "@/shared/components/ui/toast-provider";
+import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
 import type { Equipment, HealthProfile, IntensityPreference, TrainingStyle } from "@/shared/types/health-profile";
 
 type PromptKey = "rate" | "equipment" | "avoid_exercise" | "style";
 const ORDER: PromptKey[] = ["rate", "equipment", "avoid_exercise", "style"];
+
+// Mapeia as chaves internas (já em produção) para os nomes de question_key usados na analytics.
+const QUESTION_KEYS: Record<PromptKey, string> = {
+  rate: "workout_difficulty_feedback",
+  equipment: "available_equipment",
+  avoid_exercise: "avoid_exercise",
+  style: "training_preference",
+};
 
 const EQUIPMENT_OPTIONS: { value: Equipment; label: string }[] = [
   { value: "dumbbell", label: "Halteres" }, { value: "resistance_band", label: "Elástico" },
@@ -64,6 +73,12 @@ export function ProgressiveProfilingSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, answered, promptKey]);
 
+  useEffect(() => {
+    if (open && promptKey) {
+      trackOnboardingEvent("progressive_question_shown", { stepName: QUESTION_KEYS[promptKey] });
+    }
+  }, [open, promptKey]);
+
   async function persist(key: PromptKey, patch: Record<string, unknown>) {
     setSaving(true);
     try {
@@ -80,10 +95,21 @@ export function ProgressiveProfilingSheet({
   }
 
   function skip(key: PromptKey) {
+    trackOnboardingEvent("progressive_question_skipped", { stepName: QUESTION_KEYS[key] });
     persist(key, {});
   }
 
+  function answerValueFrom(patch: Record<string, unknown>): string {
+    const value = Object.values(patch)[0];
+    return Array.isArray(value) ? value.join(",") : String(value ?? "");
+  }
+
   function finishWithToast(key: PromptKey, patch: Record<string, unknown>) {
+    const answerValue = key === "avoid_exercise" ? "yes" : answerValueFrom(patch);
+    trackOnboardingEvent("progressive_question_answered", {
+      stepName: QUESTION_KEYS[key],
+      metadata: { answer_value: answerValue },
+    });
     persist(key, patch).then(() => show("Isso ajuda a ajustar seus próximos treinos ✨", { variant: "good" }));
   }
 

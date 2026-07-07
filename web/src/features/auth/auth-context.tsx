@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { api, ApiError, TRIAL_EXPIRED_EVENT } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
 import { Capacitor } from "@capacitor/core";
@@ -19,6 +19,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const justAuthenticatedRef = useRef(false);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await Browser.close().catch(() => undefined);
             const user = await api.get<User & { new_user?: boolean }>(`/api/v1/auth/mobile_callback?token=${token}`);
             setUser(user);
+            justAuthenticatedRef.current = true;
             window.location.replace(user.new_user ? "/onboarding" : "/dashboard");
           }
         } catch {
@@ -51,11 +53,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const publicPaths = ["/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];
 
     api.get<User>("/api/v1/auth/me")
-      .then(setUser)
+      .then((u) => {
+        if (justAuthenticatedRef.current) return;
+        setUser(u);
+      })
       .catch((error: unknown) => {
-        if (error instanceof ApiError && [401, 403].includes(error.status)) {
-          void api.delete("/api/v1/auth/sign_out").catch(() => undefined);
+        if (justAuthenticatedRef.current) return;
+        if (!(error instanceof ApiError && [401, 403].includes(error.status))) {
+          setUser(null);
+          return;
         }
+
+        void api.delete("/api/v1/auth/sign_out").catch(() => undefined);
 
         document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
         if (window.location.hostname === "easyhealth.art" || window.location.hostname.endsWith(".easyhealth.art")) {
@@ -85,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     const u = await api.post<User>("/api/v1/auth/sign_in", { email, password });
     setUser(u);
+    justAuthenticatedRef.current = true;
   }
 
   async function signUp(name: string, email: string, password: string, marketingConsent?: boolean) {
@@ -96,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       marketing_consent: marketingConsent ?? false,
     });
     setUser(u);
+    justAuthenticatedRef.current = true;
   }
 
   async function signOut() {

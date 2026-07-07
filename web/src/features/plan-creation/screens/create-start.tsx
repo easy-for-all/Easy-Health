@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
 import type { CreationMode } from "../types";
 
 interface ModeOption {
@@ -95,7 +96,19 @@ export function CreateStart({ onSelect, onCancel }: { onSelect: (mode: CreationM
         })}
       </div>
 
-      <button className="wizard-cta" onClick={() => onSelect(selected)}>Continuar</button>
+      <button
+        className="wizard-cta"
+        onClick={() => {
+          trackOnboardingEvent("onboarding_flow_selected", {
+            onboardingFlow: selected,
+            stepName: "choose_flow",
+            metadata: { selected_option: selected },
+          });
+          onSelect(selected);
+        }}
+      >
+        Continuar
+      </button>
     </div>
   );
 }

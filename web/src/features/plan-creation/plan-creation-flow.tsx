@@ -16,26 +16,26 @@ import { CompletePlace } from "./screens/complete/complete-place";
 import { CompleteFocus } from "./screens/complete/complete-focus";
 import { CompleteSchedule } from "./screens/complete/complete-schedule";
 import { CompleteCare } from "./screens/complete/complete-care";
-import type { EntryMode } from "./types";
+import type { CreationMode, EntryMode } from "./types";
 
 export function PlanCreationFlow({
   entryMode, initialProfile, onDone, onCancel,
 }: {
   entryMode: EntryMode;
   initialProfile: HealthProfile | null;
-  onDone: (plan: WorkoutPlan) => void;
+  onDone: (plan: WorkoutPlan, mode: CreationMode) => void;
   onCancel?: () => void;
 }) {
   const wizard = usePlanCreationWizard(entryMode, initialProfile);
 
   async function handleFinish() {
     const plan = await wizard.runGeneration();
-    if (plan) onDone(plan);
+    if (plan) onDone(plan, wizard.mode);
   }
 
   async function handleRetry() {
     const plan = await wizard.retry();
-    if (plan) onDone(plan);
+    if (plan) onDone(plan, wizard.mode);
   }
 
   if (wizard.phase === "generating") {
