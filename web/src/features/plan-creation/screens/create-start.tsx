@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
 import type { CreationMode } from "../types";
 
@@ -34,14 +35,15 @@ const MODES: ModeOption[] = [
   },
   {
     value: "chat", icon: "✨", title: "Conversar com a IA",
-    badge: { label: "Em breve", tone: "good" },
+    badge: { label: "Novo", tone: "good" },
     text: "Conte sua rotina, objetivo e limitações em linguagem natural.",
-    hint: "", disabled: true,
+    hint: "",
   },
 ];
 
 export function CreateStart({ onSelect, onCancel }: { onSelect: (mode: CreationMode) => void; onCancel?: () => void }) {
   const [selected, setSelected] = useState<CreationMode>("quick");
+  const router = useRouter();
 
   return (
     <div>
@@ -60,7 +62,14 @@ export function CreateStart({ onSelect, onCancel }: { onSelect: (mode: CreationM
               key={m.value}
               type="button"
               disabled={m.disabled}
-              onClick={() => !m.disabled && setSelected(m.value as CreationMode)}
+              onClick={() => {
+                if (m.disabled) return;
+                if (m.value === "chat") {
+                  router.push("/plan/ai-chat");
+                  return;
+                }
+                setSelected(m.value as CreationMode);
+              }}
               className={`opt${isSelected ? " sel" : ""}`}
               style={m.disabled ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
             >

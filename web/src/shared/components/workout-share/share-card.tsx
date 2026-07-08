@@ -2,6 +2,7 @@
 
 import { forwardRef } from "react";
 import { getMotivationalPhrase } from "./motivational-phrase";
+import { MUSCLE_LABELS } from "@/shared/utils/muscle-labels";
 
 type ShareCardProps = {
   workoutName: string;
@@ -11,11 +12,6 @@ type ShareCardProps = {
   muscles: string[];
   hasPR?: boolean;
   caloriesEstimated?: number;
-};
-
-const MUSCLE_LABELS: Record<string, string> = {
-  chest: "Peito", back: "Costas", shoulders: "Ombros",
-  biceps: "Bíceps", triceps: "Tríceps", legs: "Pernas", core: "Core",
 };
 
 export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(

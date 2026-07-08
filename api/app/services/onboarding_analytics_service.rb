@@ -37,7 +37,9 @@ class OnboardingAnalyticsService
     "workout_difficulty_feedback" => "Como foi o treino",
     "available_equipment" => "Equipamento disponível",
     "avoid_exercise" => "Evitar exercício",
-    "training_preference" => "Preferência de treino"
+    "training_preference" => "Preferência de treino",
+    "preferred_training_location" => "Onde treina",
+    "activation_goal_focus" => "Resultado desejado"
   }.freeze
 
   GOAL_LABELS = {
@@ -64,6 +66,30 @@ class OnboardingAnalyticsService
     "mobility" => "Mobilidade", "mixed" => "Misturado", "unknown" => "Não informado"
   }.freeze
 
+  ACTIVATION_STEPS = %w[
+    plan_created
+    activation_ready_screen_viewed
+    activation_preview_viewed
+    activation_exercise_details_opened
+    activation_start_clicked
+    first_workout_started
+    first_exercise_started
+    first_exercise_completed
+    first_workout_completed
+  ].freeze
+
+  ACTIVATION_STEP_LABELS = {
+    "plan_created" => "Treino criado",
+    "activation_ready_screen_viewed" => "Tela pronto visualizada",
+    "activation_preview_viewed" => "Preview visualizado",
+    "activation_exercise_details_opened" => "Detalhe de exercício aberto",
+    "activation_start_clicked" => "Clicou iniciar",
+    "first_workout_started" => "Primeiro treino iniciado",
+    "first_exercise_started" => "Primeiro exercício iniciado",
+    "first_exercise_completed" => "Primeiro exercício concluído",
+    "first_workout_completed" => "Primeiro treino concluído"
+  }.freeze
+
   LIMITATION_KEYWORDS = {
     "Joelho" => /joelho/i, "Lombar" => /lombar|coluna/i, "Ombro" => /ombro/i, "Punho" => /punho/i,
     "Pescoço" => /pesco/i, "Quadril" => /quadril/i, "Pós-parto" => /p[oó]s.?parto/i,
@@ -85,7 +111,8 @@ class OnboardingAnalyticsService
       first_workout_24h: first_workout_24h,
       progressive_profiling: progressive_profiling,
       ai_quality: ai_quality,
-      declared_preferences: declared_preferences
+      declared_preferences: declared_preferences,
+      activation_funnel: activation_funnel
     }
   end
 
@@ -454,6 +481,49 @@ class OnboardingAnalyticsService
         end
       end
       acc["Outro"] += 1 unless matched
+    end
+  end
+
+  # ---- Visão 9: funil de ativação (treino criado -> primeiro treino concluído) ----
+
+  def activation_funnel
+    {
+      steps: activation_funnel_steps(filtered_user_ids),
+      by_flow: flows_to_display.index_with do |flow|
+        flow_user_ids = User.where(onboarding_flow: flow, id: filtered_user_ids).pluck(:id)
+        { label: FLOW_LABELS[flow], steps: activation_funnel_steps(flow_user_ids) }
+      end
+    }
+  end
+
+  def activation_funnel_steps(user_ids)
+    counts = ACTIVATION_STEPS.map { |step| activation_step_count(step, user_ids) }
+    first_count = counts.first.to_i
+
+    ACTIVATION_STEPS.each_with_index.map do |step, idx|
+      count = counts[idx]
+      previous_count = idx.zero? ? count : counts[idx - 1]
+
+      {
+        step_name: step,
+        label: ACTIVATION_STEP_LABELS[step],
+        count: count,
+        pct_of_previous: idx.zero? ? 100.0 : pct(count, previous_count),
+        pct_of_start: pct(count, first_count)
+      }
+    end
+  end
+
+  def activation_step_count(step, user_ids)
+    return 0 if user_ids.blank?
+
+    case step
+    when "first_workout_started"
+      events_scope.named("workout_started").where(user_id: user_ids, metadata: { is_first_workout: true }).distinct.count(:user_id)
+    when "first_workout_completed"
+      events_scope.named("workout_completed").where(user_id: user_ids, metadata: { is_first_workout: true }).distinct.count(:user_id)
+    else
+      events_scope.named(step).where(user_id: user_ids).distinct.count(:user_id)
     end
   end
 

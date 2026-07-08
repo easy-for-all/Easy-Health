@@ -9,6 +9,7 @@ export interface User {
   email: string;
   admin?: boolean;
   created_at: string;
+  first_workout_completed_at?: string | null;
   avatar_url?: string | null;
   billing_status?: BillingStatus | null;
   account_type?: AccountType;

@@ -55,6 +55,22 @@ RSpec.describe RelationshipEventTracker do
     expect(UserEvent.where(user: user, event_name: "trial_day_3", idempotency_key: "trial_day_3:#{user.id}").count).to eq(1)
   end
 
+  it "whitelists the AI workout chat events" do
+    expect(described_class::EVENTS).to include(
+      "ai_workout_chat_started", "ai_workout_message_sent",
+      "ai_workout_blocked_security", "ai_workout_blocked_out_of_scope",
+      "ai_workout_preview_generated", "ai_workout_preview_adjusted",
+      "ai_workout_confirmed", "ai_workout_creation_failed"
+    )
+  end
+
+  it "whitelists the activation events" do
+    expect(described_class::EVENTS).to include(
+      "activation_workout_created", "activation_first_workout_completed",
+      "activation_reminder_2h_due", "activation_reminder_24h_due"
+    )
+  end
+
   it "removes sensitive metadata from internal payloads" do
     event = described_class.track(
       user: user,

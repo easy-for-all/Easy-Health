@@ -11,6 +11,7 @@ import { WorkoutDoneCard } from "@/shared/components/workout/workout-done-card";
 import { StreakCard } from "@/shared/components/workout/streak-card";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { CoachHomeCard } from "@/shared/components/coach-home-card";
+import { ProgressiveProfilingSheet } from "@/features/workout/progressive-profiling-sheet";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 import { relativeDayLabel, isToday } from "@/shared/utils/relative-date";
 
@@ -62,10 +63,19 @@ export default function DashboardPage() {
   const [fatigueAvg, setFatigueAvg] = useState<number | null>(null);
   const [fatigueTrend, setFatigueTrend] = useState<number | null>(null);
   const [suggestDeload, setSuggestDeload] = useState(false);
+  const [showDay7Profiling, setShowDay7Profiling] = useState(false);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "home" });
   }, []);
+
+  useEffect(() => {
+    if (!user?.created_at) return;
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - new Date(user.created_at).getTime() >= sevenDaysMs) {
+      setShowDay7Profiling(true);
+    }
+  }, [user?.created_at]);
 
   useEffect(() => {
     function loadData() {
@@ -302,6 +312,12 @@ export default function DashboardPage() {
           </a>
         </div>
       </div>
+
+      <ProgressiveProfilingSheet
+        open={showDay7Profiling}
+        trigger="day7"
+        onClose={() => setShowDay7Profiling(false)}
+      />
     </div>
   );
 }

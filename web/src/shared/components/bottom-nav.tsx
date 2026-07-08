@@ -57,7 +57,7 @@ const ITEMS = [
   { href: "/profile",    label: "Perfil",    Icon: IconUser,  match: (p: string) => p.startsWith("/profile") },
 ] as const;
 
-const IMMERSIVE_PREFIXES = ["/personal", "/join"];
+const IMMERSIVE_PREFIXES = ["/personal", "/join", "/plan/ai-chat"];
 
 export function BottomNav() {
   const pathname = usePathname();

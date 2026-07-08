@@ -10,6 +10,8 @@ require "rails_helper"
 #   3. Confirm EH-XXXXXX IDs appear in the user list
 #   4. Click "Ver" on a user and confirm email appears in the modal
 #   5. GET /api/v1/admin/users as non-admin → 403
+#   6. Confirm GET /api/v1/admin/stats includes onboarding_analytics.activation_funnel
+#      and recent_activation_events with masked user names (no full email)
 RSpec.describe Api::V1::AdminController do
   let(:controller_instance) { described_class.new }
 
@@ -129,6 +131,49 @@ RSpec.describe Api::V1::AdminController do
     it "returns 'medium' for 2 sessions (not yet high)" do
       sessions = 2.times.map { instance_double(WorkoutSession, completed_at: 2.days.ago) }
       expect(engagement_score(2, 0, sessions)).to eq("medium")
+    end
+  end
+
+  describe "#activation_event_row" do
+    def activation_event_row(event)
+      controller_instance.send(:activation_event_row, event)
+    end
+
+    it "masks the user via display_name and summarizes metadata" do
+      user = instance_double(User, id: 7, name: "Marcus Reis")
+      event = instance_double(
+        OnboardingEvent,
+        user: user,
+        event_name: "activation_start_clicked",
+        occurred_at: Time.zone.parse("2026-07-01 10:00:00"),
+        created_at: Time.zone.parse("2026-07-01 09:59:00"),
+        metadata: { "workout_plan_id" => 55, "workout_session_id" => nil, "exercise_id" => nil }
+      )
+
+      row = activation_event_row(event)
+
+      expect(row[:user_display_name]).to eq("Marcus R.")
+      expect(row[:event_name]).to eq("activation_start_clicked")
+      expect(row[:workout_plan_id]).to eq(55)
+      expect(row[:metadata_summary]).to eq({ "workout_plan_id" => 55, "workout_session_id" => nil, "exercise_id" => nil })
+      expect(row).not_to have_key(:email)
+    end
+
+    it "resolves workout_plan_id from a nested workout hash (UserEvent-shaped metadata)" do
+      user = instance_double(User, id: 8, name: "Ana Souza")
+      event = instance_double(
+        UserEvent,
+        user: user,
+        event_name: "activation_workout_created",
+        occurred_at: nil,
+        created_at: Time.zone.parse("2026-07-02 08:00:00"),
+        metadata: { "workout" => { "id" => 99 } }
+      )
+
+      row = activation_event_row(event)
+
+      expect(row[:occurred_at]).to eq(Time.zone.parse("2026-07-02 08:00:00").iso8601)
+      expect(row[:workout_plan_id]).to eq(99)
     end
   end
 end

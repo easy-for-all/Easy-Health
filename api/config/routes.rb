@@ -119,6 +119,12 @@ Rails.application.routes.draw do
         post :messages
       end
 
+      namespace :ai do
+        post "workout_chat/start",   to: "workout_chat#start"
+        post "workout_chat/message", to: "workout_chat#message"
+        post "workout_chat/confirm", to: "workout_chat#confirm"
+      end
+
       get  "coach/insights",            to: "coach_insights#index"
       post "coach/insights/:id/read",   to: "coach_insights#read"
 

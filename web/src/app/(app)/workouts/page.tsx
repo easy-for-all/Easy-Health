@@ -7,6 +7,7 @@ import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
+import { useAuth } from "@/features/auth/auth-context";
 import { AITrainerBubble } from "@/shared/components/ai-trainer";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
@@ -14,16 +15,7 @@ import { RenameWorkoutModal } from "@/shared/components/workout/rename-workout-m
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 import { relativeDate, relativeDayLabel } from "@/shared/utils/relative-date";
-
-const MUSCLE_COLORS: Record<string, string> = {
-  chest: "bg-red-500/20 text-red-300",
-  back: "bg-blue-500/20 text-blue-300",
-  shoulders: "bg-purple-500/20 text-purple-300",
-  biceps: "bg-yellow-500/20 text-yellow-300",
-  triceps: "bg-orange-500/20 text-orange-300",
-  legs: "bg-green-500/20 text-green-300",
-  core: "bg-teal-500/20 text-teal-300",
-};
+import { muscleLabel } from "@/shared/utils/muscle-labels";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -60,6 +52,7 @@ export default function WorkoutsPage() {
 
 function WorkoutsContent() {
   const router = useRouter();
+  const { user } = useAuth();
   const { activeWorkoutDayId, elapsedSeconds } = useWorkoutSession();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [todayDay, setTodayDay] = useState<WorkoutDay | null>(null);
@@ -67,6 +60,8 @@ function WorkoutsContent() {
   const [loading, setLoading] = useState(true);
   const [activePhase, setActivePhase] = useState<string | null>(null);
   const [renamingDay, setRenamingDay] = useState<WorkoutDay | null>(null);
+  const [rationaleExpanded, setRationaleExpanded] = useState(false);
+  const isFirstTimer = !user?.first_workout_completed_at;
 
   useEffect(() => {
     try {
@@ -211,7 +206,7 @@ function WorkoutsContent() {
           {recommended.muscle_groups?.length ? (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
               {recommended.muscle_groups.slice(0, 3).map((m) => (
-                <span key={m} className="tag-chip muscle">{m}</span>
+                <span key={m} className="tag-chip muscle">{muscleLabel(m)}</span>
               ))}
             </div>
           ) : null}
@@ -224,8 +219,13 @@ function WorkoutsContent() {
               cursor: "pointer", boxShadow: "var(--glow)",
             }}
           >
-            Iniciar treino
+            {isFirstTimer ? "▶ Fazer meu primeiro treino" : "▶ Iniciar treino"}
           </button>
+          {isFirstTimer && (
+            <p style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "center", margin: "8px 0 0" }}>
+              Você poderá ver cada exercício antes de começar.
+            </p>
+          )}
         </div>
       ) : null}
 
@@ -244,11 +244,19 @@ function WorkoutsContent() {
         </div>
       )}
 
-      {/* AI rationale card */}
+      {/* AI rationale — accordion, collapsed by default */}
       {plan?.ai_rationale && (
-        <div style={{ background: "var(--primary-soft)", border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .28)", borderRadius: "var(--r-lg)", padding: "14px 18px", marginBottom: 14 }}>
-          <p className="eyebrow" style={{ color: "var(--primary)", marginBottom: 6 }}>Por que este plano?</p>
-          <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>{plan.ai_rationale}</p>
+        <div style={{ border: "1px solid oklch(0.685 var(--accent-c, 0.17) var(--accent-h, 258) / .28)", borderRadius: "var(--r-lg)", marginBottom: 14, overflow: "hidden" }}>
+          <button
+            onClick={() => setRationaleExpanded((v) => !v)}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", background: "var(--primary-soft)", border: 0, cursor: "pointer" }}
+          >
+            <span className="eyebrow" style={{ color: "var(--primary)" }}>Por que este plano?</span>
+            <span style={{ fontSize: 13, color: "var(--primary)" }}>{rationaleExpanded ? "▲" : "▼"}</span>
+          </button>
+          {rationaleExpanded && (
+            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0, lineHeight: 1.5, padding: "14px 18px" }}>{plan.ai_rationale}</p>
+          )}
         </div>
       )}
 
@@ -263,7 +271,7 @@ function WorkoutsContent() {
                 badge={LETTERS[idx] ?? String(idx + 1)}
                 name={workoutDisplayName(day, idx)}
                 sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
-                tags={day.muscle_groups?.slice(0, 2)}
+                tags={day.muscle_groups?.slice(0, 2).map(muscleLabel)}
                 favorited={day.favorited}
                 onFavorite={() => day.id !== null && toggleFavorite(day.id)}
                 onRename={() => setRenamingDay(day)}
@@ -303,7 +311,7 @@ function WorkoutsContent() {
                         badge={LETTERS[idx] ?? String(idx + 1)}
                         name={workoutDisplayName(day, idx)}
                         sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
-                        tags={day.muscle_groups?.slice(0, 2)}
+                        tags={day.muscle_groups?.slice(0, 2).map(muscleLabel)}
                         favorited={day.favorited}
                         onFavorite={() => day.id !== null && toggleFavorite(day.id)}
                         onRename={() => setRenamingDay(day)}
@@ -328,7 +336,7 @@ function WorkoutsContent() {
                         badge={LETTERS[idx] ?? String(idx + 1)}
                         name={workoutDisplayName(day, idx)}
                         sub={formatLastCompleted(day.last_completed_at) ?? (day.exercise_count ? `${day.exercise_count} exercícios` : undefined)}
-                        tags={day.muscle_groups?.slice(0, 2)}
+                        tags={day.muscle_groups?.slice(0, 2).map(muscleLabel)}
                         favorited={day.favorited}
                         onFavorite={() => day.id !== null && toggleFavorite(day.id)}
                         onRename={() => setRenamingDay(day)}
@@ -401,93 +409,6 @@ function WorkoutsContent() {
         onSave={(name) => renamingDay?.id != null ? handleRename(renamingDay.id, name) : Promise.resolve()}
         onClose={() => setRenamingDay(null)}
       />
-    </div>
-  );
-}
-
-function WorkoutDayCard({
-  day,
-  idx,
-  isRecommended,
-  onView,
-  onStart,
-  onToggleFavorite,
-  highlight = false,
-}: {
-  day: WorkoutDay;
-  idx: number;
-  isRecommended: boolean;
-  onView: () => void;
-  onStart: () => void;
-  onToggleFavorite: () => void;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onView}
-      onKeyDown={(e) => e.key === "Enter" && onView()}
-      className={`cursor-pointer rounded-xl border p-4 transition-opacity active:opacity-70 ${
-        isRecommended
-          ? "border-primary-500/40 bg-primary-500/10"
-          : highlight
-          ? "border-primary-800/60 bg-slate-900"
-          : "border-slate-800 bg-slate-900"
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-500/15 font-bold text-primary-400">
-          {LETTERS[idx] ?? idx + 1}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate font-semibold text-white">{day.name}</p>
-            {isRecommended && (
-              <span className="shrink-0 rounded-full bg-primary-500 px-2 py-0.5 text-xs font-semibold text-white">
-                Hoje
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-500">{day.exercise_count} exercícios</p>
-          {day.muscle_groups?.length ? (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {day.muscle_groups.slice(0, 2).map((m) => (
-                <span
-                  key={m}
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${MUSCLE_COLORS[m] ?? "bg-slate-700 text-slate-300"}`}
-                >
-                  {m}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          <p className="mt-0.5 text-xs text-slate-600">
-            {day.last_completed_at ? relativeDate(day.last_completed_at) : "nunca executado"}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite();
-            }}
-            className="text-xl leading-none transition-transform active:scale-90"
-            aria-label={day.favorited ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-          >
-            {day.favorited ? "⭐" : "☆"}
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onStart();
-            }}
-            className="rounded-full bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-600 active:scale-95 transition-transform"
-          >
-            Iniciar
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

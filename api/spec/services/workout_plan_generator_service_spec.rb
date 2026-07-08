@@ -135,6 +135,41 @@ RSpec.describe WorkoutPlanGeneratorService do
     expect(plan.workout_days.all? { |day| day.workout_day_exercises.count <= 5 }).to be(true)
   end
 
+  it "builds the plan from a chat_decision instead of the rule-based/AI templates" do
+    user = create(:user)
+    create(:health_profile, user: user, training_days_per_week: 5, training_location: "full_gym")
+    %w[chest back shoulders legs core].each { |group| create_browseable_exercise("Seguro #{group}", group) }
+
+    chat_decision = {
+      training_method: "upper_lower",
+      plan_name: "Plano do Chat",
+      rationale: "Motivo do chat.",
+      week_structure: [
+        { name: "Superior", muscle_groups: %w[chest back shoulders] },
+        { name: "Inferior", muscle_groups: %w[legs core] }
+      ],
+      sets_reps: { sets: 3, reps: 12, rest_seconds: 60 },
+      progression_strategy: "Progressão do chat.",
+      safety_notes: ["Nota de segurança do chat"]
+    }
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(true)
+    expect(AiAgents::WorkoutPlannerService).not_to receive(:new)
+
+    plan = described_class.new(user, chat_decision: chat_decision).call
+
+    expect(plan.workout_days.count).to eq(2)
+    expect(plan.workout_days.pluck(:name)).to contain_exactly("Superior", "Inferior")
+    exercise = plan.workout_days.first.workout_day_exercises.first
+    expect(exercise.sets).to eq(3)
+    expect(exercise.reps).to eq(12)
+    expect(exercise.rest_seconds).to eq(60)
+
+    log = AiTrainingDecisionLog.find_by(workout_plan_id: plan.id)
+    expect(log.training_method).to eq("upper_lower")
+    expect(log.model_used).to eq(AiConfig.for(:workout_chat_plan_generation)[:model])
+  end
+
   def create_browseable_exercise(name, muscle_group, safety_tags: [])
     Exercise.create!(
       name: name,

@@ -50,6 +50,7 @@ class ApplicationController < ActionController::API
       email: user.email,
       admin: user.admin?,
       created_at: user.created_at,
+      first_workout_completed_at: user.first_workout_completed_at,
       avatar_url: blob_path(user.avatar),
       billing_status: user.billing_status,
       account_type: user.account_type,

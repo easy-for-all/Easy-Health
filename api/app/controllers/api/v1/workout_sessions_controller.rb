@@ -38,15 +38,28 @@ module Api
       # WorkoutExerciseSetsController; #finish closes it out.
       def start
         workout_day_id = valid_workout_day_id(params[:workout_day_id])
+        # Must be computed before creating the session below - completion_status
+        # defaults to "completed" at the DB level, so checking after creation
+        # would always see the just-created row and report false.
+        is_first_workout = current_user.workout_sessions.where(completion_status: "completed").none?
         session = current_user.workout_sessions.create!(status: "in_progress", workout_day_id: workout_day_id, source: params[:source])
 
-        is_first_workout = current_user.workout_sessions.where(completion_status: "completed").none?
         OnboardingEventTracker.track(
           user: current_user,
           event_name: "workout_started",
           onboarding_flow: current_user.onboarding_flow,
           metadata: { workout_session_id: session.id, is_first_workout: is_first_workout }
         )
+
+        if is_first_workout
+          UserEventService.track(
+            user: current_user,
+            event: :first_workout_started,
+            metadata: { workout_session_id: session.id, workout_day_id: workout_day_id },
+            occurred_at: session.created_at,
+            idempotency_key: "first_workout_started:#{current_user.id}:#{session.id}"
+          )
+        end
 
         Rails.logger.info("[WorkoutSessionStart] user=#{current_user.id} session_id=#{session.id} workout_day_id=#{workout_day_id.inspect}")
         render json: { id: session.id, status: session.status }, status: :created
@@ -446,6 +459,21 @@ module Api
           metadata: metadata,
           occurred_at: session.completed_at,
           idempotency_key: "first_workout_completed:#{current_user.id}:#{session.id}"
+        )
+
+        UserEventService.track(
+          user: current_user,
+          event: :activation_first_workout_completed,
+          metadata: metadata.merge(
+            trigger_type: "activation_first_workout_completed",
+            activation: {
+              onboarding_variant: current_user.onboarding_flow,
+              has_started_workout: true,
+              has_completed_first_workout: true
+            }
+          ),
+          occurred_at: session.completed_at,
+          idempotency_key: "activation_first_workout_completed:#{current_user.id}:#{session.id}"
         )
       end
 

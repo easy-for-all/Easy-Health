@@ -192,6 +192,25 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
         expect(body["status"]).to eq("in_progress")
         expect(WorkoutSession.find(body["id"]).completed_at).to be_nil
       end
+
+      it "tracks first_workout_started for the user's first session" do
+        authed_post "/api/v1/workout_sessions/start", as: user, params: { source: "web" }
+
+        expect(response).to have_http_status(:created)
+        session_id = JSON.parse(response.body)["id"]
+        event = UserEvent.find_by(user: user, event_name: "first_workout_started")
+        expect(event).to be_present
+        expect(event.idempotency_key).to eq("first_workout_started:#{user.id}:#{session_id}")
+      end
+
+      it "does not track first_workout_started when the user already completed a workout" do
+        user.workout_sessions.create!(status: "completed", completion_status: "completed", completed_at: 1.day.ago, duration_minutes: 30)
+
+        authed_post "/api/v1/workout_sessions/start", as: user, params: { source: "web" }
+
+        expect(response).to have_http_status(:created)
+        expect(UserEvent.where(user: user, event_name: "first_workout_started").count).to eq(0)
+      end
     end
 
     describe "POST /api/v1/workout_sessions/:id/cancel" do
@@ -239,6 +258,19 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
         expect(body["planned_sets_count"]).to eq(2)
         expect(body["exercise_logs"].first["weight_by_set"].map(&:to_f)).to eq([ 12.0, 12.0 ])
         expect(body["exercise_logs"].first["reps"]).to eq([ 10, 9 ])
+      end
+
+      it "tracks activation_first_workout_completed on the user's first completed session" do
+        authed_post "/api/v1/workout_sessions/start", as: user, params: { source: "web" }
+        session_id = JSON.parse(response.body)["id"]
+
+        authed_post "/api/v1/workout_sessions/#{session_id}/finish", as: user, params: { fatigue_level: 3 }
+
+        expect(response).to have_http_status(:ok)
+        event = UserEvent.find_by(user: user, event_name: "activation_first_workout_completed")
+        expect(event).to be_present
+        expect(event.idempotency_key).to eq("activation_first_workout_completed:#{user.id}:#{session_id}")
+        expect(event.metadata.dig("activation", "has_completed_first_workout")).to eq(true)
       end
 
       it "posting the same set_number twice updates instead of duplicating (retry safety)" do

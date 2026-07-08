@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -127,6 +127,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
     t.index ["user_id", "provider", "created_at"], name: "index_ai_usage_logs_on_user_provider_created"
     t.index ["user_id", "task_type", "created_at"], name: "index_ai_usage_logs_on_user_id_and_task_type_and_created_at"
     t.index ["user_id"], name: "index_ai_usage_logs_on_user_id"
+  end
+
+  create_table "ai_workout_chat_conversations", force: :cascade do |t|
+    t.jsonb "collected_profile", default: {}, null: false
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.integer "follow_up_rounds", default: 0, null: false
+    t.jsonb "generated_preview"
+    t.jsonb "guardrail_flags", default: {}, null: false
+    t.jsonb "messages", default: [], null: false
+    t.string "status", default: "collecting", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.bigint "workout_plan_id"
+    t.index ["user_id", "status"], name: "index_ai_workout_chat_conversations_on_user_id_and_status"
+    t.index ["user_id"], name: "index_ai_workout_chat_conversations_on_user_id"
+    t.index ["workout_plan_id"], name: "index_ai_workout_chat_conversations_on_workout_plan_id"
   end
 
   create_table "blocked_emails", force: :cascade do |t|
@@ -846,6 +863,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
   add_foreign_key "ai_training_decision_logs", "users"
   add_foreign_key "ai_training_decision_logs", "workout_plans"
   add_foreign_key "ai_usage_logs", "users"
+  add_foreign_key "ai_workout_chat_conversations", "users"
   add_foreign_key "client_permissions", "personal_client_relationships"
   add_foreign_key "coach_insights", "fitness_profiles"
   add_foreign_key "coach_insights", "users"
