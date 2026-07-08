@@ -6,10 +6,19 @@ import { BottomSheet } from "@/shared/components/ui/bottom-sheet";
 import { ChoiceGrid } from "@/shared/components/ui/choice-grid";
 import { useToast } from "@/shared/components/ui/toast-provider";
 import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
-import type { Equipment, HealthProfile, IntensityPreference, TrainingStyle } from "@/shared/types/health-profile";
+import type { Equipment, Goal, HealthProfile, IntensityPreference, TrainingLocation, TrainingStyle } from "@/shared/types/health-profile";
 
-type PromptKey = "rate" | "equipment" | "avoid_exercise" | "style";
-const ORDER: PromptKey[] = ["rate", "equipment", "avoid_exercise", "style"];
+export type ProgressiveProfilingTrigger = "post_workout" | "ready_screen" | "day7";
+
+type PromptKey = "rate" | "equipment" | "avoid_exercise" | "style" | "training_location" | "goal_focus";
+
+// Cada gatilho tem sua própria sublista — no máximo 1 pergunta é exibida por
+// montagem, sempre a primeira ainda não respondida dessa sublista.
+const ORDER_BY_TRIGGER: Record<ProgressiveProfilingTrigger, PromptKey[]> = {
+  post_workout: ["rate", "equipment", "avoid_exercise", "style"],
+  ready_screen: ["training_location"],
+  day7: ["goal_focus"],
+};
 
 // Mapeia as chaves internas (já em produção) para os nomes de question_key usados na analytics.
 const QUESTION_KEYS: Record<PromptKey, string> = {
@@ -17,7 +26,20 @@ const QUESTION_KEYS: Record<PromptKey, string> = {
   equipment: "available_equipment",
   avoid_exercise: "avoid_exercise",
   style: "training_preference",
+  training_location: "preferred_training_location",
+  goal_focus: "activation_goal_focus",
 };
+
+const TRAINING_LOCATION_OPTIONS: { value: TrainingLocation; label: string }[] = [
+  { value: "full_gym", label: "Academia" }, { value: "home", label: "Casa" },
+  { value: "outdoor", label: "Ar livre" }, { value: "hotel_travel", label: "Hotel" },
+];
+
+const GOAL_FOCUS_OPTIONS: { value: Goal; label: string }[] = [
+  { value: "strength", label: "Mais força" }, { value: "lose_weight", label: "Emagrecer" },
+  { value: "gain_muscle", label: "Ganhar massa" }, { value: "conditioning", label: "Condicionamento" },
+  { value: "health", label: "Saúde/disposição" },
+];
 
 const EQUIPMENT_OPTIONS: { value: Equipment; label: string }[] = [
   { value: "dumbbell", label: "Halteres" }, { value: "resistance_band", label: "Elástico" },
@@ -37,11 +59,12 @@ interface TodayExercise {
 }
 
 export function ProgressiveProfilingSheet({
-  open, onClose, todayExercises,
+  open, onClose, todayExercises = [], trigger = "post_workout",
 }: {
   open: boolean;
   onClose: () => void;
-  todayExercises: TodayExercise[];
+  todayExercises?: TodayExercise[];
+  trigger?: ProgressiveProfilingTrigger;
 }) {
   const { show } = useToast();
   const [answered, setAnswered] = useState<Record<string, string> | null>(null);
@@ -64,8 +87,9 @@ export function ProgressiveProfilingSheet({
     return true;
   }
 
+  const order = ORDER_BY_TRIGGER[trigger];
   const promptKey = answered
-    ? ORDER.find((key) => isApplicable(key) && !(key in answered)) ?? null
+    ? order.find((key) => isApplicable(key) && !(key in answered)) ?? null
     : null;
 
   useEffect(() => {
@@ -162,6 +186,33 @@ export function ProgressiveProfilingSheet({
           <div className="opts" style={{ marginTop: 12 }}>
             {STYLE_OPTIONS.map((opt) => (
               <button key={opt.value} className="opt" disabled={saving} onClick={() => finishWithToast("style", { preferred_training_styles: [opt.value] })}>
+                <span className="otxt"><b>{opt.label}</b></span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {promptKey === "training_location" && (
+        <div>
+          <h2 className="wizard-title">Quer deixar esse treino mais certeiro?</h2>
+          <p className="wizard-sub">Você treinou onde?</p>
+          <div className="opts" style={{ marginTop: 12 }}>
+            {TRAINING_LOCATION_OPTIONS.map((opt) => (
+              <button key={opt.value} className="opt" disabled={saving} onClick={() => finishWithToast("training_location", { training_location: opt.value })}>
+                <span className="otxt"><b>{opt.label}</b></span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {promptKey === "goal_focus" && (
+        <div>
+          <h2 className="wizard-title">Qual resultado você mais quer ver primeiro?</h2>
+          <div className="opts" style={{ marginTop: 12 }}>
+            {GOAL_FOCUS_OPTIONS.map((opt) => (
+              <button key={opt.value} className="opt" disabled={saving} onClick={() => finishWithToast("goal_focus", { goal: opt.value })}>
                 <span className="otxt"><b>{opt.label}</b></span>
               </button>
             ))}

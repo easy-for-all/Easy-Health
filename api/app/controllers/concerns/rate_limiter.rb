@@ -2,24 +2,29 @@ module RateLimiter
   extend ActiveSupport::Concern
 
   DAILY_LIMITS = {
-    "generate_workout" => 3,
-    "update_workout"   => 5,
-    "exam_analysis"    => 5,
-    "image_analysis"   => 10,
+    "generate_workout"    => 3,
+    "update_workout"      => 5,
+    "exam_analysis"       => 5,
+    "image_analysis"      => 10,
+    "workout_chat_message" => 20,
+    "workout_chat_plan"    => 3,
   }.freeze
 
   TASK_LABELS = {
-    "generate_workout" => "geração de treino",
-    "update_workout"   => "ajuste de exercício",
-    "exam_analysis"    => "análise de exame",
-    "image_analysis"   => "análise de foto corporal",
+    "generate_workout"    => "geração de treino",
+    "update_workout"      => "ajuste de exercício",
+    "exam_analysis"       => "análise de exame",
+    "image_analysis"      => "análise de foto corporal",
+    "workout_chat_message" => "mensagens do chat de IA",
+    "workout_chat_plan"    => "gerações de treino via chat",
   }.freeze
 
   def check_rate_limit!(task_type)
     return if current_user.admin?
 
     key   = task_type.to_s
-    limit = DAILY_LIMITS.fetch(key, Float::INFINITY)
+    env_override = ENV["AI_RATE_LIMIT_#{key.upcase}"]
+    limit = env_override.present? ? env_override.to_i : DAILY_LIMITS.fetch(key, Float::INFINITY)
     return if limit == Float::INFINITY
 
     count = AiUsageLog.where(user: current_user, task_type: key)

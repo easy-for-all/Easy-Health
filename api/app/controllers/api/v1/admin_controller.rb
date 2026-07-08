@@ -51,6 +51,7 @@ module Api
             make_delivery_status: event.make_delivery_status
           }
         end
+        recent_activation_events = recent_activation_events_rows
 
         # Retention D1/D7/D30 — base: users registered before the cutoff
         d1_base    = User.where("created_at <= ?", 1.day.ago).count
@@ -119,6 +120,7 @@ module Api
           make_events_delivered_today: make_events_today,
           make_events_failed: make_events_failed,
           recent_relationship_events: recent_relationship_events,
+          recent_activation_events: recent_activation_events,
 
           # Retention
           retention_d1: d1_base > 0 ? (d1_retained.to_f / d1_base * 100).round(1) : 0,
@@ -302,6 +304,42 @@ module Api
         else
           "no_trial"
         end
+      end
+
+      ACTIVATION_ONBOARDING_EVENT_NAMES = %w[
+        activation_ready_screen_viewed
+        activation_preview_viewed
+        activation_exercise_details_opened
+        activation_start_clicked
+        first_exercise_started
+        first_exercise_completed
+      ].freeze
+
+      ACTIVATION_USER_EVENT_NAMES = %w[activation_workout_created activation_first_workout_completed].freeze
+
+      def recent_activation_events_rows
+        onboarding_rows = OnboardingEvent.where(event_name: ACTIVATION_ONBOARDING_EVENT_NAMES)
+                                          .includes(:user).order(occurred_at: :desc).limit(20)
+        user_event_rows = UserEvent.where(event_name: ACTIVATION_USER_EVENT_NAMES)
+                                    .includes(:user).order(occurred_at: :desc).limit(20)
+
+        (onboarding_rows.to_a + user_event_rows.to_a)
+          .sort_by { |event| event.occurred_at || event.created_at }
+          .reverse
+          .first(20)
+          .map { |event| activation_event_row(event) }
+      end
+
+      def activation_event_row(event)
+        user = event.user
+        metadata = event.metadata.is_a?(Hash) ? event.metadata : {}
+        {
+          occurred_at: (event.occurred_at || event.created_at)&.iso8601,
+          user_display_name: user ? display_name(user) : nil,
+          event_name: event.event_name,
+          workout_plan_id: metadata["workout_plan_id"] || metadata.dig("workout", "id"),
+          metadata_summary: metadata.slice("workout_plan_id", "workout_session_id", "workout_day_id", "exercise_id")
+        }
       end
 
       def admin_display_id(user)

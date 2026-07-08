@@ -24,6 +24,12 @@ class OnboardingEvent < ApplicationRecord
     ai_plan_accepted
     ai_plan_regenerated
     ai_plan_abandoned
+    activation_ready_screen_viewed
+    activation_preview_viewed
+    activation_exercise_details_opened
+    activation_start_clicked
+    first_exercise_started
+    first_exercise_completed
   ].freeze
 
   validates :event_name, presence: true, inclusion: { in: EVENT_NAMES }

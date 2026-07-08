@@ -53,6 +53,18 @@ class RelationshipEventTracker
     exercise_favorited
     exercise_skipped
     exercise_substituted
+    ai_workout_chat_started
+    ai_workout_message_sent
+    ai_workout_blocked_security
+    ai_workout_blocked_out_of_scope
+    ai_workout_preview_generated
+    ai_workout_preview_adjusted
+    ai_workout_confirmed
+    ai_workout_creation_failed
+    activation_workout_created
+    activation_first_workout_completed
+    activation_reminder_2h_due
+    activation_reminder_24h_due
   ].uniq.freeze
 
   SENSITIVE_KEY_PATTERN = /(password|token|secret|authorization|card|stripe|cpf|ssn|cvv|cvc|dsn|api_key|access_key)/i

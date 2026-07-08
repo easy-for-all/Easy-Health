@@ -22,7 +22,7 @@ export default function OnboardingPage() {
       onDone={(_plan, mode) => {
         trackEvent(EVENTS.ONBOARDING_COMPLETED);
         trackOnboardingEvent("onboarding_completed", { onboardingFlow: mode });
-        router.push("/workouts");
+        router.push("/workouts/ready");
       }}
     />
   );

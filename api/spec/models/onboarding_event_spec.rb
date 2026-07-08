@@ -29,4 +29,15 @@ RSpec.describe OnboardingEvent do
     event = described_class.create!(user: user, event_name: "onboarding_started")
     expect(event.occurred_at).to be_within(5.seconds).of(Time.current)
   end
+
+  it "is valid with each activation event_name" do
+    %w[
+      activation_ready_screen_viewed activation_preview_viewed
+      activation_exercise_details_opened activation_start_clicked
+      first_exercise_started first_exercise_completed
+    ].each do |name|
+      event = described_class.new(user: user, event_name: name)
+      expect(event).to be_valid, "expected #{name} to be valid"
+    end
+  end
 end

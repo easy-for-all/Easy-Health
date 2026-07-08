@@ -70,6 +70,7 @@ module Api
             occurred_at: plan.created_at,
             idempotency_key: "first_workout_created:#{current_user.id}:#{plan.id}"
           )
+          track_activation_workout_created(plan)
         end
         render json: serialize_plan(plan).merge(summary: service.plan_summary), status: :ok
       rescue ActiveRecord::RecordInvalid => e
@@ -135,6 +136,37 @@ module Api
       end
 
       private
+
+      def track_activation_workout_created(plan)
+        days = plan.workout_days.includes(workout_day_exercises: :exercise)
+                   .order(Arel.sql("COALESCE(position, day_of_week) ASC")).to_a
+        first_day = days.first
+        exercises_count = days.sum { |d| d.workout_day_exercises.size }
+        muscle_groups = days.flat_map { |d| d.workout_day_exercises.map { |wde| wde.exercise.muscle_group } }.compact.uniq
+
+        UserEventService.track(
+          user: current_user,
+          event: :activation_workout_created,
+          metadata: {
+            workout_plan_id: plan.id,
+            trigger_type: "activation_workout_created",
+            workout: {
+              id: plan.id,
+              name: first_day&.custom_name.presence || first_day&.name,
+              exercises_count: exercises_count,
+              estimated_duration_minutes: current_user.health_profile&.session_duration_minutes,
+              muscle_groups: muscle_groups
+            },
+            activation: {
+              onboarding_variant: current_user.onboarding_flow,
+              has_started_workout: false,
+              has_completed_first_workout: false
+            }
+          },
+          occurred_at: plan.created_at,
+          idempotency_key: "activation_workout_created:#{current_user.id}:#{plan.id}"
+        )
+      end
 
       def serialize_plan_summary(plan)
         days = plan.workout_days.includes(workout_day_exercises: :exercise).order(Arel.sql("COALESCE(position, day_of_week) ASC"))

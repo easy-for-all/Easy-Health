@@ -10,7 +10,7 @@ import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from "@/shared/types/workout";
 import { WARMUP_BY_TYPE, COOLDOWN_BY_TYPE } from "./warmup-data";
 import { SwapModal } from "./swap-modal";
-import { ExerciseInfoModal } from "./exercise-info-modal";
+import { ExerciseInfoModal } from "@/shared/components/workout/exercise-info-modal";
 import { UpgradeGate, UpgradeBanner } from "@/shared/components/upgrade-gate";
 import { useAuth } from "@/features/auth/auth-context";
 import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-session-context";
@@ -2838,6 +2838,7 @@ function DoneScreen({
 
       <ProgressiveProfilingSheet
         open={showProfiling}
+        trigger="post_workout"
         todayExercises={exercises.map((ex) => ({ exercise_id: ex.exercise_id, name: ex.name }))}
         onClose={() => { setShowProfiling(false); router.push("/dashboard"); }}
       />

@@ -14,6 +14,8 @@ RSpec.describe OnboardingAnalyticsService do
       expect(result[:progressive_profiling][:summary][:shown]).to eq(0)
       expect(result[:ai_quality]["photo_ai"][:summaries_generated]).to eq(0)
       expect(result[:declared_preferences][:goals]).to eq([])
+      expect(result[:activation_funnel][:steps]).to be_an(Array)
+      expect(result[:activation_funnel][:steps].first[:count]).to eq(0)
     end
   end
 
@@ -89,6 +91,51 @@ RSpec.describe OnboardingAnalyticsService do
       expect(result[:goals].first).to include(key: "lose_weight", count: 1)
       expect(result[:locations].first).to include(key: "home", count: 1)
       expect(result[:limitations].first).to include(label: "Joelho", count: 1)
+    end
+  end
+
+  describe "activation_funnel" do
+    it "computes arrived/completed percentages across the activation funnel steps" do
+      user_a = create(:user, onboarding_flow: "quick")
+      user_b = create(:user, onboarding_flow: "quick")
+      user_c = create(:user, onboarding_flow: "quick")
+
+      [user_a, user_b, user_c].each { |u| OnboardingEventTracker.track(user: u, event_name: "plan_created", onboarding_flow: "quick") }
+
+      [user_b, user_c].each do |u|
+        OnboardingEventTracker.track(user: u, event_name: "activation_ready_screen_viewed", onboarding_flow: "quick")
+        OnboardingEventTracker.track(user: u, event_name: "activation_preview_viewed", onboarding_flow: "quick")
+      end
+
+      OnboardingEventTracker.track(user: user_c, event_name: "activation_exercise_details_opened", onboarding_flow: "quick")
+      OnboardingEventTracker.track(user: user_c, event_name: "activation_start_clicked", onboarding_flow: "quick")
+      OnboardingEventTracker.track(user: user_c, event_name: "workout_started", onboarding_flow: "quick", metadata: { is_first_workout: true })
+      OnboardingEventTracker.track(user: user_c, event_name: "first_exercise_started", onboarding_flow: "quick")
+      OnboardingEventTracker.track(user: user_c, event_name: "first_exercise_completed", onboarding_flow: "quick")
+      OnboardingEventTracker.track(user: user_c, event_name: "workout_completed", onboarding_flow: "quick", metadata: { is_first_workout: true })
+
+      steps = described_class.new.call[:activation_funnel][:steps]
+      by_name = steps.index_by { |s| s[:step_name] }
+
+      expect(by_name["plan_created"][:count]).to eq(3)
+      expect(by_name["activation_ready_screen_viewed"][:count]).to eq(2)
+      expect(by_name["activation_exercise_details_opened"][:count]).to eq(1)
+      expect(by_name["activation_exercise_details_opened"][:pct_of_previous]).to eq(50.0)
+      expect(by_name["activation_exercise_details_opened"][:pct_of_start]).to be_within(0.1).of(33.3)
+      expect(by_name["first_workout_started"][:count]).to eq(1)
+      expect(by_name["first_workout_completed"][:count]).to eq(1)
+    end
+
+    it "breaks down by onboarding_flow" do
+      quick_user = create(:user, onboarding_flow: "quick")
+      complete_user = create(:user, onboarding_flow: "complete")
+      OnboardingEventTracker.track(user: quick_user, event_name: "plan_created", onboarding_flow: "quick")
+      OnboardingEventTracker.track(user: complete_user, event_name: "plan_created", onboarding_flow: "complete")
+
+      by_flow = described_class.new.call[:activation_funnel][:by_flow]
+
+      expect(by_flow["quick"][:steps].find { |s| s[:step_name] == "plan_created" }[:count]).to eq(1)
+      expect(by_flow["complete"][:steps].find { |s| s[:step_name] == "plan_created" }[:count]).to eq(1)
     end
   end
 

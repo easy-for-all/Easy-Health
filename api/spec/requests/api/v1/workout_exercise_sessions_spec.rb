@@ -60,6 +60,33 @@ RSpec.describe "Api::V1::WorkoutExerciseSessions", type: :request do
 
       expect(response).to have_http_status(:unprocessable_entity)
     end
+
+    it "fires first_exercise_started for the first exercise of the user's first workout session" do
+      authed :post, "/api/v1/workout_sessions/#{workout_session.id}/exercise_sessions", params: { exercise_id: exercise.id }
+
+      expect(response).to have_http_status(:created)
+      event = OnboardingEvent.find_by(user: user, event_name: "first_exercise_started")
+      expect(event).to be_present
+      expect(event.metadata["exercise_id"]).to eq(exercise.id)
+    end
+
+    it "does not fire first_exercise_started for the second exercise of the same session" do
+      workout_session.exercise_sessions.create!(exercise: exercise, order_index: 0, exercise_kind: "strength", started_at: Time.current)
+
+      authed :post, "/api/v1/workout_sessions/#{workout_session.id}/exercise_sessions", params: { exercise_id: exercise.id }
+
+      expect(response).to have_http_status(:created)
+      expect(OnboardingEvent.where(user: user, event_name: "first_exercise_started").count).to eq(0)
+    end
+
+    it "does not fire first_exercise_started when the user already has a prior workout session" do
+      user.workout_sessions.create!(status: "completed", completion_status: "completed", completed_at: 1.day.ago, duration_minutes: 30)
+
+      authed :post, "/api/v1/workout_sessions/#{workout_session.id}/exercise_sessions", params: { exercise_id: exercise.id }
+
+      expect(response).to have_http_status(:created)
+      expect(OnboardingEvent.where(user: user, event_name: "first_exercise_started").count).to eq(0)
+    end
   end
 
   describe "PATCH /api/v1/workout_sessions/:workout_session_id/exercise_sessions/:id" do
@@ -71,6 +98,28 @@ RSpec.describe "Api::V1::WorkoutExerciseSessions", type: :request do
       expect(response).to have_http_status(:ok)
       expect(exercise_session.reload.status).to eq("completed")
       expect(exercise_session.completed_at).to be_present
+    end
+
+    it "fires first_exercise_completed when completing the first exercise of the first session" do
+      exercise_session = workout_session.exercise_sessions.create!(exercise: exercise, order_index: 0, exercise_kind: "strength", started_at: Time.current)
+
+      authed :patch, "/api/v1/workout_sessions/#{workout_session.id}/exercise_sessions/#{exercise_session.id}", params: { status: "completed" }
+
+      expect(response).to have_http_status(:ok)
+      event = OnboardingEvent.find_by(user: user, event_name: "first_exercise_completed")
+      expect(event).to be_present
+      expect(event.metadata["exercise_id"]).to eq(exercise.id)
+    end
+
+    it "does not duplicate first_exercise_completed for a second completed exercise" do
+      first = workout_session.exercise_sessions.create!(exercise: exercise, order_index: 0, exercise_kind: "strength", started_at: Time.current)
+      second = workout_session.exercise_sessions.create!(exercise: exercise, order_index: 1, exercise_kind: "strength", started_at: Time.current)
+      authed :patch, "/api/v1/workout_sessions/#{workout_session.id}/exercise_sessions/#{first.id}", params: { status: "completed" }
+
+      authed :patch, "/api/v1/workout_sessions/#{workout_session.id}/exercise_sessions/#{second.id}", params: { status: "completed" }
+
+      expect(response).to have_http_status(:ok)
+      expect(OnboardingEvent.where(user: user, event_name: "first_exercise_completed").count).to eq(1)
     end
   end
 end

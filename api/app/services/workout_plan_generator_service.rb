@@ -149,11 +149,13 @@ class WorkoutPlanGeneratorService
 
   def initialize(user, days_per_week: nil, activity_preferences: nil,
                  modality: nil, split_type: nil, cardio_type: nil,
-                 cardio_format: nil, custom_splits: nil, training_location: nil)
+                 cardio_format: nil, custom_splits: nil, training_location: nil,
+                 chat_decision: nil)
     @user    = user
     @profile = user.health_profile
+    @chat_decision = chat_decision
     @fitness_level     = @profile&.fitness_level || "beginner"
-    @days_per_week     = (days_per_week || @profile&.training_days_per_week || 3).clamp(1, 6)
+    @days_per_week     = @chat_decision ? Array(@chat_decision[:week_structure]).size.clamp(1, 6) : (days_per_week || @profile&.training_days_per_week || 3).clamp(1, 6)
     @modality          = modality          || @profile&.modality          || "ai_choice"
     @split_type        = split_type        || @profile&.split_type        || "ai_choice"
     @cardio_type       = cardio_type       || @profile&.cardio_type       || "cardio"
@@ -162,15 +164,16 @@ class WorkoutPlanGeneratorService
     @training_location = legacy_training_location(training_location || @profile&.training_location)
     raw_prefs = Array(activity_preferences || @profile&.activity_preferences || [])
     @activity_preferences = raw_prefs.presence || ["musculacao"]
-    @plan_rationale    = nil
-    @ai_decision       = nil
+    @plan_rationale    = @chat_decision ? @chat_decision[:rationale] : nil
+    @ai_decision       = @chat_decision
+    @ai_sets_reps      = @chat_decision ? @chat_decision[:sets_reps] : nil
     @fitness_profile   = user.fitness_profile
   end
 
   def call
     WorkoutPlan.transaction do
       @workout_strategy = build_workout_strategy
-      @strategy_active = FitnessIntelligence.enabled?
+      @strategy_active = @chat_decision ? false : FitnessIntelligence.enabled?
       old_favorited_names = @user.active_workout_plan
                               &.workout_days&.where(favorited: true)&.pluck(:name) || []
       fav_exercise_ids = if @strategy_active
@@ -361,6 +364,7 @@ class WorkoutPlanGeneratorService
   end
 
   def build_template
+    return Array(@chat_decision[:week_structure]).first(@days_per_week) if @chat_decision
     return build_custom_template   if @split_type == "custom"
     return build_explicit_template if EXPLICIT_SPLITS.key?(@split_type)
     build_ai_driven_template || build_ai_template
@@ -702,7 +706,7 @@ class WorkoutPlanGeneratorService
       progression_strategy:   @ai_decision[:progression_strategy],
       safety_notes:           @ai_decision[:safety_notes],
       week_structure:         @ai_decision[:week_structure].map { |d| { name: d[:name], muscle_groups: d[:muscle_groups] } },
-      model_used:             AiConfig.for(:workout_planning)[:model],
+      model_used:             AiConfig.for(@chat_decision ? :workout_chat_plan_generation : :workout_planning)[:model],
       prompt_version_id:      @ai_prompt_version_id,
       generation_type:        "workout_plan",
       status:                 "success",

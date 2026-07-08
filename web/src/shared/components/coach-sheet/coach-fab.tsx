@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { useCoach } from "@/features/coach/coach-context";
 
-const IMMERSIVE_PREFIXES = ["/personal", "/join"];
+const IMMERSIVE_PREFIXES = ["/personal", "/join", "/plan/ai-chat"];
 
 export function CoachFab() {
   const { open } = useCoach();
