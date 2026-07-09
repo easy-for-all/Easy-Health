@@ -312,9 +312,19 @@ class WorkoutPlanGeneratorService
         end
       end
 
-      raise "Workout plan was not generated" if plan.workout_days.empty?
-      total_exercises = plan.workout_days.sum { |d| d.workout_day_exercises.count }
-      raise "No exercises could be assigned to this plan (modality: #{@activity_preferences&.join(', ')}, level: #{@fitness_level}). Check exercise availability and user profile filters." if total_exercises.zero?
+      @plan_validation = WorkoutIntelligence::PlanValidator.new(
+        plan: plan, health_profile: @profile, fitness_level: @fitness_level, goal: @goal,
+        weekly_volume_targets: @volume_planner.targets, candidate_scope: @candidate_scope,
+        decision_source: decision_source_label
+      ).call
+      WorkoutIntelligence::DecisionLogger.log(
+        event: "plan_validated", user_id: @user.id, plan_id: plan.id,
+        valid: @plan_validation.valid, violations: @plan_validation.violations,
+        warnings: @plan_validation.warnings, auto_fixes: @plan_validation.auto_fixes
+      )
+      if @plan_validation.violations.any? { |v| v[:fatal] }
+        raise @plan_validation.violations.map { |v| v[:message] }.join("; ")
+      end
 
       plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
 
@@ -405,6 +415,13 @@ class WorkoutPlanGeneratorService
 
   def strategy_frequency
     @workout_strategy.fetch("weekly_frequency", @days_per_week).to_i.clamp(1, 6)
+  end
+
+  def decision_source_label
+    return "ai" if @ai_decision
+    return "strategy" if @strategy_active
+
+    "rule_based"
   end
 
   def day_exercise_limit
