@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_09_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_09_152000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -87,6 +87,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_140000) do
 
   create_table "ai_training_decision_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.string "decision_source", default: "ai", null: false
     t.text "error_message"
     t.decimal "estimated_cost_cents", precision: 10, scale: 6
     t.string "generation_type", default: "workout_plan"
@@ -105,6 +106,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_140000) do
     t.bigint "user_id", null: false
     t.jsonb "week_structure", default: []
     t.bigint "workout_plan_id", null: false
+    t.index ["decision_source"], name: "index_ai_training_decision_logs_on_decision_source"
     t.index ["prompt_version_id"], name: "index_ai_training_decision_logs_on_prompt_version_id"
     t.index ["status"], name: "index_ai_training_decision_logs_on_status"
     t.index ["user_id", "created_at"], name: "index_ai_training_decision_logs_on_user_id_and_created_at"

@@ -328,7 +328,7 @@ class WorkoutPlanGeneratorService
 
       plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
 
-      persist_ai_decision_log(plan) if @ai_decision
+      persist_training_decision_log(plan, template)
       update_adherence_score
 
       plan
@@ -409,6 +409,8 @@ class WorkoutPlanGeneratorService
   # per-day `params` that applied the same prescription to every exercise
   # regardless of goal.
   def exercise_training_params(exercise)
+    return @ai_sets_reps if @ai_sets_reps
+
     role = WorkoutIntelligence::ExerciseRoleClassifier.role_for(exercise)
     WorkoutIntelligence::GoalTrainingProfile.for(goal: @goal, fitness_level: @fitness_level, role: role)
   end
@@ -707,24 +709,31 @@ class WorkoutPlanGeneratorService
     }.fetch(location, "gym")
   end
 
-  def persist_ai_decision_log(plan)
+  def persist_training_decision_log(plan, template)
+    decision = @ai_decision || WorkoutIntelligence::PlanRationaleBuilder.new(
+      health_profile: @profile, fitness_level: @fitness_level, goal: @goal,
+      template: template, weekly_volume_targets: @volume_planner.targets,
+      validation: @plan_validation, decision_source: decision_source_label
+    ).call
+
     AiTrainingDecisionLog.create!(
       user:                   @user,
       workout_plan:           plan,
-      training_method:        @ai_decision[:training_method],
-      rationale:              @ai_decision[:rationale],
-      progression_strategy:   @ai_decision[:progression_strategy],
-      safety_notes:           @ai_decision[:safety_notes],
-      week_structure:         @ai_decision[:week_structure].map { |d| { name: d[:name], muscle_groups: d[:muscle_groups] } },
-      model_used:             AiConfig.for(@chat_decision ? :workout_chat_plan_generation : :workout_planning)[:model],
+      decision_source:        decision_source_label,
+      training_method:        decision[:training_method],
+      rationale:              decision[:rationale],
+      progression_strategy:   decision[:progression_strategy],
+      safety_notes:           decision[:safety_notes],
+      week_structure:         decision[:week_structure].map { |d| { name: d[:name], muscle_groups: d[:muscle_groups] } },
+      model_used:             @ai_decision ? AiConfig.for(@chat_decision ? :workout_chat_plan_generation : :workout_planning)[:model] : "workout_intelligence_v1",
       prompt_version_id:      @ai_prompt_version_id,
       generation_type:        "workout_plan",
       status:                 "success",
       output_summary:         {
-        personalization_reason: @ai_decision[:personalization_reason],
-        user_explanation:       @ai_decision[:user_explanation],
-        coach_notes:            @ai_decision[:coach_notes],
-        plan_name:              @ai_decision[:plan_name]
+        personalization_reason: decision[:personalization_reason],
+        user_explanation:       decision[:user_explanation],
+        coach_notes:            decision[:coach_notes],
+        plan_name:              decision[:plan_name]
       },
       input_summary:          {
         fitness_level:          @fitness_level,
@@ -738,7 +747,7 @@ class WorkoutPlanGeneratorService
       }
     )
   rescue => e
-    Rails.logger.error("[WorkoutPlanGeneratorService] Failed to persist AI decision log: #{e.message}")
+    Rails.logger.error("[WorkoutPlanGeneratorService] Failed to persist training decision log: #{e.message}")
   end
 
   def update_adherence_score
