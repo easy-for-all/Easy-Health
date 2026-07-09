@@ -31,6 +31,7 @@ echo "▶ Aplicando android-config..."
 cp android-config/build.gradle android/build.gradle
 cp android-config/app-build.gradle android/app/build.gradle
 cp android-config/gradle.properties android/gradle.properties
+cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 mkdir -p android/gradle/wrapper
 cp android-config/gradle/wrapper/gradle-wrapper.properties \
    android/gradle/wrapper/gradle-wrapper.properties

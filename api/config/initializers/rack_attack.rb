@@ -14,6 +14,12 @@ class Rack::Attack
     req.ip if req.path == "/rails/users" && req.post?
   end
 
+  # Mobile OAuth code exchange: short burst allowance, avoids brute forcing
+  # one-time codes while keeping the happy path responsive.
+  throttle("mobile-auth-exchange/ip", limit: 20, period: 1.minute) do |req|
+    req.ip if req.path == "/api/v1/auth/mobile/exchange" && req.post?
+  end
+
   self.throttled_responder = lambda do |_req|
     [
       429,

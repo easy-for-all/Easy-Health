@@ -30,7 +30,7 @@ module App
     config.api_only = true
 
     # Filter sensitive params from logs and error reporters
-    config.filter_parameters += %i[password password_confirmation token secret key dsn authorization]
+    config.filter_parameters += %i[password password_confirmation token code code_digest secret key dsn authorization]
 
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use ActionDispatch::Session::CookieStore,

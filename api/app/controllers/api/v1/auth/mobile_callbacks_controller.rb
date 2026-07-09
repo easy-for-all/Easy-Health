@@ -5,28 +5,31 @@ module Api
         skip_before_action :authenticate_user!, raise: false
 
         def exchange
-          token = params[:token].to_s.strip
-          if token.blank?
-            render json: { error: "Token ausente" }, status: :bad_request
-            return
-          end
+          auth_code = MobileAuthCode.redeem!(code: params[:code], platform: params[:platform])
+          user = auth_code.user
 
-          cached = Rails.cache.read("mobile_auth:#{token}")
-          if cached.nil?
-            render json: { error: "Token inválido ou expirado" }, status: :unauthorized
-            return
-          end
-
-          Rails.cache.delete("mobile_auth:#{token}")
-          user = User.find_by(id: cached[:user_id])
-          if user.nil?
-            render json: { error: "Usuário não encontrado" }, status: :not_found
+          if user.anonymized_at.present?
+            render json: { error: "Conta excluída" }, status: :forbidden
             return
           end
 
           sign_in(user)
-          cookies[:_eh_auth] = { value: "1", domain: ".easyhealth.art", path: "/", secure: Rails.env.production?, httponly: false, same_site: :lax }
-          render json: user_json(user).merge(new_user: cached[:new_user]), status: :ok
+          set_auth_indicator_cookie
+          render json: user_json(user).merge(new_user: new_user?(user)), status: :ok
+        rescue MobileAuthCode::InvalidPlatformError
+          render json: { error: "Plataforma inválida" }, status: :unprocessable_entity
+        rescue MobileAuthCode::InvalidCodeError
+          render json: { error: "Código inválido ou expirado" }, status: :unauthorized
+        rescue MobileAuthCode::ExpiredCodeError
+          render json: { error: "Código expirado" }, status: :unauthorized
+        rescue MobileAuthCode::UsedCodeError
+          render json: { error: "Código já utilizado" }, status: :unauthorized
+        end
+
+        private
+
+        def new_user?(user)
+          user.created_at > 5.minutes.ago && user.health_profile.nil?
         end
       end
     end

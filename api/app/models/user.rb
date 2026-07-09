@@ -33,6 +33,7 @@ class User < ApplicationRecord
   has_many :community_reactions, dependent: :destroy
   has_many :community_comments, dependent: :destroy
   has_one  :trainer_profile, dependent: :destroy
+  has_many :mobile_auth_codes, dependent: :destroy
   has_many :personal_notes_as_trainer, class_name: "PersonalNote", foreign_key: :personal_id, dependent: :destroy
   has_many :personal_notes_as_client,  class_name: "PersonalNote", foreign_key: :client_id,   dependent: :destroy
 

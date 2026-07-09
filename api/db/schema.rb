@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_09_152000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -473,6 +473,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_152000) do
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
+  create_table "mobile_auth_codes", force: :cascade do |t|
+    t.string "code_digest", null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "platform", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "used_at"
+    t.bigint "user_id", null: false
+    t.index ["code_digest"], name: "index_mobile_auth_codes_on_code_digest", unique: true
+    t.index ["platform", "expires_at"], name: "index_mobile_auth_codes_on_platform_and_expires_at"
+    t.index ["user_id", "used_at"], name: "index_mobile_auth_codes_on_user_id_and_used_at"
+    t.index ["user_id"], name: "index_mobile_auth_codes_on_user_id"
+  end
+
   create_table "onboarding_events", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "event_name", null: false
@@ -933,6 +947,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_152000) do
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
+  add_foreign_key "mobile_auth_codes", "users"
   add_foreign_key "onboarding_events", "users"
   add_foreign_key "personal_alerts", "users", column: "client_id"
   add_foreign_key "personal_alerts", "users", column: "personal_id"

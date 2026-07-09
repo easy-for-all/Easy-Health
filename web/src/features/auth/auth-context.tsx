@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { api, ApiError, TRIAL_EXPIRED_EVENT } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
 import { Capacitor } from "@capacitor/core";
+import { exchangeMobileAuthCallback, parseMobileAuthCallback } from "@/shared/lib/mobileAuth";
 
 interface AuthContextValue {
   user: User | null;
@@ -27,18 +28,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cleanup: (() => void) | undefined;
     import("@capacitor/app").then(({ App }) => {
       const listenerPromise = App.addListener("appUrlOpen", async (event) => {
+        const parsed = parseMobileAuthCallback(event.url);
+        if (!parsed) return;
+
         try {
-          const url = new URL(event.url);
-          if (url.protocol === "easyhealth:" && url.hostname === "auth-callback") {
-            const token = url.searchParams.get("token");
-            if (!token) return;
-            const { Browser } = await import("@capacitor/browser");
-            await Browser.close().catch(() => undefined);
-            const user = await api.get<User & { new_user?: boolean }>(`/api/v1/auth/mobile_callback?token=${token}`);
-            setUser(user);
-            justAuthenticatedRef.current = true;
-            window.location.replace(user.new_user ? "/onboarding" : "/dashboard");
-          }
+          const { Browser } = await import("@capacitor/browser");
+          await Browser.close().catch(() => undefined);
+          const result = await exchangeMobileAuthCallback(parsed);
+          setUser(result.user);
+          justAuthenticatedRef.current = true;
+          window.location.replace(result.redirectPath);
         } catch {
           window.location.replace("/login?error=oauth_failed");
         }
@@ -50,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const publicPaths = ["/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];
+    const publicPaths = ["/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/mobile-auth/callback", "/s/", "/join/", "/delete-account", "/delete-data"];
 
     api.get<User>("/api/v1/auth/me")
       .then((u) => {
