@@ -37,6 +37,8 @@ module WorkoutIntelligence
       @groups_in_template = Array(groups_in_template).uniq
     end
 
+    attr_reader :targets
+
     def call
       @targets = @groups_in_template.each_with_object({}) do |group, targets|
         base = BASE_SETS_PER_GROUP.dig(@bucket, @fitness_level) || BASE_SETS_PER_GROUP.dig("health", @fitness_level)

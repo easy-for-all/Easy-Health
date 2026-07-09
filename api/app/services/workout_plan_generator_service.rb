@@ -17,30 +17,30 @@ class WorkoutPlanGeneratorService
       { name: "Full Body B", muscle_groups: %w[shoulders biceps triceps core] }
     ],
     3 => [
-      { name: "Full Body A", muscle_groups: %w[chest back legs] },
+      { name: "Full Body A", muscle_groups: %w[chest back legs], emphasis: :compound_first },
       { name: "Full Body B", muscle_groups: %w[shoulders biceps triceps] },
-      { name: "Full Body C", muscle_groups: %w[chest back core] }
+      { name: "Full Body C", muscle_groups: %w[chest back core], emphasis: :accessory_first }
     ],
     4 => [
-      { name: "Superior A",  muscle_groups: %w[chest back shoulders] },
-      { name: "Inferior A",  muscle_groups: %w[legs core] },
-      { name: "Superior B",  muscle_groups: %w[biceps triceps chest] },
-      { name: "Inferior B",  muscle_groups: %w[legs core] }
+      { name: "Superior A",  muscle_groups: %w[chest back shoulders], emphasis: :compound_first },
+      { name: "Inferior A",  muscle_groups: %w[legs core], emphasis: :compound_first },
+      { name: "Superior B",  muscle_groups: %w[biceps triceps chest], emphasis: :accessory_first },
+      { name: "Inferior B",  muscle_groups: %w[legs core], emphasis: :accessory_first }
     ],
     5 => [
-      { name: "Push",        muscle_groups: %w[chest shoulders triceps] },
-      { name: "Pull",        muscle_groups: %w[back biceps] },
-      { name: "Legs",        muscle_groups: %w[legs core] },
-      { name: "Superior",    muscle_groups: %w[chest back shoulders] },
-      { name: "Inferior",    muscle_groups: %w[legs core] }
+      { name: "Push",        muscle_groups: %w[chest shoulders triceps], emphasis: :compound_first },
+      { name: "Pull",        muscle_groups: %w[back biceps], emphasis: :compound_first },
+      { name: "Legs",        muscle_groups: %w[legs core], emphasis: :compound_first },
+      { name: "Superior",    muscle_groups: %w[chest back shoulders], emphasis: :accessory_first },
+      { name: "Inferior",    muscle_groups: %w[legs core], emphasis: :accessory_first }
     ],
     6 => [
-      { name: "Push A",      muscle_groups: %w[chest shoulders triceps] },
-      { name: "Pull A",      muscle_groups: %w[back biceps] },
-      { name: "Legs A",      muscle_groups: %w[legs core] },
-      { name: "Push B",      muscle_groups: %w[chest shoulders triceps] },
-      { name: "Pull B",      muscle_groups: %w[back biceps] },
-      { name: "Legs B",      muscle_groups: %w[legs core] }
+      { name: "Push A",      muscle_groups: %w[chest shoulders triceps], emphasis: :compound_first },
+      { name: "Pull A",      muscle_groups: %w[back biceps], emphasis: :compound_first },
+      { name: "Legs A",      muscle_groups: %w[legs core], emphasis: :compound_first },
+      { name: "Push B",      muscle_groups: %w[chest shoulders triceps], emphasis: :accessory_first },
+      { name: "Pull B",      muscle_groups: %w[back biceps], emphasis: :accessory_first },
+      { name: "Legs B",      muscle_groups: %w[legs core], emphasis: :accessory_first }
     ]
   }.freeze
 
@@ -88,6 +88,10 @@ class WorkoutPlanGeneratorService
   }.freeze
 
   EXERCISES_PER_GROUP = 2
+
+  # Non-strategy mode: cap total exercises/day by declared session duration
+  # instead of a flat 8, regardless of how much time the user actually has.
+  SESSION_DURATION_EXERCISE_CAP = { 15 => 4, 25 => 5, 35 => 6, 45 => 8, 60 => 10 }.freeze
 
   # Varied weekly schedules by cardio type — up to 6 days, sliced to fit training days
   CARDIO_WEEK_SCHEDULES = {
@@ -197,7 +201,32 @@ class WorkoutPlanGeneratorService
       plan_days_per_week = @strategy_active ? strategy_frequency : @days_per_week
       template = @strategy_active ? build_strategy_template : build_template
       schedule = DAY_SCHEDULE[plan_days_per_week]
-      params   = @strategy_active ? strategy_sets_reps : @ai_sets_reps || SETS_REPS[@fitness_level]
+      @goal = @profile&.goal
+
+      group_occurrences = template.each_with_object(Hash.new(0)) do |day_tmpl, counts|
+        Array(day_tmpl[:muscle_groups]).each { |group| counts[group] += 1 }
+      end
+      @volume_planner = WorkoutIntelligence::WeeklyVolumePlanner.new(
+        goal: @goal,
+        fitness_level: @fitness_level,
+        days_per_week: plan_days_per_week,
+        session_duration_minutes: @profile&.session_duration_minutes,
+        preferred_body_focus: @profile&.preferred_body_focus,
+        groups_in_template: group_occurrences.keys
+      )
+      @volume_planner.call
+      @day_variation_selector = WorkoutIntelligence::DayVariationSelector.new(
+        fitness_level: @fitness_level,
+        style_tags: Array(@profile&.preferred_training_styles)
+      )
+      @top_up_filler = WorkoutIntelligence::TopUpFiller.new
+      @exercises_used_this_week = Set.new
+      WorkoutIntelligence::DecisionLogger.log(
+        event: "plan_generation_started", user_id: @user.id,
+        goal: WorkoutIntelligence::GoalTrainingProfile.normalize_goal(@goal), fitness_level: @fitness_level,
+        days_per_week: plan_days_per_week, weekly_volume_targets: @volume_planner.targets,
+        decision_source: @ai_decision ? "ai" : (@strategy_active ? "strategy" : "rule_based")
+      )
 
       template.each_with_index do |day_tmpl, idx|
         day = plan.workout_days.create!(
@@ -210,12 +239,16 @@ class WorkoutPlanGeneratorService
 
         if day_tmpl[:exercise_type]
           ex_type   = day_tmpl[:exercise_type]
-          exercises = @candidate_scope.for_exercise_type(ex_type).limit(day_exercise_limit)
+          exercises = @candidate_scope.for_exercise_type(ex_type)
+                        .where.not(id: @exercises_used_this_week.to_a.presence || [ 0 ])
+                        .limit(day_exercise_limit)
 
           # Outdoor funcional fallback: gym-equipment funcional exercises are filtered out,
           # so complement with HIIT bodyweight exercises
           if exercises.empty? && ex_type == "funcional" && @training_location == "outdoor"
-            exercises = @candidate_scope.base_relation.where(exercise_type: %w[funcional hiit]).limit(day_exercise_limit)
+            exercises = @candidate_scope.base_relation.where(exercise_type: %w[funcional hiit])
+                          .where.not(id: @exercises_used_this_week.to_a.presence || [ 0 ])
+                          .limit(day_exercise_limit)
           end
 
           exercises.each do |ex|
@@ -226,23 +259,53 @@ class WorkoutPlanGeneratorService
               attrs[:intensity]        = day_tmpl[:intensity] || "moderado"
               attrs[:rest_seconds]     = 0
             else
+              params = exercise_training_params(ex)
               attrs[:sets]         = params[:sets]
               attrs[:reps]         = params[:reps]
               attrs[:rest_seconds] = params[:rest_seconds]
             end
             day.workout_day_exercises.create!(**attrs)
+            @exercises_used_this_week << ex.id
             idx_exercise += 1
           end
         else
           day_tmpl[:muscle_groups].each do |group|
             break if idx_exercise >= day_exercise_limit
 
-            group_limit = [ EXERCISES_PER_GROUP, day_exercise_limit - idx_exercise ].min
-            @candidate_scope.for_group(group).limit(group_limit).each do |ex|
+            occurrences = group_occurrences[group]
+            target      = @volume_planner.exercise_count(group: group, occurrences_in_week: occurrences)
+            group_limit = [ target, day_exercise_limit - idx_exercise ].min
+            next if group_limit <= 0
+
+            picked = @day_variation_selector.select(
+              scope: @candidate_scope.for_group(group),
+              group: group,
+              count: group_limit,
+              exclude_ids: @exercises_used_this_week,
+              emphasis: day_tmpl[:emphasis] || :balanced
+            )
+
+            if picked.size < group_limit
+              picked = @top_up_filler.fill(
+                current_exercises: picked,
+                target_count: group_limit,
+                primary_group: group,
+                base_scope: @candidate_scope.base_relation,
+                exclude_ids: @exercises_used_this_week
+              )
+            end
+
+            if picked.empty?
+              WorkoutIntelligence::DecisionLogger.log(event: "group_exercises_unavailable", user_id: @user.id, group: group, day: day_tmpl[:name])
+            end
+
+            picked.each do |ex|
+              params = exercise_training_params(ex)
               day.workout_day_exercises.create!(
                 exercise: ex, sets: params[:sets], reps: params[:reps],
                 rest_seconds: params[:rest_seconds], order_index: idx_exercise
               )
+              @exercises_used_this_week << ex.id
               idx_exercise += 1
             end
           end
@@ -331,13 +394,13 @@ class WorkoutPlanGeneratorService
     )
   end
 
-  def strategy_sets_reps
-    strategy = @workout_strategy.fetch("strength_strategy", {})
-    {
-      sets: strategy.fetch("sets", 3).to_i.clamp(1, 6),
-      reps: strategy.fetch("reps", 10).to_i.clamp(1, 30),
-      rest_seconds: strategy.fetch("rest_seconds", 90).to_i.clamp(0, 300)
-    }
+  # goal/level-aware sets/reps/rest for a single exercise, distinguishing
+  # compound (main lift) from accessory work — replaces the old flat
+  # per-day `params` that applied the same prescription to every exercise
+  # regardless of goal.
+  def exercise_training_params(exercise)
+    role = WorkoutIntelligence::ExerciseRoleClassifier.role_for(exercise)
+    WorkoutIntelligence::GoalTrainingProfile.for(goal: @goal, fitness_level: @fitness_level, role: role)
   end
 
   def strategy_frequency
@@ -345,9 +408,9 @@ class WorkoutPlanGeneratorService
   end
 
   def day_exercise_limit
-    return EXERCISES_PER_GROUP * 4 unless @strategy_active
+    return @workout_strategy.dig("strength_strategy", "max_exercises_per_session").to_i.clamp(1, 12) if @strategy_active
 
-    @workout_strategy.dig("strength_strategy", "max_exercises_per_session").to_i.clamp(1, 12)
+    SESSION_DURATION_EXERCISE_CAP.fetch(@profile&.session_duration_minutes, EXERCISES_PER_GROUP * 4)
   end
 
   def build_template
@@ -503,7 +566,7 @@ class WorkoutPlanGeneratorService
   end
 
   def available_exercises_by_group
-    @candidate_scope.for_exercise_type("musculacao").group(:muscle_group).count
+    @candidate_scope.for_exercise_type("musculacao").reorder(nil).group(:muscle_group).count
   end
 
   def build_explicit_template
