@@ -1,7 +1,7 @@
 class User < ApplicationRecord
   devise :database_authenticatable, :registerable,
          :recoverable, :rememberable, :validatable,
-         :omniauthable, omniauth_providers: [:google_oauth2]
+         :omniauthable, omniauth_providers: [:google_oauth2, :google_oauth2_mobile]
 
   ACCOUNT_TYPES = %w[regular personal_trainer].freeze
   PROFILE_VISIBILITIES = %w[private public_limited public].freeze
