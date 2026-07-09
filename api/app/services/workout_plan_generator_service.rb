@@ -89,9 +89,6 @@ class WorkoutPlanGeneratorService
 
   EXERCISES_PER_GROUP = 2
 
-  # Equipment types that work outdoors (no gym machines needed)
-  OUTDOOR_COMPATIBLE_EQUIPMENT = %w[bodyweight cardio].freeze
-
   # Varied weekly schedules by cardio type — up to 6 days, sliced to fit training days
   CARDIO_WEEK_SCHEDULES = {
     "caminhada" => [
@@ -181,6 +178,13 @@ class WorkoutPlanGeneratorService
       else
         @user.user_favorite_exercises.pluck(:exercise_id)
       end
+      @candidate_scope = WorkoutIntelligence::ExerciseCandidateScope.new(
+        training_location: @training_location,
+        fitness_level: @fitness_level,
+        strategy: @strategy_active ? @workout_strategy : nil,
+        available_equipment: Array(@profile&.available_equipment || @fitness_profile&.available_equipment),
+        fav_exercise_ids: fav_exercise_ids
+      )
 
       @user.workout_plans.update_all(active: false)
       plan = @user.workout_plans.create!(active: true)
@@ -206,20 +210,12 @@ class WorkoutPlanGeneratorService
 
         if day_tmpl[:exercise_type]
           ex_type   = day_tmpl[:exercise_type]
-          exercises = exercise_scope(
-            Exercise.browseable.where(exercise_type: ex_type),
-            fav_exercise_ids,
-            strategy: active_strategy
-          ).limit(day_exercise_limit)
+          exercises = @candidate_scope.for_exercise_type(ex_type).limit(day_exercise_limit)
 
           # Outdoor funcional fallback: gym-equipment funcional exercises are filtered out,
           # so complement with HIIT bodyweight exercises
           if exercises.empty? && ex_type == "funcional" && @training_location == "outdoor"
-            exercises = exercise_scope(
-              Exercise.browseable.where(exercise_type: %w[funcional hiit]),
-              fav_exercise_ids,
-              strategy: active_strategy
-            ).limit(day_exercise_limit)
+            exercises = @candidate_scope.base_relation.where(exercise_type: %w[funcional hiit]).limit(day_exercise_limit)
           end
 
           exercises.each do |ex|
@@ -242,12 +238,7 @@ class WorkoutPlanGeneratorService
             break if idx_exercise >= day_exercise_limit
 
             group_limit = [ EXERCISES_PER_GROUP, day_exercise_limit - idx_exercise ].min
-            exercise_scope(
-              Exercise.browseable.where(exercise_type: "musculacao", muscle_group: group),
-              fav_exercise_ids,
-              strategy: active_strategy
-            )
-                    .limit(group_limit).each do |ex|
+            @candidate_scope.for_group(group).limit(group_limit).each do |ex|
               day.workout_day_exercises.create!(
                 exercise: ex, sets: params[:sets], reps: params[:reps],
                 rest_seconds: params[:rest_seconds], order_index: idx_exercise
@@ -338,10 +329,6 @@ class WorkoutPlanGeneratorService
       strategy: @workout_strategy,
       strategy_version: @workout_strategy.fetch("strategy_version", WorkoutStrategy::VERSION)
     )
-  end
-
-  def active_strategy
-    @strategy_active ? @workout_strategy : nil
   end
 
   def strategy_sets_reps
@@ -516,12 +503,7 @@ class WorkoutPlanGeneratorService
   end
 
   def available_exercises_by_group
-    scope = Exercise.browseable.where(exercise_type: "musculacao")
-    scope = scope.where(home_compatible: true)   if @training_location == "home"
-    scope = scope.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT) if @training_location == "outdoor"
-    scope = scope.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?
-
-    scope.group(:muscle_group).count
+    @candidate_scope.for_exercise_type("musculacao").group(:muscle_group).count
   end
 
   def build_explicit_template
@@ -629,58 +611,6 @@ class WorkoutPlanGeneratorService
         muscle_groups: Array(split["muscle_groups"])
       }
     end
-  end
-
-  def exercise_scope(relation, fav_ids = [], strategy: nil)
-    rel = relation.merge(Exercise.browseable)
-
-    rel = case @training_location
-          when "home"    then rel.where(home_compatible: true)
-          when "outdoor" then rel.where(equipment_type: OUTDOOR_COMPATIBLE_EQUIPMENT)
-          else rel
-          end
-
-    rel = rel.merge(Exercise.for_fitness_level(@fitness_level)) if @fitness_level.present?
-    rel = strategy_filtered_scope(rel, strategy) if strategy
-
-    fav_priority = if fav_ids.any?
-      Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END")
-    else
-      Arel.sql("1")
-    end
-
-    rel.order(fav_priority, Arel.sql("CASE WHEN gif_url IS NOT NULL THEN 0 ELSE 1 END"), :id)
-  end
-
-  def strategy_filtered_scope(relation, strategy)
-    rel = relation.where.not(id: Array(strategy["avoided_exercises"]))
-    forbidden_tags = Array(strategy["forbidden_exercises"])
-    if forbidden_tags.any?
-      rel = rel.where.not("safety_tags && ARRAY[?]::text[]", forbidden_tags)
-    end
-
-    equipment_types = strategy_equipment_types
-    rel = rel.where(equipment_type: equipment_types) if equipment_types.any?
-    rel
-  end
-
-  def strategy_equipment_types
-    equipment = Array(@profile&.available_equipment || @fitness_profile&.available_equipment)
-    return [] if equipment.empty?
-    return [ "bodyweight" ] if equipment.include?("none") || equipment.include?("bodyweight")
-
-    mapping = {
-      "machine" => %w[machine gym],
-      "dumbbell" => [ "dumbbell" ],
-      "barbell" => [ "barbell" ],
-      "plates" => [ "barbell" ],
-      "resistance_band" => [ "bodyweight" ],
-      "treadmill" => [ "cardio" ],
-      "stationary_bike" => [ "cardio" ],
-      "rower" => [ "cardio" ],
-      "jump_rope" => [ "bodyweight" ]
-    }
-    equipment.flat_map { |item| mapping.fetch(item, []) }.uniq.presence || [ "bodyweight" ]
   end
 
   def legacy_training_location(location)
