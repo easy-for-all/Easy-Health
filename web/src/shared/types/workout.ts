@@ -26,6 +26,22 @@ export interface WorkoutDayExercise {
   last_weight_kg?: number | string | null;
   suggested_weight_kg?: number | string | null;
   progression_reason?: string | null;
+  // Composite training block context - "single" when the exercise isn't
+  // part of a superset/circuit. Absent entirely on data predating this
+  // feature (e.g. cached sessionStorage), always treated as "single" then.
+  block_type?: string;
+  block_id?: number | null;
+  block_position?: number | null;
+  position_in_block?: number;
+  block_rounds?: number;
+  block_rest_between_rounds_seconds?: number | null;
+  target_reps_min?: number | null;
+  target_reps_max?: number | null;
+  tempo?: string | null;
+  rir?: number | null;
+  rpe?: number | null;
+  is_optional?: boolean;
+  notes?: string | null;
 }
 
 export interface WorkoutDay {

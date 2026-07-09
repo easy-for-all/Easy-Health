@@ -172,60 +172,61 @@ class WorkoutPlanGeneratorService
   end
 
   def call
-    WorkoutPlan.transaction do
-      @workout_strategy = build_workout_strategy
-      @strategy_active = @chat_decision ? false : FitnessIntelligence.enabled?
-      old_favorited_names = @user.active_workout_plan
-                              &.workout_days&.where(favorited: true)&.pluck(:name) || []
-      fav_exercise_ids = if @strategy_active
-        Array(@workout_strategy["preferred_exercises"])
-      else
-        @user.user_favorite_exercises.pluck(:exercise_id)
-      end
-      @candidate_scope = WorkoutIntelligence::ExerciseCandidateScope.new(
-        training_location: @training_location,
-        fitness_level: @fitness_level,
-        strategy: @strategy_active ? @workout_strategy : nil,
-        available_equipment: Array(@profile&.available_equipment || @fitness_profile&.available_equipment),
-        fav_exercise_ids: fav_exercise_ids
-      )
+    @workout_strategy = build_workout_strategy
+    @strategy_active = @chat_decision ? false : FitnessIntelligence.enabled?
+    old_favorited_names = @user.active_workout_plan
+                            &.workout_days&.where(favorited: true)&.pluck(:name) || []
+    fav_exercise_ids = if @strategy_active
+      Array(@workout_strategy["preferred_exercises"])
+    else
+      @user.user_favorite_exercises.pluck(:exercise_id)
+    end
+    @candidate_scope = WorkoutIntelligence::ExerciseCandidateScope.new(
+      training_location: @training_location,
+      fitness_level: @fitness_level,
+      strategy: @strategy_active ? @workout_strategy : nil,
+      available_equipment: Array(@profile&.available_equipment || @fitness_profile&.available_equipment),
+      fav_exercise_ids: fav_exercise_ids
+    )
 
+    plan_days_per_week = @strategy_active ? strategy_frequency : @days_per_week
+    template = @strategy_active ? build_strategy_template : build_template
+    schedule = DAY_SCHEDULE[plan_days_per_week]
+    @goal = @profile&.goal
+
+    group_occurrences = template.each_with_object(Hash.new(0)) do |day_tmpl, counts|
+      Array(day_tmpl[:muscle_groups]).each { |group| counts[group] += 1 }
+    end
+    @volume_planner = WorkoutIntelligence::WeeklyVolumePlanner.new(
+      goal: @goal,
+      fitness_level: @fitness_level,
+      days_per_week: plan_days_per_week,
+      session_duration_minutes: @profile&.session_duration_minutes,
+      preferred_body_focus: @profile&.preferred_body_focus,
+      groups_in_template: group_occurrences.keys
+    )
+    @volume_planner.call
+    @day_variation_selector = WorkoutIntelligence::DayVariationSelector.new(
+      fitness_level: @fitness_level,
+      style_tags: Array(@profile&.preferred_training_styles)
+    )
+    @top_up_filler = WorkoutIntelligence::TopUpFiller.new
+    @exercises_used_this_week = Set.new
+    WorkoutIntelligence::DecisionLogger.log(
+      event: "plan_generation_started", user_id: @user.id,
+      goal: WorkoutIntelligence::GoalTrainingProfile.normalize_goal(@goal), fitness_level: @fitness_level,
+      days_per_week: plan_days_per_week, weekly_volume_targets: @volume_planner.targets,
+      decision_source: @ai_decision ? "ai" : (@strategy_active ? "strategy" : "rule_based")
+    )
+
+    plan = nil
+    WorkoutPlan.transaction do
       @user.workout_plans.update_all(active: false)
       plan = @user.workout_plans.create!(active: true)
       persist_workout_strategy(plan)
       @profile&.update_columns(
         training_days_per_week: @days_per_week,
         activity_preferences:   @activity_preferences
-      )
-
-      plan_days_per_week = @strategy_active ? strategy_frequency : @days_per_week
-      template = @strategy_active ? build_strategy_template : build_template
-      schedule = DAY_SCHEDULE[plan_days_per_week]
-      @goal = @profile&.goal
-
-      group_occurrences = template.each_with_object(Hash.new(0)) do |day_tmpl, counts|
-        Array(day_tmpl[:muscle_groups]).each { |group| counts[group] += 1 }
-      end
-      @volume_planner = WorkoutIntelligence::WeeklyVolumePlanner.new(
-        goal: @goal,
-        fitness_level: @fitness_level,
-        days_per_week: plan_days_per_week,
-        session_duration_minutes: @profile&.session_duration_minutes,
-        preferred_body_focus: @profile&.preferred_body_focus,
-        groups_in_template: group_occurrences.keys
-      )
-      @volume_planner.call
-      @day_variation_selector = WorkoutIntelligence::DayVariationSelector.new(
-        fitness_level: @fitness_level,
-        style_tags: Array(@profile&.preferred_training_styles)
-      )
-      @top_up_filler = WorkoutIntelligence::TopUpFiller.new
-      @exercises_used_this_week = Set.new
-      WorkoutIntelligence::DecisionLogger.log(
-        event: "plan_generation_started", user_id: @user.id,
-        goal: WorkoutIntelligence::GoalTrainingProfile.normalize_goal(@goal), fitness_level: @fitness_level,
-        days_per_week: plan_days_per_week, weekly_volume_targets: @volume_planner.targets,
-        decision_source: @ai_decision ? "ai" : (@strategy_active ? "strategy" : "rule_based")
       )
 
       template.each_with_index do |day_tmpl, idx|
@@ -327,12 +328,12 @@ class WorkoutPlanGeneratorService
       end
 
       plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
-
-      persist_training_decision_log(plan, template)
-      update_adherence_score
-
-      plan
     end
+
+    persist_training_decision_log_safely(plan, template)
+    update_adherence_score_safely
+
+    plan
   end
 
   def plan_summary
@@ -709,7 +710,7 @@ class WorkoutPlanGeneratorService
     }.fetch(location, "gym")
   end
 
-  def persist_training_decision_log(plan, template)
+  def persist_training_decision_log_safely(plan, template)
     decision = @ai_decision || WorkoutIntelligence::PlanRationaleBuilder.new(
       health_profile: @profile, fitness_level: @fitness_level, goal: @goal,
       template: template, weekly_volume_targets: @volume_planner.targets,
@@ -750,7 +751,7 @@ class WorkoutPlanGeneratorService
     Rails.logger.error("[WorkoutPlanGeneratorService] Failed to persist training decision log: #{e.message}")
   end
 
-  def update_adherence_score
+  def update_adherence_score_safely
     return unless @profile
 
     sessions_last_30 = @user.workout_sessions

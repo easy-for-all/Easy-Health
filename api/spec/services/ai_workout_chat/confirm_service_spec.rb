@@ -62,6 +62,16 @@ RSpec.describe AiWorkoutChat::ConfirmService do
         expect(second.workout_plan_id).to eq(first.workout_plan_id)
         expect(WorkoutPlan.where(user: user).count).to eq(1)
       end
+
+      it "confirms the conversation even when non-critical decision log persistence fails" do
+        allow(AiTrainingDecisionLog).to receive(:create!).and_raise(ActiveRecord::StatementInvalid.new("PG failure"))
+
+        result = described_class.new(conversation).call
+
+        expect(result.success?).to be true
+        expect(result.workout_plan_id).to be_present
+        expect(conversation.reload.status).to eq("confirmed")
+      end
     end
 
     context "when the conversation has no preview yet" do

@@ -170,6 +170,21 @@ RSpec.describe WorkoutPlanGeneratorService do
     expect(log.model_used).to eq(AiConfig.for(:workout_chat_plan_generation)[:model])
   end
 
+  it "keeps the generated plan when non-critical decision log persistence fails" do
+    user = create(:user)
+    create(:health_profile, user: user, training_days_per_week: 1, training_location: "full_gym")
+    %w[chest back legs core].each { |group| create_browseable_exercise("Seguro #{group}", group) }
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+    allow(AiTrainingDecisionLog).to receive(:create!).and_raise(ActiveRecord::StatementInvalid.new("PG failure"))
+
+    plan = described_class.new(user, modality: "musculacao", split_type: "full_body").call
+
+    expect(plan).to be_persisted
+    expect(plan.workout_days.count).to eq(1)
+    expect(plan.workout_days.first.workout_day_exercises.count).to be_positive
+  end
+
   it "Teste 1: advanced/gain_muscle 3x/45min full_gym allows advanced exercises with coherent volume and split" do
     user = create(:user)
     create(:health_profile, user: user, fitness_level: "advanced", goal: "gain_muscle",

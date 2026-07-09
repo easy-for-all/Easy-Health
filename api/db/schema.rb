@@ -794,7 +794,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_152000) do
     t.integer "target_reps_min"
     t.string "tempo"
     t.datetime "updated_at", null: false
-    t.bigint "workout_block_id"
+    t.bigint "workout_block_id", null: false
     t.bigint "workout_day_id", null: false
     t.index ["exercise_id"], name: "index_workout_day_exercises_on_exercise_id"
     t.index ["workout_block_id"], name: "index_workout_day_exercises_on_workout_block_id"

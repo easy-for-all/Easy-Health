@@ -60,6 +60,7 @@ Rails.application.routes.draw do
       delete "workout_day_exercises/:id",      to: "workout_day_exercises#destroy"
       post   "workout_days/:workout_day_id/exercises",        to: "workout_day_exercises#create"
       patch  "workout_days/:workout_day_id/exercises/reorder", to: "workout_day_exercises#reorder"
+      post   "workout_days/:workout_day_id/blocks",            to: "workout_day_exercises#create_block"
 
       resources :workout_sessions, only: [:index, :show, :create, :update] do
         collection do

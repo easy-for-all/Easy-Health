@@ -92,7 +92,12 @@ module Api
                   last_completed_at: history.last_completed_at,
                   last_weight_kg: history.last_used_weight,
                   suggested_weight_kg: history.suggested_starting_weight,
-                  progression_reason: history.progression_reason
+                  progression_reason: history.progression_reason,
+                  block_type: "single",
+                  block_id: nil,
+                  block_position: idx,
+                  position_in_block: 0,
+                  block_rounds: 1
                 }
               end
             }
@@ -225,6 +230,11 @@ module Api
           order_index: idx - 1,
           is_favorite: false,
           last_performed_at: nil,
+          block_type: "single",
+          block_id: nil,
+          block_position: idx - 1,
+          position_in_block: 0,
+          block_rounds: 1
         }
       end
 

@@ -27,6 +27,8 @@ import { AgentOrb } from "@/shared/components/agent-orb";
 import "@/shared/components/workout/workout-ui.css";
 import { workoutEngine, usesTimerScreen, usesRecoveryScreen } from "@/features/workout/workout-engine";
 import { CardioPanel, IntervalPanel, RecoveryPanel } from "./workout-engine-screens";
+import { groupExercisesIntoBlocks, isMultiExerciseBlock, nextStepInBlock, blockConnectorLabel } from "@/features/workout/workout-blocks";
+import { BlockGroupCard } from "@/shared/components/workout/block-group-card";
 
 type Phase = "choose" | "overview" | "warmup" | "exercising" | "rest" | "exercise_feedback" | "cooldown" | "closing_optional" | "pre_done" | "done";
 type ExerciseOption = {
@@ -180,6 +182,23 @@ function WorkoutTodayContent() {
     });
     return Math.round(total);
   }, [day?.exercises, exerciseRuntime, currentIndex, currentSet]);
+
+  // Composite training blocks (superset/bi_set/tri_set/circuit) derived from
+  // the flat, order_index-ordered exercises array. Single blocks (the
+  // default for every pre-existing/legacy exercise) fall through to the
+  // exact same per-exercise flow as before - only a multi-exercise block
+  // changes handleSetDone's branching below.
+  const blocks = useMemo(() => groupExercisesIntoBlocks(day?.exercises ?? []), [day?.exercises]);
+
+  const currentBlockLocation = useMemo(() => {
+    const wdeId = day?.exercises?.[currentIndex]?.workout_day_exercise_id;
+    if (wdeId == null) return null;
+    for (let groupIndex = 0; groupIndex < blocks.length; groupIndex++) {
+      const positionInBlock = blocks[groupIndex].exercises.findIndex((e) => e.workout_day_exercise_id === wdeId);
+      if (positionInBlock !== -1) return { groupIndex, positionInBlock };
+    }
+    return null;
+  }, [blocks, day?.exercises, currentIndex]);
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "treino" });
@@ -617,6 +636,39 @@ function WorkoutTodayContent() {
     navigator.vibrate?.(80);
     setSetFlash(true);
     setTimeout(() => setSetFlash(false), 600);
+
+    // Composite block (superset/bi_set/tri_set/circuit): "1 round = 1 set",
+    // so currentSet already doubles as the round counter - no separate round
+    // state is needed. A1 -> A2 never rests; rest only happens between full
+    // rounds, using the block's own rest_between_rounds_seconds when set.
+    const group = currentBlockLocation ? blocks[currentBlockLocation.groupIndex] : null;
+    if (group && currentBlockLocation && isMultiExerciseBlock(group.blockType) && group.exercises.length > 1) {
+      const step = nextStepInBlock(group, currentBlockLocation.positionInBlock, currentSet, state.rest_seconds);
+
+      if (step.type === "next_exercise_in_round") {
+        const nextExercise = group.exercises[step.positionInBlock];
+        const nextIndex = day.exercises.findIndex((e) => e.workout_day_exercise_id === nextExercise.workout_day_exercise_id);
+        if (nextIndex !== -1) setCurrentIndex(nextIndex);
+        setPhase("exercising");
+        return;
+      }
+
+      if (step.type === "rest_before_next_round") {
+        const firstExercise = group.exercises[0];
+        const firstIndex = day.exercises.findIndex((e) => e.workout_day_exercise_id === firstExercise.workout_day_exercise_id);
+        if (firstIndex !== -1) setCurrentIndex(firstIndex);
+        setCurrentSet(step.nextRound);
+        startRest(step.restSeconds);
+        return;
+      }
+
+      // step.type === "block_complete": last exercise of the last round -
+      // same "exercise finished" flow as a single block below, and
+      // finishExercise() already advances correctly into the next block
+      // since blocks occupy contiguous, order_index-ordered ranges.
+      setPhase("exercise_feedback");
+      return;
+    }
 
     if (currentSet < state.planned_sets) {
       setCurrentSet((s) => s + 1);
@@ -1133,6 +1185,31 @@ function WorkoutTodayContent() {
             Trocar
           </button>
         </div>
+
+        {/* Composite block context (superset/bi_set/tri_set/circuit): which
+            round we're on, this exercise's slot (A1/A2...) and what's next -
+            so the user never has to guess the order. */}
+        {(() => {
+          const group = currentBlockLocation ? blocks[currentBlockLocation.groupIndex] : null;
+          if (!group || !currentBlockLocation || !isMultiExerciseBlock(group.blockType) || group.exercises.length <= 1) return null;
+          const { positionInBlock } = currentBlockLocation;
+          const nextInRound = group.exercises[positionInBlock + 1];
+          return (
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-primary-800/60 bg-primary-950/40 px-3 py-2">
+              <span className="rounded-full bg-primary-500 px-2 py-0.5 text-xs font-bold text-white">
+                {blockConnectorLabel(positionInBlock)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-primary-300">
+                  {group.blockLabel} · Rodada {currentSet}/{group.rounds}
+                </p>
+                {nextInRound && (
+                  <p className="truncate text-xs text-slate-400">Próximo: {nextInRound.name}</p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Exercise name */}
         <div className="mt-2">
@@ -1940,7 +2017,11 @@ function OverviewScreen({
       </div>
 
       <div className="mt-4 space-y-3">
-        {exercises.map((ex) => {
+        {groupExercisesIntoBlocks(exercises).map((group) => (
+          <BlockGroupCard
+            key={group.blockId ?? `single-${group.exercises[0].workout_day_exercise_id}`}
+            group={group}
+            renderExercise={(ex, _indexInBlock, isGrouped) => {
           const state = runtimeFor(runtime, ex);
           return (
             <div key={ex.workout_day_exercise_id} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
@@ -1976,18 +2057,20 @@ function OverviewScreen({
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <button onClick={() => openSwap(ex)} className="text-xs text-blue-500 hover:underline">Trocar</button>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => handleMove(ex.workout_day_exercise_id, "up")}
-                      disabled={exercises.indexOf(ex) === 0}
-                      className="flex h-6 w-6 items-center justify-center rounded border border-slate-700 text-xs text-slate-500 disabled:opacity-25"
-                    >↑</button>
-                    <button
-                      onClick={() => handleMove(ex.workout_day_exercise_id, "down")}
-                      disabled={exercises.indexOf(ex) === exercises.length - 1}
-                      className="flex h-6 w-6 items-center justify-center rounded border border-slate-700 text-xs text-slate-500 disabled:opacity-25"
-                    >↓</button>
-                  </div>
+                  {!isGrouped && (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleMove(ex.workout_day_exercise_id, "up")}
+                        disabled={exercises.indexOf(ex) === 0}
+                        className="flex h-6 w-6 items-center justify-center rounded border border-slate-700 text-xs text-slate-500 disabled:opacity-25"
+                      >↑</button>
+                      <button
+                        onClick={() => handleMove(ex.workout_day_exercise_id, "down")}
+                        disabled={exercises.indexOf(ex) === exercises.length - 1}
+                        className="flex h-6 w-6 items-center justify-center rounded border border-slate-700 text-xs text-slate-500 disabled:opacity-25"
+                      >↓</button>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mt-2 flex gap-2">
@@ -2030,7 +2113,9 @@ function OverviewScreen({
               )}
             </div>
           );
-        })}
+            }}
+          />
+        ))}
       </div>
 
       <button onClick={openAdd} className="mt-4 w-full rounded-xl border border-dashed border-primary-500/50 py-3 text-sm font-semibold text-primary-400">Adicionar exercício</button>
@@ -2441,6 +2526,11 @@ function DoneScreen({
           exercise_logs: exercises.map((exercise) => {
             const state = runtimeFor(runtime, exercise);
             const wdeId = isQuick || exercise.workout_day_exercise_id < 0 ? null : exercise.workout_day_exercise_id;
+            const blockFields = {
+              block_type: exercise.block_type ?? "single",
+              block_id: exercise.block_id ?? null,
+              position_in_block: exercise.position_in_block ?? 0,
+            };
             if (isTimed(exercise)) {
               return {
                 workout_day_exercise_id: wdeId,
@@ -2449,6 +2539,7 @@ function DoneScreen({
                 elapsed_seconds: state.elapsed_seconds ?? 0,
                 target_seconds: (exercise.duration_minutes ?? 1) * 60,
                 feeling: state.feeling || null,
+                ...blockFields,
               };
             }
             if (isCardio(exercise)) {
@@ -2459,6 +2550,7 @@ function DoneScreen({
                 duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
                 intensity: state.intensity ?? null,
                 feeling: state.feeling || null,
+                ...blockFields,
               };
             }
             return {
@@ -2473,6 +2565,7 @@ function DoneScreen({
               reps: state.reps_by_set,
               rest_seconds: state.rest_seconds,
               feeling: state.feeling || null,
+              ...blockFields,
             };
           }),
         });
@@ -2530,6 +2623,11 @@ function DoneScreen({
         exercise_logs: exercises.map((exercise) => {
           const state = runtimeFor(runtime, exercise);
           const wdeId = isQuick || exercise.workout_day_exercise_id < 0 ? null : exercise.workout_day_exercise_id;
+          const blockFields = {
+            block_type: exercise.block_type ?? "single",
+            block_id: exercise.block_id ?? null,
+            position_in_block: exercise.position_in_block ?? 0,
+          };
           if (isTimed(exercise)) {
             return {
               workout_day_exercise_id: wdeId,
@@ -2538,6 +2636,7 @@ function DoneScreen({
               elapsed_seconds: state.elapsed_seconds ?? 0,
               target_seconds: (exercise.duration_minutes ?? 1) * 60,
               feeling: state.feeling || null,
+              ...blockFields,
             };
           }
           if (isCardio(exercise)) {
@@ -2548,6 +2647,7 @@ function DoneScreen({
               duration_minutes: state.duration_minutes ?? exercise.duration_minutes ?? null,
               intensity: state.intensity ?? null,
               feeling: state.feeling || null,
+              ...blockFields,
             };
           }
           return {
@@ -2562,6 +2662,7 @@ function DoneScreen({
             reps: state.reps_by_set,
             rest_seconds: state.rest_seconds,
             feeling: state.feeling || null,
+            ...blockFields,
           };
         }),
       });

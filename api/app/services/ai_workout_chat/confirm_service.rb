@@ -15,11 +15,9 @@ module AiWorkoutChat
       end
 
       plan = nil
-      WorkoutPlan.transaction do
-        plan = WorkoutPlanGeneratorService.new(@user, chat_decision: symbolized_preview).call
-        write_back_health_profile
-        @conversation.update!(status: "confirmed", workout_plan_id: plan.id, completed_at: Time.current)
-      end
+      plan = WorkoutPlanGeneratorService.new(@user, chat_decision: symbolized_preview).call
+      write_back_health_profile_safely
+      @conversation.update!(status: "confirmed", workout_plan_id: plan.id, completed_at: Time.current)
 
       Result.new(success?: true, workout_plan_id: plan.id, error: nil)
     rescue => e
@@ -41,7 +39,7 @@ module AiWorkoutChat
       @conversation.generated_preview.deep_symbolize_keys
     end
 
-    def write_back_health_profile
+    def write_back_health_profile_safely
       profile = @user.health_profile
       return unless profile
 
