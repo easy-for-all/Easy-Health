@@ -170,16 +170,177 @@ RSpec.describe WorkoutPlanGeneratorService do
     expect(log.model_used).to eq(AiConfig.for(:workout_chat_plan_generation)[:model])
   end
 
-  def create_browseable_exercise(name, muscle_group, safety_tags: [])
+  it "Teste 1: advanced/gain_muscle 3x/45min full_gym allows advanced exercises with coherent volume and split" do
+    user = create(:user)
+    create(:health_profile, user: user, fitness_level: "advanced", goal: "gain_muscle",
+      training_days_per_week: 3, training_location: "full_gym", session_duration_minutes: 45,
+      split_type: "abc", modality: "musculacao")
+
+    advanced_back = create_browseable_exercise("Barra Fixa Teste", "back",
+      calisthenics_skill: "advanced", technical_complexity: "high", risk_level: "high")
+    create_browseable_exercise("Peito seguro", "chest")
+    create_browseable_exercise("Ombro seguro", "shoulders")
+    create_browseable_exercise("Triceps seguro", "triceps")
+    create_browseable_exercise("Biceps seguro", "biceps")
+    create_browseable_exercise("Perna segura", "legs")
+    create_browseable_exercise("Core seguro", "core")
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+    plan = described_class.new(user, modality: "musculacao", split_type: "abc").call
+
+    expect(plan.workout_days.count).to eq(3)
+    exercise_ids = plan.workout_days.flat_map { |d| d.workout_day_exercises.pluck(:exercise_id) }
+    expect(exercise_ids).to include(advanced_back.id)
+    expect(plan.workout_days.sum { |d| d.workout_day_exercises.count }).to be > 0
+  end
+
+  it "Teste 2: beginner/gain_muscle 3x/60min never selects Muscle Up or unassisted Barra Fixa" do
+    user = create(:user)
+    create(:health_profile, user: user, fitness_level: "beginner", goal: "gain_muscle",
+      training_days_per_week: 3, training_location: "full_gym", session_duration_minutes: 60,
+      split_type: "abc", modality: "musculacao")
+
+    muscle_up = create_browseable_exercise("Muscle Up", "back",
+      calisthenics_skill: "advanced", technical_complexity: "high", risk_level: "high")
+    barra_fixa = create_browseable_exercise("Barra Fixa", "back",
+      calisthenics_skill: "basic", technical_complexity: "medium", risk_level: "medium")
+    assisted = create_browseable_exercise("Barra Fixa Assistida", "back",
+      calisthenics_skill: "none", technical_complexity: "low", risk_level: "low")
+    create_browseable_exercise("Peito seguro", "chest")
+    create_browseable_exercise("Ombro seguro", "shoulders")
+    create_browseable_exercise("Triceps seguro", "triceps")
+    create_browseable_exercise("Biceps seguro", "biceps")
+    create_browseable_exercise("Perna segura", "legs")
+    create_browseable_exercise("Core seguro", "core")
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+    plan = described_class.new(user, modality: "musculacao", split_type: "abc").call
+
+    exercise_ids = plan.workout_days.flat_map { |d| d.workout_day_exercises.pluck(:exercise_id) }
+    expect(exercise_ids).not_to include(muscle_up.id, barra_fixa.id)
+    expect(exercise_ids).to include(assisted.id)
+  end
+
+  it "Teste 3: strength+calisthenics 5x/45min varies reps/rest, keeps legs well-stocked, and calisthenics influences selection" do
+    user = create(:user)
+    create(:health_profile, user: user, fitness_level: "intermediate", goal: "strength",
+      training_days_per_week: 5, training_location: "full_gym", session_duration_minutes: 45,
+      split_type: "ai_choice", modality: "musculacao", preferred_training_styles: [ "calisthenics" ],
+      intensity_preference: "balanced")
+
+    3.times { |i| create_browseable_exercise("Perna #{i}", "legs", movement_pattern: "squat", compound: true) }
+    3.times { |i| create_browseable_exercise("Core #{i}", "core") }
+    2.times { |i| create_browseable_exercise("Peito #{i}", "chest") }
+    2.times { |i| create_browseable_exercise("Ombro #{i}", "shoulders") }
+    2.times { |i| create_browseable_exercise("Triceps #{i}", "triceps") }
+    calisthenics_back = create_browseable_exercise("Barra Fixa Calistenia", "back",
+      style_tags: [ "calisthenics" ], movement_pattern: "pull", compound: true)
+    create_browseable_exercise("Costas segura", "back")
+    2.times { |i| create_browseable_exercise("Biceps #{i}", "biceps") }
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+    allow_any_instance_of(AiWorkout::DailyLimitChecker).to receive(:limit_reached?).and_return(true)
+    expect(AiAgents::WorkoutPlannerService).not_to receive(:new)
+
+    plan = described_class.new(user, modality: "musculacao", split_type: "ai_choice", training_location: "full_gym").call
+
+    expect(plan.workout_days.count).to eq(5)
+
+    leg_ids = Exercise.where(muscle_group: "legs").pluck(:id)
+    legs_exercise_count = WorkoutDayExercise.where(workout_day: plan.workout_days, exercise_id: leg_ids).count
+    expect(legs_exercise_count).to be >= 3
+
+    all_wdes = WorkoutDayExercise.where(workout_day: plan.workout_days)
+    expect(all_wdes.pluck(:reps).uniq.size).to be > 1
+    expect(all_wdes.pluck(:rest_seconds).uniq.size).to be > 1
+    expect(all_wdes.pluck(:exercise_id)).to include(calisthenics_back.id)
+  end
+
+  it "Teste 4: beginner+calisthenics preference never selects Muscle Up and prefers safe bodyweight regressions" do
+    user = create(:user)
+    create(:health_profile, user: user, fitness_level: "beginner", goal: "gain_muscle",
+      training_days_per_week: 3, training_location: "full_gym", session_duration_minutes: 45,
+      split_type: "abc", modality: "musculacao", preferred_training_styles: [ "calisthenics" ])
+
+    muscle_up = create_browseable_exercise("Muscle Up", "back",
+      calisthenics_skill: "advanced", technical_complexity: "high", risk_level: "high", style_tags: [ "calisthenics" ])
+    safe_calisthenics = create_browseable_exercise("Remada Invertida", "back",
+      calisthenics_skill: "none", technical_complexity: "low", risk_level: "low", style_tags: [ "calisthenics" ])
+    create_browseable_exercise("Peito seguro", "chest")
+    create_browseable_exercise("Ombro seguro", "shoulders")
+    create_browseable_exercise("Triceps seguro", "triceps")
+    create_browseable_exercise("Biceps seguro", "biceps")
+    create_browseable_exercise("Perna segura", "legs")
+    create_browseable_exercise("Core seguro", "core")
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+    plan = described_class.new(user, modality: "musculacao", split_type: "abc").call
+
+    exercise_ids = plan.workout_days.flat_map { |d| d.workout_day_exercises.pluck(:exercise_id) }
+    expect(exercise_ids).not_to include(muscle_up.id)
+    expect(exercise_ids).to include(safe_calisthenics.id)
+  end
+
+  it "Teste 5: PlanValidator substitutes an unsafe exercise injected directly into a beginner's plan" do
+    user = create(:user)
+    health_profile = create(:health_profile, user: user, fitness_level: "beginner", goal: "gain_muscle",
+      training_days_per_week: 1, training_location: "full_gym", session_duration_minutes: 45,
+      split_type: "full_body", modality: "musculacao")
+
+    regression = create_browseable_exercise("Barra Fixa Assistida", "back",
+      calisthenics_skill: "none", technical_complexity: "low", risk_level: "low")
+    muscle_up = create_browseable_exercise("Muscle Up", "back",
+      calisthenics_skill: "advanced", technical_complexity: "high", risk_level: "high", regression_exercise: regression)
+
+    # Build a minimal plan by hand (bypassing the generator) so the test
+    # controls exactly what's already in the day, simulating a Muscle Up
+    # that slipped in via favorites/AI/manual swap.
+    plan = WorkoutPlan.create!(user: user, active: true)
+    day = plan.workout_days.create!(day_of_week: 1, name: "Full Body", position: 1)
+    bad_wde = day.workout_day_exercises.create!(exercise: muscle_up, sets: 3, reps: 8, rest_seconds: 90, order_index: 0)
+
+    candidate_scope = WorkoutIntelligence::ExerciseCandidateScope.new(
+      training_location: "gym", fitness_level: "beginner", strategy: nil,
+      available_equipment: [], fav_exercise_ids: []
+    )
+    volume_planner = WorkoutIntelligence::WeeklyVolumePlanner.new(
+      goal: "gain_muscle", fitness_level: "beginner", days_per_week: 1, session_duration_minutes: 45,
+      groups_in_template: %w[back]
+    )
+    volume_planner.call
+
+    validator = WorkoutIntelligence::PlanValidator.new(
+      plan: plan, health_profile: health_profile, fitness_level: "beginner", goal: "gain_muscle",
+      weekly_volume_targets: volume_planner.targets, candidate_scope: candidate_scope, decision_source: "rule_based"
+    )
+    result = validator.call
+
+    expect(result.valid).to be(true)
+    expect(result.auto_fixes).to include(hash_including(code: :substituted_exercise, from: "Muscle Up", to: "Barra Fixa Assistida"))
+    expect(WorkoutDayExercise.find(bad_wde.id).exercise_id).to eq(regression.id)
+  end
+
+  def create_browseable_exercise(name, muscle_group, safety_tags: [], technical_complexity: nil,
+                                  risk_level: nil, calisthenics_skill: nil, compound: nil,
+                                  movement_pattern: nil, style_tags: [], objective_tags: [],
+                                  regression_exercise: nil, equipment_type: "bodyweight", difficulty_level: "beginner")
     Exercise.create!(
       name: name,
       exercise_type: "musculacao",
       muscle_group: muscle_group,
-      equipment_type: "bodyweight",
-      difficulty_level: "beginner",
+      equipment_type: equipment_type,
+      difficulty_level: difficulty_level,
       home_compatible: true,
       gif_url: "/exercise-images/gifdotreino/test/#{name.parameterize}.gif",
-      safety_tags: safety_tags
+      safety_tags: safety_tags,
+      technical_complexity: technical_complexity,
+      risk_level: risk_level,
+      calisthenics_skill: calisthenics_skill,
+      compound: compound,
+      movement_pattern: movement_pattern,
+      style_tags: style_tags,
+      objective_tags: objective_tags,
+      regression_exercise: regression_exercise
     )
   end
 end
