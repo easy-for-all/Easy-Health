@@ -63,6 +63,13 @@ class Exercise < ApplicationRecord
     end
   }
 
+  # Technical-complexity/risk/skill aware level filter — see
+  # WorkoutIntelligence::TechnicalLevelPolicy. Used by the workout generator
+  # instead of the weaker difficulty_level-based for_fitness_level above.
+  scope :technically_safe_for, ->(level) {
+    where(WorkoutIntelligence::TechnicalLevelPolicy.sql_conditions_for(level))
+  }
+
   def self.gifdotreino_url?(url)
     value = url.to_s
     value.start_with?(GIFDOTREINO_URL_PREFIX) && value.downcase.end_with?(".gif")
