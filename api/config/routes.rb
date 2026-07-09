@@ -4,10 +4,13 @@ Rails.application.routes.draw do
   devise_for :users, skip: :all
 
   # Google OAuth — OmniAuth middleware handles the initiation at /users/auth/google_oauth2
+  # and /users/auth/google_oauth2_mobile (the latter used by the Capacitor app).
   devise_scope :user do
-    get  "/users/auth/google_oauth2/callback", to: "api/v1/auth/omniauth_callbacks#google_oauth2"
-    post "/users/auth/google_oauth2/callback", to: "api/v1/auth/omniauth_callbacks#google_oauth2"
-    get  "/users/auth/failure",                to: "api/v1/auth/omniauth_callbacks#failure"
+    get  "/users/auth/google_oauth2/callback",        to: "api/v1/auth/omniauth_callbacks#google_oauth2"
+    post "/users/auth/google_oauth2/callback",        to: "api/v1/auth/omniauth_callbacks#google_oauth2"
+    get  "/users/auth/google_oauth2_mobile/callback", to: "api/v1/auth/omniauth_callbacks#google_oauth2_mobile"
+    post "/users/auth/google_oauth2_mobile/callback", to: "api/v1/auth/omniauth_callbacks#google_oauth2_mobile"
+    get  "/users/auth/failure",                       to: "api/v1/auth/omniauth_callbacks#failure"
   end
 
   namespace :api do

@@ -278,6 +278,21 @@ Devise.setup do |config|
     scope: "email,profile",
     prompt: "select_account"
 
+  # Second mount point for the same Google strategy, used by the mobile app.
+  # Whether to deep-link back into the app (vs. redirect to the website) used
+  # to depend on a `mobile=1` query param round-tripped through the Rack
+  # session across the OAuth redirect to Google — which the in-app browser
+  # doesn't reliably preserve. Using a distinct provider name/path instead
+  # makes that decision derivable straight from `auth.provider` in the
+  # callback, with no session dependency.
+  config.omniauth :google_oauth2_mobile,
+    ENV.fetch("GOOGLE_CLIENT_ID", nil),
+    ENV.fetch("GOOGLE_CLIENT_SECRET", nil),
+    scope: "email,profile",
+    prompt: "select_account",
+    name: "google_oauth2_mobile",
+    strategy_class: OmniAuth::Strategies::GoogleOauth2
+
   # `devise_for :users, skip: :all` (routes.rb) skips Devise's own omniauthable
   # route generation, which is what normally sets OmniAuth.config.path_prefix.
   # Without this, OmniAuth falls back to its gem default of "/auth", so

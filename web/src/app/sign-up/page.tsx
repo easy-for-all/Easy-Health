@@ -61,7 +61,7 @@ export default function SignUpPage() {
     if (!Capacitor.isNativePlatform()) return;
     e.preventDefault();
     const { Browser } = await import("@capacitor/browser");
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2?mobile=1`;
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2_mobile`;
     await Browser.open({ url });
   }
 

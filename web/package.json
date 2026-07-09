@@ -13,7 +13,8 @@
     "android:open": "bash scripts/open-android.sh",
     "android:build:debug": "npm run android:sync && cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon",
     "android:build:aab": "bash build-android-local.sh",
-    "android:clean": "cd android && ./gradlew clean --no-daemon"
+    "android:clean": "cd android && ./gradlew clean --no-daemon",
+    "android:run": "bash scripts/run-android.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

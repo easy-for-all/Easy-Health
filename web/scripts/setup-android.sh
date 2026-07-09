@@ -28,6 +28,7 @@ fi
 #    Capacitor generates by default.
 # ------------------------------------------------------------------
 echo "▶ Aplicando android-config..."
+cp android-config/build.gradle android/build.gradle
 cp android-config/app-build.gradle android/app/build.gradle
 cp android-config/gradle.properties android/gradle.properties
 mkdir -p android/gradle/wrapper
