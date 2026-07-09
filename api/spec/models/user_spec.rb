@@ -1,6 +1,15 @@
 require "rails_helper"
 
 RSpec.describe User do
+  describe "associations" do
+    it "does not depend on the removed ai_chat_messages table when destroyed" do
+      user = create(:user)
+
+      expect(described_class.reflect_on_association(:ai_chat_messages)).to be_nil
+      expect { user.destroy! }.not_to raise_error
+    end
+  end
+
   describe "#active_for_authentication?" do
     it "is true for a regular account" do
       user = create(:user)

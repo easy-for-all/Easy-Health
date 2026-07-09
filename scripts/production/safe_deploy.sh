@@ -28,6 +28,19 @@ sql_count() {
   compose exec -T "$DB_SERVICE" sh -lc "psql -U '$DB_USER' -d '$DB_NAME' -Atc \"select count(*) from ${table};\""
 }
 
+assert_migration_applied() {
+  version="$1"
+  applied="$(compose exec -T "$DB_SERVICE" sh -lc "psql -U '$DB_USER' -d '$DB_NAME' -Atc \"select count(*) from schema_migrations where version = '${version}';\"")"
+  [ "$applied" = "1" ] || fail "migration critica pendente: $version"
+}
+
+validate_critical_migrations() {
+  log "Validando migrations criticas"
+  for version in 20260706130000 20260709020100 20260709020102 20260709152000; do
+    assert_migration_applied "$version"
+  done
+}
+
 write_snapshot() {
   file="$1"
   {
@@ -124,10 +137,18 @@ compose exec -T "$API_SERVICE" bin/rails db:create || true
 
 log "Rodando migrations Rails incrementais"
 compose exec -T "$API_SERVICE" bin/rails db:migrate
+validate_critical_migrations
+
+log "Garantindo workout_blocks para exercicios existentes"
+compose exec -T "$API_SERVICE" bin/rails blocks:backfill_single_blocks
+compose exec -T "$API_SERVICE" bin/rails blocks:assert_no_null_workout_blocks
 
 log "Atualizando assets de exercicios"
 compose exec -T "$API_SERVICE" bin/rails exercises:import_local_images || true
 compose run --rm -v /home/easy/Easy-Health/external/free-exercise-db/exercises:/external/free-exercise-db/exercises "$API_SERVICE" bin/rails exercises:import_all || true
+
+log "Auditando catalogo gifdotreino em modo dry-run"
+compose exec -T "$API_SERVICE" bin/rails exercises:purge_non_gifdotreino DRY_RUN=1
 
 healthcheck
 

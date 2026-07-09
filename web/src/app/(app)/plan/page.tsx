@@ -8,6 +8,9 @@ import type { WorkoutPlan, WorkoutDayExercise } from "@/shared/types/workout";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import { SwapModal } from "../workout/today/swap-modal";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
+import { groupExercisesIntoBlocks } from "@/features/workout/workout-blocks";
+import { BlockGroupCard } from "@/shared/components/workout/block-group-card";
+import { AddBlockWizard, type CreatedBlockResult } from "@/features/workout/add-block-wizard";
 import { AITrainerBubble } from "@/shared/components/ai-trainer";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { PlanCreationFlow } from "@/features/plan-creation/plan-creation-flow";
@@ -376,6 +379,8 @@ function PlanDayDetailDrawer({
   const [addTypeFilter, setAddTypeFilter] = useState<"all" | "cardio">("all");
   const [cardioConfig, setCardioConfig] = useState<CardioAddConfig | null>(null);
   const addTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [blockWizardType, setBlockWizardType] = useState<"superset" | "circuit" | null>(null);
 
   useEffect(() => {
     api.get<{ day: import("@/shared/types/workout").WorkoutDay }>(`/api/v1/workout_days/${dayId}`)
@@ -479,6 +484,13 @@ function PlanDayDetailDrawer({
     }
   }
 
+  function handleBlockCreated(result: CreatedBlockResult) {
+    const newList = [...exercises, ...result.exercises];
+    setExercises(newList);
+    setBlockWizardType(null);
+    if (day) onChanged({ ...day, exercises: newList });
+  }
+
   async function handleMove(id: number, direction: "up" | "down") {
     if (!day) return;
     const idx = exercises.findIndex((e) => e.workout_day_exercise_id === id);
@@ -554,7 +566,11 @@ function PlanDayDetailDrawer({
           )}
 
           <div className="space-y-3">
-            {exercises.map((ex) => (
+            {groupExercisesIntoBlocks(exercises).map((group) => (
+              <BlockGroupCard
+                key={group.blockId ?? `single-${group.exercises[0].workout_day_exercise_id}`}
+                group={group}
+                renderExercise={(ex, _indexInBlock, isGrouped) => (
               <div key={ex.workout_day_exercise_id} className="rounded-xl border border-gray-100 bg-white p-3">
                 <div className="flex gap-3 mb-3">
                   {/* Exercise image */}
@@ -594,18 +610,20 @@ function PlanDayDetailDrawer({
                       </button>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1 justify-center">
-                    <button
-                      onClick={() => handleMove(ex.workout_day_exercise_id, "up")}
-                      disabled={exercises.indexOf(ex) === 0}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-                    >↑</button>
-                    <button
-                      onClick={() => handleMove(ex.workout_day_exercise_id, "down")}
-                      disabled={exercises.indexOf(ex) === exercises.length - 1}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-                    >↓</button>
-                  </div>
+                  {!isGrouped && (
+                    <div className="flex flex-col gap-1 justify-center">
+                      <button
+                        onClick={() => handleMove(ex.workout_day_exercise_id, "up")}
+                        disabled={exercises.indexOf(ex) === 0}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                      >↑</button>
+                      <button
+                        onClick={() => handleMove(ex.workout_day_exercise_id, "down")}
+                        disabled={exercises.indexOf(ex) === exercises.length - 1}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-xs text-gray-400 disabled:opacity-25 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                      >↓</button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Editable fields: sets/reps for strength, duration/intensity for cardio */}
@@ -672,16 +690,52 @@ function PlanDayDetailDrawer({
                   </div>
                 )}
               </div>
+                )}
+              />
             ))}
           </div>
 
           {!loading && (
-            <button
-              onClick={openAdd}
-              className="mt-4 w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-semibold text-primary-600 hover:bg-primary-50"
-            >
-              + Adicionar exercício
-            </button>
+            <div className="relative mt-4">
+              <button
+                onClick={() => setShowAddMenu((v) => !v)}
+                className="w-full rounded-xl border border-dashed border-primary-300 py-3 text-sm font-semibold text-primary-600 hover:bg-primary-50"
+              >
+                + Adicionar exercício
+              </button>
+              {showAddMenu && (
+                <div className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                  <button
+                    onClick={() => { setShowAddMenu(false); openAdd(); }}
+                    className="block w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Exercício simples
+                  </button>
+                  <button
+                    onClick={() => { setShowAddMenu(false); setBlockWizardType("superset"); }}
+                    className="block w-full border-t border-gray-100 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Criar superset
+                  </button>
+                  <button
+                    onClick={() => { setShowAddMenu(false); setBlockWizardType("circuit"); }}
+                    className="block w-full border-t border-gray-100 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Criar circuito
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {blockWizardType && day && (
+            <AddBlockWizard
+              dayId={dayId}
+              blockType={blockWizardType}
+              excludeExerciseIds={exercises.map((e) => e.exercise_id)}
+              onCreated={handleBlockCreated}
+              onClose={() => setBlockWizardType(null)}
+            />
           )}
 
           {!loading && exercises.length > 0 && (

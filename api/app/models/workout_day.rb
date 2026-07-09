@@ -2,6 +2,7 @@ class WorkoutDay < ApplicationRecord
   belongs_to :workout_plan
   has_many :workout_day_exercises, -> { order(:order_index) }, dependent: :destroy
   has_many :exercises, through: :workout_day_exercises
+  has_many :workout_blocks, -> { order(:position) }, dependent: :destroy
 
   DAY_NAMES = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday].freeze
 

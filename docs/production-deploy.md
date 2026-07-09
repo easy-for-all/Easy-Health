@@ -27,9 +27,12 @@ O GitHub Actions tambem deve chamar esse script na VPS.
 5. Atualiza o codigo para a ref desejada.
 6. Sobe/rebuilda containers sem apagar volumes.
 7. Roda migrations incrementais com `bin/rails db:migrate`.
-8. Roda healthcheck.
-9. Valida contagens minimas antes/depois do deploy.
-10. Roda `scripts/production/check_persistence.sh`.
+8. Valida migrations criticas em `schema_migrations`.
+9. Roda `bin/rails blocks:backfill_single_blocks` e `bin/rails blocks:assert_no_null_workout_blocks`.
+10. Audita o catalogo gifdotreino com `bin/rails exercises:purge_non_gifdotreino DRY_RUN=1`.
+11. Roda healthcheck.
+12. Valida contagens minimas antes/depois do deploy.
+13. Roda `scripts/production/check_persistence.sh`.
 
 ## Dados protegidos
 
@@ -83,3 +86,9 @@ DEPLOY BLOQUEADO: backup de producao falhou.
 ```
 
 Nao force o deploy. Verifique permissao em `/backups/easy-health`, espaco em disco, saude do container `db`, saude do container `api` e existencia de `/rails/storage`.
+
+## Operacoes de manutencao
+
+- Para validar blocos de treino, use `bin/rails blocks:backfill_single_blocks` seguido de `bin/rails blocks:assert_no_null_workout_blocks`.
+- Para auditar exercicios fora do catalogo gifdotreino, use `bin/rails exercises:purge_non_gifdotreino DRY_RUN=1`.
+- Evite `rails runner` longos com aspas aninhadas em producao; prefira rake tasks versionadas e revisaveis no repositorio.

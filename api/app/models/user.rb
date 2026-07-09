@@ -20,7 +20,6 @@ class User < ApplicationRecord
   has_many :ai_training_decision_logs, dependent: :destroy
   has_many :coach_insights, dependent: :destroy
   has_many :coach_recommendations, dependent: :destroy
-  has_many :ai_chat_messages, dependent: :destroy
   has_many :user_training_preferences, dependent: :destroy
   has_many :exercise_suggestion_logs, dependent: :destroy
   has_one_attached :avatar

@@ -8,9 +8,10 @@
 # to parsing the legacy exercise_logs JSONB (via ExerciseLogEntry) for users/
 # sessions that predate the backfill.
 class ExerciseHistoryService
-  def initialize(user:, exercise_id:)
+  def initialize(user:, exercise_id:, block_type: "single")
     @user = user
     @exercise_id = exercise_id.to_i
+    @block_type = block_type || "single"
   end
 
   def last_completed_session
@@ -56,11 +57,14 @@ class ExerciseHistoryService
   end
 
   def suggested_starting_weight
-    progression[:suggested_weight]
+    BlockLoadContextService.adjust(progression[:suggested_weight], @block_type)
   end
 
   def progression_reason
-    progression[:reason]
+    suffix = BlockLoadContextService.reason_suffix(@block_type)
+    return progression[:reason] unless suffix
+
+    [progression[:reason], suffix].compact.join(" — ")
   end
 
   # Normalized "what happened last time" summary, regardless of whether the

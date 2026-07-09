@@ -514,6 +514,9 @@ module Api
             :distance_km,
             :avg_speed_kmh,
             :avg_pace_per_km,
+            :block_type,
+            :block_id,
+            :position_in_block,
             weight_by_set: [],
             is_warmup_by_set: [],
             reps: []

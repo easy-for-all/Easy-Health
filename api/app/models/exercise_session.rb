@@ -5,6 +5,7 @@ class ExerciseSession < ApplicationRecord
   belongs_to :workout_session
   belongs_to :workout_day_exercise, optional: true
   belongs_to :exercise
+  belongs_to :workout_block, optional: true
   has_many :exercise_sets, -> { order(:set_number) }, dependent: :destroy
 
   validates :order_index, presence: true

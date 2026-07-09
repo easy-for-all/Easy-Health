@@ -55,6 +55,36 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
       expect(body["extra_block_data"]["modality"]).to eq("bike")
     end
 
+    it "persists block_type/block_id/position_in_block per exercise_logs entry (superset rounds)" do
+      post "/api/v1/workout_sessions", params: session_payload(
+        exercise_logs: [
+          {
+            workout_day_exercise_id: 1, exercise_id: 10, name: "Supino Inclinado",
+            weight_kg: 20, weight_by_set: [ 20, 20, 20 ], reps: [ 10, 10, 8 ], is_warmup_by_set: [ false, false, false ],
+            planned_sets: 3, sets: 3, rest_seconds: 0,
+            block_type: "superset", block_id: 7, position_in_block: 0
+          },
+          {
+            workout_day_exercise_id: 2, exercise_id: 11, name: "Remada Baixa",
+            weight_kg: 15, weight_by_set: [ 15, 15, 15 ], reps: [ 12, 12, 10 ], is_warmup_by_set: [ false, false, false ],
+            planned_sets: 3, sets: 3, rest_seconds: 90,
+            block_type: "superset", block_id: 7, position_in_block: 1
+          }
+        ]
+      )
+
+      expect(response).to have_http_status(:created)
+      body = JSON.parse(response.body)
+      a1 = body["exercise_logs"].find { |l| l["exercise_id"].to_i == 10 }
+      a2 = body["exercise_logs"].find { |l| l["exercise_id"].to_i == 11 }
+
+      expect(a1["block_type"]).to eq("superset")
+      expect(a1["block_id"].to_i).to eq(7)
+      expect(a1["position_in_block"].to_i).to eq(0)
+      expect(a1["weight_by_set"].size).to eq(3) # one entry per round, no series lost
+      expect(a2["position_in_block"].to_i).to eq(1)
+    end
+
     it "returns 422 for invalid completion_status" do
       post "/api/v1/workout_sessions", params: session_payload(completion_status: "invalid")
 

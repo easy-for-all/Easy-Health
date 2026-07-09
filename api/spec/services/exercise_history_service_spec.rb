@@ -73,6 +73,41 @@ RSpec.describe ExerciseHistoryService do
     end
   end
 
+  describe "#suggested_starting_weight / #progression_reason with block context" do
+    before do
+      user.workout_sessions.create!(
+        status: "completed", completed_at: 10.days.ago, duration_minutes: 40,
+        exercise_logs: [ { "exercise_id" => exercise.id, "weight_by_set" => [ 20.0 ], "reps" => [ 10 ], "planned_sets" => 1 } ]
+      )
+      user.workout_sessions.create!(
+        status: "completed", completed_at: 2.days.ago, duration_minutes: 40,
+        exercise_logs: [ { "exercise_id" => exercise.id, "weight_by_set" => [ 20.0 ], "reps" => [ 8 ], "planned_sets" => 1 } ]
+      )
+    end
+
+    it "suggests 100% of the last load when the exercise is a single block (default)" do
+      expect(service.suggested_starting_weight).to eq(20.0)
+      expect(service.progression_reason).not_to include("Ajustado para bloco")
+    end
+
+    it "discounts to ~90% when performed inside a superset" do
+      superset_service = described_class.new(user: user, exercise_id: exercise.id, block_type: "superset")
+      expect(superset_service.suggested_starting_weight).to eq(18.0)
+      expect(superset_service.progression_reason).to include("Ajustado para bloco: superset (~90% da carga isolada)")
+    end
+
+    it "discounts to ~77.5% when performed inside a circuit" do
+      circuit_service = described_class.new(user: user, exercise_id: exercise.id, block_type: "circuit")
+      expect(circuit_service.suggested_starting_weight).to eq(15.5)
+    end
+
+    it "never invents a weight when there is no history at all" do
+      other_exercise = Exercise.create!(name: "Outro Exercício", exercise_type: "musculacao", muscle_group: "back")
+      no_history_service = described_class.new(user: user, exercise_id: other_exercise.id, block_type: "superset")
+      expect(no_history_service.suggested_starting_weight).to be_nil
+    end
+  end
+
   describe "#personal_record" do
     it "picks the highest working weight and excludes warmup sets" do
       s1 = create_exercise_session(status: "completed", completed_at: 10.days.ago)

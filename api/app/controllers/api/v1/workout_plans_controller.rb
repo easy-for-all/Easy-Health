@@ -1,6 +1,8 @@
 module Api
   module V1
     class WorkoutPlansController < BaseController
+      include WorkoutBlockSerialization
+
       before_action :require_active_access!, only: [:regenerate]
       before_action(only: [:regenerate]) { check_rate_limit!(:generate_workout) }
 
@@ -227,7 +229,7 @@ module Api
       end
 
       def serialize_day_with_exercises(day)
-        wdes = day.workout_day_exercises.includes(:exercise).to_a
+        wdes = day.workout_day_exercises.includes(:exercise, :workout_block).to_a
         exercise_ids   = wdes.map { |wde| wde.exercise.id }
         last_performed = exercise_last_performed(current_user, exercise_ids)
         favorite_ids   = current_user.user_favorite_exercises
@@ -244,7 +246,11 @@ module Api
           invalid_workout_reason: day.invalid_workout_reason,
           last_completed_at: last_completed_at_by_day([day.id])[day.id],
           exercises: wdes.map do |wde|
-            history = ExerciseHistoryService.new(user: current_user, exercise_id: wde.exercise.id)
+            history = ExerciseHistoryService.new(
+              user: current_user,
+              exercise_id: wde.exercise.id,
+              block_type: wde.workout_block&.block_type
+            )
 
             {
               workout_day_exercise_id: wde.id,
@@ -271,7 +277,8 @@ module Api
               last_completed_at: history.last_completed_at,
               last_weight_kg: history.last_used_weight,
               suggested_weight_kg: history.suggested_starting_weight,
-              progression_reason: history.progression_reason
+              progression_reason: history.progression_reason,
+              **block_fields_for(wde)
             }
           end
         }
