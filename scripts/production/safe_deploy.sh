@@ -128,6 +128,10 @@ copy_exercise_images
 log "Rebuild e subida dos containers sem apagar volumes"
 compose up -d --build
 
+log "Limpando cache de build do Docker (evita esgotar disco em deploys futuros)"
+docker builder prune -af || true
+docker image prune -af || true
+
 log "Aguardando API e banco"
 sleep 15
 compose exec -T "$DB_SERVICE" sh -lc "pg_isready -U '$DB_USER' -d '$DB_NAME'" >/dev/null
