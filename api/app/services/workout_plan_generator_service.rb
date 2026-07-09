@@ -270,6 +270,8 @@ class WorkoutPlanGeneratorService
             idx_exercise += 1
           end
         else
+          day_picks = []
+
           day_tmpl[:muscle_groups].each do |group|
             break if idx_exercise >= day_exercise_limit
 
@@ -302,14 +304,13 @@ class WorkoutPlanGeneratorService
 
             picked.each do |ex|
               params = exercise_training_params(ex)
-              day.workout_day_exercises.create!(
-                exercise: ex, sets: params[:sets], reps: params[:reps],
-                rest_seconds: params[:rest_seconds], order_index: idx_exercise
-              )
+              day_picks << { exercise: ex, sets: params[:sets], reps: params[:reps], rest_seconds: params[:rest_seconds] }
               @exercises_used_this_week << ex.id
               idx_exercise += 1
             end
           end
+
+          create_day_exercises_with_blocks(day, day_picks)
         end
       end
 
@@ -414,6 +415,48 @@ class WorkoutPlanGeneratorService
 
     role = WorkoutIntelligence::ExerciseRoleClassifier.role_for(exercise)
     WorkoutIntelligence::GoalTrainingProfile.for(goal: @goal, fitness_level: @fitness_level, role: role)
+  end
+
+  # Groups a day's already-selected exercises into composite blocks
+  # (superset/circuit) when WorkoutIntelligence::BlockPlanner's deterministic
+  # rules call for it, then persists blocks + exercises. Exercises left
+  # ungrouped fall back to today's plain per-exercise create!, which still
+  # wraps each one in its own "single" WorkoutBlock via
+  # WorkoutDayExercise#ensure_single_block!.
+  def create_day_exercises_with_blocks(day, picks)
+    return if picks.empty?
+
+    block_plan = WorkoutIntelligence::BlockPlanner.new(
+      picks: picks, fitness_level: @fitness_level, goal: @goal, day_exercise_limit: day_exercise_limit
+    ).call
+
+    order_index = 0
+
+    block_plan.groups.each do |group_plan|
+      block = day.workout_blocks.create!(
+        block_type: group_plan.block_type,
+        position: order_index,
+        rounds: group_plan.rounds,
+        rest_between_rounds_seconds: group_plan.rest_between_rounds_seconds,
+        label: group_plan.rationale
+      )
+
+      group_plan.members.each_with_index do |m, position_in_block|
+        day.workout_day_exercises.create!(
+          exercise: m[:exercise], sets: group_plan.rounds, reps: m[:reps], rest_seconds: m[:rest_seconds],
+          order_index: order_index, workout_block: block, position_in_block: position_in_block
+        )
+        order_index += 1
+      end
+    end
+
+    block_plan.leftovers.each do |m|
+      day.workout_day_exercises.create!(
+        exercise: m[:exercise], sets: m[:sets], reps: m[:reps], rest_seconds: m[:rest_seconds],
+        order_index: order_index
+      )
+      order_index += 1
+    end
   end
 
   def strategy_frequency

@@ -14,6 +14,8 @@ module WorkoutIntelligence
     MAX_EXERCISES_PER_DAY = AiWorkout::SafetyValidator::MAX_EXERCISES_PER_DAY
     LIMITATION_TAG_MAP     = AiWorkout::SafetyValidator::LIMITATION_TAG_MAP
     VOLUME_WARNING_RATIO   = 0.5
+    MAX_CIRCUIT_SIZE_NON_ADVANCED = 4
+    MIN_BLOCK_SIZE = { "superset" => 2, "bi_set" => 2, "tri_set" => 3, "circuit" => 3 }.freeze
 
     def initialize(plan:, health_profile:, fitness_level:, goal:, weekly_volume_targets:, candidate_scope:, decision_source:)
       @plan = plan
@@ -37,6 +39,7 @@ module WorkoutIntelligence
       check_duplicates_within_day!
       check_session_volume!
       check_weekly_volume!
+      check_composite_block_safety!
 
       build_result
     end
@@ -104,7 +107,7 @@ module WorkoutIntelligence
         if exercises.size > MAX_EXERCISES_PER_DAY
           exercises.last(exercises.size - MAX_EXERCISES_PER_DAY).each do |wde|
             @auto_fixes << { code: :trimmed_excess_exercise, exercise: wde.exercise.name, day: day.name }
-            wde.destroy
+            safely_destroy!(wde)
           end
         end
 
@@ -148,7 +151,7 @@ module WorkoutIntelligence
         wde.update!(exercise: substitute)
       else
         @auto_fixes << { code: :removed_unresolved_exercise, exercise: wde.exercise.name, reason: reason, day: day.name }
-        wde.destroy
+        safely_destroy!(wde)
       end
     end
 
@@ -156,6 +159,86 @@ module WorkoutIntelligence
       @plan.workout_days.each do |day|
         day.workout_day_exercises.reload.each { |wde| yield wde }
       end
+    end
+
+    # Bloqueia combinações de bloco perigosas (item 11): dois exercícios de
+    # alta complexidade/risco juntos fora do nível advanced, circuito grande
+    # demais para o nível, ou dois+ exercícios compostos num bloco quando o
+    # objetivo é força. Auto-fix = dissolve o bloco inteiro em blocos single
+    # (os exercícios continuam no plano, só deixam de ser feitos juntos).
+    def check_composite_block_safety!
+      @plan.workout_days.each do |day|
+        day.workout_blocks.where(block_type: WorkoutBlock::MULTI_EXERCISE_TYPES).each do |block|
+          exercises = block.workout_day_exercises.includes(:exercise).map(&:exercise)
+          reason = composite_block_violation_reason(block.block_type, exercises)
+          next unless reason
+
+          dissolve_block!(block)
+          @auto_fixes << { code: :dissolved_unsafe_block, block_type: block.block_type, reason: reason, day: day.name }
+        end
+      end
+    end
+
+    def composite_block_violation_reason(block_type, exercises)
+      return "too_many_high_risk_exercises_together" if too_many_high_risk_together?(exercises)
+
+      if block_type == "circuit" && @fitness_level != "advanced" && exercises.size > MAX_CIRCUIT_SIZE_NON_ADVANCED
+        return "circuit_too_large_for_level"
+      end
+
+      if strength_goal? && exercises.count { |ex| WorkoutIntelligence::ExerciseRoleClassifier.role_for(ex) == :compound } >= 2
+        return "multiple_compound_exercises_in_strength_block"
+      end
+
+      nil
+    end
+
+    def too_many_high_risk_together?(exercises)
+      return false if @fitness_level == "advanced"
+
+      exercises.count { |ex| high_risk_exercise?(ex) } >= 2
+    end
+
+    def high_risk_exercise?(exercise)
+      classification = TechnicalLevelPolicy.classification_for(exercise)
+      classification[:technical_complexity] == "high" || classification[:risk_level] == "high"
+    end
+
+    def strength_goal?
+      WorkoutIntelligence::GoalTrainingProfile.normalize_goal(@goal) == "strength"
+    end
+
+    # Ungroups every exercise in a composite block into its own "single"
+    # block. workout_block_id is NOT NULL, so each exercise is moved straight
+    # to its new single block in one update - it must never pass through a
+    # transient nil (unlike WorkoutDayExercise#ensure_single_block!, which
+    # only runs before_create, when the row doesn't exist in the DB yet).
+    def dissolve_block!(block)
+      day = block.workout_day
+      block.workout_day_exercises.each do |wde|
+        next_position = day.workout_blocks.maximum(:position).to_i + 1
+        single = day.workout_blocks.create!(block_type: "single", position: next_position, rounds: 1)
+        wde.update_columns(workout_block_id: single.id, position_in_block: 0)
+      end
+      block.destroy
+    end
+
+    # Destroying one exercise of a multi-exercise block can leave the block
+    # below its type's minimum size (e.g. a 3-exercise circuit trimmed to 2).
+    # When that would happen, the whole block is dissolved into singles first
+    # so no WorkoutBlock ever ends up structurally invalid.
+    def safely_destroy!(wde)
+      if wde.in_multi_exercise_block? && would_break_block?(wde)
+        dissolve_block!(wde.workout_block)
+        wde.reload
+      end
+      wde.destroy
+    end
+
+    def would_break_block?(wde)
+      block = wde.workout_block
+      min_size = MIN_BLOCK_SIZE.fetch(block.block_type, 2)
+      block.workout_day_exercises.count - 1 < min_size
     end
   end
 end

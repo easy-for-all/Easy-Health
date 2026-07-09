@@ -151,7 +151,10 @@ module Api
           pct_users_with_insights:  total_users > 0 ? ((defined?(CoachInsight) ? CoachInsight.distinct.count(:user_id) : 0).to_f / total_users * 100).round(1) : 0,
 
           # Onboarding Analytics
-          onboarding_analytics: onboarding_analytics
+          onboarding_analytics: onboarding_analytics,
+
+          # Composite training block usage
+          block_usage_metrics: BlockUsageMetricsService.new.call
         }
       end
 

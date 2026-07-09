@@ -2446,7 +2446,7 @@ function DoneScreen({
     const maxReached = lastStartedIndex ?? exercises.length - 1;
     let plannedSets = 0;
     let completedSets = 0;
-    const skipped: Array<{ exercise_id: number; name: string; planned_sets: number; muscle_group: string | null }> = [];
+    const skipped: Array<{ exercise_id: number; name: string; planned_sets: number; muscle_group: string | null; block_type: string; block_id: number | null }> = [];
 
     exercises.forEach((ex, idx) => {
       const state = runtimeFor(runtime, ex);
@@ -2459,7 +2459,7 @@ function DoneScreen({
           ? (state.elapsed_seconds ?? 0) > 0
           : (state.duration_minutes ?? 0) > 0;
         if (hasData) completedSets += 1;
-        else if (idx > maxReached) skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: 1, muscle_group: ex.muscle_group });
+        else if (idx > maxReached) skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: 1, muscle_group: ex.muscle_group, block_type: ex.block_type ?? "single", block_id: ex.block_id ?? null });
         return;
       }
 
@@ -2467,14 +2467,14 @@ function DoneScreen({
       plannedSets += ps;
 
       if (idx > maxReached) {
-        skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: ps, muscle_group: ex.muscle_group });
+        skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: ps, muscle_group: ex.muscle_group, block_type: ex.block_type ?? "single", block_id: ex.block_id ?? null });
         return;
       }
 
       const doneCount = state.reps_by_set.filter((r, i) => r > 0 || Number(state.weight_by_set[i]) > 0).length;
       completedSets += Math.min(doneCount, ps);
       if (doneCount === 0) {
-        skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: ps, muscle_group: ex.muscle_group });
+        skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: ps, muscle_group: ex.muscle_group, block_type: ex.block_type ?? "single", block_id: ex.block_id ?? null });
       }
     });
 

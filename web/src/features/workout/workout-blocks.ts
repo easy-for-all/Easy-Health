@@ -13,6 +13,11 @@ export interface WorkoutBlockGroup {
   blockLabel: string;
   rounds: number;
   restBetweenRoundsSeconds: number | null;
+  // Short explanation set by WorkoutIntelligence::BlockPlanner when this
+  // block was created automatically by the generator (e.g. "Superset para
+  // otimizar hipertrofia: ..."). Null for single blocks and for blocks
+  // created manually via the add-block wizard.
+  rationale: string | null;
   exercises: WorkoutDayExercise[]; // already ordered by position_in_block
 }
 
@@ -68,6 +73,7 @@ export function groupExercisesIntoBlocks(exercises: WorkoutDayExercise[]): Worko
         blockLabel,
         rounds: exercise.block_rounds ?? 1,
         restBetweenRoundsSeconds: exercise.block_rest_between_rounds_seconds ?? null,
+        rationale: exercise.block_label ?? null,
         exercises: [],
       });
     }
