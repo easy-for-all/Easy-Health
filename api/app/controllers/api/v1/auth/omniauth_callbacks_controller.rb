@@ -37,17 +37,16 @@ module Api
             return
           end
 
-          sign_in(user)
-          set_auth_indicator_cookie
           new_user = user.previously_new_record? || (user.created_at > 5.minutes.ago && user.health_profile.nil?)
           Rails.logger.info("[GoogleOAuthCallback] email=#{user.email} new_user=#{new_user}")
 
           if mobile
-            token = SecureRandom.urlsafe_base64(32)
-            Rails.cache.write("mobile_auth:#{token}", { user_id: user.id, new_user: new_user }, expires_in: 5.minutes)
-            Rails.logger.info("[GoogleOAuthCallback] mobile flow, redirecting with token")
-            redirect_to "easyhealth://auth-callback?token=#{token}", allow_other_host: true
+            code = MobileAuthCode.issue_for!(user: user, platform: "android")
+            Rails.logger.info("[GoogleOAuthCallback] mobile flow, redirecting with one-time code")
+            redirect_to "#{FRONTEND}/mobile-auth/callback?code=#{code}&platform=android", allow_other_host: true
           else
+            sign_in(user)
+            set_auth_indicator_cookie
             redirect_to "#{FRONTEND}#{new_user ? '/onboarding' : '/dashboard'}", allow_other_host: true
           end
         rescue User::BlockedEmailError

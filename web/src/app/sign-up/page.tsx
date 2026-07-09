@@ -8,6 +8,7 @@ import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
 import { trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
 import { Capacitor } from "@capacitor/core";
+import { GOOGLE_AUTH_ANDROID_URL, GOOGLE_AUTH_WEB_URL } from "@/shared/lib/mobileAuth";
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -52,6 +53,7 @@ export default function SignUpPage() {
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
   const submittingRef = useRef(false);
 
@@ -60,9 +62,15 @@ export default function SignUpPage() {
   async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
     if (!Capacitor.isNativePlatform()) return;
     e.preventDefault();
-    const { Browser } = await import("@capacitor/browser");
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2_mobile`;
-    await Browser.open({ url });
+    setError("");
+    setGoogleLoading(true);
+    try {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: GOOGLE_AUTH_ANDROID_URL });
+    } catch {
+      setGoogleLoading(false);
+      setError("Não conseguimos abrir o login com Google. Tente novamente.");
+    }
   }
 
   useEffect(() => {
@@ -157,8 +165,9 @@ export default function SignUpPage() {
 
         {/* Google OAuth */}
         <a
-          href={`${process.env.NEXT_PUBLIC_API_URL}/users/auth/google_oauth2`}
+          href={GOOGLE_AUTH_WEB_URL}
           onClick={handleGoogleAuth}
+          aria-busy={googleLoading}
           className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-700 bg-slate-900 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
           <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -167,7 +176,7 @@ export default function SignUpPage() {
             <path d="M10.956 28.504A14.51 14.51 0 0 1 10.2 24c0-1.568.264-3.088.756-4.504v-6.216H3.048A23.98 23.98 0 0 0 .48 24c0 3.876.924 7.536 2.568 10.72l7.908-6.216z" fill="#FBBC05"/>
             <path d="M24.48 9.548c3.54 0 6.72 1.216 9.22 3.604l6.908-6.908C36.384 2.4 30.948 0 24.48 0 15.156 0 6.996 5.364 3.048 13.28l7.908 6.216c1.908-5.704 7.236-9.948 13.524-9.948z" fill="#EA4335"/>
           </svg>
-          Continuar com Google
+          {googleLoading ? "Entrando com Google..." : "Continuar com Google"}
         </a>
 
         <div className="flex items-center gap-3">
