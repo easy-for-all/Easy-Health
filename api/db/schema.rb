@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_09_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -293,14 +293,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
     t.integer "planned_sets"
     t.decimal "planned_weight_kg", precision: 6, scale: 2
     t.integer "rest_seconds"
+    t.integer "round_number", default: 1, null: false
     t.datetime "started_at", null: false
     t.string "status", default: "in_progress", null: false
     t.integer "target_seconds"
     t.datetime "updated_at", null: false
+    t.bigint "workout_block_id"
     t.bigint "workout_day_exercise_id"
     t.bigint "workout_session_id", null: false
     t.index ["exercise_id", "status"], name: "index_exercise_sessions_on_exercise_id_and_status"
     t.index ["exercise_id"], name: "index_exercise_sessions_on_exercise_id"
+    t.index ["workout_block_id"], name: "index_exercise_sessions_on_workout_block_id"
     t.index ["workout_day_exercise_id"], name: "index_exercise_sessions_on_workout_day_exercise_id"
     t.index ["workout_session_id"], name: "index_exercise_sessions_on_workout_session_id"
   end
@@ -334,6 +337,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
   end
 
   create_table "exercises", force: :cascade do |t|
+    t.string "calisthenics_skill"
+    t.boolean "compound"
     t.datetime "created_at", null: false
     t.text "description"
     t.string "difficulty", default: "intermediate"
@@ -344,17 +349,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
     t.boolean "home_compatible", default: false, null: false
     t.string "image_url"
     t.text "instructions"
+    t.string "movement_pattern"
     t.string "muscle_group"
     t.string "name"
     t.string "name_en"
+    t.text "objective_tags", default: [], null: false, array: true
+    t.bigint "regression_exercise_id"
+    t.boolean "requires_barbell_skill", default: false, null: false
+    t.boolean "requires_bodyweight_strength", default: false, null: false
+    t.string "risk_level"
     t.text "safety_tags", default: [], null: false, array: true
     t.text "setup_guide"
     t.string "source_dataset"
+    t.text "style_tags", default: [], null: false, array: true
+    t.string "technical_complexity"
+    t.boolean "unilateral", default: false, null: false
     t.datetime "updated_at", null: false
     t.string "video_url"
+    t.index ["calisthenics_skill"], name: "index_exercises_on_calisthenics_skill"
     t.index ["difficulty_level"], name: "index_exercises_on_difficulty_level"
     t.index ["equipment_type"], name: "index_exercises_on_equipment_type"
     t.index ["exercise_type"], name: "index_exercises_on_exercise_type"
+    t.index ["regression_exercise_id"], name: "index_exercises_on_regression_exercise_id"
+    t.index ["risk_level"], name: "index_exercises_on_risk_level"
+    t.index ["technical_complexity"], name: "index_exercises_on_technical_complexity"
   end
 
   create_table "feature_flags", force: :cascade do |t|
@@ -740,19 +758,44 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
     t.index ["unsubscribed_at"], name: "index_users_on_unsubscribed_at"
   end
 
+  create_table "workout_blocks", force: :cascade do |t|
+    t.string "block_type", default: "single", null: false
+    t.datetime "created_at", null: false
+    t.string "label"
+    t.integer "position", null: false
+    t.integer "rest_between_rounds_seconds"
+    t.integer "rounds", default: 1, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "workout_day_id", null: false
+    t.index ["workout_day_id", "position"], name: "index_workout_blocks_on_workout_day_id_and_position"
+    t.index ["workout_day_id"], name: "index_workout_blocks_on_workout_day_id"
+  end
+
   create_table "workout_day_exercises", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_minutes"
     t.bigint "exercise_id", null: false
     t.string "intensity"
+    t.boolean "is_optional", default: false, null: false
+    t.text "notes"
     t.integer "order_index"
     t.decimal "planned_weight", precision: 6, scale: 2
+    t.integer "position_in_block"
     t.integer "reps"
     t.integer "rest_seconds"
+    t.integer "rir"
+    t.decimal "rpe", precision: 3, scale: 1
     t.integer "sets"
+    t.bigint "substitution_group_id"
+    t.integer "target_duration_seconds"
+    t.integer "target_reps_max"
+    t.integer "target_reps_min"
+    t.string "tempo"
     t.datetime "updated_at", null: false
+    t.bigint "workout_block_id"
     t.bigint "workout_day_id", null: false
     t.index ["exercise_id"], name: "index_workout_day_exercises_on_exercise_id"
+    t.index ["workout_block_id"], name: "index_workout_day_exercises_on_workout_block_id"
     t.index ["workout_day_id"], name: "index_workout_day_exercises_on_workout_day_id"
   end
 
@@ -878,10 +921,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
   add_foreign_key "equipment_identifications", "exercises"
   add_foreign_key "equipment_identifications", "users"
   add_foreign_key "exercise_sessions", "exercises"
+  add_foreign_key "exercise_sessions", "workout_blocks"
   add_foreign_key "exercise_sessions", "workout_day_exercises"
   add_foreign_key "exercise_sessions", "workout_sessions"
   add_foreign_key "exercise_sets", "exercise_sessions"
   add_foreign_key "exercise_suggestion_logs", "users"
+  add_foreign_key "exercises", "exercises", column: "regression_exercise_id"
   add_foreign_key "fitness_profiles", "users"
   add_foreign_key "health_data_points", "user_media", column: "user_media_id"
   add_foreign_key "health_data_points", "users"
@@ -904,7 +949,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_130000) do
   add_foreign_key "user_media", "users"
   add_foreign_key "user_segments", "users"
   add_foreign_key "user_training_preferences", "users"
+  add_foreign_key "workout_blocks", "workout_days"
   add_foreign_key "workout_day_exercises", "exercises"
+  add_foreign_key "workout_day_exercises", "workout_blocks"
   add_foreign_key "workout_day_exercises", "workout_days"
   add_foreign_key "workout_days", "workout_plans"
   add_foreign_key "workout_plan_generations", "users"
