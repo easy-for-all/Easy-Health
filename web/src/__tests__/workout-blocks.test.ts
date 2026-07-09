@@ -78,6 +78,25 @@ describe("groupExercisesIntoBlocks", () => {
     expect(groups[0].exercises.map((e) => e.name)).toEqual(["Supino Inclinado", "Remada Baixa"]);
   });
 
+  it("exposes the generator's rationale (block_label) as the group's rationale", () => {
+    const exercises = [
+      makeExercise({
+        workout_day_exercise_id: 1, block_type: "superset", block_id: 7, position_in_block: 0,
+        block_label: "Superset para intensificar o estímulo de hipertrofia: Supino + Remada.",
+      }),
+      makeExercise({ workout_day_exercise_id: 2, block_type: "superset", block_id: 7, position_in_block: 1 }),
+    ];
+
+    const groups = groupExercisesIntoBlocks(exercises);
+
+    expect(groups[0].rationale).toBe("Superset para intensificar o estímulo de hipertrofia: Supino + Remada.");
+  });
+
+  it("has a null rationale for blocks without a generator label (manual/single blocks)", () => {
+    const groups = groupExercisesIntoBlocks([ makeExercise({ workout_day_exercise_id: 1, block_type: "single", block_id: 1 }) ]);
+    expect(groups[0].rationale).toBeNull();
+  });
+
   it("numbers repeated block types across the day (Superset 1, Superset 2)", () => {
     const exercises = [
       makeExercise({ workout_day_exercise_id: 1, block_type: "superset", block_id: 1, position_in_block: 0, order_index: 0 }),

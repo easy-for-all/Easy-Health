@@ -335,6 +335,151 @@ RSpec.describe WorkoutPlanGeneratorService do
     expect(WorkoutDayExercise.find(bad_wde.id).exercise_id).to eq(regression.id)
   end
 
+  def build_validator_for(plan, health_profile, fitness_level:, goal:)
+    candidate_scope = WorkoutIntelligence::ExerciseCandidateScope.new(
+      training_location: "gym", fitness_level: fitness_level, strategy: nil,
+      available_equipment: [], fav_exercise_ids: []
+    )
+    volume_planner = WorkoutIntelligence::WeeklyVolumePlanner.new(
+      goal: goal, fitness_level: fitness_level, days_per_week: 1, session_duration_minutes: 45,
+      groups_in_template: %w[back]
+    )
+    volume_planner.call
+
+    WorkoutIntelligence::PlanValidator.new(
+      plan: plan, health_profile: health_profile, fitness_level: fitness_level, goal: goal,
+      weekly_volume_targets: volume_planner.targets, candidate_scope: candidate_scope, decision_source: "rule_based"
+    )
+  end
+
+  it "item 11: dissolves a composite block combining two high-risk exercises for a non-advanced level" do
+    user = create(:user)
+    health_profile = create(:health_profile, user: user, fitness_level: "intermediate", goal: "gain_muscle",
+      training_days_per_week: 1, training_location: "full_gym", session_duration_minutes: 45)
+
+    risky_a = create_browseable_exercise("Risco A", "back", technical_complexity: "high", risk_level: "high")
+    risky_b = create_browseable_exercise("Risco B", "back", technical_complexity: "high", risk_level: "high")
+
+    plan = WorkoutPlan.create!(user: user, active: true)
+    day = plan.workout_days.create!(day_of_week: 1, name: "Full Body", position: 1)
+    block = day.workout_blocks.create!(block_type: "superset", position: 0, rounds: 3)
+    day.workout_day_exercises.create!(exercise: risky_a, sets: 3, reps: 8, rest_seconds: 0, order_index: 0, workout_block: block, position_in_block: 0)
+    day.workout_day_exercises.create!(exercise: risky_b, sets: 3, reps: 8, rest_seconds: 0, order_index: 1, workout_block: block, position_in_block: 1)
+
+    result = build_validator_for(plan, health_profile, fitness_level: "intermediate", goal: "gain_muscle").call
+
+    expect(result.auto_fixes).to include(hash_including(code: :dissolved_unsafe_block, reason: "too_many_high_risk_exercises_together"))
+    expect(WorkoutDayExercise.where(exercise: [ risky_a, risky_b ]).pluck(:workout_block_id).uniq.size).to eq(2)
+    expect(WorkoutBlock.find_by(id: block.id)).to be_nil
+  end
+
+  it "item 11: dissolves a circuit larger than allowed for a non-advanced level" do
+    user = create(:user)
+    health_profile = create(:health_profile, user: user, fitness_level: "intermediate", goal: "conditioning",
+      training_days_per_week: 1, training_location: "full_gym", session_duration_minutes: 45)
+
+    exercises = (1..5).map { |i| create_browseable_exercise("Circuito #{i}", "core") }
+
+    plan = WorkoutPlan.create!(user: user, active: true)
+    day = plan.workout_days.create!(day_of_week: 1, name: "Full Body", position: 1)
+    block = day.workout_blocks.create!(block_type: "circuit", position: 0, rounds: 3)
+    exercises.each_with_index do |ex, idx|
+      day.workout_day_exercises.create!(exercise: ex, sets: 1, reps: 12, rest_seconds: 0, order_index: idx, workout_block: block, position_in_block: idx)
+    end
+
+    result = build_validator_for(plan, health_profile, fitness_level: "intermediate", goal: "conditioning").call
+
+    expect(result.auto_fixes).to include(hash_including(code: :dissolved_unsafe_block, reason: "circuit_too_large_for_level"))
+    expect(WorkoutBlock.find_by(id: block.id)).to be_nil
+  end
+
+  it "item 11: dissolves a block combining 2+ compound exercises under a strength goal" do
+    user = create(:user)
+    health_profile = create(:health_profile, user: user, fitness_level: "advanced", goal: "strength",
+      training_days_per_week: 1, training_location: "full_gym", session_duration_minutes: 45)
+
+    squat = create_browseable_exercise("Agachamento Livre", "legs", compound: true, movement_pattern: "squat")
+    deadlift = create_browseable_exercise("Levantamento Terra", "back", compound: true, movement_pattern: "hinge")
+
+    plan = WorkoutPlan.create!(user: user, active: true)
+    day = plan.workout_days.create!(day_of_week: 1, name: "Full Body", position: 1)
+    block = day.workout_blocks.create!(block_type: "superset", position: 0, rounds: 3)
+    day.workout_day_exercises.create!(exercise: squat, sets: 3, reps: 5, rest_seconds: 0, order_index: 0, workout_block: block, position_in_block: 0)
+    day.workout_day_exercises.create!(exercise: deadlift, sets: 3, reps: 5, rest_seconds: 0, order_index: 1, workout_block: block, position_in_block: 1)
+
+    result = build_validator_for(plan, health_profile, fitness_level: "advanced", goal: "strength").call
+
+    expect(result.auto_fixes).to include(hash_including(code: :dissolved_unsafe_block, reason: "multiple_compound_exercises_in_strength_block"))
+    expect(WorkoutBlock.find_by(id: block.id)).to be_nil
+  end
+
+  it "item 11: trimming excess exercises never leaves a composite block below its minimum size" do
+    user = create(:user)
+    health_profile = create(:health_profile, user: user, fitness_level: "advanced", goal: "conditioning",
+      training_days_per_week: 1, training_location: "full_gym", session_duration_minutes: 60)
+
+    plan = WorkoutPlan.create!(user: user, active: true)
+    day = plan.workout_days.create!(day_of_week: 1, name: "Full Body", position: 1)
+
+    # (max_singles - 1) leading singles, then a 3-exercise circuit, then 2
+    # trailing singles. The trim removes the last 4 by order_index - the 2
+    # trailing singles plus the last 2 circuit members - leaving exactly 1
+    # circuit member alive. Naively destroying those 2 would leave that
+    # survivor stuck in a "circuit" block with only 1 member; it must instead
+    # come out the other side as its own "single" block.
+    max_singles = WorkoutIntelligence::PlanValidator::MAX_EXERCISES_PER_DAY
+    idx = 0
+    (max_singles - 1).times do
+      ex = create_browseable_exercise("Single #{idx}", "back")
+      day.workout_day_exercises.create!(exercise: ex, sets: 3, reps: 10, rest_seconds: 60, order_index: idx)
+      idx += 1
+    end
+
+    circuit_exercises = (1..3).map { |i| create_browseable_exercise("Circuito Trim #{i}", "core") }
+    block = day.workout_blocks.create!(block_type: "circuit", position: idx, rounds: 3)
+    circuit_exercises.each_with_index do |ex, position_in_block|
+      day.workout_day_exercises.create!(
+        exercise: ex, sets: 1, reps: 12, rest_seconds: 0,
+        order_index: idx, workout_block: block, position_in_block: position_in_block
+      )
+      idx += 1
+    end
+
+    2.times do
+      ex = create_browseable_exercise("Trailing #{idx}", "back")
+      day.workout_day_exercises.create!(exercise: ex, sets: 3, reps: 10, rest_seconds: 60, order_index: idx)
+      idx += 1
+    end
+
+    build_validator_for(plan, health_profile, fitness_level: "advanced", goal: "conditioning").call
+
+    survivor = WorkoutDayExercise.find_by(exercise_id: circuit_exercises.first.id) # circuit_start_index, first to survive the trim
+    expect(survivor).to be_present
+    expect(survivor.workout_block.block_type).to eq("single")
+    expect(WorkoutDayExercise.where(exercise: circuit_exercises[1..])).to be_empty
+    expect(WorkoutBlock.find_by(id: block.id)).to be_nil
+  end
+
+  it "groups exercises into a composite block when the profile favors it (item 10 - gerador cria blocos)" do
+    user = create(:user)
+    create(
+      :health_profile, user: user, fitness_level: "intermediate", goal: "gain_muscle",
+      training_days_per_week: 1, training_location: "home", available_equipment: [ "bodyweight" ],
+      session_duration_minutes: 25
+    )
+    create_browseable_exercise("Flexão segura", "chest")
+    create_browseable_exercise("Remada segura", "back")
+
+    allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+    plan = described_class.new(user, modality: "musculacao", split_type: "full_body").call
+
+    blocks = plan.workout_days.flat_map(&:workout_blocks)
+    composite = blocks.select { |b| WorkoutBlock::MULTI_EXERCISE_TYPES.include?(b.block_type) }
+    expect(composite).not_to be_empty
+    expect(composite.first.label).to be_present
+    expect(composite.first.workout_day_exercises.count).to eq(2)
+  end
+
   def create_browseable_exercise(name, muscle_group, safety_tags: [], technical_complexity: nil,
                                   risk_level: nil, calisthenics_skill: nil, compound: nil,
                                   movement_pattern: nil, style_tags: [], objective_tags: [],

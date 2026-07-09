@@ -35,6 +35,11 @@ export interface WorkoutDayExercise {
   position_in_block?: number;
   block_rounds?: number;
   block_rest_between_rounds_seconds?: number | null;
+  // Short rationale set by WorkoutIntelligence::BlockPlanner when the block
+  // was created automatically by the generator (e.g. "Superset para
+  // otimizar hipertrofia: ..."). Absent for single blocks and for blocks
+  // created manually via the add-block wizard.
+  block_label?: string | null;
   target_reps_min?: number | null;
   target_reps_max?: number | null;
   tempo?: string | null;

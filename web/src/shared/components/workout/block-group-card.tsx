@@ -40,9 +40,14 @@ export function BlockGroupCard({
 
   return (
     <div className="space-y-3 rounded-xl border-2 border-primary-200 bg-primary-50/40 p-3 dark:border-primary-900 dark:bg-primary-950/20">
-      <p className="text-sm font-bold text-primary-700 dark:text-primary-300">
-        {group.blockLabel} · {group.rounds} {group.rounds === 1 ? "rodada" : "rodadas"}
-      </p>
+      <div>
+        <p className="text-sm font-bold text-primary-700 dark:text-primary-300">
+          {group.blockLabel} · {group.rounds} {group.rounds === 1 ? "rodada" : "rodadas"}
+        </p>
+        {group.rationale && (
+          <p className="mt-0.5 text-xs text-primary-500 dark:text-primary-400">{group.rationale}</p>
+        )}
+      </div>
 
       <div className="space-y-3">
         {group.exercises.map((exercise, idx) => (

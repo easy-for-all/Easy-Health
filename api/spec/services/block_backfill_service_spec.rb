@@ -1,43 +1,30 @@
 require "rails_helper"
 
+# NOTE: workout_day_exercises.workout_block_id is NOT NULL at the DB level
+# (enforced by the EnforceWorkoutBlockIdNotNull migration, which now performs
+# its own backfill inline before adding the constraint). That means a row
+# with a null workout_block_id can no longer exist in this schema version -
+# every WorkoutDayExercise is guaranteed to already have a block via
+# WorkoutDayExercise#ensure_single_block!. BlockBackfillService is kept as a
+# harmless, idempotent no-op for any data that somehow still needs it (e.g.
+# restoring from an old backup taken before the migration), rather than
+# deleted, since it's cheap to keep and the migration itself documents the
+# same intent.
 RSpec.describe BlockBackfillService do
   let(:user) { create(:user) }
   let(:plan) { user.workout_plans.create!(active: true) }
   let(:day) { plan.workout_days.create!(name: "Treino A", day_of_week: 1) }
 
-  def create_legacy_exercise(name, order_index)
-    exercise = Exercise.create!(name: name, exercise_type: "musculacao", muscle_group: "chest")
-    wde = day.workout_day_exercises.create!(exercise: exercise, sets: 3, reps: 10, rest_seconds: 60, order_index: order_index)
-    # Simulate data that existed before this feature shipped: no block yet,
-    # bypassing the after_create callback the same way a pre-migration row would.
-    wde.update_columns(workout_block_id: nil, position_in_block: nil)
-    wde
-  end
+  it "is a no-op when every WorkoutDayExercise already has a block" do
+    exercise = Exercise.create!(name: "Supino", exercise_type: "musculacao", muscle_group: "chest")
+    wde = day.workout_day_exercises.create!(exercise: exercise, sets: 3, reps: 10, rest_seconds: 60, order_index: 0)
+    original_block_id = wde.workout_block_id
 
-  it "wraps each pre-existing WorkoutDayExercise in its own single block, preserving order" do
-    third = create_legacy_exercise("Exercicio C", 2)
-    first = create_legacy_exercise("Exercicio A", 0)
-    second = create_legacy_exercise("Exercicio B", 1)
-
-    described_class.new.call
-
-    [first, second, third].each(&:reload)
-    expect(first.workout_block.block_type).to eq("single")
-    expect(second.workout_block.block_type).to eq("single")
-    expect(third.workout_block.block_type).to eq("single")
-
-    expect(first.workout_block_id).not_to eq(second.workout_block_id)
-    expect(second.workout_block_id).not_to eq(third.workout_block_id)
-
-    expect(first.workout_block.position).to be < second.workout_block.position
-    expect(second.workout_block.position).to be < third.workout_block.position
-  end
-
-  it "is idempotent when run twice" do
-    create_legacy_exercise("Exercicio A", 0)
-
-    described_class.new.call
     expect { described_class.new.call }.not_to change { WorkoutBlock.count }
-    expect(WorkoutDayExercise.where(workout_block_id: nil).count).to eq(0)
+    expect(wde.reload.workout_block_id).to eq(original_block_id)
+  end
+
+  it "does not raise when there is nothing to backfill" do
+    expect { described_class.new.call }.not_to raise_error
   end
 end

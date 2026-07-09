@@ -496,7 +496,7 @@ module Api
           :extra_block_type,
           :extra_started_at,
           :extra_completed_at,
-          skipped_exercises: [:exercise_id, :name, :planned_sets, :muscle_group],
+          skipped_exercises: [:exercise_id, :name, :planned_sets, :muscle_group, :block_type, :block_id],
           extra_block_data: {},
           exercise_logs: [
             :workout_day_exercise_id,

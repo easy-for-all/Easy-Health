@@ -14,6 +14,7 @@ module WorkoutBlockSerialization
       position_in_block: wde.position_in_block || 0,
       block_rounds: block&.rounds || 1,
       block_rest_between_rounds_seconds: block&.rest_between_rounds_seconds,
+      block_label: block&.label,
       target_reps_min: wde.target_reps_min,
       target_reps_max: wde.target_reps_max,
       tempo: wde.tempo,
