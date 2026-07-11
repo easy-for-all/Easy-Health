@@ -23,6 +23,7 @@
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
     "@capacitor/push-notifications": "^8.1.1",
+    "@capgo/capacitor-social-login": "^8.3.36",
     "@swc/helpers": "^0.5.21",
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.40.0",

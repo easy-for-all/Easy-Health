@@ -3,7 +3,6 @@ import { type NextRequest, NextResponse } from "next/server";
 const PUBLIC_PATHS = [
   "/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password",
   "/reset-password", "/billing/success", "/billing/cancel", "/pricing",
-  "/mobile-auth/callback",
   "/ia-para-treino", "/treino-personalizado", "/emagrecimento",
   "/treino-em-casa", "/analise-de-exames", "/exercicios", "/sobre", "/precos",
 ];

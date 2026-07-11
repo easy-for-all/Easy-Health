@@ -1,0 +1,53 @@
+require "rails_helper"
+
+RSpec.describe "Api::V1::Auth::GoogleNative", type: :request do
+  let(:claims) do
+    {
+      "aud" => "web-client-id",
+      "sub" => "google-sub-123",
+      "email" => "native@example.com",
+      "name" => "Native User",
+      "picture" => nil
+    }
+  end
+
+  describe "POST /api/v1/auth/google/native" do
+    it "creates and signs in a new user from a valid id token" do
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
+
+      expect do
+        post "/api/v1/auth/google/native", params: { id_token: "valid.jwt", platform: "android" }, as: :json
+      end.to change(User, :count).by(1)
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body["email"]).to eq("native@example.com")
+      expect(body["new_user"]).to be(true)
+
+      get "/api/v1/auth/me"
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "reuses an existing user matched by email" do
+      existing = create(:user, email: "native@example.com")
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
+
+      expect do
+        post "/api/v1/auth/google/native", params: { id_token: "valid.jwt", platform: "android" }, as: :json
+      end.not_to change(User, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["id"]).to eq(existing.id)
+    end
+
+    it "rejects an invalid id token with 401" do
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!)
+        .and_raise(Auth::GoogleIdTokenVerifier::VerificationError, "bad aud")
+
+      post "/api/v1/auth/google/native", params: { id_token: "bad.jwt", platform: "android" }, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body["error_code"]).to eq("invalid_token")
+    end
+  end
+end
