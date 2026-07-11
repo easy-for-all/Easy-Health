@@ -28,6 +28,7 @@ Rails.application.routes.draw do
         get    "me",               to: "sessions#show"
         delete "account",          to: "registrations#destroy"
         post   "mobile/exchange",  to: "mobile_callbacks#exchange"
+        post   "google/native",    to: "google_native#create"
 
         scope "/password" do
           post "forgot", to: "passwords#forgot"

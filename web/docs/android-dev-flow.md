@@ -163,58 +163,71 @@ Secrets necessários no repositório GitHub:
 
 ---
 
-## Depurar login Google
+## Login Google (nativo)
 
-### Checklist OAuth Android
+Desde jul/2026 o app Android usa **Google Sign-In nativo** (Credential Manager)
+via `@capgo/capacitor-social-login`. **Não há browser, redirect nem tela
+intermediária** — a única tela é o seletor de conta nativo do Google (a
+obrigatória). O fluxo antigo por Custom Tab + App Link (`/mobile-auth/callback`)
+foi removido.
 
-| Item | Valor atual | Onde verificar/configurar |
+### Fluxo
+
+```
+Botão "Continuar com Google"
+  → seletor de conta NATIVO do Android (SocialLogin.login)
+  → idToken
+  → POST /api/v1/auth/google/native  (backend valida o idToken via JWKS do Google)
+  → sign_in + cookie de sessão
+  → /dashboard (ou /onboarding se novo)
+```
+
+Web permanece no OmniAuth server-side (`/auth/google/web`), intocado.
+
+- Frontend: [`src/shared/lib/googleAuth.ts`](../src/shared/lib/googleAuth.ts) — `nativeGoogleSignIn`, `postGoogleNative`, `authLog`.
+- Backend: `Api::V1::Auth::GoogleNativeController` + `Auth::GoogleIdTokenVerifier`.
+
+### Configuração necessária (Google Cloud + build)
+
+| Item | Valor | Onde configurar |
 |---|---|---|
 | `applicationId` | `com.EasyHealth.myapp` | `android-config/app-build.gradle` |
-| SHA-1 (debug) | obter abaixo | Google Cloud Console → OAuth Credentials |
-| SHA-256 (debug) | obter abaixo | Google Cloud Console → OAuth Credentials |
-| SHA-1 (release) | da keystore em `~/.android/` | Google Cloud Console → OAuth Credentials |
-| Android Client ID | — | Google Cloud Console → APIs & Services |
-| Web Client ID | usado no frontend | `.env` do frontend |
-| Redirect URI | `com.EasyHealth.myapp:/oauth2redirect` | Google Cloud Console |
-| Intent filter | `<intent-filter>` no AndroidManifest | gerado pelo Capacitor / plugin OAuth |
+| Web OAuth Client ID | = `GOOGLE_CLIENT_ID` do backend | usado como `serverClientId`/`aud` |
+| `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` | o Web Client ID acima | build de produção do Next (Dockerfile/compose) e `web/.env.local` para dev |
+| Android OAuth Client (debug) | package + **SHA-1 da debug keystore** | Google Cloud Console → Credentials |
+| Android OAuth Client (release) | package + **SHA-1 do Play App Signing** | Google Cloud Console → Credentials |
 
-### Obter SHA-1 e SHA-256 da keystore
+> São **dois** OAuth clients Android (mesmo package, SHA-1 diferentes): um para
+> testar com APK debug local, outro para o app assinado pelo Google Play.
+> Sem o client Android correto, o `SocialLogin.login` falha (o código do erro
+> aparece nos logs `[GoogleAuth]` e na tela).
 
-**Keystore de release:**
+### Obter os SHA-1
 
-```bash
-keytool -list -v \
-  -keystore ~/.android/easyhealth-release.keystore \
-  -alias easyhealth \
-  -storepass SUA_SENHA
-```
-
-**Keystore de debug** (gerada automaticamente pelo Android Studio):
+**Debug keystore** (teste local):
 
 ```bash
-keytool -list -v \
-  -keystore ~/.android/debug.keystore \
-  -alias androiddebugkey \
-  -storepass android
+keytool -list -v -keystore ~/.android/debug.keystore \
+  -alias androiddebugkey -storepass android | grep SHA1
 ```
 
-Copie os valores `SHA1` e `SHA256` e adicione como impressões digitais no
-Google Cloud Console → **APIs & Services → Credentials → seu Android OAuth client**.
+**Play App Signing** (produção/track interno): Play Console → *Test and release*
+→ **App integrity** → *App signing key certificate* → copie o `SHA-1`.
 
-### Verificar intent filters
+### Diagnóstico / logs
 
-No arquivo gerado `android/app/src/main/AndroidManifest.xml`, verifique se existe:
+O fluxo é instrumentado ponta a ponta. Para achar onde quebra:
 
-```xml
-<intent-filter>
-  <action android:name="android.intent.action.VIEW" />
-  <category android:name="android.intent.category.DEFAULT" />
-  <category android:name="android.intent.category.BROWSABLE" />
-  <data android:scheme="com.EasyHealth.myapp" />
-</intent-filter>
+```bash
+# Console JS da WebView (logs [GoogleAuth]) — melhor visão do lado frontend:
+#   chrome://inspect/#devices  → inspect (requer APK debug)
+
+adb logcat -s Capacitor                 # eventos do Capacitor/plugin
+adb logcat | grep -iE "google|credential|signin"   # erros nativos do sign-in
 ```
 
-Isso é necessário para o deep link de retorno do OAuth.
+- Frontend `[GoogleAuth]`: `sign_in_start` → `plugin_initialized` → `sign_in_result` (tokenLength) → `exchange_start` → `exchange_success`/`*_error` (com código).
+- Backend `[GoogleNative]` (logs do Rails): `received` → `verified aud/sub/email` → `signed in` ou `verification failed: <motivo>`.
 
 ---
 

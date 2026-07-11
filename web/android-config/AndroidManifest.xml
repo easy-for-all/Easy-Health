@@ -22,28 +22,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Android App Link for Google OAuth callback. -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="easyhealth.art"
-                    android:pathPrefix="/mobile-auth/callback" />
-            </intent-filter>
-
-            <!-- Custom scheme fallback when App Links are not verified yet. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="easyhealth"
-                    android:host="auth"
-                    android:pathPrefix="/callback" />
-            </intent-filter>
-
         </activity>
 
         <provider

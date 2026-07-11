@@ -9,7 +9,13 @@ import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
 import { trackCheckoutStarted } from "@/shared/lib/analytics";
 import { Capacitor } from "@capacitor/core";
-import { GOOGLE_AUTH_ANDROID_URL, GOOGLE_AUTH_WEB_URL } from "@/shared/lib/mobileAuth";
+import {
+  GOOGLE_AUTH_WEB_URL,
+  GoogleAuthError,
+  authLog,
+  nativeGoogleSignIn,
+  postGoogleNative,
+} from "@/shared/lib/googleAuth";
 
 const OAUTH_ERROR_MESSAGE_KEYS: Record<string, string> = {
   account_deleted: "accountDeletedError",
@@ -32,16 +38,21 @@ export default function LoginPage() {
   const submittingRef = useRef(false);
 
   async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
+    // Web keeps the server-side OmniAuth flow (follows the <a href>).
     if (!Capacitor.isNativePlatform()) return;
+    // Android uses native Google Sign-In (no browser, no intermediate screen).
     e.preventDefault();
     setError("");
     setGoogleLoading(true);
     try {
-      const { Browser } = await import("@capacitor/browser");
-      await Browser.open({ url: GOOGLE_AUTH_ANDROID_URL });
-    } catch {
+      const idToken = await nativeGoogleSignIn();
+      const { redirectPath } = await postGoogleNative(idToken);
+      window.location.replace(redirectPath);
+    } catch (err) {
       setGoogleLoading(false);
-      setError("Não conseguimos abrir o login com Google. Tente novamente.");
+      const code = err instanceof GoogleAuthError ? err.code : "unknown";
+      authLog("login_failed", { code });
+      setError(`Não foi possível entrar com Google. (${code})`);
     }
   }
 
