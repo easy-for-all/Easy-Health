@@ -184,7 +184,16 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center px-4 py-5" style={{ background: "#0a0f1e" }}>
+    <div
+      className="flex min-h-svh items-center justify-center"
+      style={{
+        background: "#0a0f1e",
+        paddingTop: "max(20px, var(--safe-area-top))",
+        paddingRight: "max(16px, var(--safe-area-right))",
+        paddingBottom: "max(20px, var(--safe-area-bottom))",
+        paddingLeft: "max(16px, var(--safe-area-left))",
+      }}
+    >
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="mb-5 flex flex-col items-center gap-2">

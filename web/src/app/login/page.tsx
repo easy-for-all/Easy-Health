@@ -99,7 +99,11 @@ export default function LoginPage() {
     <div
       style={{
         display: "flex", minHeight: "100svh", alignItems: "center",
-        justifyContent: "center", padding: "24px 20px",
+        justifyContent: "center",
+        paddingTop: "max(24px, var(--safe-area-top))",
+        paddingRight: "max(20px, var(--safe-area-right))",
+        paddingBottom: "max(24px, var(--safe-area-bottom))",
+        paddingLeft: "max(20px, var(--safe-area-left))",
         background: "var(--bg)",
         backgroundImage: "radial-gradient(130% 90% at 50% -20%, oklch(0.30 0.06 258 / .35), transparent 60%)",
       }}

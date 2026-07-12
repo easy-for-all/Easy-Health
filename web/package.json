@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "android:setup": "bash scripts/setup-android.sh",
-    "android:sync": "cp android-config/app-build.gradle android/app/build.gradle && cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml && cp -R android-config/res/. android/app/src/main/res/ && npx cap sync android",
+    "android:sync": "cp android-config/app-build.gradle android/app/build.gradle && cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml && cp android-config/MainActivity.java android/app/src/main/java/com/EasyHealth/myapp/MainActivity.java && cp -R android-config/res/. android/app/src/main/res/ && npx cap sync android",
     "android:open": "bash scripts/open-android.sh",
     "android:build:debug": "npm run android:sync && cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon",
     "android:build:aab": "bash build-android-local.sh",

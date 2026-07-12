@@ -32,6 +32,7 @@ cp android-config/build.gradle android/build.gradle
 cp android-config/app-build.gradle android/app/build.gradle
 cp android-config/gradle.properties android/gradle.properties
 cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+cp android-config/MainActivity.java android/app/src/main/java/com/EasyHealth/myapp/MainActivity.java
 mkdir -p android/gradle/wrapper
 cp android-config/gradle/wrapper/gradle-wrapper.properties \
    android/gradle/wrapper/gradle-wrapper.properties

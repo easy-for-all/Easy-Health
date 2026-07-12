@@ -127,6 +127,7 @@ export function ExerciseInfoModal({
     >
       <div
         className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-5 pb-10 pt-5 dark:bg-gray-900"
+        style={{ paddingBottom: "max(40px, var(--safe-area-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />

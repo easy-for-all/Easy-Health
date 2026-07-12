@@ -1376,7 +1376,7 @@ function WorkoutTodayContent() {
       </AnimatePresence>
       </div>
 
-      <div className="px-4" style={{ paddingTop: 8, paddingBottom: "max(24px, env(safe-area-inset-bottom))", flexShrink: 0 }}>
+      <div className="px-4" style={{ paddingTop: 8, paddingBottom: "max(24px, var(--safe-area-bottom))", flexShrink: 0 }}>
       {isTimed(exercise) ? (
         <PressButton
           onClick={() => {
@@ -1450,7 +1450,11 @@ function WorkoutTodayContent() {
 
     {showSwapChoice && (
       <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={() => setShowSwapChoice(false)}>
-        <div className="w-full rounded-t-2xl bg-slate-900 px-4 pb-10 pt-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="w-full rounded-t-2xl bg-slate-900 px-4 pt-4"
+          style={{ paddingBottom: "max(40px, var(--safe-area-bottom))" }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="mb-3 mx-auto h-1 w-10 rounded-full bg-slate-700" />
           <h3 className="mb-4 text-base font-bold text-white">Como quer trocar?</h3>
 
@@ -1482,7 +1486,8 @@ function WorkoutTodayContent() {
     {showReorderModal && (
       <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => setShowReorderModal(false)}>
         <div
-          className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-slate-900 px-4 pb-8 pt-4"
+          className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-slate-900 px-4 pt-4"
+          style={{ paddingBottom: "max(32px, var(--safe-area-bottom))" }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-slate-700" />
@@ -1583,6 +1588,7 @@ function WorkoutTodayContent() {
         >
           <div
             className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-slate-900"
+            style={{ paddingBottom: "var(--safe-area-bottom)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex-shrink-0 px-4 pt-3 pb-2">
@@ -2137,7 +2143,11 @@ function OverviewScreen({
         );
         return (
           <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={() => { setAddMode(false); setAddSearch(""); }}>
-            <div className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-slate-900"
+              style={{ paddingBottom: "var(--safe-area-bottom)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Drag handle */}
               <div className="flex-shrink-0 px-4 pt-3 pb-2">
                 <div className="mb-3 mx-auto h-1 w-10 rounded-full bg-slate-700" />

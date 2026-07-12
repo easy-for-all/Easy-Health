@@ -9,7 +9,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <WorkoutSessionProvider>
       <CoachProvider>
-        <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", paddingBottom: "var(--nav-pb)" }}>
+        <div
+          style={{
+            minHeight: "100svh",
+            background: "var(--bg)",
+            color: "var(--text)",
+            paddingTop: "var(--safe-area-top)",
+            paddingRight: "var(--safe-area-right)",
+            paddingBottom: "var(--nav-pb)",
+            paddingLeft: "var(--safe-area-left)",
+          }}
+        >
           <TrialBanner />
           <PageTransition>{children}</PageTransition>
           <BottomNav />

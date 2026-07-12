@@ -135,7 +135,7 @@ export default function FavoritesPage() {
               style={{
                 position: "absolute", bottom: 0, left: 0, right: 0,
                 background: "var(--bg-2)", borderRadius: "var(--r-xl) var(--r-xl) 0 0",
-                padding: "20px 20px 48px",
+                padding: "20px 20px max(48px, var(--safe-area-bottom))",
               }}
               onClick={(e) => e.stopPropagation()}
               initial={{ y: "100%" }}

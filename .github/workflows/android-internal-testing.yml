@@ -53,6 +53,7 @@ jobs:
           # Push notifications: manifest (POST_NOTIFICATIONS + FCM meta-data) and
           # notification icon/color resources.
           cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp android-config/MainActivity.java android/app/src/main/java/com/EasyHealth/myapp/MainActivity.java
           mkdir -p android/app/src/main/res/drawable android/app/src/main/res/values
           cp android-config/res/drawable/ic_stat_notification.xml android/app/src/main/res/drawable/ic_stat_notification.xml
           cp android-config/res/values/notification.xml android/app/src/main/res/values/notification.xml
@@ -100,6 +101,19 @@ jobs:
             app/build/intermediates/merged_manifests/release \
             app/build/intermediates/packaged_manifests/release 2>/dev/null; then
             echo "Advertising ID permission found in release manifest"
+            exit 1
+          fi
+
+      - name: Verify androidbrowserhelper is absent
+        working-directory: web/android
+        run: |
+          ./gradlew :app:dependencyInsight \
+            --dependency androidbrowserhelper \
+            --configuration releaseRuntimeClasspath \
+            --no-daemon > /tmp/androidbrowserhelper-insight.txt
+          cat /tmp/androidbrowserhelper-insight.txt
+          if ! grep -q "No dependencies matching given input were found" /tmp/androidbrowserhelper-insight.txt; then
+            echo "androidbrowserhelper still present in releaseRuntimeClasspath"
             exit 1
           fi
 

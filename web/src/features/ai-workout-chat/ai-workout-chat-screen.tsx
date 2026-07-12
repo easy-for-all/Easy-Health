@@ -45,7 +45,7 @@ export function AiWorkoutChatScreen({ onConfirmed, onBack }: Props) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 40, display: "flex", flexDirection: "column", background: AI_CHAT_COLORS.bg }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "max(14px, env(safe-area-inset-top, 14px)) 16px 12px", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "max(14px, var(--safe-area-top)) max(16px, var(--safe-area-right)) 12px max(16px, var(--safe-area-left))", flexShrink: 0 }}>
         <button
           onClick={onBack}
           aria-label="Voltar"

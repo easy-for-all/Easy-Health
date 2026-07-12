@@ -21,7 +21,7 @@
   background: var(--surface-2);
   box-shadow: 0 -20px 60px -10px rgba(0, 0, 0, .35);
   overflow: hidden;
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-bottom: var(--safe-area-bottom);
 }
 
 .bsheet-grabber {
