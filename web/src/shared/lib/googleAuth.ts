@@ -32,6 +32,32 @@ export function authLog(step: string, data?: Record<string, unknown>) {
   console.log(`[GoogleAuth] ${step}`, payload);
 }
 
+/**
+ * Safely extracts everything useful from an unknown thrown value without ever
+ * touching sensitive fields (idToken/accessToken/clientId/email are never read).
+ * Used so a plugin rejection is never flattened into an opaque code again.
+ */
+export function serializeAuthError(err: unknown): Record<string, unknown> {
+  if (err === null || (typeof err !== "object" && !(err instanceof Error))) {
+    return { value: String(err) };
+  }
+
+  const obj = err as Record<string, unknown>;
+  const cause = obj?.cause;
+
+  return {
+    type: typeof err,
+    constructorName: (err as { constructor?: { name?: string } })?.constructor?.name,
+    name: obj?.name,
+    message: obj?.message,
+    code: obj?.code,
+    stack: obj?.stack,
+    cause: cause == null ? undefined : typeof cause === "string" ? cause : String(cause),
+    keys: Object.keys(obj ?? {}),
+    ownPropertyNames: Object.getOwnPropertyNames(err),
+  };
+}
+
 let initialized = false;
 
 async function ensureInitialized() {
@@ -86,14 +112,26 @@ export async function nativeGoogleSignIn(): Promise<string> {
   const { SocialLogin } = await import("@capgo/capacitor-social-login");
   let result;
   try {
+    // Do NOT pass custom `scopes` here: the native plugin rejects any custom
+    // scope array unless MainActivity implements ModifiedMainActivityForSocialLoginPlugin,
+    // and that reject carries no code so it surfaced as the opaque "plugin_login_failed".
+    // The base email/profile/openid scopes are always added by the plugin, and the
+    // id_token (all we need) does not depend on extra scopes.
     ({ result } = await SocialLogin.login({
       provider: "google",
-      options: { scopes: ["email", "profile"] },
+      options: {},
     }));
   } catch (err) {
-    const code = (err as { code?: string })?.code ?? "plugin_login_failed";
-    authLog("sign_in_plugin_error", { code, message: (err as Error)?.message });
-    throw new GoogleAuthError((err as Error)?.message ?? "Falha no login Google", code);
+    // Preserve the real plugin code when present; only fall back to the generic
+    // code when none is available. Full safe diagnostics go to the console.
+    const details = serializeAuthError(err);
+    const rawCode = details.code;
+    const code = typeof rawCode === "string" && rawCode.length > 0 ? rawCode : "plugin_login_failed";
+    authLog("sign_in_plugin_error", details);
+    throw new GoogleAuthError(
+      typeof details.message === "string" ? details.message : "Falha no login Google",
+      code,
+    );
   }
 
   const idToken = "idToken" in result ? result.idToken : null;
