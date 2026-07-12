@@ -51,7 +51,11 @@ export default function LoginPage() {
     } catch (err) {
       setGoogleLoading(false);
       const code = err instanceof GoogleAuthError ? err.code : "unknown";
-      authLog("login_failed", { code });
+      authLog("login_failed", {
+        code,
+        name: (err as Error)?.name,
+        message: (err as Error)?.message,
+      });
       setError(`Não foi possível entrar com Google. (${code})`);
     }
   }
