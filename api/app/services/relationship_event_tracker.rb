@@ -65,6 +65,17 @@ class RelationshipEventTracker
     activation_first_workout_completed
     activation_reminder_2h_due
     activation_reminder_24h_due
+    push_scheduled
+    push_sent
+    push_failed
+    push_opened
+    push_deep_link_opened
+    workout_started_from_push
+    workout_completed_from_push
+    notification_disliked
+    notification_type_disabled
+    notification_time_changed
+    notification_skipped
   ].uniq.freeze
 
   SENSITIVE_KEY_PATTERN = /(password|token|secret|authorization|card|stripe|cpf|ssn|cvv|cvc|dsn|api_key|access_key)/i

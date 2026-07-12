@@ -137,6 +137,7 @@
     "loginError": "Erro ao fazer login",
     "accountDeletedError": "Esta conta foi excluída e não pode ser reativada. Crie uma nova conta com outro e-mail para continuar.",
     "oauthError": "Não foi possível entrar com o Google. Tente novamente.",
+    "consentRequiredError": "Para criar sua conta, faça o cadastro e aceite os Termos de Uso e a Política de Privacidade.",
     "noAccount": "Não tem conta?",
     "alreadyHaveAccount": "Já tem conta?",
     "name": "Nome",

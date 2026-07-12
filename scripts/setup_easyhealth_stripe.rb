@@ -144,7 +144,7 @@ puts <<~ENV
 
   # Stripe nova conta — obtenha a secret key no dashboard:
   # https://dashboard.stripe.com/apikeys → Secret key (Reveal)
-  STRIPE_SECRET_KEY=sk_live_51TjVZt...(obter no dashboard)
+  STRIPE_SECRET_KEY=sk_live_...(obter no dashboard)
 
 ENV
 

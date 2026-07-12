@@ -61,6 +61,10 @@ module Api
           )
         end
 
+        # Cancel any pending activation push and attribute the start if it came
+        # from an opened push (within the 2h window).
+        ActivationPushAttribution.on_workout_started(current_user, session)
+
         Rails.logger.info("[WorkoutSessionStart] user=#{current_user.id} session_id=#{session.id} workout_day_id=#{workout_day_id.inspect}")
         render json: { id: session.id, status: session.status }, status: :created
       end
@@ -325,6 +329,7 @@ module Api
       def finalize_completed_session!(session)
         mark_free_workout_used if !current_user.admin? && !current_user.paid_plan? && !current_user.free_workout_used?
         track_workout_session_event(session)
+        ActivationPushAttribution.on_workout_completed(current_user, session)
         FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_completed")
       end
 

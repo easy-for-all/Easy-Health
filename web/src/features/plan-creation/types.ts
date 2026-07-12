@@ -21,12 +21,13 @@ export type Modality = "musculacao" | "cardio" | "misto" | "funcional" | "ai_cho
 export type SplitType = "ai_choice" | "full_body" | "upper_lower" | "ab" | "abc" | "ppl" | "custom";
 export type CardioType = "corrida" | "caminhada" | "bicicleta" | "eliptico" | "escada" | "remo" | "hiit" | "natacao" | "ai_choice";
 export type CardioFormat = "continuo_leve" | "continuo_moderado" | "intervalado" | "hiit" | "progressivo" | "recuperacao" | "ai_choice";
+export type WorkoutPeriod = "morning" | "lunch" | "afternoon" | "evening" | "variable";
 
 export type StepId =
   | "create-start"
-  | "quick-goal" | "quick-profile" | "quick-place" | "quick-time" | "quick-limits"
+  | "quick-goal" | "quick-profile" | "quick-place" | "quick-time" | "quick-when" | "quick-limits"
   | "complete-goal" | "complete-profile" | "complete-method" | "complete-place"
-  | "complete-focus" | "complete-schedule" | "complete-care"
+  | "complete-focus" | "complete-schedule" | "complete-when" | "complete-care"
   | "generating" | "error";
 
 export interface WizardFormState {
@@ -52,6 +53,10 @@ export interface WizardFormState {
   cardio_type: CardioType;
   cardio_format: CardioFormat;
   custom_splits: { name: string; muscle_groups: string[] }[];
+  // When the user usually trains (activation push). Optional — the plan is never
+  // blocked by leaving these empty ("variable" / skip).
+  preferred_workout_period: WorkoutPeriod | "";
+  preferred_workout_time: string; // "HH:MM" or ""
 }
 
 export function buildInitialForm(): WizardFormState {
@@ -63,6 +68,7 @@ export function buildInitialForm(): WizardFormState {
     favorite_exercises: [], avoided_exercises: [], limitations: [],
     modality: "ai_choice", split_type: "ai_choice", cardio_type: "ai_choice", cardio_format: "ai_choice",
     custom_splits: [],
+    preferred_workout_period: "", preferred_workout_time: "",
   };
 }
 
@@ -92,5 +98,7 @@ export function hydrateFormFromProfile(profile: HealthProfile | null): WizardFor
     favorite_exercises: profile.favorite_exercises ?? [],
     avoided_exercises: profile.avoided_exercises ?? [],
     limitations: profile.limitations ?? [],
+    preferred_workout_period: profile.preferred_workout_period ?? "",
+    preferred_workout_time: profile.preferred_workout_time ?? "",
   };
 }

@@ -15,13 +15,13 @@ export interface FlowDefinition {
 // existe profile (onboarding de usuário novo); no replan o profile já tem esses dados.
 const BASE_FLOWS: Record<CreationMode, FlowDefinition> = {
   quick: {
-    steps: ["quick-goal", "quick-profile", "quick-place", "quick-time", "quick-limits"],
+    steps: ["quick-goal", "quick-profile", "quick-place", "quick-time", "quick-when", "quick-limits"],
     first: "quick-goal",
   },
   complete: {
     steps: [
       "complete-goal", "complete-profile", "complete-method", "complete-place",
-      "complete-focus", "complete-schedule", "complete-care",
+      "complete-focus", "complete-schedule", "complete-when", "complete-care",
     ],
     first: "complete-goal",
   },

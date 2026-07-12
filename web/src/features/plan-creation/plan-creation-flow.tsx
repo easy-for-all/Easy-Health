@@ -16,6 +16,7 @@ import { CompletePlace } from "./screens/complete/complete-place";
 import { CompleteFocus } from "./screens/complete/complete-focus";
 import { CompleteSchedule } from "./screens/complete/complete-schedule";
 import { CompleteCare } from "./screens/complete/complete-care";
+import { WhenStep } from "./screens/shared/when-step";
 import type { CreationMode, EntryMode } from "./types";
 
 export function PlanCreationFlow({
@@ -54,6 +55,7 @@ export function PlanCreationFlow({
       {wizard.phase === "form" && wizard.stepId === "quick-profile" && <QuickProfile wizard={wizard} />}
       {wizard.phase === "form" && wizard.stepId === "quick-place" && <QuickPlace wizard={wizard} />}
       {wizard.phase === "form" && wizard.stepId === "quick-time" && <QuickTime wizard={wizard} />}
+      {wizard.phase === "form" && wizard.stepId === "quick-when" && <WhenStep wizard={wizard} />}
       {wizard.phase === "form" && wizard.stepId === "quick-limits" && <QuickLimits wizard={wizard} onFinish={handleFinish} />}
 
       {wizard.phase === "form" && wizard.stepId === "complete-goal" && <QuickGoal wizard={wizard} />}
@@ -62,6 +64,7 @@ export function PlanCreationFlow({
       {wizard.phase === "form" && wizard.stepId === "complete-place" && <CompletePlace wizard={wizard} />}
       {wizard.phase === "form" && wizard.stepId === "complete-focus" && <CompleteFocus wizard={wizard} />}
       {wizard.phase === "form" && wizard.stepId === "complete-schedule" && <CompleteSchedule wizard={wizard} />}
+      {wizard.phase === "form" && wizard.stepId === "complete-when" && <WhenStep wizard={wizard} />}
       {wizard.phase === "form" && wizard.stepId === "complete-care" && <CompleteCare wizard={wizard} onFinish={handleFinish} />}
     </div>
   );

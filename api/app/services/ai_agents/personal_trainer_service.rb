@@ -8,6 +8,7 @@ module AiAgents
       raw = call_claude(prompt, :agent_personal_trainer)
       return { recommendations: [], message: "Não foi possível gerar análise agora. Tente novamente mais tarde." } if raw.blank?
 
+      log_agent_usage(:agent_personal_trainer)
       recommendations = parse_recommendations(raw)
       { recommendations: recommendations, analyzed_sessions: recent_sessions.size }
     end

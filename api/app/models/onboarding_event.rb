@@ -30,6 +30,10 @@ class OnboardingEvent < ApplicationRecord
     activation_start_clicked
     first_exercise_started
     first_exercise_completed
+    workout_time_step_viewed
+    workout_time_selected
+    workout_time_skipped
+    preferred_workout_time_changed
   ].freeze
 
   validates :event_name, presence: true, inclusion: { in: EVENT_NAMES }

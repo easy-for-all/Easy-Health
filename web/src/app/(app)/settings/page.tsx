@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { usePrivacySettings, usePublicProfile } from "@/features/privacy/use-privacy";
 import { useAuth } from "@/features/auth/auth-context";
 import { PrivacyToggle } from "@/shared/components/privacy-toggle";
+import { NotificationSettingsSection } from "@/features/notifications/notification-settings-section";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { ProfileVisibility } from "@/shared/types/user";
 
@@ -137,6 +138,9 @@ export default function SettingsPage() {
             />
           </div>
         </section>
+
+        {/* Notificações (push de ativação) */}
+        <NotificationSettingsSection />
 
         {/* Configurações do perfil público */}
         {settings.profile_visibility !== "private" && (

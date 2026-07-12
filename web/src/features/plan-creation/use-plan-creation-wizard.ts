@@ -19,6 +19,7 @@ const STEP_FIELDS: Partial<Record<StepId, (keyof WizardFormState)[]>> = {
   "quick-profile": ["age", "fitness_level", "gender", "height_cm", "weight_kg"],
   "quick-place": ["training_location"],
   "quick-time": ["session_duration_minutes", "training_days_per_week"],
+  "quick-when": ["preferred_workout_period", "preferred_workout_time"],
   "quick-limits": ["limitations"],
   "complete-goal": ["goal"],
   "complete-profile": ["age", "fitness_level", "gender", "height_cm", "weight_kg"],
@@ -26,6 +27,7 @@ const STEP_FIELDS: Partial<Record<StepId, (keyof WizardFormState)[]>> = {
   "complete-place": ["training_location", "available_equipment"],
   "complete-focus": ["preferred_body_focus", "preferred_training_styles"],
   "complete-schedule": ["session_duration_minutes", "training_days_per_week", "intensity_preference", "limitations"],
+  "complete-when": ["preferred_workout_period", "preferred_workout_time"],
   "complete-care": ["favorite_exercises", "avoided_exercises"],
 };
 

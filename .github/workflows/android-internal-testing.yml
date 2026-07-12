@@ -49,6 +49,12 @@ jobs:
         run: |
           cp android-config/app-build.gradle android/app/build.gradle
           cp android-config/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
+          # Push notifications: manifest (POST_NOTIFICATIONS + FCM meta-data) and
+          # notification icon/color resources.
+          cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          mkdir -p android/app/src/main/res/drawable android/app/src/main/res/values
+          cp android-config/res/drawable/ic_stat_notification.xml android/app/src/main/res/drawable/ic_stat_notification.xml
+          cp android-config/res/values/notification.xml android/app/src/main/res/values/notification.xml
 
       - name: Decode google-services.json
         env:

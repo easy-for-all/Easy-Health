@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_12_130004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -250,11 +250,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
   end
 
   create_table "device_tokens", force: :cascade do |t|
+    t.string "app_version"
     t.datetime "created_at", null: false
+    t.string "device_identifier"
+    t.boolean "enabled", default: true, null: false
+    t.datetime "invalidated_at"
+    t.string "invalidation_reason"
+    t.datetime "last_seen_at"
+    t.string "os_version"
+    t.string "permission_status"
     t.string "platform", default: "android", null: false
     t.string "token", null: false
+    t.datetime "token_refreshed_at"
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.index ["enabled"], name: "index_device_tokens_on_enabled"
+    t.index ["invalidated_at"], name: "index_device_tokens_on_invalidated_at"
     t.index ["token"], name: "index_device_tokens_on_token", unique: true
     t.index ["user_id", "platform"], name: "index_device_tokens_on_user_id_and_platform"
     t.index ["user_id"], name: "index_device_tokens_on_user_id"
@@ -461,6 +472,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
     t.string "modality", default: "ai_choice"
     t.text "preferred_body_focus", default: [], null: false, array: true
     t.text "preferred_training_styles", default: [], array: true
+    t.string "preferred_workout_period"
+    t.time "preferred_workout_time"
+    t.datetime "preferred_workout_time_updated_at"
     t.jsonb "profiling_prompts_answered", default: {}, null: false
     t.integer "session_duration_minutes"
     t.string "split_type", default: "ai_choice"
@@ -470,6 +484,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.decimal "weight_kg"
+    t.string "workout_time_source"
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
@@ -485,6 +500,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
     t.index ["platform", "expires_at"], name: "index_mobile_auth_codes_on_platform_and_expires_at"
     t.index ["user_id", "used_at"], name: "index_mobile_auth_codes_on_user_id_and_used_at"
     t.index ["user_id"], name: "index_mobile_auth_codes_on_user_id"
+  end
+
+  create_table "notification_deliveries", force: :cascade do |t|
+    t.string "cancel_reason"
+    t.datetime "canceled_at"
+    t.datetime "clicked_at"
+    t.datetime "converted_at"
+    t.datetime "created_at", null: false
+    t.datetime "delivered_at"
+    t.string "error_code"
+    t.string "idempotency_key"
+    t.string "notification_type", null: false
+    t.datetime "opened_at"
+    t.jsonb "payload_json", default: {}, null: false
+    t.string "provider_message_id"
+    t.bigint "push_device_id"
+    t.integer "retry_count", default: 0, null: false
+    t.datetime "scheduled_for"
+    t.datetime "sent_at"
+    t.string "status", default: "scheduled", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["idempotency_key"], name: "index_notification_deliveries_on_idempotency_key", unique: true, where: "(idempotency_key IS NOT NULL)"
+    t.index ["push_device_id"], name: "index_notification_deliveries_on_push_device_id"
+    t.index ["scheduled_for"], name: "index_notification_deliveries_on_scheduled_for"
+    t.index ["status"], name: "index_notification_deliveries_on_status"
+    t.index ["user_id", "notification_type"], name: "index_notification_deliveries_on_user_id_and_notification_type"
+    t.index ["user_id"], name: "index_notification_deliveries_on_user_id"
   end
 
   create_table "onboarding_events", force: :cascade do |t|
@@ -706,6 +749,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
     t.index ["user_id"], name: "index_user_media_on_user_id"
   end
 
+  create_table "user_notification_preferences", force: :cascade do |t|
+    t.datetime "activation_notifications_completed_at"
+    t.string "activation_push_variant"
+    t.datetime "activation_recovery_sent_at"
+    t.datetime "activation_reminder_sent_at"
+    t.datetime "created_at", null: false
+    t.string "disabled_reason"
+    t.integer "max_pushes_per_week", default: 2, null: false
+    t.datetime "notifications_disabled_at"
+    t.datetime "permission_granted_at"
+    t.datetime "permission_requested_at"
+    t.datetime "prepermission_answered_at"
+    t.boolean "push_enabled", default: false, null: false
+    t.string "timezone"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.boolean "workout_ready_enabled", default: false, null: false
+    t.boolean "workout_reminders_enabled", default: false, null: false
+    t.index ["user_id"], name: "index_user_notification_preferences_on_user_id", unique: true
+  end
+
   create_table "user_segments", force: :cascade do |t|
     t.boolean "active", default: true, null: false
     t.datetime "calculated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
@@ -739,6 +803,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
     t.boolean "admin", default: false, null: false
     t.datetime "anonymized_at"
     t.boolean "community_enabled", default: false, null: false
+    t.string "consent_source"
     t.datetime "created_at", null: false
     t.datetime "deletion_requested_at"
     t.string "email", default: "", null: false
@@ -750,6 +815,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
     t.boolean "marketing_consent", default: false, null: false
     t.string "name", default: "", null: false
     t.string "onboarding_flow"
+    t.datetime "privacy_policy_accepted_at"
+    t.string "privacy_policy_version"
     t.string "profile_visibility", default: "private", null: false
     t.string "provider"
     t.string "referral_code"
@@ -757,6 +824,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.string "reset_password_token_digest"
+    t.datetime "terms_accepted_at"
+    t.string "terms_version"
+    t.string "time_zone"
     t.datetime "trial_ends_at"
     t.datetime "trial_started_at"
     t.string "uid"
@@ -948,6 +1018,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
   add_foreign_key "mobile_auth_codes", "users"
+  add_foreign_key "notification_deliveries", "device_tokens", column: "push_device_id"
+  add_foreign_key "notification_deliveries", "users"
   add_foreign_key "onboarding_events", "users"
   add_foreign_key "personal_alerts", "users", column: "client_id"
   add_foreign_key "personal_alerts", "users", column: "personal_id"
@@ -964,6 +1036,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_09_170000) do
   add_foreign_key "user_favorite_exercises", "exercises"
   add_foreign_key "user_favorite_exercises", "users"
   add_foreign_key "user_media", "users"
+  add_foreign_key "user_notification_preferences", "users"
   add_foreign_key "user_segments", "users"
   add_foreign_key "user_training_preferences", "users"
   add_foreign_key "workout_blocks", "workout_days"

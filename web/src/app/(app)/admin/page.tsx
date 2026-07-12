@@ -6,6 +6,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { OnboardingAnalyticsSection } from "./onboarding-analytics";
+import { PushActivationSection } from "./push/push-activation-section";
 import type { OnboardingAnalytics } from "./onboarding-analytics/types";
 
 type AdminStats = {
@@ -43,6 +44,31 @@ type AdminStats = {
   total_workout_sessions: number;
   total_uploads: number;
   onboarding_analytics?: OnboardingAnalytics;
+  push_activation?: PushActivationStats;
+};
+
+type PushActivationStats = {
+  enabled: boolean;
+  experiment_enabled: boolean;
+  firebase_configured: boolean;
+  permission: {
+    opt_in_reminders: number;
+    push_enabled: number;
+    permission_granted: number;
+    opted_out: number;
+    active_devices: number;
+  };
+  funnel: {
+    scheduled: number;
+    sent: number;
+    opened: number;
+    converted: number;
+    workout_started_from_push: number;
+    workout_completed_from_push: number;
+  };
+  experiment: { treatment: number; control: number };
+  preferences: { reasons_disabled: Record<string, number>; dislike_reasons: Record<string, number> };
+  performance: { sent: number; failed: number; skipped: number; tokens_invalidated: number; retries: number };
 };
 
 type AdminUser = {
@@ -299,6 +325,8 @@ export default function AdminPage() {
         </section>
 
         <OnboardingAnalyticsSection />
+
+        <PushActivationSection stats={stats?.push_activation} />
 
         {/* Users table */}
         <section>

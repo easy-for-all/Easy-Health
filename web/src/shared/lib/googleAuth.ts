@@ -12,6 +12,29 @@ export interface GoogleNativeUser extends User {
   new_user?: boolean;
 }
 
+// Consent carried into the social sign-up flows. Only sent from the sign-up
+// screen (after its consent gate); the login screen omits it, so the backend
+// refuses to CREATE a new account there but still lets existing users in.
+export interface GoogleConsent {
+  termsAccepted: boolean;
+  privacyAccepted: boolean;
+  marketingConsent?: boolean;
+}
+
+/**
+ * Builds the server-side OmniAuth URL, forwarding consent as query params so it
+ * survives the OAuth redirect round-trip (read back from `omniauth.params`).
+ */
+export function googleAuthWebUrl(consent?: GoogleConsent): string {
+  if (!consent) return GOOGLE_AUTH_WEB_URL;
+  const params = new URLSearchParams({
+    terms_accepted: consent.termsAccepted ? "1" : "0",
+    privacy_accepted: consent.privacyAccepted ? "1" : "0",
+    marketing_consent: consent.marketingConsent ? "1" : "0",
+  });
+  return `${GOOGLE_AUTH_WEB_URL}?${params.toString()}`;
+}
+
 export class GoogleAuthError extends Error {
   code: string;
 
@@ -143,12 +166,19 @@ export async function nativeGoogleSignIn(): Promise<string> {
   return idToken;
 }
 
-export async function postGoogleNative(idToken: string) {
+export async function postGoogleNative(idToken: string, consent?: GoogleConsent) {
   authLog("exchange_start");
   try {
     const user = await api.post<GoogleNativeUser>("/api/v1/auth/google/native", {
       id_token: idToken,
       platform: "android",
+      ...(consent
+        ? {
+            terms_accepted: consent.termsAccepted,
+            privacy_accepted: consent.privacyAccepted,
+            marketing_consent: consent.marketingConsent ?? false,
+          }
+        : {}),
     });
     const redirectPath = user.new_user ? "/onboarding" : "/dashboard";
     authLog("exchange_success", { userId: user.id, newUser: user.new_user, redirectPath });

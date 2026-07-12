@@ -267,3 +267,14 @@
 .wizard-cta:hover { filter: brightness(1.05); }
 .wizard-cta:active { transform: scale(.985); }
 .wizard-cta:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+.wizard-select {
+  width: 100%;
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 16px;
+  cursor: pointer;
+}
+.wizard-select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }

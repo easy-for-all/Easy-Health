@@ -47,12 +47,45 @@ RSpec.describe User do
       double("auth", provider: "google_oauth2", uid: uid, info: info)
     end
 
-    it "creates a new user for a fresh identity" do
-      user = described_class.from_omniauth(auth_double(uid: "uid-1", email: "new@example.com"))
+    let(:full_consent) { { terms_accepted: true, privacy_accepted: true, source: "web" } }
+
+    it "creates a new user for a fresh identity when consent is given" do
+      user = described_class.from_omniauth(auth_double(uid: "uid-1", email: "new@example.com"), consent: full_consent)
 
       expect(user).to be_persisted
       expect(user.provider).to eq("google_oauth2")
       expect(user.uid).to eq("uid-1")
+      expect(user.terms_accepted_at).to be_present
+      expect(user.privacy_policy_accepted_at).to be_present
+      expect(user.terms_version).to eq(User::CURRENT_TERMS_VERSION)
+      expect(user.consent_source).to eq("web")
+    end
+
+    it "raises ConsentRequiredError when creating a new user without consent" do
+      expect {
+        described_class.from_omniauth(auth_double(uid: "uid-9", email: "noconsent@example.com"))
+      }.to raise_error(User::ConsentRequiredError)
+      expect(User.find_by(email: "noconsent@example.com")).to be_nil
+    end
+
+    it "raises ConsentRequiredError when only one of terms/privacy is accepted" do
+      expect {
+        described_class.from_omniauth(
+          auth_double(uid: "uid-10", email: "partial@example.com"),
+          consent: { terms_accepted: true, privacy_accepted: false }
+        )
+      }.to raise_error(User::ConsentRequiredError)
+    end
+
+    it "authenticates an existing user without consent and keeps their acceptance dates" do
+      accepted_at = 2.days.ago
+      existing = create(:user, provider: "google_oauth2", uid: "uid-11",
+                               terms_accepted_at: accepted_at, privacy_policy_accepted_at: accepted_at)
+
+      user = described_class.from_omniauth(auth_double(uid: "uid-11", email: existing.email))
+
+      expect(user.id).to eq(existing.id)
+      expect(user.reload.terms_accepted_at).to be_within(1.second).of(accepted_at)
     end
 
     it "returns the same anonymized user when provider/uid match (no new record is created)" do

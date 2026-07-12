@@ -43,4 +43,8 @@ export interface HealthProfile {
   favorite_exercises?: ExercisePreference[];
   avoided_exercises?: ExercisePreference[];
   profiling_prompts_answered?: Record<string, string>;
+  preferred_workout_period?: "morning" | "lunch" | "afternoon" | "evening" | "variable" | null;
+  preferred_workout_time?: string | null; // "HH:MM"
+  workout_time_source?: string | null;
+  time_zone?: string | null;
 }

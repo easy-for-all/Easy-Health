@@ -44,6 +44,8 @@ module Api
       end
 
       def ai_substitute
+        check_rate_limit!(:exercise_substitute); return if performed?
+
         unless params[:image].present?
           return render json: { error: "No image provided" }, status: :unprocessable_entity
         end

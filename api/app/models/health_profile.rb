@@ -25,6 +25,13 @@ class HealthProfile < ApplicationRecord
   SESSION_DURATIONS    = [ 15, 25, 35, 45, 60 ].freeze
   INTENSITY_PREFERENCES = %w[easy_start balanced intense progressive unknown].freeze
   TRAINING_CONTEXTS    = %w[none postpartum pregnant menstrual_cycle_impact prefer_not_to_say].freeze
+  # When the user usually trains. Source of truth for activation push scheduling.
+  WORKOUT_PERIODS      = %w[morning lunch afternoon evening variable].freeze
+  WORKOUT_TIME_SOURCES = %w[onboarding profile inferred manually_changed].freeze
+  # Suggested (editable) default local time per period. "variable" has no default.
+  WORKOUT_PERIOD_DEFAULT_TIMES = {
+    "morning" => "07:00", "lunch" => "12:30", "afternoon" => "16:00", "evening" => "19:00"
+  }.freeze
 
   LEGACY_TRAINING_LOCATION_ALIASES = {
     "gym" => "full_gym",
@@ -48,6 +55,8 @@ class HealthProfile < ApplicationRecord
   validates :session_duration_minutes, inclusion: { in: SESSION_DURATIONS }, allow_nil: true
   validates :intensity_preference, inclusion: { in: INTENSITY_PREFERENCES }, allow_nil: true
   validates :training_context, inclusion: { in: TRAINING_CONTEXTS }, allow_nil: true
+  validates :preferred_workout_period, inclusion: { in: WORKOUT_PERIODS }, allow_nil: true
+  validates :workout_time_source, inclusion: { in: WORKOUT_TIME_SOURCES }, allow_nil: true
   validate :activity_preferences_valid
   validate :preferred_body_focus_valid
   validate :preferred_training_styles_valid

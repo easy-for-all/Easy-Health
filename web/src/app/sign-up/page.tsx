@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
@@ -9,11 +9,12 @@ import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/b
 import { trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
 import { Capacitor } from "@capacitor/core";
 import {
-  GOOGLE_AUTH_WEB_URL,
+  googleAuthWebUrl,
   GoogleAuthError,
   authLog,
   nativeGoogleSignIn,
   postGoogleNative,
+  type GoogleConsent,
 } from "@/shared/lib/googleAuth";
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -50,6 +51,7 @@ const PLAN_COPY: Record<PendingPlan, {
 export default function SignUpPage() {
   const { signUp } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,11 +64,35 @@ export default function SignUpPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
   const submittingRef = useRef(false);
+  const consentCheckboxRef = useRef<HTMLInputElement>(null);
 
   const passwordValid = password.length >= 8;
+  // Single checkbox covers both Terms of Use and Privacy Policy.
+  const consent: GoogleConsent = {
+    termsAccepted: acceptedTerms,
+    privacyAccepted: acceptedTerms,
+    marketingConsent,
+  };
 
   async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
-    // Web keeps the server-side OmniAuth flow (follows the <a href>).
+    // Defense in depth: block the social flow before ANY side effect when the
+    // required consent is missing — same gate as the email/password submit.
+    if (!acceptedTerms) {
+      e.preventDefault();
+      setTermsWarning(true);
+      consentCheckboxRef.current?.focus();
+      authLog("auth_blocked_missing_consent", {
+        provider: "google",
+        surface: "signup",
+        platform: Capacitor.isNativePlatform() ? "android" : "web",
+        missing_terms: true,
+        missing_privacy: true,
+      });
+      return;
+    }
+
+    // Web keeps the server-side OmniAuth flow (follows the <a href>, which
+    // already carries the consent query params).
     if (!Capacitor.isNativePlatform()) return;
     // Android uses native Google Sign-In (no browser, no intermediate screen).
     e.preventDefault();
@@ -74,7 +100,7 @@ export default function SignUpPage() {
     setGoogleLoading(true);
     try {
       const idToken = await nativeGoogleSignIn();
-      const { redirectPath } = await postGoogleNative(idToken);
+      const { redirectPath } = await postGoogleNative(idToken, consent);
       window.location.replace(redirectPath);
     } catch (err) {
       setGoogleLoading(false);
@@ -91,6 +117,15 @@ export default function SignUpPage() {
   useEffect(() => {
     trackEvent(EVENTS.SIGNUP_STARTED);
   }, []);
+
+  // A social sign-in that was refused for missing consent lands here; highlight
+  // the same checkbox the email/password flow uses.
+  useEffect(() => {
+    if (searchParams.get("error") === "consent_required") {
+      setTermsWarning(true);
+      consentCheckboxRef.current?.focus();
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -180,10 +215,11 @@ export default function SignUpPage() {
 
         {/* Google OAuth */}
         <a
-          href={GOOGLE_AUTH_WEB_URL}
+          href={acceptedTerms ? googleAuthWebUrl(consent) : undefined}
           onClick={handleGoogleAuth}
           aria-busy={googleLoading}
-          className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-700 bg-slate-900 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          aria-disabled={!acceptedTerms}
+          className={`flex w-full items-center justify-center gap-3 rounded-full border border-slate-700 bg-slate-900 py-3 text-sm font-semibold text-white transition ${acceptedTerms ? "hover:bg-slate-800" : "cursor-not-allowed opacity-50"}`}
         >
           <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M47.532 24.552c0-1.636-.143-3.2-.41-4.704H24.48v8.892h12.968c-.56 2.996-2.24 5.54-4.768 7.252v6.02h7.716c4.516-4.16 7.136-10.284 7.136-17.46z" fill="#4285F4"/>
@@ -265,6 +301,7 @@ export default function SignUpPage() {
 
           <label className="flex cursor-pointer items-start gap-3">
             <input
+              ref={consentCheckboxRef}
               type="checkbox"
               checked={acceptedTerms}
               onChange={(e) => { setAcceptedTerms(e.target.checked); if (e.target.checked) setTermsWarning(false); }}

@@ -22,6 +22,9 @@ gem "anthropic", "~> 0.3"
 gem "ruby-openai"
 gem "stripe", "~> 13.0"
 
+# OAuth2 access tokens for Firebase Cloud Messaging HTTP v1 (Service Account).
+gem "googleauth", "~> 1.11"
+
 group :development, :test do
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "brakeman", require: false

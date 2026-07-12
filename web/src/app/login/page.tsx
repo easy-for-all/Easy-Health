@@ -20,6 +20,7 @@ import {
 const OAUTH_ERROR_MESSAGE_KEYS: Record<string, string> = {
   account_deleted: "accountDeletedError",
   oauth_failed: "oauthError",
+  consent_required: "consentRequiredError",
 };
 
 export default function LoginPage() {
@@ -56,7 +57,11 @@ export default function LoginPage() {
         name: (err as Error)?.name,
         message: (err as Error)?.message,
       });
-      setError(`Não foi possível entrar com Google. (${code})`);
+      if (code === "consent_required") {
+        setError(t("consentRequiredError"));
+      } else {
+        setError(`Não foi possível entrar com Google. (${code})`);
+      }
     }
   }
 
