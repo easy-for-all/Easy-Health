@@ -94,6 +94,8 @@ jobs:
             -e "com.google.android.gms.permission.AD_ID" \
             -e "android.permission.ACCESS_ADSERVICES_AD_ID" \
             -e "android.permission.ACCESS_ADSERVICES_ATTRIBUTION" \
+            -e "android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE" \
+            -e "android.permission.ACCESS_ADSERVICES_TOPICS" \
             app/build/intermediates/merged_manifest/release \
             app/build/intermediates/merged_manifests/release \
             app/build/intermediates/packaged_manifests/release 2>/dev/null; then
