@@ -42,8 +42,34 @@ async function ensureInitialized() {
       "missing_web_client_id",
     );
   }
-  const { SocialLogin } = await import("@capgo/capacitor-social-login");
-  await SocialLogin.initialize({ google: { webClientId: WEB_CLIENT_ID } });
+
+  let SocialLogin;
+  try {
+    ({ SocialLogin } = await import("@capgo/capacitor-social-login"));
+  } catch (err) {
+    authLog("plugin_import_error", {
+      name: (err as Error)?.name,
+      message: (err as Error)?.message,
+    });
+    throw new GoogleAuthError(
+      (err as Error)?.message ?? "Falha ao carregar o plugin de login",
+      "plugin_import_failed",
+    );
+  }
+
+  try {
+    await SocialLogin.initialize({ google: { webClientId: WEB_CLIENT_ID } });
+  } catch (err) {
+    authLog("plugin_init_error", {
+      name: (err as Error)?.name,
+      message: (err as Error)?.message,
+    });
+    throw new GoogleAuthError(
+      (err as Error)?.message ?? "Falha ao inicializar o plugin de login",
+      "plugin_init_failed",
+    );
+  }
+
   initialized = true;
   authLog("plugin_initialized");
 }

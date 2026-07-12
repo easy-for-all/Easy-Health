@@ -79,7 +79,11 @@ export default function SignUpPage() {
     } catch (err) {
       setGoogleLoading(false);
       const code = err instanceof GoogleAuthError ? err.code : "unknown";
-      authLog("signup_failed", { code });
+      authLog("signup_failed", {
+        code,
+        name: (err as Error)?.name,
+        message: (err as Error)?.message,
+      });
       setError(`Não foi possível entrar com Google. (${code})`);
     }
   }
