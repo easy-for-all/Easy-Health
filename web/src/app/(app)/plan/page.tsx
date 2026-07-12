@@ -547,6 +547,7 @@ function PlanDayDetailDrawer({
       <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
         <div
           className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-8 pt-4 dark:bg-gray-900"
+          style={{ paddingBottom: "max(32px, var(--safe-area-bottom))" }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200 dark:bg-gray-700" />
@@ -767,6 +768,7 @@ function PlanDayDetailDrawer({
         >
           <div
             className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pb-24 pt-4 dark:bg-gray-900"
+            style={{ paddingBottom: "max(96px, var(--safe-area-bottom))" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 mx-auto h-1 w-10 rounded-full bg-gray-200" />

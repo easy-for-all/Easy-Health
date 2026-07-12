@@ -932,6 +932,7 @@ export default function ProfilePage() {
         >
           <div
             className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-slate-900 px-4 pb-24 pt-4"
+            style={{ paddingBottom: "max(96px, var(--safe-area-bottom))" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-slate-700" />
@@ -993,6 +994,7 @@ export default function ProfilePage() {
           <button
             onClick={() => setLightboxPhoto(null)}
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-xl text-white"
+            style={{ right: "max(16px, var(--safe-area-right))", top: "max(16px, var(--safe-area-top))" }}
           >
             ✕
           </button>
@@ -1000,6 +1002,7 @@ export default function ProfilePage() {
             <button
               onClick={(e) => { e.stopPropagation(); setDeletePhotoConfirmId(lightboxPhoto.id); }}
               className="absolute left-4 top-4 flex h-10 items-center gap-1.5 rounded-full bg-white/20 px-3 text-sm text-white hover:bg-red-600/70"
+              style={{ left: "max(16px, var(--safe-area-left))", top: "max(16px, var(--safe-area-top))" }}
             >
               🗑 Apagar
             </button>
@@ -1011,7 +1014,7 @@ export default function ProfilePage() {
             onClick={(e) => e.stopPropagation()}
           />
           {lightboxPhoto.captured_at && (
-            <p className="absolute bottom-6 text-sm text-white/70">
+            <p className="absolute bottom-6 text-sm text-white/70" style={{ bottom: "max(24px, var(--safe-area-bottom))" }}>
               {relativeDayLabel(lightboxPhoto.captured_at)}
             </p>
           )}
@@ -1026,6 +1029,7 @@ export default function ProfilePage() {
         >
           <div
             className="w-full max-w-sm rounded-t-2xl bg-slate-900 p-6 pb-10"
+            style={{ paddingBottom: "max(40px, var(--safe-area-bottom))" }}
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-1 text-center text-base font-bold text-white">Apagar foto?</p>

@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { getLocale, getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
 import Script from "next/script";
 import { AuthProvider } from "@/features/auth/auth-context";
 import { ThemeProvider } from "@/features/theme/theme-context";
+import { SystemBarsController } from "@/features/system-bars/system-bars-controller";
 import { ToastProvider } from "@/shared/components/ui/toast-provider";
 import "./globals.css";
 
@@ -27,6 +28,12 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
   const messages = await getMessages();
@@ -36,7 +43,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         {/* Apply saved theme before first paint to prevent flash */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');})();` }} />
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png" />
         <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
@@ -64,6 +70,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-full bg-[var(--bg)] text-[var(--text)] font-sans" style={{ fontFamily: "var(--font-body)" }}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
+            <SystemBarsController />
             <AuthProvider>
               <ToastProvider>{children}</ToastProvider>
             </AuthProvider>

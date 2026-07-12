@@ -1,11 +1,14 @@
-import { api } from "./api";
+import { api, ApiError } from "./api";
+import { trackEvent } from "./analytics";
 import { resolveDeepLink } from "./push-deep-link";
 
 // Centralized push service. Responsibilities:
 // - never prompt for permission unless explicitly asked (pre-permission opt-in);
-// - register + attach listeners exactly once;
-// - report the device token to the backend with metadata;
-// - route notification taps through a safe deep-link allowlist;
+// - attach permanent listeners exactly once (foreground + tap routing);
+// - own a single, awaited, observable token-registration operation with timeout;
+// - be the ONLY caller of the backend sync (the "registration" event just hands
+//   the token to the pending operation — it never posts);
+// - report the device token to the backend with safe metadata (never the token);
 // - no-op on the web (only runs on the native Android platform).
 
 export type PushPermissionState =
@@ -15,8 +18,32 @@ export type PushPermissionState =
   | "prompt"
   | "unsupported";
 
+export type PushRegistrationSource =
+  | "auth_boot"
+  | "login"
+  | "prepermission_card"
+  | "permission_granted";
+
+export type PushRegistrationFailureReason =
+  | "unsupported"
+  | "permission_denied"
+  | "registration_error"
+  | "registration_timeout"
+  | "backend_sync_failed";
+
+export interface PushRegistrationResult {
+  permissionState: PushPermissionState;
+  // true only when the FCM token was obtained AND persisted by the backend.
+  registered: boolean;
+  failureReason?: PushRegistrationFailureReason;
+}
+
 const REQUESTED_KEY = "eh_push_requested";
-let listenersAttached = false;
+const REGISTRATION_TIMEOUT_MS = 15_000;
+
+let permanentListenersAttached = false;
+// Only ever one registration operation in flight (dedupe + no cross-op races).
+let inFlight: Promise<PushRegistrationResult> | null = null;
 
 async function isNative(): Promise<boolean> {
   try {
@@ -58,19 +85,67 @@ export async function getPushPermissionState(): Promise<PushPermissionState> {
   return mapState(status.receive);
 }
 
-// Called on login. Only registers if permission was ALREADY granted — it never
-// shows the native prompt (that only happens via the pre-permission opt-in).
-export async function syncPushIfGranted(): Promise<void> {
-  if (!(await isNative())) return;
-  if ((await getPushPermissionState()) !== "granted") return;
-  await attachListeners();
-  await ensureChannel();
-  await registerDevice();
+// ---------------------------------------------------------------------------
+// Safe observability. These events are emitted in production too (via the
+// existing analytics pipeline) so we can locate failures on installed builds.
+// NEVER include the token (even masked), Authorization, response bodies, or PII.
+// ---------------------------------------------------------------------------
+type PushEventMeta = {
+  source?: PushRegistrationSource;
+  app_version?: string;
+  os_version?: string;
+  permission_status?: PushPermissionState;
+  error_category?: string;
+  http_status?: number;
+};
+
+function trackPushEvent(event: string, meta: PushEventMeta): void {
+  trackEvent(event, { platform: "android", ...meta });
+}
+
+// Masked token is DEV-console only — never sent to analytics/Sentry.
+function devLog(message: string, token?: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  if (token) {
+    const masked = token.length > 8 ? `${token.slice(0, 4)}…${token.slice(-4)}` : "****";
+    console.log(`[Push] ${message} (${masked})`);
+  } else {
+    console.log(`[Push] ${message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public entry points
+// ---------------------------------------------------------------------------
+
+// Idempotent. Registers + persists the FCM token ONLY if permission is already
+// granted. Never shows the native prompt. Safe to call repeatedly and from
+// multiple places (auth boot, login, card) — concurrent calls share one op.
+// The inFlight check/assignment is synchronous (no await before it) so two
+// concurrent callers can never spawn two operations.
+export function ensurePushTokenRegistered(
+  source: PushRegistrationSource,
+): Promise<PushRegistrationResult> {
+  if (inFlight) return inFlight;
+  inFlight = runRegistration(source).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+// Called on login / app boot. Thin wrapper — permission-gated by ensure().
+export async function syncPushIfGranted(
+  source: PushRegistrationSource = "auth_boot",
+): Promise<PushRegistrationResult> {
+  return ensurePushTokenRegistered(source);
 }
 
 // Called from the pre-permission card when the user taps "Ativar lembretes".
-export async function requestPushPermissionAndRegister(): Promise<PushPermissionState> {
-  if (!(await isNative())) return "unsupported";
+// Shows the native prompt when needed, then registers + persists the token.
+export async function requestPushPermissionAndRegister(): Promise<PushRegistrationResult> {
+  if (!(await isNative())) {
+    return { permissionState: "unsupported", registered: false, failureReason: "unsupported" };
+  }
   const { PushNotifications } = await import("@capacitor/push-notifications");
   markRequested();
 
@@ -79,56 +154,158 @@ export async function requestPushPermissionAndRegister(): Promise<PushPermission
     status = await PushNotifications.requestPermissions();
   }
 
-  const state = mapState(status.receive);
-  if (state === "granted") {
-    await attachListeners();
-    await ensureChannel();
-    await registerDevice();
+  const permissionState = mapState(status.receive);
+  if (permissionState !== "granted") {
+    return { permissionState, registered: false, failureReason: "permission_denied" };
   }
-  return state;
+  return ensurePushTokenRegistered("prepermission_card");
 }
 
-async function registerDevice(): Promise<void> {
-  const { PushNotifications } = await import("@capacitor/push-notifications");
-  await PushNotifications.register();
-}
+// ---------------------------------------------------------------------------
+// Registration operation — single owner of the backend sync
+// ---------------------------------------------------------------------------
+async function runRegistration(source: PushRegistrationSource): Promise<PushRegistrationResult> {
+  if (!(await isNative())) {
+    return { permissionState: "unsupported", registered: false, failureReason: "unsupported" };
+  }
+  const permissionState = await getPushPermissionState();
+  trackPushEvent("push_permission_state", { source, permission_status: permissionState });
+  if (permissionState !== "granted") {
+    return { permissionState, registered: false, failureReason: "permission_denied" };
+  }
 
-async function attachListeners(): Promise<void> {
-  if (listenersAttached) return;
-  listenersAttached = true;
+  const meta = await deviceMetadata();
+  trackPushEvent("push_registration_started", { source, ...meta });
 
-  const { PushNotifications } = await import("@capacitor/push-notifications");
-  await PushNotifications.removeAllListeners();
+  await attachPermanentListeners();
+  await ensureChannel();
 
-  await PushNotifications.addListener("registration", ({ value }) => {
-    void sendToken(value);
-  });
-  await PushNotifications.addListener("registrationError", (err) => {
-    console.error("[Push] Registration error:", err.error);
-  });
-  await PushNotifications.addListener("pushNotificationReceived", (notification) => {
-    console.log("[Push] Foreground notification:", notification.title);
-  });
-  await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-    void handleActionPerformed(action.notification?.data ?? {});
-  });
-}
-
-async function sendToken(token: string): Promise<void> {
+  let token: string;
   try {
-    await api.post("/api/v1/device_tokens", {
-      token,
-      platform: "android",
-      permission_status: "granted",
-      ...(await deviceMetadata()),
-    });
-  } catch {
-    // token registration is best-effort
+    token = await awaitRegistrationToken();
+  } catch (err) {
+    if (err instanceof RegistrationTimeout) {
+      trackPushEvent("push_registration_timeout", { source, ...meta });
+      return { permissionState: "granted", registered: false, failureReason: "registration_timeout" };
+    }
+    const category = err instanceof Error ? err.message : "unknown";
+    trackPushEvent("push_registration_error", { source, ...meta, error_category: category });
+    return { permissionState: "granted", registered: false, failureReason: "registration_error" };
+  }
+
+  trackPushEvent("push_registration_callback_received", { source, ...meta });
+  devLog("registration token received", token);
+
+  const synced = await syncToken(token, source, meta);
+  return {
+    permissionState: "granted",
+    registered: synced,
+    failureReason: synced ? undefined : "backend_sync_failed",
+  };
+}
+
+class RegistrationTimeout extends Error {
+  constructor() {
+    super("registration_timeout");
+    this.name = "RegistrationTimeout";
   }
 }
 
-async function deviceMetadata(): Promise<Record<string, string>> {
-  const meta: Record<string, string> = {};
+type ListenerHandle = { remove: () => Promise<void> };
+
+// Attaches per-operation `registration`/`registrationError` listeners, then calls
+// PushNotifications.register() and resolves with the token. The listeners are
+// removed on success, error and timeout — so a delayed callback from a timed-out
+// attempt can never resolve a later attempt. Only one op runs at a time.
+async function awaitRegistrationToken(): Promise<string> {
+  const { PushNotifications } = await import("@capacitor/push-notifications");
+
+  let regHandle: ListenerHandle | undefined;
+  let errHandle: ListenerHandle | undefined;
+  let settled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+    void regHandle?.remove();
+    void errHandle?.remove();
+  };
+
+  return new Promise<string>((resolve, reject) => {
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+
+    timer = setTimeout(() => settle(() => reject(new RegistrationTimeout())), REGISTRATION_TIMEOUT_MS);
+
+    // Attach BOTH listeners before register() so the token event can't be missed.
+    Promise.all([
+      PushNotifications.addListener("registration", ({ value }) => settle(() => resolve(value))),
+      PushNotifications.addListener("registrationError", (err) =>
+        settle(() => reject(new Error(err?.error ?? "registration_error"))),
+      ),
+    ])
+      .then(([reg, errListener]) => {
+        regHandle = reg;
+        errHandle = errListener;
+        // If the op already settled (fast event or timeout) before the handles
+        // resolved, remove them now so nothing leaks.
+        if (settled) {
+          void reg.remove();
+          void errListener.remove();
+          return undefined;
+        }
+        return PushNotifications.register();
+      })
+      .catch((e) => settle(() => reject(e instanceof Error ? e : new Error("register_failed"))));
+  });
+}
+
+// Posts the token to the backend with one short retry for transient failures
+// (network / 5xx). 4xx is not retried. Returns whether it persisted.
+async function syncToken(
+  token: string,
+  source: PushRegistrationSource,
+  meta: Awaited<ReturnType<typeof deviceMetadata>>,
+): Promise<boolean> {
+  trackPushEvent("push_backend_sync_started", { source, ...meta });
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await api.post("/api/v1/device_tokens", {
+        token,
+        platform: "android",
+        permission_status: "granted",
+        ...meta,
+      });
+      trackPushEvent("push_backend_sync_succeeded", { source, ...meta });
+      devLog("backend sync succeeded", token);
+      return true;
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : undefined;
+      const transient = status === undefined || status >= 500;
+      const lastAttempt = attempt === 1 || !transient;
+      if (lastAttempt) {
+        trackPushEvent("push_backend_sync_failed", {
+          source,
+          ...meta,
+          http_status: status,
+          error_category: transient ? "transient" : "client_error",
+        });
+        return false;
+      }
+      // one short retry for transient failures
+      await new Promise((r) => setTimeout(r, 800));
+    }
+  }
+  return false;
+}
+
+async function deviceMetadata(): Promise<{ app_version?: string; os_version?: string }> {
+  const meta: { app_version?: string; os_version?: string } = {};
   try {
     const { App } = await import("@capacitor/app");
     const info = await App.getInfo();
@@ -140,6 +317,21 @@ async function deviceMetadata(): Promise<Record<string, string>> {
     meta.os_version = navigator.userAgent;
   }
   return meta;
+}
+
+// Permanent listeners: foreground receipt + tap routing. Attached once; NEVER
+// removed during a registration operation (removeAllListeners is not used).
+async function attachPermanentListeners(): Promise<void> {
+  if (permanentListenersAttached) return;
+  permanentListenersAttached = true;
+
+  const { PushNotifications } = await import("@capacitor/push-notifications");
+  await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+    devLog(`foreground notification: ${notification.title ?? ""}`);
+  });
+  await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+    void handleActionPerformed(action.notification?.data ?? {});
+  });
 }
 
 async function ensureChannel(): Promise<void> {

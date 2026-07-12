@@ -49,9 +49,15 @@
   --hot-soft:  oklch(0.60 0.19 28 / 0.14);
   --cool:      oklch(0.65 0.12 232);
 
+  /* ---- safe areas (Capacitor SystemBars injects --safe-area-inset-*) ---- */
+  --safe-area-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-area-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-area-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-area-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+
   /* ---- bottom nav ---- */
   --nav-h: 72px;
-  --nav-pb: calc(var(--nav-h) + env(safe-area-inset-bottom));
+  --nav-pb: calc(var(--nav-h) + var(--safe-area-bottom));
 
   /* ---- raio ---- */
   --r-xs:  8px;

@@ -50,6 +50,7 @@ export function CleanDataModal({ onClose, onSuccess }: CleanDataModalProps) {
     <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
       <div
         className="w-full rounded-t-2xl bg-white px-5 pb-10 pt-5 dark:bg-gray-900"
+        style={{ paddingBottom: "max(40px, var(--safe-area-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-200" />

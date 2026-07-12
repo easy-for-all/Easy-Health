@@ -463,6 +463,12 @@ export default function AdminPage() {
       {selectedUserId !== null && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          style={{
+            paddingTop: "max(16px, var(--safe-area-top))",
+            paddingRight: "max(16px, var(--safe-area-right))",
+            paddingBottom: "max(16px, var(--safe-area-bottom))",
+            paddingLeft: "max(16px, var(--safe-area-left))",
+          }}
           onClick={(e) => { if (e.target === e.currentTarget) closeDetail(); }}
         >
           <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl">

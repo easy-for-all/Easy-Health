@@ -5,6 +5,7 @@ import { api } from "@/shared/lib/api";
 import { trackEvent } from "@/shared/lib/analytics";
 import { useToast } from "@/shared/components/ui/toast-provider";
 import {
+  ensurePushTokenRegistered,
   getPushPermissionState,
   requestPushPermissionAndRegister,
   type PushPermissionState,
@@ -50,7 +51,16 @@ export function PrePermissionCard({ onboardingStage = "workout_ready" }: { onboa
       const state = await getPushPermissionState();
       if (!active) return;
       setPermissionState(state);
-      if (state === "unsupported" || state === "granted" || answeredLocally()) return;
+
+      // Permission already granted (e.g. enabled manually in Android settings, or
+      // on a returning device): silently ensure the FCM token is registered —
+      // independent of `answeredLocally()`, which only gates the card's visibility.
+      if (state === "granted") {
+        void ensurePushTokenRegistered("permission_granted");
+        return;
+      }
+
+      if (state === "unsupported" || answeredLocally()) return;
 
       const p = await api.get<NotificationPrefs>("/api/v1/notification_preferences").catch(() => null);
       if (!active) return;
@@ -70,11 +80,26 @@ export function PrePermissionCard({ onboardingStage = "workout_ready" }: { onboa
     trackEvent("push_permission_requested", { platform: "android", permission_status: permissionState });
     trackEvent("push_token_registration_started", { platform: "android" });
 
-    const state = await requestPushPermissionAndRegister();
-    setPermissionState(state);
+    const result = await requestPushPermissionAndRegister();
+    setPermissionState(result.permissionState);
 
-    if (state === "granted") {
+    if (result.permissionState === "granted") {
       trackEvent("push_permission_granted", { platform: "android" });
+
+      if (!result.registered) {
+        // Permission granted, but the token callback or backend sync failed.
+        // Do NOT claim success or mark the card as answered — keep it so the user
+        // can retry. Never leave the UI stuck in the busy state.
+        trackEvent("push_token_registration_failed", { platform: "android", reason: result.failureReason });
+        toast.show(
+          "As notificações foram autorizadas, mas não conseguimos concluir a ativação. Tente novamente.",
+          { variant: "hot" },
+        );
+        setBusy(false);
+        return;
+      }
+
+      // Token was actually persisted — only now enable the reminder preferences.
       try {
         await api.patch("/api/v1/notification_preferences", {
           push_enabled: true,
@@ -83,17 +108,18 @@ export function PrePermissionCard({ onboardingStage = "workout_ready" }: { onboa
         trackEvent("push_token_registered", { platform: "android" });
         toast.show("Pronto! Vamos te lembrar no horário certo.", { variant: "good" });
       } catch {
-        trackEvent("push_token_registration_failed", { platform: "android" });
+        trackEvent("push_token_registration_failed", { platform: "android", reason: "preferences_patch_failed" });
       }
       markAnswered();
       setVisible(false);
     } else {
-      trackEvent("push_permission_denied", { platform: "android", permission_status: state });
-      if (state === "permanently_denied") {
+      trackEvent("push_permission_denied", { platform: "android", permission_status: result.permissionState });
+      if (result.permissionState === "permanently_denied") {
         // Keep the card but switch it to settings guidance.
         setBusy(false);
         return;
       }
+      // Explicit user denial — record the answer so we stop prompting.
       markAnswered();
       setVisible(false);
     }

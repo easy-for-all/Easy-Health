@@ -714,7 +714,7 @@ function SessionSheet({ session, onClose }: { session: WorkoutSession; onClose: 
           maxHeight: "88svh", overflowY: "auto",
           background: "var(--bg-2)",
           borderRadius: "var(--r-xl) var(--r-xl) 0 0",
-          paddingBottom: 32,
+          paddingBottom: "max(32px, var(--safe-area-bottom))",
         }}
         onClick={(e) => e.stopPropagation()}
         initial={{ y: "100%" }}

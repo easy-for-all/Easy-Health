@@ -20,8 +20,8 @@ export function CoachFab() {
       aria-label="Abrir Coach EasyHealth"
       style={{
         position: "fixed",
-        bottom: "88px",
-        right: "16px",
+        bottom: "calc(88px + var(--safe-area-bottom))",
+        right: "max(16px, var(--safe-area-right))",
         zIndex: 40,
         background: "none",
         border: "none",

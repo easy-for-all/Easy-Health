@@ -341,7 +341,7 @@ export default function PersonalStudentDetailPage() {
         <div
           style={{
             position: "fixed",
-            bottom: 24,
+            bottom: "max(24px, var(--safe-area-bottom))",
             left: "50%",
             transform: "translateX(-50%)",
             background: "var(--good)",

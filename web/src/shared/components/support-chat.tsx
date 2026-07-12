@@ -57,7 +57,11 @@ export function SupportChat() {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Abrir chat de suporte"
-        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary-500 text-white shadow-lg transition hover:bg-primary-600 active:scale-95"
+        className="fixed z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary-500 text-white shadow-lg transition hover:bg-primary-600 active:scale-95"
+        style={{
+          bottom: "calc(6rem + var(--safe-area-bottom))",
+          right: "max(1rem, var(--safe-area-right))",
+        }}
       >
         {open ? (
           <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -71,8 +75,12 @@ export function SupportChat() {
       {/* Chat panel */}
       {open && (
         <div
-          className="fixed bottom-40 right-4 z-40 flex w-[min(340px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-          style={{ maxHeight: "60vh" }}
+          className="fixed z-40 flex w-[min(340px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+          style={{
+            bottom: "calc(10rem + var(--safe-area-bottom))",
+            right: "max(1rem, var(--safe-area-right))",
+            maxHeight: "60vh",
+          }}
         >
           {/* Header */}
           <div className="flex items-center gap-3 bg-primary-500 px-4 py-3">
