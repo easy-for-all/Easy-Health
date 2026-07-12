@@ -46,3 +46,8 @@ android/
 *.keystore
 *.jks
 key.properties
+
+# android build outputs / gradle cache (never commit)
+/releases/
+*.aab
+android-config/.gradle/
