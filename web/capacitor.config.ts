@@ -9,6 +9,12 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
   plugins: {
+    SocialLogin: {
+      providers: {
+        google: true,
+        facebook: false,
+      },
+    },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
