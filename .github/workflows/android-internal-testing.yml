@@ -48,6 +48,7 @@ jobs:
         working-directory: web
         run: |
           cp android-config/app-build.gradle android/app/build.gradle
+          cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           cp android-config/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
           # Push notifications: manifest (POST_NOTIFICATIONS + FCM meta-data) and
           # notification icon/color resources.
@@ -84,6 +85,21 @@ jobs:
       - name: Make gradlew executable
         working-directory: web/android
         run: chmod +x gradlew
+
+      - name: Verify Advertising ID permissions are absent
+        working-directory: web/android
+        run: |
+          ./gradlew app:processReleaseMainManifest --no-daemon
+          if grep -R -n \
+            -e "com.google.android.gms.permission.AD_ID" \
+            -e "android.permission.ACCESS_ADSERVICES_AD_ID" \
+            -e "android.permission.ACCESS_ADSERVICES_ATTRIBUTION" \
+            app/build/intermediates/merged_manifest/release \
+            app/build/intermediates/merged_manifests/release \
+            app/build/intermediates/packaged_manifests/release 2>/dev/null; then
+            echo "Advertising ID permission found in release manifest"
+            exit 1
+          fi
 
       - name: Build Release AAB
         working-directory: web/android
