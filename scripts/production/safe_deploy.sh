@@ -88,6 +88,17 @@ copy_exercise_images() {
   done
 }
 
+assert_web_client_id() {
+  log "Validando NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID no .env"
+  local val
+  val="$(grep -E '^NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID=' .env 2>/dev/null | head -1 | cut -d= -f2-)"
+  [ -n "$val" ] || fail "NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ausente/vazia no .env de producao"
+  case "$val" in
+    *.apps.googleusercontent.com) log "NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID present: yes (ends with .apps.googleusercontent.com)";;
+    *) fail "NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID com formato inesperado (esperado terminar em .apps.googleusercontent.com)";;
+  esac
+}
+
 healthcheck() {
   log "Rodando healthcheck em $HEALTHCHECK_URL"
   for attempt in 1 2 3 4 5 6; do
@@ -122,6 +133,8 @@ if [ -f ".env" ]; then
   sed -i '/^GIT_COMMIT=/d' .env 2>/dev/null || true
   printf 'GIT_COMMIT=%s\n' "$TARGET_REF" >> .env
 fi
+
+assert_web_client_id
 
 copy_exercise_images
 

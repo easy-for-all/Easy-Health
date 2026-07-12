@@ -33,6 +33,9 @@ jobs:
         working-directory: web
         run: npm ci
 
+      # NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID is intentionally NOT needed here: the AAB
+      # loads the live site (capacitor.config.ts server.url = https://easyhealth.art),
+      # so native Google Sign-In uses the bundle built on the VPS, not this local build.
       - name: Build web
         working-directory: web
         run: npm run build
