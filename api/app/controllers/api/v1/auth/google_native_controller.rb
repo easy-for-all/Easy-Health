@@ -15,7 +15,7 @@ module Api
           claims = ::Auth::GoogleIdTokenVerifier.verify!(params[:id_token], audiences)
           Rails.logger.info("[GoogleNative] verified aud=#{claims['aud']} sub=#{claims['sub']} email=#{claims['email']}")
 
-          user = User.from_omniauth(build_auth_hash(claims))
+          user = User.from_omniauth(build_auth_hash(claims), consent: consent_params)
 
           if user.anonymized_at.present?
             Rails.logger.info("[GoogleNative] blocked anonymized user_id=#{user.id}")
@@ -33,6 +33,9 @@ module Api
         rescue User::BlockedEmailError
           Rails.logger.info("[GoogleNative] blocked email attempted signup")
           render json: { error: "Conta excluída", error_code: "account_deleted" }, status: :forbidden
+        rescue User::ConsentRequiredError
+          Rails.logger.info("[GoogleNative] blocked signup missing consent")
+          render json: { error: "Aceite os termos para continuar", error_code: "consent_required" }, status: :unprocessable_entity
         rescue => e
           Rails.logger.error("[GoogleNative] error #{e.class}: #{e.message}")
           render json: { error: "Falha no login", error_code: "oauth_failed" }, status: :internal_server_error
@@ -42,6 +45,15 @@ module Api
 
         def audiences
           [ ENV["GOOGLE_CLIENT_ID"], ENV["GOOGLE_ANDROID_CLIENT_ID"] ].compact
+        end
+
+        def consent_params
+          {
+            terms_accepted: params[:terms_accepted],
+            privacy_accepted: params[:privacy_accepted],
+            marketing_consent: params[:marketing_consent],
+            source: params[:platform].presence || "android"
+          }
         end
 
         def build_auth_hash(claims)

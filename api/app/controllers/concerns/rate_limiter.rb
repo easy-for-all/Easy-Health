@@ -8,6 +8,9 @@ module RateLimiter
     "image_analysis"      => 10,
     "workout_chat_message" => 20,
     "workout_chat_plan"    => 3,
+    "agent_personal_trainer" => 5,
+    "agent_conditioning"     => 5,
+    "exercise_substitute"    => 20,
   }.freeze
 
   TASK_LABELS = {
@@ -17,6 +20,9 @@ module RateLimiter
     "image_analysis"      => "análise de foto corporal",
     "workout_chat_message" => "mensagens do chat de IA",
     "workout_chat_plan"    => "gerações de treino via chat",
+    "agent_personal_trainer" => "análise do personal trainer IA",
+    "agent_conditioning"     => "análise de condicionamento IA",
+    "exercise_substitute"    => "substituição de exercício por foto",
   }.freeze
 
   def check_rate_limit!(task_type)

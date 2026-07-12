@@ -7,6 +7,12 @@ class User < ApplicationRecord
   PROFILE_VISIBILITIES = %w[private public_limited public].freeze
   TRIAL_DURATION_DAYS = 7
 
+  # Current legal document versions. The backend is the source of truth for
+  # these — the client only sends acceptance booleans, and we stamp the version
+  # here so the two can never drift.
+  CURRENT_TERMS_VERSION = "1.0".freeze
+  CURRENT_PRIVACY_POLICY_VERSION = "1.0".freeze
+
   has_one :health_profile, dependent: :destroy
   has_one :fitness_profile, dependent: :destroy
   has_many :workout_plans, dependent: :destroy
@@ -55,6 +61,8 @@ class User < ApplicationRecord
            through: :trainer_client_relationships,
            source: :personal
   has_many :device_tokens, dependent: :destroy
+  has_one :notification_preferences, class_name: "UserNotificationPreferences", dependent: :destroy
+  has_many :notification_deliveries, dependent: :destroy
 
   after_create :create_public_profile_record
   after_create :generate_referral_code
@@ -78,8 +86,18 @@ class User < ApplicationRecord
   end
 
   class BlockedEmailError < StandardError; end
+  # Raised when a social sign-in would CREATE a new account but the required
+  # Terms of Use / Privacy Policy consent was not provided. Existing users
+  # authenticate normally and never trigger this.
+  class ConsentRequiredError < StandardError; end
 
-  def self.from_omniauth(auth)
+  # Finds or provisions a user from an OmniAuth hash. Creating a brand-new
+  # account requires that the caller pass the required legal consent; existing
+  # users log in normally and their acceptance timestamps are never overwritten.
+  #
+  # `consent` is a hash with (optional) keys: :terms_accepted, :privacy_accepted,
+  # :marketing_consent, :source. Only consulted on the create path.
+  def self.from_omniauth(auth, consent: {})
     user = find_by(provider: auth.provider, uid: auth.uid)
     user ||= find_by(email: auth.info.email)
 
@@ -87,20 +105,46 @@ class User < ApplicationRecord
       user.update(provider: auth.provider, uid: auth.uid) unless user.provider.present?
     else
       raise BlockedEmailError if BlockedEmail.blocked?(auth.info.email)
+      raise ConsentRequiredError unless required_consent_given?(consent)
 
       user = create!(
-        provider: auth.provider,
-        uid: auth.uid,
-        email: auth.info.email,
-        name: auth.info.name.presence || auth.info.email.split("@").first,
-        password: Devise.friendly_token[0, 20],
-        marketing_consent: true
+        {
+          provider: auth.provider,
+          uid: auth.uid,
+          email: auth.info.email,
+          name: auth.info.name.presence || auth.info.email.split("@").first,
+          password: Devise.friendly_token[0, 20]
+        }.merge(consent_attributes(consent))
       )
     end
 
     attach_google_avatar(user, auth.info.image) if auth.info.image.present? && !user.avatar.attached?
 
     user
+  end
+
+  # True only when BOTH Terms of Use and Privacy Policy were accepted. The
+  # sign-up screen uses a single checkbox covering both, so callers may pass the
+  # same flag for each.
+  def self.required_consent_given?(consent)
+    boolean = ActiveModel::Type::Boolean.new
+    boolean.cast(consent[:terms_accepted]) && boolean.cast(consent[:privacy_accepted])
+  end
+
+  # Consent columns to stamp on a newly created account. Timestamps/versions are
+  # authoritative on the server; marketing_consent defaults to true when the
+  # caller does not send it (preserves prior social behaviour).
+  def self.consent_attributes(consent)
+    now = Time.current
+    marketing = consent[:marketing_consent].nil? ? true : ActiveModel::Type::Boolean.new.cast(consent[:marketing_consent])
+    {
+      terms_accepted_at: now,
+      privacy_policy_accepted_at: now,
+      terms_version: CURRENT_TERMS_VERSION,
+      privacy_policy_version: CURRENT_PRIVACY_POLICY_VERSION,
+      consent_source: consent[:source],
+      marketing_consent: marketing
+    }
   end
 
   def self.attach_google_avatar(user, image_url)
@@ -174,6 +218,13 @@ class User < ApplicationRecord
 
   def can_access_workout?
     has_active_access?
+  end
+
+  # Always returns a persisted preferences row (creates the default, opt-out row
+  # on first access). Use this instead of the raw association when reading/writing
+  # notification settings.
+  def notification_preferences!
+    notification_preferences || create_notification_preferences!
   end
 
   private

@@ -27,9 +27,22 @@ module Api
 
         private
 
+        # Consent flags travel as query params on the /auth/google/web request
+        # phase and are handed back to us on the callback phase via
+        # `omniauth.params`. Only consulted when creating a brand-new account.
+        def oauth_consent_params
+          oauth_params = request.env["omniauth.params"] || {}
+          {
+            terms_accepted: oauth_params["terms_accepted"],
+            privacy_accepted: oauth_params["privacy_accepted"],
+            marketing_consent: oauth_params["marketing_consent"],
+            source: "web"
+          }
+        end
+
         def handle_google_callback(mobile:)
           Rails.logger.info("[GoogleOAuth] started uid=#{request.env.dig('omniauth.auth', 'uid')} mobile=#{mobile}")
-          user = User.from_omniauth(request.env["omniauth.auth"])
+          user = User.from_omniauth(request.env["omniauth.auth"], consent: oauth_consent_params)
 
           if user.anonymized_at.present?
             Rails.logger.info("[GoogleOAuthCallback] blocked login for anonymized user_id=#{user.id}")
@@ -52,6 +65,9 @@ module Api
         rescue User::BlockedEmailError
           Rails.logger.info("[GoogleOAuthCallback] blocked email attempted signup")
           redirect_to "#{FRONTEND}/login?error=account_deleted", allow_other_host: true
+        rescue User::ConsentRequiredError
+          Rails.logger.info("[GoogleOAuthCallback] blocked signup missing consent")
+          redirect_to "#{FRONTEND}/sign-up?error=consent_required", allow_other_host: true
         rescue => e
           Rails.logger.error("[GoogleOAuthError] #{e.class}: #{e.message}")
           redirect_to "#{FRONTEND}/login?error=oauth_failed", allow_other_host: true

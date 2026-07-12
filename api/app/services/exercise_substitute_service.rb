@@ -72,6 +72,8 @@ class ExerciseSubstituteService
     json = JSON.parse(raw.match(/\{.*\}/m)&.to_s || "{}")
     return nil if json.empty?
 
+    AiUsageLog.create!(user: @user, task_type: "exercise_substitute", model: cfg[:model], status: "success")
+
     EquipmentIdentification.create!(
       user:           @user,
       image_checksum: checksum,

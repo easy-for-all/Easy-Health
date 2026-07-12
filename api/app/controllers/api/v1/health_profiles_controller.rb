@@ -36,6 +36,7 @@ module Api
         params.permit(:age, :weight_kg, :height_cm, :fitness_level, :goal,
                       :training_days_per_week, :training_location, :gender, :session_duration_minutes,
                       :intensity_preference, :training_context,
+                      :preferred_workout_period, :preferred_workout_time, :workout_time_source,
                       activity_preferences: [], preferred_body_focus: [], preferred_training_styles: [],
                       available_equipment: [], avoided_exercise_ids: [], favorite_exercise_ids: [], limitations: [],
                       profiling_prompts_answered: {})
@@ -59,7 +60,20 @@ module Api
           p["activity_preferences"] = activities_for_styles(p["preferred_training_styles"])
         end
         p["avoided_exercise_ids"] = selected_exercise_ids(:avoided_exercise_ids) if p.key?("avoided_exercise_ids")
+        if p.key?("preferred_workout_period") || p.key?("preferred_workout_time")
+          p["workout_time_source"] = p["workout_time_source"].presence || "onboarding"
+          p["preferred_workout_time_updated_at"] = Time.current
+          # "variable" has no fixed time — clear any stray value.
+          p["preferred_workout_time"] = nil if p["preferred_workout_period"] == "variable"
+        end
         p
+      end
+
+      # IANA timezone (e.g. "America/Sao_Paulo") captured by the client. Stored on
+      # the user (source of truth for scheduling), never overwritten with a blank.
+      def persist_time_zone!
+        tz = params[:time_zone].presence || params[:timezone].presence
+        current_user.update_column(:time_zone, tz) if tz.present? && tz != current_user.time_zone
       end
 
       def save_profile_with_exercise_preferences(profile)
@@ -72,6 +86,7 @@ module Api
           end
           profile.save!
           sync_favorite_exercises! if favorite_exercise_ids_provided?
+          persist_time_zone!
         end
         true
       rescue ActiveRecord::RecordInvalid
@@ -138,6 +153,10 @@ module Api
           session_duration_minutes: profile.session_duration_minutes,
           intensity_preference: profile.intensity_preference,
           training_context: profile.training_context,
+          preferred_workout_period: profile.preferred_workout_period,
+          preferred_workout_time: profile.preferred_workout_time&.strftime("%H:%M"),
+          workout_time_source: profile.workout_time_source,
+          time_zone: current_user.time_zone,
           limitations: profile.limitations || [],
           profiling_prompts_answered: profile.profiling_prompts_answered || {},
           favorite_exercise_ids: current_user.user_favorite_exercises.order(:exercise_id).pluck(:exercise_id),

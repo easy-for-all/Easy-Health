@@ -153,6 +153,9 @@ module Api
           # Onboarding Analytics
           onboarding_analytics: onboarding_analytics,
 
+          # Activation push (Android MVP)
+          push_activation: push_activation_stats,
+
           # Composite training block usage
           block_usage_metrics: BlockUsageMetricsService.new.call
         }
@@ -189,6 +192,54 @@ module Api
       end
 
       private
+
+      # Activation push panel — aggregate only, never exposes tokens or PII.
+      def push_activation_stats
+        deliveries = NotificationDelivery.all
+        by_status = deliveries.group(:status).count
+        prefs = UserNotificationPreferences.all
+        event_counts = UserEvent
+          .where(event_name: %w[workout_started_from_push workout_completed_from_push])
+          .group(:event_name).count
+        dislike_reasons = UserEvent.where(event_name: "notification_disliked")
+          .group(Arel.sql("metadata->>'reason'")).count
+
+        {
+          enabled: PushActivationEligibility.enabled?,
+          experiment_enabled: PushActivationEligibility.experiment_enabled?,
+          firebase_configured: FirebasePushService.configured?,
+          permission: {
+            opt_in_reminders: prefs.where(workout_reminders_enabled: true).count,
+            push_enabled: prefs.where(push_enabled: true).count,
+            permission_granted: prefs.where.not(permission_granted_at: nil).count,
+            opted_out: prefs.where.not(notifications_disabled_at: nil).count,
+            active_devices: DeviceToken.active.where(platform: "android").count
+          },
+          funnel: {
+            scheduled: deliveries.count,
+            sent: deliveries.where.not(sent_at: nil).count,
+            opened: deliveries.where.not(opened_at: nil).count,
+            converted: deliveries.where.not(converted_at: nil).count,
+            workout_started_from_push: event_counts["workout_started_from_push"].to_i,
+            workout_completed_from_push: event_counts["workout_completed_from_push"].to_i
+          },
+          experiment: {
+            treatment: prefs.where(activation_push_variant: "treatment").count,
+            control: prefs.where(activation_push_variant: "control").count
+          },
+          preferences: {
+            reasons_disabled: prefs.where.not(disabled_reason: nil).group(:disabled_reason).count,
+            dislike_reasons: dislike_reasons
+          },
+          performance: {
+            sent: deliveries.where.not(sent_at: nil).count,
+            failed: by_status["failed"].to_i,
+            skipped: by_status["skipped"].to_i,
+            tokens_invalidated: DeviceToken.where.not(invalidated_at: nil).count,
+            retries: deliveries.sum(:retry_count)
+          }
+        }
+      end
 
       def require_admin!
         return if current_user&.admin?

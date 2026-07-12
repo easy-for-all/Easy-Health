@@ -14,6 +14,15 @@ module AiAgents
         .limit(SESSIONS_TO_ANALYZE)
     end
 
+    # Records a successful agent AI call so RateLimiter can enforce a daily cap.
+    # Kept out of #call_claude so tasks logged elsewhere (e.g. coach_chat) are not double-counted.
+    def log_agent_usage(task_key)
+      cfg = AiConfig.for(task_key)
+      AiUsageLog.create!(user: @user, task_type: task_key.to_s, model: cfg[:model], status: "success")
+    rescue => e
+      Rails.logger.error("[AiAgent] failed to log usage (#{task_key}): #{e.message}")
+    end
+
     def call_claude(prompt, task_key = :agent_analysis)
       client = Anthropic::Client.new(access_token: ENV.fetch("ANTHROPIC_API_KEY"))
       cfg = AiConfig.for(task_key)

@@ -22,7 +22,24 @@ function buildProfilePayload(form: WizardFormState) {
     avoided_exercise_ids: form.avoided_exercises.map((exercise) => exercise.id),
     limitations: form.limitations,
     training_context: form.gender === "female" ? (form.training_context || null) : null,
+    // Activation push: when the user usually trains + real IANA timezone. Empty
+    // period is omitted so we don't overwrite a previous choice on replan.
+    preferred_workout_period: form.preferred_workout_period || undefined,
+    preferred_workout_time: form.preferred_workout_period && form.preferred_workout_period !== "variable"
+      ? (form.preferred_workout_time || undefined)
+      : undefined,
+    workout_time_source: form.preferred_workout_period ? "onboarding" : undefined,
+    time_zone: resolveTimeZone(),
   };
+}
+
+// Real device/browser IANA timezone (e.g. "America/Sao_Paulo"), never an offset.
+function resolveTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // Onboarding faz POST (cria o profile); se o profile já existir (422), cai para PATCH —

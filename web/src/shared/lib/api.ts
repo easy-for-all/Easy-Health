@@ -35,8 +35,14 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown, opti
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const errorCode = typeof data?.error === "string" ? data.error : undefined;
-    const message = errorCode ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
+    // Prefer the machine-readable `error_code`; fall back to `error` for
+    // endpoints that carry the code in that field (e.g. trial_expired).
+    const errorCode =
+      typeof data?.error_code === "string" ? data.error_code :
+      typeof data?.error === "string" ? data.error : undefined;
+    const message =
+      (typeof data?.error === "string" ? data.error : undefined) ??
+      data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
     const err = new ApiError(message, res.status, errorCode);
     if (res.status === 402 && errorCode === "trial_expired" && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(TRIAL_EXPIRED_EVENT));
@@ -57,8 +63,14 @@ async function upload<T>(method: HttpMethod, path: string, formData: FormData): 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const errorCode = typeof data?.error === "string" ? data.error : undefined;
-    const message = errorCode ?? data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
+    // Prefer the machine-readable `error_code`; fall back to `error` for
+    // endpoints that carry the code in that field (e.g. trial_expired).
+    const errorCode =
+      typeof data?.error_code === "string" ? data.error_code :
+      typeof data?.error === "string" ? data.error : undefined;
+    const message =
+      (typeof data?.error === "string" ? data.error : undefined) ??
+      data?.errors?.join(", ") ?? res.statusText ?? "Request failed";
     if (res.status === 402 && errorCode === "trial_expired" && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(TRIAL_EXPIRED_EVENT));
     }

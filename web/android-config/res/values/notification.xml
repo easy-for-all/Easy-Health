@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent color applied to the notification icon/title. Matches the
+         EasyHealth blue-violet primary. -->
+    <color name="notification_color">#6C5CE7</color>
+</resources>

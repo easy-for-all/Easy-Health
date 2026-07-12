@@ -2,6 +2,8 @@ module Api
   module V1
     class AiAgentsController < BaseController
       before_action :require_active_access!
+      before_action(only: [:personal_trainer]) { check_rate_limit!(:agent_personal_trainer) }
+      before_action(only: [:conditioning])     { check_rate_limit!(:agent_conditioning) }
 
       def personal_trainer
         result = AiAgents::PersonalTrainerService.new(current_user).call

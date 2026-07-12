@@ -12,6 +12,8 @@ import { ConfettiBurst, GlowPulse } from "@/shared/components/motion";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { ExerciseInfoModal } from "@/shared/components/workout/exercise-info-modal";
 import { ProgressiveProfilingSheet } from "@/features/workout/progressive-profiling-sheet";
+import { PrePermissionCard } from "@/features/notifications/pre-permission-card";
+import { PushFeedbackLink } from "@/features/notifications/push-feedback-link";
 import { muscleLabel } from "@/shared/utils/muscle-labels";
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay, WorkoutDayExercise } from "@/shared/types/workout";
@@ -205,6 +207,9 @@ function WorkoutReadyContent() {
         </div>
       )}
 
+      {/* Contextual push opt-in (native only, after the workout is ready) */}
+      <PrePermissionCard onboardingStage="workout_ready" />
+
       {/* CTAs */}
       <button
         onClick={handleStart}
@@ -240,6 +245,8 @@ function WorkoutReadyContent() {
           Quer deixar esse treino mais certeiro? Responder 1 pergunta
         </button>
       )}
+
+      <PushFeedbackLink />
 
       <ExerciseInfoModal exercise={activeExercise} onClose={() => setActiveExercise(null)} />
       <ProgressiveProfilingSheet

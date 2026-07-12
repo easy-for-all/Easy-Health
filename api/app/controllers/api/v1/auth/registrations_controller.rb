@@ -5,7 +5,12 @@ module Api
         before_action :authenticate_user!, only: [:destroy]
 
         def create
-          user = User.new(registration_params)
+          unless User.required_consent_given?(consent_params)
+            render json: { error: "Aceite os termos para continuar", error_code: "consent_required" }, status: :unprocessable_entity
+            return
+          end
+
+          user = User.new(registration_params.merge(User.consent_attributes(consent_params)))
 
           if user.save
             sign_in(user)
@@ -34,7 +39,16 @@ module Api
         private
 
         def registration_params
-          params.permit(:name, :email, :password, :password_confirmation, :marketing_consent)
+          params.permit(:name, :email, :password, :password_confirmation)
+        end
+
+        def consent_params
+          {
+            terms_accepted: params[:terms_accepted],
+            privacy_accepted: params[:privacy_accepted],
+            marketing_consent: params[:marketing_consent],
+            source: "web"
+          }
         end
       end
     end

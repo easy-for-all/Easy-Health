@@ -56,9 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     if (!Capacitor.isNativePlatform()) return;
 
-    import("@/shared/lib/pushNotifications").then(({ initPushNotifications }) => {
-      initPushNotifications().catch((err) => {
-        console.error("[Push] Init failed", err);
+    // Only re-syncs the token if the user already granted permission — never
+    // prompts on login. The native prompt is shown only via the contextual
+    // pre-permission opt-in after a workout is created.
+    import("@/shared/lib/pushNotifications").then(({ syncPushIfGranted }) => {
+      syncPushIfGranted().catch((err) => {
+        console.error("[Push] Sync failed", err);
       });
     });
   }, [user?.id]);
@@ -75,6 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       password_confirmation: password,
+      // Reachable only after the sign-up screen's consent gate, so the required
+      // Terms + Privacy acceptance is guaranteed here. The backend stamps the
+      // authoritative versions/timestamps from these flags.
+      terms_accepted: true,
+      privacy_accepted: true,
       marketing_consent: marketingConsent ?? false,
     });
     setUser(u);

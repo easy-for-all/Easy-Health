@@ -181,7 +181,16 @@ Rails.application.routes.draw do
 
       # User search (public profiles only)
       resources :users, only: [:index, :show]
-      resources :device_tokens, only: [:create]
+      resources :device_tokens, only: [:create, :update, :destroy]
+
+      # Activation push notifications (Android MVP)
+      resource :notification_preferences, only: [:show, :create, :update]
+      resources :notification_deliveries, only: [] do
+        member do
+          post :opened
+          post :dislike
+        end
+      end
 
       # Workout sharing
       resources :shared_workouts, only: [:index, :create, :destroy]

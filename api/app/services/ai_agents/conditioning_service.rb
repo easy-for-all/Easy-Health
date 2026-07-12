@@ -8,6 +8,7 @@ module AiAgents
       raw = call_claude(prompt, :agent_conditioning)
       return { recommendations: [], message: "Não foi possível gerar análise agora." } if raw.blank?
 
+      log_agent_usage(:agent_conditioning)
       recommendations = parse_recommendations(raw)
       {
         recommendations: recommendations,
