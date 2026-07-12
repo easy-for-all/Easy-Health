@@ -56,11 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     if (!Capacitor.isNativePlatform()) return;
 
+    // Runs once the session is ready (user resolved from /auth/me or a login).
     // Only re-syncs the token if the user already granted permission — never
-    // prompts on login. The native prompt is shown only via the contextual
-    // pre-permission opt-in after a workout is created.
+    // prompts on login. Idempotent: concurrent invocations (incl. React Strict
+    // Mode double-mount) share a single in-flight operation. A transient failure
+    // here is retried, idempotently, on the next authenticated boot/login.
     import("@/shared/lib/pushNotifications").then(({ syncPushIfGranted }) => {
-      syncPushIfGranted().catch((err) => {
+      syncPushIfGranted("auth_boot").catch((err) => {
         console.error("[Push] Sync failed", err);
       });
     });
