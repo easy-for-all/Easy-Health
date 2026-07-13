@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- EasyHealth is dark-first. This is the brand dark surface (same hex used as
+         the web msapplication-TileColor and the bg-[#0a0f1e] workout screens). It is
+         the window background so that, under edge-to-edge (Android 15 / targetSDK 36),
+         the transparent status bar and navigation bar reveal the dark app surface —
+         not the white AppCompat default that caused the top/bottom white bands. -->
+    <color name="easyhealth_background">#0A0F1E</color>
+
+    <!-- Referenced by styles.xml (AppTheme). Previously undefined, so we pin them to
+         the EasyHealth blue-violet primary instead of relying on framework defaults. -->
+    <color name="colorPrimary">#6C5CE7</color>
+    <color name="colorPrimaryDark">#0A0F1E</color>
+    <color name="colorAccent">#6C5CE7</color>
+</resources>

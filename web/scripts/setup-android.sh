@@ -33,6 +33,13 @@ cp android-config/app-build.gradle android/app/build.gradle
 cp android-config/gradle.properties android/gradle.properties
 cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 cp android-config/MainActivity.java android/app/src/main/java/com/EasyHealth/myapp/MainActivity.java
+# Edge-to-edge: dark window background + splash/theme so the transparent system
+# bars reveal the EasyHealth dark surface instead of white bands.
+mkdir -p android/app/src/main/res/values android/app/src/main/res/drawable
+cp android-config/res/values/colors.xml android/app/src/main/res/values/colors.xml
+cp android-config/res/values/styles.xml android/app/src/main/res/values/styles.xml
+cp android-config/res/values/notification.xml android/app/src/main/res/values/notification.xml
+cp android-config/res/drawable/ic_stat_notification.xml android/app/src/main/res/drawable/ic_stat_notification.xml
 mkdir -p android/gradle/wrapper
 cp android-config/gradle/wrapper/gradle-wrapper.properties \
    android/gradle/wrapper/gradle-wrapper.properties

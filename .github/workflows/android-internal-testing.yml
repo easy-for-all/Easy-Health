@@ -57,6 +57,10 @@ jobs:
           mkdir -p android/app/src/main/res/drawable android/app/src/main/res/values
           cp android-config/res/drawable/ic_stat_notification.xml android/app/src/main/res/drawable/ic_stat_notification.xml
           cp android-config/res/values/notification.xml android/app/src/main/res/values/notification.xml
+          # Edge-to-edge: dark window background + splash/theme so the transparent
+          # system bars reveal the EasyHealth dark surface instead of white bands.
+          cp android-config/res/values/colors.xml android/app/src/main/res/values/colors.xml
+          cp android-config/res/values/styles.xml android/app/src/main/res/values/styles.xml
 
       - name: Decode google-services.json
         env:
