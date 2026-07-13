@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <!-- Content theme the MainActivity runs on after the splash. Under edge-to-edge
+         the system bars are transparent, so the ONLY thing that shows behind them is
+         the window background: it must be the EasyHealth dark surface, otherwise the
+         AppCompat light default bleeds through as white bands. -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/easyhealth_background</item>
+        <item name="android:colorBackground">@color/easyhealth_background</item>
+        <!-- Dark-first: keep status/nav bar icons light (contrast against the dark
+             surface). The web SystemBarsController flips these at runtime per screen
+             via SystemBars.setStyle. -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <!-- Legacy bar colors for Android < 15; ignored (bars forced transparent) on
+             Android 15+ where windowBackground is what matters. -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- Launch / splash theme (declared as the MainActivity theme in the manifest).
+         Uses the modern SplashScreen API: dark splash background and, crucially, a
+         postSplashScreenTheme so the white launch backdrop does not persist after the
+         WebView loads. -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:windowBackground">@color/easyhealth_background</item>
+        <item name="windowSplashScreenBackground">@color/easyhealth_background</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>
