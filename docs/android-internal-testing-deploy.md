@@ -36,7 +36,7 @@ O job de build roda automaticamente a cada push na `main`. O upload só acontece
 | `ANDROID_KEYSTORE_PASSWORD` | Senha da keystore |
 | `ANDROID_KEY_ALIAS` | Alias da chave de assinatura |
 | `ANDROID_KEY_PASSWORD` | Senha da chave de assinatura |
-| `GOOGLE_SERVICES_JSON_BASE64` | google-services.json do Firebase Console em base64 (ver web/docs/firebase-push-android.md) |
+| `GOOGLE_SERVICES_JSON_BASE64` | `google-services.json` do app Android no Firebase Console, em base64 (ver web/docs/firebase-push-android.md). Não é Service Account. |
 
 ### Environment Secrets — `internal-testing`
 (Settings → Environments → internal-testing → Add secret)
@@ -61,6 +61,12 @@ cat ~/secure/EasyHealth/google-play/service-account.json
 
 # Validar que o JSON da service account é válido
 cat ~/secure/EasyHealth/google-play/service-account.json | jq .
+
+# GOOGLE_SERVICES_JSON_BASE64
+# Baixe este arquivo em Firebase Console → Project settings → Your apps → Android.
+# Ele deve conter project_info e um client Android para com.EasyHealth.myapp.
+base64 -w 0 ~/secure/EasyHealth/firebase/google-services.json
+# Cole o output completo como valor do secret
 
 # ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
 # Use os mesmos valores que você definiu ao criar a keystore com keytool

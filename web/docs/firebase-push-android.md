@@ -80,12 +80,18 @@ Adicione um secret no repositório:
 
 | Nome do secret | Valor |
 |---|---|
-| `GOOGLE_SERVICES_JSON_BASE64` | Conteúdo base64 do `google-services.json` |
+| `GOOGLE_SERVICES_JSON_BASE64` | Conteúdo base64 do `google-services.json` do app Android. Não use Service Account aqui. |
 
 Para gerar o valor:
 
 ```bash
 base64 -w0 google-services.json
+```
+
+Valide o arquivo antes de gerar o secret:
+
+```bash
+node -e "const j=require('./google-services.json'); const ok=j.project_info?.project_number && j.project_info?.project_id && j.client?.some(c=>c.client_info?.android_client_info?.package_name==='com.EasyHealth.myapp' && c.client_info?.mobilesdk_app_id); if (!ok) { console.error('google-services.json invalido para com.EasyHealth.myapp'); process.exit(1) } console.log('ok')"
 ```
 
 O workflow `.github/workflows/android-internal-testing.yml` decodifica automaticamente o secret e escreve o arquivo em `web/android/app/google-services.json` antes do `cap sync`.

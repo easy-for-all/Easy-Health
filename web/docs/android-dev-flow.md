@@ -159,6 +159,7 @@ Secrets necessários no repositório GitHub:
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
+- `GOOGLE_SERVICES_JSON_BASE64` — `google-services.json` do app Android no Firebase Console, em base64
 - `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
 
 ---
