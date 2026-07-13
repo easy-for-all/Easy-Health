@@ -62,8 +62,16 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
-          echo "$GOOGLE_SERVICES_JSON_BASE64" | tr -d '[:space:]' | base64 --decode \
-            > web/android/app/google-services.json
+          if [ -z "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            echo "❌ Secret GOOGLE_SERVICES_JSON_BASE64 não configurado"
+            exit 1
+          fi
+
+          if ! echo "$GOOGLE_SERVICES_JSON_BASE64" | tr -d '[:space:]' | base64 --decode \
+            > web/android/app/google-services.json; then
+            echo "❌ GOOGLE_SERVICES_JSON_BASE64 precisa conter o google-services.json em base64"
+            exit 1
+          fi
 
       - name: Verify google-services.json
         run: |
@@ -71,7 +79,50 @@ jobs:
             echo "❌ google-services.json está vazio ou ausente"
             exit 1
           fi
-          echo "✅ google-services.json encontrado ($(wc -c < web/android/app/google-services.json) bytes)"
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const file = 'web/android/app/google-services.json';
+          const expectedPackageName = 'com.EasyHealth.myapp';
+          let config;
+
+          try {
+            config = JSON.parse(fs.readFileSync(file, 'utf8'));
+          } catch (error) {
+            console.error('❌ GOOGLE_SERVICES_JSON_BASE64 não decodificou para um JSON válido.');
+            process.exit(1);
+          }
+
+          if (config.type === 'service_account' || config.private_key || config.client_email) {
+            console.error('❌ GOOGLE_SERVICES_JSON_BASE64 parece ser uma Service Account.');
+            console.error('Use o google-services.json do app Android no Firebase Console, não o JSON de Service Account.');
+            process.exit(1);
+          }
+
+          const clients = Array.isArray(config.client) ? config.client : [];
+          const androidClient = clients.find((client) => (
+            client?.client_info?.android_client_info?.package_name === expectedPackageName
+          ));
+
+          const missingFields = [];
+          if (!config.project_info || typeof config.project_info !== 'object') missingFields.push('project_info');
+          if (!config.project_info?.project_number) missingFields.push('project_info.project_number');
+          if (!config.project_info?.project_id) missingFields.push('project_info.project_id');
+          if (!clients.length) missingFields.push('client[]');
+          if (!androidClient) missingFields.push(`client[].client_info.android_client_info.package_name=${expectedPackageName}`);
+          if (androidClient && !androidClient.client_info?.mobilesdk_app_id) {
+            missingFields.push('client[].client_info.mobilesdk_app_id');
+          }
+
+          if (missingFields.length > 0) {
+            console.error('❌ google-services.json não tem o formato esperado para Android/Firebase.');
+            console.error(`Campos esperados ausentes: ${missingFields.join(', ')}`);
+            process.exit(1);
+          }
+          NODE
+
+          echo "✅ google-services.json Android válido ($(wc -c < web/android/app/google-services.json) bytes)"
 
       - name: Sync Capacitor
         working-directory: web

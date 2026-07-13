@@ -36,7 +36,11 @@ Já suportado no workflow `android-internal-testing.yml`. Passos:
 1. No **Firebase Console**, selecione o projeto (reuse o projeto Google Cloud da EasyHealth se já existir; **não crie um novo** sem verificar).
 2. Registre o app Android **`com.EasyHealth.myapp`**. Informe os SHA-1/SHA-256 (Play + debug).
 3. Baixe `google-services.json`.
-4. `base64 -w0 google-services.json` → cole em **GitHub → Settings → Secrets → `GOOGLE_SERVICES_JSON_BASE64`**.
+4. Confirme que o arquivo contém `project_info` e um client Android para `com.EasyHealth.myapp`.
+5. `base64 -w0 google-services.json` → cole em **GitHub → Settings → Secrets → `GOOGLE_SERVICES_JSON_BASE64`**.
+
+Esse secret é o config do app Android baixado em **Project Settings → Your apps → Android**.
+Não use aqui o JSON de Service Account.
 
 ### 2. `FIREBASE_SERVICE_ACCOUNT_JSON` (backend — envio FCM HTTP v1)
 No ambiente do **backend** (VPS/compose), **nunca no banco/repo/log**:
