@@ -56,7 +56,7 @@ module Api
           }, status: :created
         else
           exercise_count = (duration / 8.0).round.clamp(3, 12)
-          chosen_exercises = build_exercises(modality, muscle_groups, location, exercise_count, fav_ids)
+          chosen_exercises = build_exercises(modality, muscle_groups, location, exercise_count, fav_ids, explicit_groups: raw_groups.any?)
 
           render json: {
             day: {
@@ -240,11 +240,13 @@ module Api
 
       # ── Exercise-based workouts ─────────────────────────────────────────────
 
-      def build_exercises(modality, muscle_groups, location, exercise_count, fav_ids)
+      def build_exercises(modality, muscle_groups, location, exercise_count, fav_ids, explicit_groups: false)
         exercise_type = MODALITY_TO_EXERCISE_TYPE[modality]
 
         if exercise_type
           scope = Exercise.browseable.where(exercise_type: exercise_type)
+          # Quando o usuário escolheu grupos no seletor, restringe a musculação a eles.
+          scope = scope.where(muscle_group: muscle_groups) if exercise_type == "musculacao" && explicit_groups
           scope = apply_location_filter(scope, location)
           fav_priority = fav_ids.any? ? Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END") : Arel.sql("1")
           scope = scope.order(fav_priority, gif_presence_order, :id)

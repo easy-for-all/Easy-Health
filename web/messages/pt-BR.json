@@ -318,5 +318,19 @@
       "empty": "Nenhuma recomendação no momento",
       "mark_read": "Marcar como lido"
     }
+  },
+  "appPromo": {
+    "dismiss": "Dispensar",
+    "banner": {
+      "text": "Treine melhor com o app da EasyHealth no seu Android.",
+      "cta": "Baixar app",
+      "ctaQr": "Ver QR"
+    },
+    "card": {
+      "title": "Leve a EasyHealth no bolso",
+      "subtitle": "O app Android traz treino offline, lembretes e uma execução mais fluida.",
+      "androidCta": "Baixar na Play Store",
+      "qrHint": "Aponte a câmera do seu Android para instalar"
+    }
   }
 }

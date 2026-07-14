@@ -8,6 +8,8 @@ import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer
 import type { WorkoutDay } from "@/shared/types/workout";
 import { ModalityPicker, type Modality } from "./modality-picker";
 import { EnvironmentStep, type EquipId, type Location } from "./environment-step";
+import { MuscleStep } from "./muscle-step";
+import { useMuscleSelection } from "@/features/muscle-selector";
 type Duration = 15 | 30 | 45 | 60;
 type Difficulty = "iniciante" | "moderado" | "intenso";
 
@@ -26,21 +28,23 @@ const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; emoji: string; sub
   { value: "intenso",   label: "Intenso",   emoji: "🔴", sub: "Mais séries, menos descanso" },
 ];
 
-const TOTAL_STEPS = 4;
+// Passos do fluxo. O passo "muscle" (foco muscular) só entra quando a modalidade
+// é força (musculação) — por isso a lista é derivada da modalidade escolhida.
+type StepKey = "modality" | "muscle" | "duration" | "environment" | "intensity";
 
-const TRAINER_MESSAGES: Record<number, string> = {
-  1: "Qual modalidade você quer treinar hoje?",
-  2: "Quanto tempo você tem disponível?",
-  3: "Onde você vai treinar?",
-  4: "Qual é o nível de intensidade?",
+const STEP_META: Record<StepKey, { title: string; trainer: string }> = {
+  modality:    { title: "Qual modalidade?",  trainer: "Qual modalidade você quer treinar hoje?" },
+  muscle:      { title: "Qual músculo?",     trainer: "Quais grupos musculares você quer focar?" },
+  duration:    { title: "Quanto tempo?",     trainer: "Quanto tempo você tem disponível?" },
+  environment: { title: "Onde vai treinar?", trainer: "Onde você vai treinar?" },
+  intensity:   { title: "Qual intensidade?", trainer: "Qual é o nível de intensidade?" },
 };
 
-const STEP_TITLES = [
-  "Qual modalidade?",
-  "Quanto tempo?",
-  "Onde vai treinar?",
-  "Qual intensidade?",
-];
+function stepsFor(modality: Modality | null): StepKey[] {
+  const base: StepKey[] = ["modality", "duration", "environment", "intensity"];
+  if (modality === "musculacao") base.splice(1, 0, "muscle");
+  return base;
+}
 
 export default function QuickWorkoutPage() {
   const router = useRouter();
@@ -53,6 +57,11 @@ export default function QuickWorkoutPage() {
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const muscle = useMuscleSelection();
+
+  const steps = stepsFor(modality);
+  const totalSteps = steps.length;
+  const currentKey = steps[step - 1];
 
   function next() {
     setStep((s) => s + 1);
@@ -69,6 +78,8 @@ export default function QuickWorkoutPage() {
         location: location ?? "academia",
         difficulty: selectedDifficulty,
         equipment,
+        // Só quando força e o usuário escolheu grupos (senão o backend decide).
+        muscle_groups: modality === "musculacao" && muscle.count > 0 ? muscle.selectedList : undefined,
       });
       sessionStorage.setItem("wk_quick_day", JSON.stringify(data.day));
       router.push("/workout/today?quick=1");
@@ -89,14 +100,14 @@ export default function QuickWorkoutPage() {
         <button onClick={() => (step > 1 ? setStep(step - 1) : router.back())} className="text-slate-400 text-sm">
           ← Voltar
         </button>
-        <span className="text-xs font-medium text-slate-500">{step}/{TOTAL_STEPS}</span>
+        <span className="text-xs font-medium text-slate-500">{step}/{totalSteps}</span>
       </div>
 
       {/* Progress */}
       <div className="mb-6 h-1 rounded-full bg-slate-800">
         <motion.div
           className="h-1 rounded-full bg-primary-500"
-          animate={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
+          animate={{ width: `${(step / totalSteps) * 100}%` }}
           transition={{ duration: 0.3, ease: "easeOut" }}
         />
       </div>
@@ -104,11 +115,11 @@ export default function QuickWorkoutPage() {
       {/* AI Trainer */}
       <div className="flex items-start gap-3 mb-6">
         <AITrainerAvatar mood="speaking" size="sm" />
-        <AITrainerBubble message={TRAINER_MESSAGES[step]} mood="speaking" show side="left" />
+        <AITrainerBubble message={STEP_META[currentKey].trainer} mood="speaking" show side="left" />
       </div>
 
       {/* Step title */}
-      <h1 className="text-2xl font-bold text-white mb-5">{STEP_TITLES[step - 1]}</h1>
+      <h1 className="text-2xl font-bold text-white mb-5">{STEP_META[currentKey].title}</h1>
 
       {/* Step content */}
       <AnimatePresence mode="wait">
@@ -120,14 +131,22 @@ export default function QuickWorkoutPage() {
           transition={{ duration: 0.18, ease: "easeOut" }}
           className="flex-1"
         >
-          {step === 1 && (
+          {currentKey === "modality" && (
             <ModalityPicker
               value={modality}
               onSelect={(m) => { setModality(m); next(); }}
             />
           )}
 
-          {step === 2 && (
+          {currentKey === "muscle" && (
+            <MuscleStep
+              selection={muscle}
+              onContinue={next}
+              onDecideForMe={() => { muscle.clear(); next(); }}
+            />
+          )}
+
+          {currentKey === "duration" && (
             <div className="grid grid-cols-2 gap-3">
               {DURATION_OPTIONS.map((opt) => (
                 <SelectCard
@@ -142,7 +161,7 @@ export default function QuickWorkoutPage() {
             </div>
           )}
 
-          {step === 3 && modality && (
+          {currentKey === "environment" && modality && (
             <>
               <EnvironmentStep
                 modality={modality}
@@ -165,7 +184,7 @@ export default function QuickWorkoutPage() {
             </>
           )}
 
-          {step === 4 && (
+          {currentKey === "intensity" && (
             <div className="space-y-3">
               {DIFFICULTY_OPTIONS.map((opt) => (
                 <SelectCard

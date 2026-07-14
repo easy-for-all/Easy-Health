@@ -151,6 +151,7 @@ class WorkoutPlanGeneratorService
   def initialize(user, days_per_week: nil, activity_preferences: nil,
                  modality: nil, split_type: nil, cardio_type: nil,
                  cardio_format: nil, custom_splits: nil, training_location: nil,
+                 selected_muscles: nil, muscle_priorities: nil,
                  chat_decision: nil)
     @user    = user
     @profile = user.health_profile
@@ -162,6 +163,8 @@ class WorkoutPlanGeneratorService
     @cardio_type       = cardio_type       || @profile&.cardio_type       || "cardio"
     @cardio_format     = cardio_format     || @profile&.cardio_format
     @custom_splits     = custom_splits     || @profile&.custom_splits     || []
+    @selected_muscles  = normalize_muscle_groups(selected_muscles || @profile&.selected_muscle_groups || [])
+    @muscle_priorities = (muscle_priorities || @profile&.muscle_priorities || {}).transform_keys(&:to_s)
     @training_location = legacy_training_location(training_location || @profile&.training_location)
     raw_prefs = Array(activity_preferences || @profile&.activity_preferences || [])
     @activity_preferences = raw_prefs.presence || ["musculacao"]
@@ -189,8 +192,24 @@ class WorkoutPlanGeneratorService
       fav_exercise_ids: fav_exercise_ids
     )
 
-    plan_days_per_week = @strategy_active ? strategy_frequency : @days_per_week
-    template = @strategy_active ? build_strategy_template : build_template
+    # Seleção muscular explícita do usuário (força) dita a composição do treino,
+    # sobrepondo splits pré-fabricados e o caminho de IA — é o que honra o
+    # seletor de grupos musculares. "Decida por mim" não envia seleção e cai no
+    # comportamento padrão (estratégia/IA/split).
+    plan_days_per_week = if selected_muscles_active?
+                           @days_per_week
+                         elsif @strategy_active
+                           strategy_frequency
+                         else
+                           @days_per_week
+                         end
+    template = if selected_muscles_active?
+                 build_selected_muscles_template
+               elsif @strategy_active
+                 build_strategy_template
+               else
+                 build_template
+               end
     schedule = DAY_SCHEDULE[plan_days_per_week]
     @goal = @profile&.goal
 
@@ -202,7 +221,7 @@ class WorkoutPlanGeneratorService
       fitness_level: @fitness_level,
       days_per_week: plan_days_per_week,
       session_duration_minutes: @profile&.session_duration_minutes,
-      preferred_body_focus: @profile&.preferred_body_focus,
+      preferred_body_focus: volume_focus_groups,
       groups_in_template: group_occurrences.keys
     )
     @volume_planner.call
@@ -725,6 +744,57 @@ class WorkoutPlanGeneratorService
       schedule.sort_by { |d| d[:intensity] == "leve" ? 0 : 1 }
     else
       schedule
+    end
+  end
+
+  # --- Seleção muscular explícita (seletor de grupos musculares) ---
+
+  def normalize_muscle_groups(list)
+    Array(list).map(&:to_s) & Exercise::MUSCLE_GROUPS
+  end
+
+  # Grupos escolhidos que devem ser treinados: exclui os marcados "avoid".
+  def valid_selected_groups
+    @selected_muscles.reject { |group| @muscle_priorities[group].to_s == "avoid" }
+  end
+
+  def high_priority_groups
+    @selected_muscles.select { |group| @muscle_priorities[group].to_s == "high" }
+  end
+
+  # Só honramos a seleção em treinos de força (com musculação nas preferências).
+  # Sem seleção válida (ou "Decida por mim") caímos no fluxo padrão.
+  def selected_muscles_active?
+    valid_selected_groups.any? && @activity_preferences.include?("musculacao")
+  end
+
+  # High → entra em preferred_body_focus para o WeeklyVolumePlanner aplicar o
+  # FOCUS_BOOST (mais volume). Fora da seleção, mantém o foco do perfil.
+  def volume_focus_groups
+    return high_priority_groups if selected_muscles_active?
+
+    @profile&.preferred_body_focus
+  end
+
+  # Distribui os grupos escolhidos pelos dias da semana. Grupos "high" repetem
+  # para cair em mais dias (frequência/volume extra). Cobre grupos que os splits
+  # pré-fabricados ignoram (glutes/calves/forearms/trapezius).
+  def build_selected_muscles_template
+    groups = valid_selected_groups
+    return build_ai_template if groups.empty?
+
+    days     = @days_per_week
+    weighted = groups.flat_map { |group| high_priority_groups.include?(group) ? [ group, group ] : [ group ] }
+
+    # Poucos grupos para muitos dias → cada dia treina todos (full-body).
+    if weighted.size <= days
+      return Array.new(days) { |index| { name: "Treino #{("A".ord + index).chr}", muscle_groups: groups } }
+    end
+
+    buckets = Array.new(days) { [] }
+    weighted.each_with_index { |group, index| buckets[index % days] << group }
+    buckets.map.with_index do |day_groups, index|
+      { name: "Treino #{("A".ord + index).chr}", muscle_groups: day_groups.uniq.presence || groups }
     end
   end
 

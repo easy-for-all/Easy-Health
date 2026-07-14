@@ -25,7 +25,7 @@ const STEP_FIELDS: Partial<Record<StepId, (keyof WizardFormState)[]>> = {
   "complete-profile": ["age", "fitness_level", "gender", "height_cm", "weight_kg"],
   "complete-method": ["modality", "split_type", "cardio_type", "cardio_format"],
   "complete-place": ["training_location", "available_equipment"],
-  "complete-focus": ["preferred_body_focus", "preferred_training_styles"],
+  "complete-focus": ["preferred_body_focus", "preferred_training_styles", "selected_muscles", "muscle_priorities"],
   "complete-schedule": ["session_duration_minutes", "training_days_per_week", "intensity_preference", "limitations"],
   "complete-when": ["preferred_workout_period", "preferred_workout_time"],
   "complete-care": ["favorite_exercises", "avoided_exercises"],

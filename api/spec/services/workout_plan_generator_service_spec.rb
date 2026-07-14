@@ -480,6 +480,91 @@ RSpec.describe WorkoutPlanGeneratorService do
     expect(composite.first.workout_day_exercises.count).to eq(2)
   end
 
+  describe "explicit muscle-group selection (seletor de grupos musculares)" do
+    def seed_all_group_exercises
+      Exercise::MUSCLE_GROUPS.each do |group|
+        create_browseable_exercise("#{group} A", group)
+        create_browseable_exercise("#{group} B", group)
+      end
+    end
+
+    def assigned_muscle_groups(plan)
+      plan.workout_days
+          .flat_map { |day| day.workout_day_exercises.map { |wde| wde.exercise.muscle_group } }
+          .uniq
+    end
+
+    it "only assigns exercises from the selected groups" do
+      user = create(:user)
+      create(:health_profile, user: user, training_days_per_week: 3, training_location: "home",
+                              available_equipment: [ "bodyweight" ])
+      seed_all_group_exercises
+
+      allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+      plan = described_class.new(
+        user, modality: "musculacao", activity_preferences: [ "musculacao" ],
+              selected_muscles: %w[chest triceps]
+      ).call
+
+      expect(assigned_muscle_groups(plan)).to match_array(%w[chest triceps])
+    end
+
+    it "excludes groups marked as 'avoid'" do
+      user = create(:user)
+      create(:health_profile, user: user, training_days_per_week: 3, training_location: "home",
+                              available_equipment: [ "bodyweight" ])
+      seed_all_group_exercises
+
+      allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+      plan = described_class.new(
+        user, modality: "musculacao", activity_preferences: [ "musculacao" ],
+              selected_muscles: %w[chest legs], muscle_priorities: { "legs" => "avoid" }
+      ).call
+
+      expect(assigned_muscle_groups(plan)).to eq(%w[chest])
+    end
+
+    it "gives more volume to a 'high' priority group than to a 'normal' one" do
+      user = create(:user)
+      create(:health_profile, user: user, fitness_level: "intermediate", goal: "gain_muscle",
+                              training_days_per_week: 4, training_location: "home",
+                              available_equipment: [ "bodyweight" ], session_duration_minutes: 60)
+      # Estoque amplo p/ que a diferença de volume (FOCUS_BOOST) apareça e não
+      # seja mascarada pela falta de exercícios distintos na semana.
+      8.times do |i|
+        create_browseable_exercise("chest #{i}", "chest")
+        create_browseable_exercise("back #{i}", "back")
+      end
+
+      allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+      plan = described_class.new(
+        user, modality: "musculacao", activity_preferences: [ "musculacao" ],
+              selected_muscles: %w[chest back],
+              muscle_priorities: { "chest" => "high", "back" => "normal" }
+      ).call
+
+      counts = plan.workout_days
+                   .flat_map { |day| day.workout_day_exercises.map { |wde| wde.exercise.muscle_group } }
+                   .tally
+      expect(counts.fetch("chest", 0)).to be > counts.fetch("back", 0)
+    end
+
+    it "covers groups the pre-baked splits ignore (glutes/calves)" do
+      user = create(:user)
+      create(:health_profile, user: user, training_days_per_week: 2, training_location: "home",
+                              available_equipment: [ "bodyweight" ])
+      seed_all_group_exercises
+
+      allow(FitnessIntelligence).to receive(:enabled?).and_return(false)
+      plan = described_class.new(
+        user, modality: "musculacao", activity_preferences: [ "musculacao" ],
+              selected_muscles: %w[glutes calves]
+      ).call
+
+      expect(assigned_muscle_groups(plan)).to match_array(%w[glutes calves])
+    end
+  end
+
   def create_browseable_exercise(name, muscle_group, safety_tags: [], technical_complexity: nil,
                                   risk_level: nil, calisthenics_skill: nil, compound: nil,
                                   movement_pattern: nil, style_tags: [], objective_tags: [],

@@ -51,6 +51,9 @@ export const EVENTS = {
   AI_WORKOUT_GENERATED: "ai_workout_generated",
   SCREEN_VIEW:          "screen_view",
   CTA_CLICK:            "cta_click",
+  APP_PROMO_VIEWED:     "app_promo_viewed",
+  APP_PROMO_CLICK:      "app_promo_click",
+  APP_PROMO_DISMISSED:  "app_promo_dismissed",
 } as const;
 
 const PLAN_ANALYTICS: Record<BillingPlanName, {

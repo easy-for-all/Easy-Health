@@ -1,0 +1,177 @@
+/* Seletor de grupos musculares — corpo interativo, resumo e presets.
+   Reutiliza os tokens de globals.css ([data-mode="dark"]). Estados nunca
+   dependem só de cor (check + aria-pressed + label). */
+
+.ms-body-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.ms-body-svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+}
+
+.ms-head {
+  fill: var(--surface-3, #132a30);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.ms-region {
+  fill: var(--surface-3, #132a30);
+  stroke: var(--border);
+  stroke-width: 1;
+  cursor: pointer;
+  transition: fill 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    stroke 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ms-region:hover {
+  stroke: var(--primary);
+}
+
+.ms-region.sel {
+  fill: var(--primary);
+  stroke: var(--primary);
+}
+
+.ms-region:focus-visible {
+  outline: none;
+  stroke: var(--primary);
+  stroke-width: 2.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-region {
+    transition: none;
+  }
+}
+
+/* Resumo com chips removíveis */
+.ms-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0;
+}
+
+.ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 12px;
+  border-radius: var(--r-pill, 999px);
+  border: 1.5px solid var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 36px;
+}
+
+.ms-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.ms-summary-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.ms-clear {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 36px;
+}
+
+/* Presets */
+.ms-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ms-preset {
+  padding: 10px 14px;
+  border-radius: var(--r-md, 16px);
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color 160ms, background 160ms;
+}
+
+.ms-preset:hover {
+  border-color: var(--primary);
+}
+
+/* Controle de prioridade (modo avançado) */
+.ms-priority-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.ms-priority-row + .ms-priority-row {
+  border-top: 1px solid var(--hairline, var(--border));
+}
+
+.ms-priority-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ms-warning {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md, 16px);
+  border: 1.5px solid var(--warn, #d9a441);
+  background: var(--warn-soft, rgba(217, 164, 65, 0.12));
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ms-warning-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ms-warning-actions button {
+  padding: 6px 12px;
+  border-radius: var(--r-pill, 999px);
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 36px;
+}

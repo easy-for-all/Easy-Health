@@ -318,5 +318,19 @@
       "empty": "No recommendations at the moment",
       "mark_read": "Mark as read"
     }
+  },
+  "appPromo": {
+    "dismiss": "Dismiss",
+    "banner": {
+      "text": "Train better with the EasyHealth app on your Android.",
+      "cta": "Get the app",
+      "ctaQr": "Show QR"
+    },
+    "card": {
+      "title": "Take EasyHealth with you",
+      "subtitle": "The Android app brings offline workouts, reminders and a smoother execution.",
+      "androidCta": "Get it on Play Store",
+      "qrHint": "Point your Android camera to install"
+    }
   }
 }

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_12_130004) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -383,6 +383,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_130004) do
     t.index ["difficulty_level"], name: "index_exercises_on_difficulty_level"
     t.index ["equipment_type"], name: "index_exercises_on_equipment_type"
     t.index ["exercise_type"], name: "index_exercises_on_exercise_type"
+    t.index ["muscle_group"], name: "index_exercises_on_muscle_group"
     t.index ["regression_exercise_id"], name: "index_exercises_on_regression_exercise_id"
     t.index ["risk_level"], name: "index_exercises_on_risk_level"
     t.index ["technical_complexity"], name: "index_exercises_on_technical_complexity"
@@ -470,12 +471,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_130004) do
     t.datetime "last_profile_review_at"
     t.text "limitations", default: [], array: true
     t.string "modality", default: "ai_choice"
+    t.jsonb "muscle_priorities", default: {}
     t.text "preferred_body_focus", default: [], null: false, array: true
     t.text "preferred_training_styles", default: [], array: true
     t.string "preferred_workout_period"
     t.time "preferred_workout_time"
     t.datetime "preferred_workout_time_updated_at"
     t.jsonb "profiling_prompts_answered", default: {}, null: false
+    t.text "selected_muscle_groups", default: [], array: true
     t.integer "session_duration_minutes"
     t.string "split_type", default: "ai_choice"
     t.string "training_context"

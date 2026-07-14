@@ -100,4 +100,45 @@ RSpec.describe "Api::V1::WorkoutPlans", type: :request do
       expect(Time.parse(body["day"]["last_completed_at"])).to be_within(1.minute).of(3.days.ago)
     end
   end
+
+  describe "POST /api/v1/workout_plan/regenerate muscle selection" do
+    before do
+      create(:health_profile, user: user, training_days_per_week: 3)
+      allow_any_instance_of(WorkoutPlanGeneratorService).to receive(:call) do
+        user.workout_plans.update_all(active: false)
+        new_plan = user.workout_plans.create!(active: true)
+        new_plan.workout_days.create!(name: "Treino A", day_of_week: Date.current.wday)
+        new_plan
+      end
+      allow_any_instance_of(WorkoutPlanGeneratorService).to receive(:plan_summary).and_return({})
+    end
+
+    it "persists the selected groups and priorities, dropping invalid values" do
+      post "/api/v1/workout_plan/regenerate", params: {
+        modality: "musculacao",
+        selected_muscles: [ "chest", "triceps", "not_a_muscle" ],
+        muscle_priorities: { "chest" => "high", "triceps" => "bogus", "legs" => "avoid" }
+      }
+
+      expect(response).to have_http_status(:ok)
+      profile = user.health_profile.reload
+      expect(profile.selected_muscle_groups).to match_array(%w[chest triceps])
+      # Só grupos e níveis válidos sobrevivem.
+      expect(profile.muscle_priorities).to eq({ "chest" => "high", "legs" => "avoid" })
+    end
+
+    it "forwards the sanitized selection to the generator service" do
+      expect(WorkoutPlanGeneratorService).to receive(:new).with(
+        user, hash_including(selected_muscles: %w[chest], muscle_priorities: { "chest" => "high" })
+      ).and_call_original
+
+      post "/api/v1/workout_plan/regenerate", params: {
+        modality: "musculacao",
+        selected_muscles: [ "chest" ],
+        muscle_priorities: { "chest" => "high" }
+      }
+
+      expect(response).to have_http_status(:ok)
+    end
+  end
 end

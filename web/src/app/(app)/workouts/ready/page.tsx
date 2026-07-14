@@ -13,6 +13,7 @@ import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { ExerciseInfoModal } from "@/shared/components/workout/exercise-info-modal";
 import { ProgressiveProfilingSheet } from "@/features/workout/progressive-profiling-sheet";
 import { PrePermissionCard } from "@/features/notifications/pre-permission-card";
+import { AppPromoCard } from "@/features/app-promo/app-promo-card";
 import { PushFeedbackLink } from "@/features/notifications/push-feedback-link";
 import { muscleLabel } from "@/shared/utils/muscle-labels";
 import "@/shared/components/workout/workout-ui.css";
@@ -209,6 +210,9 @@ function WorkoutReadyContent() {
 
       {/* Contextual push opt-in (native only, after the workout is ready) */}
       <PrePermissionCard onboardingStage="workout_ready" />
+
+      {/* App promo (web only — mirror of PrePermissionCard, hidden in the native app) */}
+      <AppPromoCard placement="ready" />
 
       {/* CTAs */}
       <button

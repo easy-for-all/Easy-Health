@@ -11,6 +11,7 @@ import type {
   TrainingLocation,
   TrainingStyle,
 } from "@/shared/types/health-profile";
+import type { MuscleGroupId, MusclePriorities } from "@/features/muscle-selector";
 
 export type EntryMode = "onboarding" | "replan";
 export type CreationMode = "quick" | "complete";
@@ -53,6 +54,10 @@ export interface WizardFormState {
   cardio_type: CardioType;
   cardio_format: CardioFormat;
   custom_splits: { name: string; muscle_groups: string[] }[];
+  // Seleção muscular do Treino Completo (força). selected_muscles = grupos
+  // escolhidos; muscle_priorities = Alta/Normal/Evitar por grupo (modo avançado).
+  selected_muscles: MuscleGroupId[];
+  muscle_priorities: MusclePriorities;
   // When the user usually trains (activation push). Optional — the plan is never
   // blocked by leaving these empty ("variable" / skip).
   preferred_workout_period: WorkoutPeriod | "";
@@ -68,6 +73,7 @@ export function buildInitialForm(): WizardFormState {
     favorite_exercises: [], avoided_exercises: [], limitations: [],
     modality: "ai_choice", split_type: "ai_choice", cardio_type: "ai_choice", cardio_format: "ai_choice",
     custom_splits: [],
+    selected_muscles: [], muscle_priorities: {},
     preferred_workout_period: "", preferred_workout_time: "",
   };
 }

@@ -27,6 +27,8 @@ module Api
         cardio_format        = params[:cardio_format].presence
         custom_splits        = params[:custom_splits].presence
         training_location    = params[:training_location].presence
+        selected_muscles     = sanitize_selected_muscles(params[:selected_muscles])
+        muscle_priorities    = sanitize_muscle_priorities(params[:muscle_priorities])
 
         if days_per_week && !days_per_week.between?(1, 6)
           return render_error("training_days_per_week must be between 1 and 6")
@@ -41,6 +43,8 @@ module Api
         profile_attrs[:cardio_format]          = cardio_format        if cardio_format
         profile_attrs[:custom_splits]          = custom_splits        if custom_splits
         profile_attrs[:training_location]      = training_location    if training_location
+        profile_attrs[:selected_muscle_groups] = selected_muscles     unless selected_muscles.nil?
+        profile_attrs[:muscle_priorities]      = muscle_priorities    unless muscle_priorities.nil?
         current_user.health_profile&.update!(profile_attrs) if profile_attrs.any?
 
         FitnessIntelligence.recalculate_safely(user: current_user, source: "workout_plan_regenerated")
@@ -54,7 +58,9 @@ module Api
           cardio_type:          cardio_type,
           cardio_format:        cardio_format,
           custom_splits:        custom_splits,
-          training_location:    training_location
+          training_location:    training_location,
+          selected_muscles:     selected_muscles,
+          muscle_priorities:    muscle_priorities
         )
         plan = service.call
         UserEventService.track(
@@ -138,6 +144,26 @@ module Api
       end
 
       private
+
+      # Só aceita ids dentro de Exercise::MUSCLE_GROUPS. `nil` = param ausente
+      # (não mexe no profile); `[]` = seleção explicitamente limpa.
+      def sanitize_selected_muscles(raw)
+        return nil if raw.nil?
+
+        Array(raw).map(&:to_s) & Exercise::MUSCLE_GROUPS
+      end
+
+      # { "chest" => "high", ... } restrito a grupos e níveis válidos.
+      def sanitize_muscle_priorities(raw)
+        return nil if raw.blank?
+
+        allowed = %w[high normal avoid]
+        raw.to_unsafe_h.each_with_object({}) do |(group, priority), acc|
+          group = group.to_s
+          priority = priority.to_s
+          acc[group] = priority if Exercise::MUSCLE_GROUPS.include?(group) && allowed.include?(priority)
+        end
+      end
 
       def track_activation_workout_created(plan)
         days = plan.workout_days.includes(workout_day_exercises: :exercise)
