@@ -4,6 +4,7 @@ import { WorkoutSessionProvider } from "@/features/workout/workout-session-conte
 import { CoachProvider } from "@/features/coach/coach-context";
 import { CoachFab, CoachSheet } from "@/shared/components/coach-sheet";
 import { TrialBanner } from "@/shared/components/trial-banner";
+import { AppPromoBanner } from "@/features/app-promo/app-promo-banner";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           }}
         >
           <TrialBanner />
+          <AppPromoBanner />
           <PageTransition>{children}</PageTransition>
           <BottomNav />
           <CoachFab />

@@ -91,6 +91,15 @@ export async function generatePlan(form: WizardFormState): Promise<WorkoutPlan &
     body.custom_splits = form.custom_splits;
   }
 
+  // Seleção muscular (força): só envia quando há grupos escolhidos. Vazio =
+  // "Decida por mim" → backend usa splits/IA padrão.
+  if (form.modality === "musculacao" && form.selected_muscles.length > 0) {
+    body.selected_muscles = form.selected_muscles;
+    if (Object.keys(form.muscle_priorities).length > 0) {
+      body.muscle_priorities = form.muscle_priorities;
+    }
+  }
+
   if (form.modality === "funcional")  body.activity_preferences = ["funcional"];
   if (form.modality === "cardio")     body.activity_preferences = [toActivityPref(form.cardio_type)];
   if (form.modality === "misto")      body.activity_preferences = ["musculacao", toActivityPref(form.cardio_type)];

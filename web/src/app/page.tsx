@@ -5,6 +5,7 @@ import { HeroCta } from "@/shared/components/hero-cta";
 import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
 import { LandingHeader } from "@/shared/components/landing-header";
 import { CONVERSIONS } from "@/shared/lib/analytics";
+import { AppPromoCard } from "@/features/app-promo/app-promo-card";
 
 export const metadata: Metadata = {
   title: "EasyHealth — Treino inteligente com IA",
@@ -390,6 +391,13 @@ export default function LandingPage() {
                 </Link>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* ── APP DOWNLOAD ── */}
+        <section style={{ padding: "clamp(24px, 4vw, 48px) 0" }}>
+          <div style={{ margin: "0 auto", maxWidth: 460, padding: "0 clamp(16px, 4vw, 32px)" }}>
+            <AppPromoCard placement="landing" />
           </div>
         </section>
 
