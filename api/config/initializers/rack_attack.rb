@@ -20,6 +20,12 @@ class Rack::Attack
     req.ip if req.path == "/api/v1/auth/mobile/exchange" && req.post?
   end
 
+  # Analytics ingestion: batches are cheap but must not be abused. Generous
+  # enough for a normal session (each POST carries up to 50 events).
+  throttle("analytics-events/ip", limit: 120, period: 1.minute) do |req|
+    req.ip if req.path == "/api/v1/analytics/events" && req.post?
+  end
+
   self.throttled_responder = lambda do |_req|
     [
       429,

@@ -71,6 +71,19 @@ class User < ApplicationRecord
   delegate :pro_monthly?, :pro_yearly?, :pro?, :subscription_active?,
            to: :subscription, allow_nil: true
 
+  # Analytics reporting base: excludes internal/test accounts and
+  # anonymized/deleted users so every Admin metric shares one denominator.
+  # Internal e-mail domains come from ENV ANALYTICS_INTERNAL_EMAIL_DOMAINS
+  # (comma-separated, e.g. "easyhealth.art,internal.test").
+  scope :reportable, lambda {
+    rel = where(test_account: false)
+            .where(anonymized_at: nil)
+            .where(deletion_requested_at: nil)
+    domains = ENV.fetch("ANALYTICS_INTERNAL_EMAIL_DOMAINS", "").split(",").map(&:strip).reject(&:blank?)
+    domains.each { |d| rel = rel.where.not("users.email ILIKE ?", "%@#{d}") }
+    rel
+  }
+
   validates :name, presence: true, length: { minimum: 2, maximum: 100 }
   validates :email, presence: true, uniqueness: { case_sensitive: false }
   validates :account_type, inclusion: { in: ACCOUNT_TYPES }

@@ -1,0 +1,122 @@
+# Canonical Product Analytics event taxonomy — single source of truth.
+#
+# Consumed by:
+#   - Backend: Analytics::EventCatalog (validates ingestion at POST /api/v1/analytics/events)
+#   - Frontend: web/src/shared/lib/analytics/taxonomy.ts (kept in parity by a spec test)
+#   - Docs: docs/analytics/EVENT_TAXONOMY.md
+#
+# Each event declares:
+#   version: integer, current schema version of the event
+#   sinks:   where the event is routed
+#            - server:  persisted in product_analytics_events (auditable, feeds Admin)
+#            - ga4:     sent to Google Analytics 4 (behavioural exploration)
+#            - clarity: emitted as a Microsoft Clarity custom event/tag (diagnostics)
+#
+# NEVER put sensitive data in event properties (see PRIVACY_AND_DATA_HANDLING.md):
+# password, token, full exam text, photos, medical content, full name, email,
+# phone, address, GPS, free sensitive text, full AI responses.
+
+taxonomy_version: 1
+
+events:
+  # ── Acquisition & app lifecycle ────────────────────────────────────────────
+  app_install_attributed:   { version: 1, sinks: [server] }
+  app_first_open:           { version: 1, sinks: [server, ga4] }
+  app_opened:               { version: 1, sinks: [server, ga4] }
+  app_backgrounded:         { version: 1, sinks: [ga4] }
+  app_resumed:              { version: 1, sinks: [ga4] }
+  app_updated:              { version: 1, sinks: [server, ga4] }
+  web_session_started:      { version: 1, sinks: [server, ga4] }
+  pwa_installed:            { version: 1, sinks: [server, ga4] }
+  pwa_opened:               { version: 1, sinks: [ga4] }
+  deep_link_opened:         { version: 1, sinks: [server, ga4] }
+  landing_page_viewed:      { version: 1, sinks: [ga4, clarity] }
+
+  # ── Authentication ─────────────────────────────────────────────────────────
+  signup_started:           { version: 1, sinks: [ga4] }
+  signup_completed:         { version: 1, sinks: [server, ga4] }
+  login_started:            { version: 1, sinks: [ga4] }
+  login_completed:          { version: 1, sinks: [server, ga4] }
+  login_failed:             { version: 1, sinks: [ga4] }
+  logout_completed:         { version: 1, sinks: [ga4] }
+  social_login_started:     { version: 1, sinks: [ga4] }
+  social_login_completed:   { version: 1, sinks: [server, ga4] }
+  social_login_failed:      { version: 1, sinks: [ga4] }
+
+  # ── Onboarding ─────────────────────────────────────────────────────────────
+  onboarding_started:       { version: 1, sinks: [server, ga4] }
+  onboarding_flow_selected: { version: 1, sinks: [server, ga4] }
+  onboarding_step_viewed:   { version: 1, sinks: [ga4] }
+  onboarding_step_completed: { version: 1, sinks: [server, ga4] }
+  onboarding_step_skipped:  { version: 1, sinks: [ga4] }
+  onboarding_abandoned:     { version: 1, sinks: [server, ga4, clarity] }
+  onboarding_completed:     { version: 1, sinks: [server, ga4] }
+
+  # ── Workouts ───────────────────────────────────────────────────────────────
+  workout_created:          { version: 1, sinks: [server, ga4, clarity] }
+  workout_viewed:           { version: 1, sinks: [server, ga4, clarity] }
+  workout_details_viewed:   { version: 1, sinks: [ga4] }
+  workout_start_clicked:    { version: 1, sinks: [server, ga4, clarity] }
+  workout_started:          { version: 1, sinks: [server, ga4, clarity] }
+  workout_first_exercise_started: { version: 1, sinks: [server, ga4] }
+  workout_exercise_completed:     { version: 1, sinks: [ga4] }
+  workout_abandoned:        { version: 1, sinks: [server, ga4, clarity] }
+  workout_completed:        { version: 1, sinks: [server, ga4] }
+  workout_repeated:         { version: 1, sinks: [server, ga4] }
+  workout_edited:           { version: 1, sinks: [ga4] }
+  exercise_replaced:        { version: 1, sinks: [ga4] }
+  workout_favorited:        { version: 1, sinks: [ga4] }
+
+  # ── Engagement ─────────────────────────────────────────────────────────────
+  home_viewed:              { version: 1, sinks: [ga4] }
+  plan_viewed:              { version: 1, sinks: [ga4] }
+  progress_viewed:          { version: 1, sinks: [ga4] }
+  profile_viewed:           { version: 1, sinks: [ga4] }
+  quick_workout_started:    { version: 1, sinks: [server, ga4] }
+  complete_workout_started: { version: 1, sinks: [server, ga4] }
+  photo_ai_started:         { version: 1, sinks: [ga4] }
+  ai_conversation_started:  { version: 1, sinks: [ga4] }
+  coach_message_sent:       { version: 1, sinks: [ga4] }
+  coach_suggestion_accepted: { version: 1, sinks: [ga4] }
+  coach_suggestion_rejected: { version: 1, sinks: [ga4] }
+  progressive_profile_shown:    { version: 1, sinks: [ga4] }
+  progressive_profile_answered: { version: 1, sinks: [ga4] }
+  progressive_profile_skipped:  { version: 1, sinks: [ga4] }
+
+  # ── Push ───────────────────────────────────────────────────────────────────
+  push_permission_prompted: { version: 1, sinks: [server, ga4] }
+  push_permission_granted:  { version: 1, sinks: [server, ga4] }
+  push_permission_denied:   { version: 1, sinks: [server, ga4] }
+  push_permission_later:    { version: 1, sinks: [ga4] }
+  push_token_registered:    { version: 1, sinks: [server] }
+  push_scheduled:           { version: 1, sinks: [server] }
+  push_sent:                { version: 1, sinks: [server] }
+  push_delivered:           { version: 1, sinks: [server] }
+  push_opened:              { version: 1, sinks: [server, ga4] }
+  push_deep_link_resolved:  { version: 1, sinks: [server] }
+  push_failed:              { version: 1, sinks: [server] }
+  push_disabled:            { version: 1, sinks: [server, ga4] }
+  workout_started_after_push:   { version: 1, sinks: [server] }
+  workout_completed_after_push: { version: 1, sinks: [server] }
+
+  # ── Subscription ───────────────────────────────────────────────────────────
+  paywall_viewed:           { version: 1, sinks: [server, ga4, clarity] }
+  checkout_started:         { version: 1, sinks: [server, ga4] }
+  checkout_completed:       { version: 1, sinks: [server, ga4] }
+  subscription_started:     { version: 1, sinks: [server, ga4] }
+  subscription_renewed:     { version: 1, sinks: [server] }
+  subscription_canceled:    { version: 1, sinks: [server, ga4] }
+  trial_started:            { version: 1, sinks: [server, ga4] }
+  trial_expired:            { version: 1, sinks: [server, ga4] }
+
+  # ── Experiments ────────────────────────────────────────────────────────────
+  experiment_assigned:      { version: 1, sinks: [server] }
+  experiment_exposed:       { version: 1, sinks: [server, ga4] }
+  experiment_converted:     { version: 1, sinks: [server, ga4] }
+
+  # ── Functional errors ──────────────────────────────────────────────────────
+  analytics_event_rejected: { version: 1, sinks: [server] }
+  deep_link_failed:         { version: 1, sinks: [server, ga4] }
+  workout_load_failed:      { version: 1, sinks: [server, ga4] }
+  workout_save_failed:      { version: 1, sinks: [server, ga4] }
+  push_registration_failed: { version: 1, sinks: [server, ga4] }

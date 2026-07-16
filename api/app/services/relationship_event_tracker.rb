@@ -70,6 +70,9 @@ class RelationshipEventTracker
     push_failed
     push_opened
     push_deep_link_opened
+    push_provider_accepted
+    push_provider_rejected
+    admin_push_test_requested
     workout_started_from_push
     workout_completed_from_push
     notification_disliked

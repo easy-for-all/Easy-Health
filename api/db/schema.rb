@@ -10,39 +10,11 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_15_120003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
-
-  create_table "activation_events", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "device"
-    t.string "event_name", null: false
-    t.bigint "exercise_id"
-    t.string "idempotency_key"
-    t.jsonb "metadata", default: {}, null: false
-    t.datetime "occurred_at", null: false
-    t.string "origin"
-    t.string "platform"
-    t.string "screen"
-    t.string "session_id"
-    t.string "subscription_status"
-    t.string "trial_status"
-    t.datetime "updated_at", null: false
-    t.bigint "user_id"
-    t.bigint "workout_day_id"
-    t.bigint "workout_plan_id"
-    t.index ["event_name", "occurred_at"], name: "index_activation_events_on_event_name_and_occurred_at"
-    t.index ["exercise_id"], name: "index_activation_events_on_exercise_id"
-    t.index ["session_id", "event_name", "idempotency_key"], name: "index_activation_events_on_session_event_idempotency", unique: true, where: "((idempotency_key IS NOT NULL) AND (session_id IS NOT NULL))"
-    t.index ["session_id", "event_name", "occurred_at"], name: "idx_on_session_id_event_name_occurred_at_ceb9d3841a"
-    t.index ["user_id", "event_name", "idempotency_key"], name: "index_activation_events_on_user_event_idempotency", unique: true, where: "((idempotency_key IS NOT NULL) AND (user_id IS NOT NULL))"
-    t.index ["user_id", "event_name", "occurred_at"], name: "idx_on_user_id_event_name_occurred_at_80fac2ebfc"
-    t.index ["user_id"], name: "index_activation_events_on_user_id"
-    t.index ["workout_day_id"], name: "index_activation_events_on_workout_day_id"
-    t.index ["workout_plan_id"], name: "index_activation_events_on_workout_plan_id"
-  end
+  enable_extension "vector"
 
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
@@ -70,6 +42,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "ai_chat_messages", force: :cascade do |t|
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.string "role", null: false
+    t.string "session_id", null: false
+    t.string "source", default: "rag", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["created_at"], name: "index_ai_chat_messages_on_created_at"
+    t.index ["session_id"], name: "index_ai_chat_messages_on_session_id"
+    t.index ["user_id", "created_at"], name: "index_ai_chat_messages_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_ai_chat_messages_on_user_id"
   end
 
   create_table "ai_prompt_versions", force: :cascade do |t|
@@ -146,6 +133,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.index ["user_id", "status"], name: "index_ai_workout_chat_conversations_on_user_id_and_status"
     t.index ["user_id"], name: "index_ai_workout_chat_conversations_on_user_id"
     t.index ["workout_plan_id"], name: "index_ai_workout_chat_conversations_on_workout_plan_id"
+  end
+
+  create_table "analytics_experiment_assignments", force: :cascade do |t|
+    t.string "anonymous_id"
+    t.datetime "assigned_at", null: false
+    t.datetime "converted_at"
+    t.datetime "created_at", null: false
+    t.string "experiment_key", null: false
+    t.datetime "exposed_at"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.string "variant", null: false
+    t.index ["experiment_key", "anonymous_id"], name: "index_analytics_experiments_unique_anon", unique: true, where: "((user_id IS NULL) AND (anonymous_id IS NOT NULL))"
+    t.index ["experiment_key", "user_id"], name: "index_analytics_experiments_unique_user", unique: true, where: "(user_id IS NOT NULL)"
+    t.index ["experiment_key", "variant"], name: "idx_on_experiment_key_variant_60f2dbba2f"
+    t.index ["user_id"], name: "index_analytics_experiment_assignments_on_user_id"
   end
 
   create_table "blocked_emails", force: :cascade do |t|
@@ -358,8 +361,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.string "difficulty_level"
     t.string "equipment_type", default: "gym", null: false
     t.string "exercise_type", default: "musculacao", null: false
+    t.string "gif_path"
     t.string "gif_url"
     t.boolean "home_compatible", default: false, null: false
+    t.string "image_fallback_url"
     t.string "image_url"
     t.text "instructions"
     t.string "movement_pattern"
@@ -387,18 +392,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.index ["regression_exercise_id"], name: "index_exercises_on_regression_exercise_id"
     t.index ["risk_level"], name: "index_exercises_on_risk_level"
     t.index ["technical_complexity"], name: "index_exercises_on_technical_complexity"
-  end
-
-  create_table "feature_flags", force: :cascade do |t|
-    t.boolean "active", default: false, null: false
-    t.datetime "created_at", null: false
-    t.text "description"
-    t.string "environment", default: "all", null: false
-    t.string "name", null: false
-    t.integer "rollout_percentage", default: 0, null: false
-    t.datetime "updated_at", null: false
-    t.index ["name", "environment"], name: "index_feature_flags_on_name_and_environment", unique: true
-    t.check_constraint "rollout_percentage >= 0 AND rollout_percentage <= 100", name: "feature_flags_rollout_percentage_range"
   end
 
   create_table "fitness_profiles", force: :cascade do |t|
@@ -489,6 +482,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.decimal "weight_kg"
     t.string "workout_time_source"
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
+  end
+
+  create_table "knowledge_documents", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.string "category", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.string "source"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_knowledge_documents_on_active"
+    t.index ["category"], name: "index_knowledge_documents_on_category"
+    t.index ["source"], name: "index_knowledge_documents_on_source", unique: true
   end
 
   create_table "mobile_auth_codes", force: :cascade do |t|
@@ -591,6 +597,33 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.string "visibility", default: "private", null: false
     t.index ["personal_id", "client_id"], name: "index_personal_notes_on_personal_id_and_client_id"
     t.index ["personal_id"], name: "index_personal_notes_on_personal_id"
+  end
+
+  create_table "product_analytics_events", force: :cascade do |t|
+    t.string "anonymous_id"
+    t.string "app_surface", default: "unknown", null: false
+    t.string "app_version"
+    t.string "build_number"
+    t.datetime "created_at", null: false
+    t.string "environment", default: "production", null: false
+    t.string "event_name", null: false
+    t.integer "event_version", default: 1, null: false
+    t.string "idempotency_key"
+    t.string "locale"
+    t.datetime "occurred_at", null: false
+    t.string "platform", default: "unknown", null: false
+    t.jsonb "properties", default: {}, null: false
+    t.datetime "received_at", null: false
+    t.string "session_id"
+    t.string "source"
+    t.string "timezone"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["anonymous_id"], name: "index_product_analytics_events_on_anonymous_id"
+    t.index ["event_name", "occurred_at"], name: "index_product_analytics_events_on_event_name_and_occurred_at"
+    t.index ["idempotency_key"], name: "index_product_analytics_events_on_idempotency_key", unique: true, where: "(idempotency_key IS NOT NULL)"
+    t.index ["platform", "occurred_at"], name: "index_product_analytics_events_on_platform_and_occurred_at"
+    t.index ["user_id", "occurred_at"], name: "index_product_analytics_events_on_user_id_and_occurred_at"
   end
 
   create_table "public_profiles", force: :cascade do |t|
@@ -803,6 +836,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
 
   create_table "users", force: :cascade do |t|
     t.string "account_type", default: "regular", null: false
+    t.string "activation_platform"
     t.boolean "admin", default: false, null: false
     t.datetime "anonymized_at"
     t.boolean "community_enabled", default: false, null: false
@@ -829,6 +863,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.string "reset_password_token_digest"
     t.datetime "terms_accepted_at"
     t.string "terms_version"
+    t.boolean "test_account", default: false, null: false
     t.string "time_zone"
     t.datetime "trial_ends_at"
     t.datetime "trial_started_at"
@@ -836,6 +871,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.datetime "unsubscribed_at"
     t.datetime "updated_at", null: false
     t.index ["account_type"], name: "index_users_on_account_type"
+    t.index ["activation_platform"], name: "index_users_on_activation_platform"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["email_bounced_at"], name: "index_users_on_email_bounced_at"
     t.index ["marketing_consent"], name: "index_users_on_marketing_consent"
@@ -843,6 +879,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
     t.index ["referral_code"], name: "index_users_on_referral_code", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
+    t.index ["test_account"], name: "index_users_on_test_account"
     t.index ["trial_ends_at"], name: "index_users_on_trial_ends_at"
     t.index ["unsubscribed_at"], name: "index_users_on_unsubscribed_at"
   end
@@ -901,43 +938,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.index ["workout_plan_id"], name: "index_workout_days_on_workout_plan_id"
   end
 
-  create_table "workout_plan_generations", force: :cascade do |t|
-    t.datetime "completed_at"
-    t.string "correlation_id"
-    t.datetime "created_at", null: false
-    t.text "error_message"
-    t.string "idempotency_key"
-    t.jsonb "params_json", default: {}, null: false
-    t.string "request_id"
-    t.string "session_id"
-    t.string "source", default: "regenerate", null: false
-    t.datetime "started_at", null: false
-    t.string "status", default: "started", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
-    t.bigint "workout_plan_id"
-    t.index ["user_id", "created_at"], name: "index_workout_plan_generations_on_user_id_and_created_at"
-    t.index ["user_id", "idempotency_key"], name: "index_workout_plan_generations_on_user_idempotency", unique: true, where: "(idempotency_key IS NOT NULL)"
-    t.index ["user_id", "status"], name: "index_workout_plan_generations_on_user_id_and_status"
-    t.index ["user_id"], name: "index_workout_plan_generations_on_user_id"
-    t.index ["workout_plan_id"], name: "index_workout_plan_generations_on_workout_plan_id"
-  end
-
   create_table "workout_plans", force: :cascade do |t|
     t.boolean "active"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.index ["user_id"], name: "index_workout_plans_on_user_id"
-    t.index ["user_id"], name: "index_workout_plans_one_active_per_user", unique: true, where: "(active = true)"
   end
 
   create_table "workout_sessions", force: :cascade do |t|
-    t.jsonb "abandon_reason", default: {}, null: false
     t.integer "calories_estimated"
     t.datetime "completed_at"
     t.integer "completed_sets_count"
-    t.decimal "completion_percentage", precision: 5, scale: 2
     t.decimal "completion_rate", precision: 5, scale: 2
     t.string "completion_status", default: "completed", null: false
     t.datetime "created_at", null: false
@@ -948,26 +960,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.datetime "extra_completed_at"
     t.datetime "extra_started_at"
     t.integer "fatigue_level"
-    t.datetime "finished_at"
-    t.bigint "last_exercise_id"
-    t.integer "last_rep"
-    t.string "last_screen"
-    t.integer "last_series"
     t.text "notes"
     t.integer "planned_sets_count"
     t.jsonb "skipped_exercises", default: []
     t.string "source"
-    t.datetime "started_at"
     t.string "status", default: "completed", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
     t.bigint "workout_day_id"
     t.index ["completion_status"], name: "index_workout_sessions_on_completion_status"
-    t.index ["finished_at"], name: "index_workout_sessions_on_finished_at"
-    t.index ["last_exercise_id"], name: "index_workout_sessions_on_last_exercise_id"
-    t.index ["started_at"], name: "index_workout_sessions_on_started_at"
     t.index ["status"], name: "index_workout_sessions_on_status"
-    t.index ["user_id", "status"], name: "index_workout_sessions_on_user_id_and_status"
     t.index ["user_id"], name: "index_workout_sessions_on_user_id"
     t.index ["workout_day_id"], name: "index_workout_sessions_on_workout_day_id"
   end
@@ -985,17 +987,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
     t.index ["workout_plan_id"], name: "index_workout_strategies_on_workout_plan_id", unique: true
   end
 
-  add_foreign_key "activation_events", "exercises"
-  add_foreign_key "activation_events", "users"
-  add_foreign_key "activation_events", "workout_days"
-  add_foreign_key "activation_events", "workout_plans"
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "ai_chat_messages", "users"
   add_foreign_key "ai_training_decision_logs", "ai_prompt_versions", column: "prompt_version_id"
   add_foreign_key "ai_training_decision_logs", "users"
   add_foreign_key "ai_training_decision_logs", "workout_plans"
   add_foreign_key "ai_usage_logs", "users"
   add_foreign_key "ai_workout_chat_conversations", "users"
+  add_foreign_key "analytics_experiment_assignments", "users"
   add_foreign_key "client_permissions", "personal_client_relationships"
   add_foreign_key "coach_insights", "fitness_profiles"
   add_foreign_key "coach_insights", "users"
@@ -1030,6 +1030,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
   add_foreign_key "personal_client_relationships", "users", column: "personal_id"
   add_foreign_key "personal_notes", "users", column: "client_id"
   add_foreign_key "personal_notes", "users", column: "personal_id"
+  add_foreign_key "product_analytics_events", "users"
   add_foreign_key "public_profiles", "users"
   add_foreign_key "shared_workouts", "users", column: "owner_id"
   add_foreign_key "subscriptions", "users"
@@ -1047,10 +1048,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_140000) do
   add_foreign_key "workout_day_exercises", "workout_blocks"
   add_foreign_key "workout_day_exercises", "workout_days"
   add_foreign_key "workout_days", "workout_plans"
-  add_foreign_key "workout_plan_generations", "users"
-  add_foreign_key "workout_plan_generations", "workout_plans"
   add_foreign_key "workout_plans", "users"
-  add_foreign_key "workout_sessions", "exercises", column: "last_exercise_id"
   add_foreign_key "workout_sessions", "users"
   add_foreign_key "workout_sessions", "workout_days"
   add_foreign_key "workout_strategies", "fitness_profiles"

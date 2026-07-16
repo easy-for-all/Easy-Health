@@ -87,4 +87,72 @@ namespace :push do
 
     puts "== fim =="
   end
+
+  # Reusable, guarded push test bench. All sends/mutations target the admin user
+  # resolved from EMAIL only (PushTest.resolve_admin! refuses non-admins). See
+  # app/services/push_test.rb.
+  #
+  #   bin/rails "push:test:inspect_user[mail.marcus.reis@gmail.com]"   # read-only
+  #   bin/rails "push:test:inspect_environment"
+  #   bin/rails "push:test:send_now[mail.marcus.reis@gmail.com]"
+  #   bin/rails "push:test:schedule[mail.marcus.reis@gmail.com,2]"
+  #   bin/rails "push:test:run_scheduler[mail.marcus.reis@gmail.com]"
+  #   bin/rails "push:test:run_dispatcher[mail.marcus.reis@gmail.com]"
+  #   bin/rails "push:test:invalidate_fake_token[mail.marcus.reis@gmail.com]"
+  #   bin/rails "push:test:report[mail.marcus.reis@gmail.com]"
+  namespace :test do
+    desc "Read-only diagnostic of a user's push setup (+ near-match detection). Args: email"
+    task :inspect_user, %i[email] => :environment do |_t, args|
+      PushTest.inspect_user(args[:email])
+    rescue PushTest::Abort => e
+      abort e.message
+    end
+
+    desc "Print environment/config diagnostics (flags, firebase, cron hints)."
+    task inspect_environment: :environment do
+      PushTest.inspect_environment
+    end
+
+    desc "Send the standard admin test push now to the admin user's own tokens. Args: email"
+    task :send_now, %i[email] => :environment do |_t, args|
+      PushTest.send_now(args[:email])
+    rescue PushTest::Abort => e
+      abort e.message
+    end
+
+    desc "Create a reversible due delivery in N minutes to exercise the queue. Args: email,minutes"
+    task :schedule, %i[email minutes] => :environment do |_t, args|
+      PushTest.schedule(args[:email], args[:minutes])
+    rescue PushTest::Abort => e
+      abort e.message
+    end
+
+    desc "Run the real eligibility scheduler scoped to one admin user. Args: email"
+    task :run_scheduler, %i[email] => :environment do |_t, args|
+      PushTest.run_scheduler(args[:email])
+    rescue PushTest::Abort => e
+      abort e.message
+    end
+
+    desc "Run the real dispatcher for one admin user's due deliveries. Args: email"
+    task :run_dispatcher, %i[email] => :environment do |_t, args|
+      PushTest.run_dispatcher(args[:email])
+    rescue PushTest::Abort => e
+      abort e.message
+    end
+
+    desc "Prove token invalidation on an isolated fake token (no real token touched). Args: email"
+    task :invalidate_fake_token, %i[email] => :environment do |_t, args|
+      PushTest.invalidate_fake_token(args[:email])
+    rescue PushTest::Abort => e
+      abort e.message
+    end
+
+    desc "Consolidated push report for a user (read-only). Args: email"
+    task :report, %i[email] => :environment do |_t, args|
+      PushTest.report(args[:email])
+    rescue PushTest::Abort => e
+      abort e.message
+    end
+  end
 end

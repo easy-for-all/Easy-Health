@@ -75,3 +75,6 @@ easyhealth-release.jks
 key.properties
 service-account.json
 google-play-service-account.json
+
+# Android push diagnostics reports (may contain masked device logs)
+scripts/android/reports/

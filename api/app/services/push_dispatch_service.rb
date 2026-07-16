@@ -1,3 +1,5 @@
+require "digest"
+
 # Sends a single scheduled NotificationDelivery via FCM. Revalidates eligibility
 # immediately before sending (state may have changed since scheduling), claims
 # the row atomically to avoid double-send across concurrent cron sweeps, updates
@@ -53,6 +55,7 @@ class PushDispatchService
 
     devices.each do |device|
       result = service.deliver(token: device.token, title: message[:title], body: message[:body], data: message[:data])
+      track_provider(result, device)
       device.invalidate!(result.error_code) if result.invalid_token
       if result.sent?
         sent_device = device
@@ -113,6 +116,24 @@ class PushDispatchService
     :skipped
   end
 
+  # Records whether FCM ACCEPTED vs REJECTED the message for a device. This is
+  # explicitly NOT "delivered to the phone" — that is proven only by an app-side
+  # push_received/push_opened event. Token is never logged, only a SHA digest.
+  def track_provider(result, device)
+    track(
+      result.sent? ? "push_provider_accepted" : "push_provider_rejected",
+      provider_message_id: result.message_id,
+      error_code: result.error_code,
+      device_digest: device_digest(device.token)
+    )
+  end
+
+  def device_digest(token)
+    return nil if token.blank?
+
+    Digest::SHA256.hexdigest(token)[0, 12]
+  end
+
   def track(event_name, extra = {})
     UserEventService.track(
       user: user,
@@ -127,6 +148,7 @@ class PushDispatchService
     {
       notification_type: delivery.notification_type,
       delivery_id: delivery.id,
+      correlation_id: "delivery-#{delivery.id}",
       platform: "android",
       variant: user.notification_preferences&.activation_push_variant
     }

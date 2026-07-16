@@ -19,6 +19,18 @@ RSpec.describe "Api::V1::DeviceTokens", type: :request do
       expect(token.reload.invalidated_at).to be_nil
       expect(token.enabled).to be(true)
     end
+
+    it "re-attaches a token previously owned by another user (unique index, single row)" do
+      other = create(:user)
+      shared = other.device_tokens.create!(token: "shared-device", platform: "android")
+
+      post "/api/v1/device_tokens", params: { token: "shared-device", platform: "android" }
+
+      expect(response).to have_http_status(:ok)
+      expect(DeviceToken.where(token: "shared-device").count).to eq(1)
+      expect(shared.reload.user_id).to eq(user.id)
+      expect(other.device_tokens.active).to be_empty
+    end
   end
 
   describe "PATCH/DELETE ownership" do
