@@ -17,7 +17,7 @@ import { useWorkoutSession, formatElapsed } from "@/features/workout/workout-ses
 import { ProgressiveProfilingSheet } from "@/features/workout/progressive-profiling-sheet";
 import { AnimatedCounter, ConfettiBurst, GlowPulse, PressButton } from "@/shared/components/motion";
 import { ShareButton } from "@/shared/components/workout-share/share-button";
-import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { trackEvent, trackOnce, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 import { relativeDate } from "@/shared/utils/relative-date";
 import { historyWeight } from "@/features/workout/use-exercise-history";
@@ -202,6 +202,8 @@ function WorkoutTodayContent() {
 
   useEffect(() => {
     trackEvent(EVENTS.SCREEN_VIEW, { screen_name: "treino" });
+    // Auditable "viewed a workout" (server-sink). Once per tab session.
+    trackOnce("workout_viewed:today", "workout_viewed", { source: "workout_today" });
   }, []);
 
   // Register coach exec context whenever the exercising phase or current exercise changes
@@ -209,6 +211,11 @@ function WorkoutTodayContent() {
     if (phase === "exercising" && day?.exercises) {
       const ex = day.exercises[currentIndex];
       if (ex) {
+        // First actual exercise of this session (distinct from start/click).
+        trackOnce(`workout_first_exercise_started:${day.id}`, "workout_first_exercise_started", {
+          workout_day_id: day.id ?? undefined,
+          source: "workout_today",
+        });
         setScreen("exec");
         registerExec(
           {
@@ -485,6 +492,11 @@ function WorkoutTodayContent() {
   function startWorkout() {
     unlockAudio();
     if (day) {
+      // Clicked to start (distinct from workout_started = session created).
+      trackEvent("workout_start_clicked", {
+        workout_day_id: day.id ?? undefined,
+        source: "workout_today",
+      });
       beginSession(day.id);
       trackEvent(EVENTS.WORKOUT_STARTED, {
         workout_day_id: day.id ?? undefined,

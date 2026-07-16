@@ -5,6 +5,7 @@ import Script from "next/script";
 import { AuthProvider } from "@/features/auth/auth-context";
 import { ThemeProvider } from "@/features/theme/theme-context";
 import { SystemBarsController } from "@/features/system-bars/system-bars-controller";
+import { AnalyticsBoot } from "@/shared/components/analytics-boot";
 import { ToastProvider } from "@/shared/components/ui/toast-provider";
 import "./globals.css";
 
@@ -56,6 +57,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
+          // LGPD Consent Mode v2: default to denied until the visitor opts in
+          // (analytics.updateConsent). Must run before gtag('config').
+          var __ehConsent = (function(){try{var v=localStorage.getItem('eh_consent');return v==='granted'?'granted':'denied';}catch(e){return 'denied';}})();
+          gtag('consent','default',{ad_storage:__ehConsent,ad_user_data:__ehConsent,ad_personalization:__ehConsent,analytics_storage:__ehConsent,wait_for_update:500});
           gtag('config', '${GTAG_ID}');
           gtag('config', '${GADS_ID}');
         `}</Script>
@@ -71,6 +76,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
             <SystemBarsController />
+            <AnalyticsBoot />
             <AuthProvider>
               <ToastProvider>{children}</ToastProvider>
             </AuthProvider>

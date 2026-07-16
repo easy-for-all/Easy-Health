@@ -27,7 +27,12 @@ module Api
 
         # Workout engagement
         users_created_workouts   = User.joins(:workout_plans).distinct.count
-        users_completed_workouts = User.joins(:workout_sessions).distinct.count
+        # Single definition of "executed a workout": a COMPLETED session.
+        # (Previously joins(:workout_sessions) also counted in_progress/cancelled,
+        # yielding a different number from OnboardingAnalyticsService.)
+        users_completed_workouts = User.joins(:workout_sessions)
+                                       .where(workout_sessions: { completion_status: "completed" })
+                                       .distinct.count
         users_plan_not_started   = User.joins(:workout_plans)
                                        .left_joins(:workout_sessions)
                                        .where(workout_sessions: { id: nil })
@@ -53,35 +58,50 @@ module Api
         end
         recent_activation_events = recent_activation_events_rows
 
-        # Retention D1/D7/D30 — base: users registered before the cutoff
-        d1_base    = User.where("created_at <= ?", 1.day.ago).count
-        d7_base    = User.where("created_at <= ?", 7.days.ago).count
-        d30_base   = User.where("created_at <= ?", 30.days.ago).count
+        # Retention D1/D7/D30 — reportable base only; a cohort must have had N
+        # full days of observation to be in the denominator (cohort maturity is
+        # implicit in the "created_at <= N.days.ago" cut). Calendar days are
+        # computed in the reporting timezone, not raw UTC DATE() (see
+        # Analytics::ReportingTime), so a 22h-local workout counts on the right
+        # local day for a Brazilian user base.
+        completed_local = Analytics::ReportingTime.local_date_sql("workout_sessions.completed_at")
+        created_local   = Analytics::ReportingTime.local_date_sql("users.created_at")
 
-        d1_retained = WorkoutSession
-          .joins("INNER JOIN users ON users.id = workout_sessions.user_id")
-          .where("DATE(workout_sessions.completed_at) = DATE(users.created_at + INTERVAL '1 day')")
-          .distinct.count(:user_id)
+        d1_base    = User.reportable.where("users.created_at <= ?", 1.day.ago).count
+        d7_base    = User.reportable.where("users.created_at <= ?", 7.days.ago).count
+        d30_base   = User.reportable.where("users.created_at <= ?", 30.days.ago).count
 
-        d7_retained = WorkoutSession
-          .joins("INNER JOIN users ON users.id = workout_sessions.user_id")
-          .where("DATE(workout_sessions.completed_at) BETWEEN DATE(users.created_at + INTERVAL '7 days') AND DATE(users.created_at + INTERVAL '8 days')")
-          .distinct.count(:user_id)
+        retained_on = lambda do |from_day, to_day|
+          WorkoutSession
+            .where(completion_status: "completed")
+            .joins("INNER JOIN users ON users.id = workout_sessions.user_id")
+            .merge(User.reportable)
+            .where("#{completed_local} BETWEEN (#{created_local} + #{from_day}) AND (#{created_local} + #{to_day})")
+            .distinct.count(:user_id)
+        end
 
-        d30_retained = WorkoutSession
-          .joins("INNER JOIN users ON users.id = workout_sessions.user_id")
-          .where("DATE(workout_sessions.completed_at) BETWEEN DATE(users.created_at + INTERVAL '30 days') AND DATE(users.created_at + INTERVAL '31 days')")
-          .distinct.count(:user_id)
+        d1_retained  = retained_on.call(1, 1)
+        d7_retained  = retained_on.call(7, 8)
+        d30_retained = retained_on.call(30, 31)
+
+        retention_detail = {
+          d1:  Analytics::MetricResult.ratio(numerator: d1_retained, denominator: d1_base, definition: "retention_value_d1_v1"),
+          d7:  Analytics::MetricResult.ratio(numerator: d7_retained, denominator: d7_base, definition: "retention_value_d7_v1"),
+          d30: Analytics::MetricResult.ratio(numerator: d30_retained, denominator: d30_base, definition: "retention_value_d30_v1")
+        }
 
         # Conversion funnels
         users_subscribed = User.joins(:subscription)
                                .where("subscriptions.status IN ('active','trialing')")
                                .count
 
-        conversion_trial_to_subscription    = total_users > 0 ? (users_subscribed.to_f / total_users * 100).round(1) : 0
-        conversion_signup_to_workout_created = total_users > 0 ? (users_created_workouts.to_f / total_users * 100).round(1) : 0
-        conversion_plan_to_session          = users_created_workouts > 0 ? (users_completed_workouts.to_f / users_created_workouts * 100).round(1) : 0
-        conversion_session_to_subscription  = users_completed_workouts > 0 ? (users_subscribed.to_f / users_completed_workouts * 100).round(1) : 0
+        # Percentages are clamped to [0,100]: instrumentation gaps must never
+        # surface as a negative drop-off or an impossible >100% conversion.
+        pct = ->(num, den) { den > 0 ? (num.to_f / den * 100).round(1).clamp(0.0, 100.0) : 0 }
+        conversion_trial_to_subscription     = pct.call(users_subscribed, total_users)
+        conversion_signup_to_workout_created = pct.call(users_created_workouts, total_users)
+        conversion_plan_to_session           = pct.call(users_completed_workouts, users_created_workouts)
+        conversion_session_to_subscription   = pct.call(users_subscribed, users_completed_workouts)
 
         onboarding_analytics = OnboardingAnalyticsService.new(
           period: params[:onboarding_period],
@@ -122,10 +142,12 @@ module Api
           recent_relationship_events: recent_relationship_events,
           recent_activation_events: recent_activation_events,
 
-          # Retention
-          retention_d1: d1_base > 0 ? (d1_retained.to_f / d1_base * 100).round(1) : 0,
-          retention_d7: d7_base > 0 ? (d7_retained.to_f / d7_base * 100).round(1) : 0,
-          retention_d30: d30_base > 0 ? (d30_retained.to_f / d30_base * 100).round(1) : 0,
+          # Retention (legacy numeric keys kept for the current UI)
+          retention_d1: retention_detail[:d1].value,
+          retention_d7: retention_detail[:d7].value,
+          retention_d30: retention_detail[:d30].value,
+          # Auditable retention with numerator/denominator/status/maturity
+          retention_detail: retention_detail.transform_values(&:as_json),
 
           # Conversion funnels (%)
           conversion_trial_to_subscription: conversion_trial_to_subscription,
@@ -191,7 +213,44 @@ module Api
         render json: full_user_detail(user)
       end
 
+      # POST /api/v1/admin/push_test
+      # Sends the standard admin test push to the CURRENT admin's own device
+      # tokens. Guarded by require_admin!; self-only (never reads a user_id from
+      # params); rate-limited and audited inside AdminPushTestService.
+      def push_test
+        result = AdminPushTestService.new(current_user).call
+
+        render(
+          json: {
+            ok: result.ok?,
+            error: result.error,
+            correlation_id: result.correlation_id,
+            devices: Array(result.devices).map do |d|
+              {
+                masked_token: d.masked_token,
+                status: d.status,
+                message_id: d.message_id,
+                error_code: d.error_code,
+                invalidated: d.invalidated
+              }
+            end
+          },
+          status: push_test_http_status(result)
+        )
+      end
+
       private
+
+      def push_test_http_status(result)
+        return :ok if result.ok?
+
+        case result.error
+        when "rate_limited" then :too_many_requests
+        when "not_configured" then :service_unavailable
+        when "not_admin" then :forbidden
+        else :unprocessable_entity
+        end
+      end
 
       # Activation push panel — aggregate only, never exposes tokens or PII.
       def push_activation_stats

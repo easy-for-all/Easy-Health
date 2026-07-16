@@ -145,9 +145,19 @@ Rails.application.routes.draw do
         get :stats
         get :users
         get "users/:id", action: :user_detail
+        # Product analytics by domain (rollout gradual; source: product_analytics_events)
+        get "analytics/platform_comparison", to: "analytics#platform_comparison"
+        # Admin-only diagnostic: sends a test push to the CURRENT admin's own
+        # device tokens (never accepts a user_id). See AdminPushTestService.
+        post :push_test
       end
 
       post "onboarding_events", to: "onboarding_events#create"
+
+      # Product analytics ingestion (auth optional; accepts anonymous_id pre-login)
+      namespace :analytics do
+        post "events", to: "events#create"
+      end
 
       # Privacy & public profile
       resource :privacy_settings, only: [:show, :update]

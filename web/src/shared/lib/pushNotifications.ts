@@ -45,6 +45,32 @@ let permanentListenersAttached = false;
 // Only ever one registration operation in flight (dedupe + no cross-op races).
 let inFlight: Promise<PushRegistrationResult> | null = null;
 
+// Safe, in-memory diagnostics state for the admin device panel. NEVER stores the
+// raw token — only a mask. Reset on reload; this is a live debugging aid, not a
+// persisted record.
+let lastMaskedToken: string | null = null;
+let lastRegistrationAt: string | null = null;
+let lastTokenSyncedToApi: boolean | null = null;
+let lastApiStatus: number | "ok" | null = null;
+let lastForeground: { title: string | null; at: string } | null = null;
+let lastAction: { path: string | null; type: string | null; at: string } | null = null;
+
+export interface PushDiagnosticsSnapshot {
+  platform: string;
+  isNative: boolean;
+  permissionState: PushPermissionState;
+  maskedToken: string | null;
+  tokenSyncedToApi: boolean | null;
+  lastApiStatus: number | "ok" | null;
+  lastRegistrationAt: string | null;
+  channelId: string;
+  appVersion: string | null;
+  build: string | null;
+  firebaseHint: string;
+  lastForeground: { title: string | null; at: string } | null;
+  lastAction: { path: string | null; type: string | null; at: string } | null;
+}
+
 async function isNative(): Promise<boolean> {
   try {
     const { Capacitor } = await import("@capacitor/core");
@@ -103,15 +129,15 @@ function trackPushEvent(event: string, meta: PushEventMeta): void {
   trackEvent(event, { platform: "android", ...meta });
 }
 
+// The ONLY place a token is turned into a safe, loggable form.
+function maskToken(token: string): string {
+  return token.length > 8 ? `${token.slice(0, 4)}…${token.slice(-4)}` : "****";
+}
+
 // Masked token is DEV-console only — never sent to analytics/Sentry.
 function devLog(message: string, token?: string): void {
   if (process.env.NODE_ENV === "production") return;
-  if (token) {
-    const masked = token.length > 8 ? `${token.slice(0, 4)}…${token.slice(-4)}` : "****";
-    console.log(`[Push] ${message} (${masked})`);
-  } else {
-    console.log(`[Push] ${message}`);
-  }
+  console.log(token ? `[Push] ${message} (${maskToken(token)})` : `[Push] ${message}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,6 +221,8 @@ async function runRegistration(source: PushRegistrationSource): Promise<PushRegi
 
   trackPushEvent("push_registration_callback_received", { source, ...meta });
   devLog("registration token received", token);
+  lastMaskedToken = maskToken(token);
+  lastRegistrationAt = new Date().toISOString();
 
   const synced = await syncToken(token, source, meta);
   return {
@@ -283,6 +311,8 @@ async function syncToken(
       });
       trackPushEvent("push_backend_sync_succeeded", { source, ...meta });
       devLog("backend sync succeeded", token);
+      lastTokenSyncedToApi = true;
+      lastApiStatus = "ok";
       return true;
     } catch (err) {
       const status = err instanceof ApiError ? err.status : undefined;
@@ -295,6 +325,8 @@ async function syncToken(
           http_status: status,
           error_category: transient ? "transient" : "client_error",
         });
+        lastTokenSyncedToApi = false;
+        lastApiStatus = status ?? null;
         return false;
       }
       // one short retry for transient failures
@@ -328,6 +360,7 @@ async function attachPermanentListeners(): Promise<void> {
   const { PushNotifications } = await import("@capacitor/push-notifications");
   await PushNotifications.addListener("pushNotificationReceived", (notification) => {
     devLog(`foreground notification: ${notification.title ?? ""}`);
+    lastForeground = { title: notification.title ?? null, at: new Date().toISOString() };
   });
   await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
     void handleActionPerformed(action.notification?.data ?? {});
@@ -359,7 +392,115 @@ async function handleActionPerformed(data: Record<string, unknown>): Promise<voi
     }
   }
   const path = resolveDeepLink(data);
+  lastAction = { path, type: data.type != null ? String(data.type) : null, at: new Date().toISOString() };
   // Carry the delivery id so the target screen can offer "não gostei" feedback.
   const target = deliveryId != null ? `${path}${path.includes("?") ? "&" : "?"}from_push=${deliveryId}` : path;
   if (typeof window !== "undefined") window.location.assign(target);
+}
+
+// ---------------------------------------------------------------------------
+// Device diagnostics (admin-only panel). All read-only/report helpers here are
+// safe on the web (they no-op / return "unsupported") and never expose the raw
+// token — only the mask captured during registration.
+// ---------------------------------------------------------------------------
+
+export async function collectPushDiagnostics(): Promise<PushDiagnosticsSnapshot> {
+  const native = await isNative();
+  let platform = "web";
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    platform = Capacitor.getPlatform();
+  } catch {
+    /* ignore */
+  }
+  const permissionState = native ? await getPushPermissionState() : "unsupported";
+  const meta = await deviceMetadata();
+  let build: string | null = null;
+  try {
+    const { App } = await import("@capacitor/app");
+    const info = await App.getInfo();
+    build = info.build ?? null;
+  } catch {
+    /* @capacitor/app may be unavailable */
+  }
+  return {
+    platform,
+    isNative: native,
+    permissionState,
+    maskedToken: lastMaskedToken,
+    tokenSyncedToApi: lastTokenSyncedToApi,
+    lastApiStatus,
+    lastRegistrationAt,
+    channelId: "workout_reminders",
+    appVersion: meta.app_version ?? null,
+    build,
+    firebaseHint: "FCM project is configured server-side; not exposed to the client.",
+    lastForeground,
+    lastAction,
+  };
+}
+
+// Opens the OS notification settings for this app (Android). Returns false on web
+// or if the native plugin is unavailable.
+export async function openAppNotificationSettings(): Promise<boolean> {
+  if (!(await isNative())) return false;
+  try {
+    const { NativeSettings, AndroidSettings } = await import("capacitor-native-settings");
+    await NativeSettings.openAndroid({ option: AndroidSettings.AppNotification });
+    trackPushEvent("push_open_settings_invoked", {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Fires an immediate LOCAL notification (no server / FCM) so we can isolate an
+// on-device display problem from a delivery problem. Android-only.
+export async function sendLocalTestNotification(): Promise<boolean> {
+  if (!(await isNative())) return false;
+  try {
+    const { LocalNotifications } = await import("@capacitor/local-notifications");
+    let perm = await LocalNotifications.checkPermissions();
+    if (perm.display !== "granted") {
+      perm = await LocalNotifications.requestPermissions();
+      if (perm.display !== "granted") return false;
+    }
+    try {
+      await LocalNotifications.createChannel({
+        id: "workout_reminders",
+        name: "Lembretes de treino",
+        importance: 4,
+        visibility: 1,
+      });
+    } catch {
+      /* channel best-effort */
+    }
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: Date.now() % 100000,
+          title: "Teste local EasyHealth",
+          body: "Notificação local de diagnóstico (não passou pelo Firebase).",
+          channelId: "workout_reminders",
+          extra: { type: "admin_push_test_local" },
+        },
+      ],
+    });
+    trackPushEvent("push_local_test_scheduled", {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Asks the backend to send the admin test push to THIS user's own tokens. The
+// endpoint is admin-only and self-only; no user id is ever sent.
+export async function requestApiTestPush(): Promise<{ ok: boolean; status?: number; errorCode?: string; body?: unknown }> {
+  try {
+    const body = await api.post("/api/v1/admin/push_test", {});
+    return { ok: true, body };
+  } catch (err) {
+    if (err instanceof ApiError) return { ok: false, status: err.status, errorCode: err.errorCode };
+    return { ok: false };
+  }
 }

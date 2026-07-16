@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { api, ApiError, TRIAL_EXPIRED_EVENT } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
 import { Capacitor } from "@capacitor/core";
+import { identifyUser, resetIdentity } from "@/shared/lib/analytics";
 
 interface AuthContextValue {
   user: User | null;
@@ -52,6 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Associate the anonymous analytics thread with the authenticated user across
+  // sinks (GA4 user_id, Clarity identify). anonymous_id is preserved.
+  useEffect(() => {
+    if (user?.id) identifyUser(user.id);
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user) return;
     if (!Capacitor.isNativePlatform()) return;
@@ -99,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
       setUser(null);
+      resetIdentity();
     }
   }
 

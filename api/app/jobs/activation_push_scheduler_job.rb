@@ -7,9 +7,13 @@
 class ActivationPushSchedulerJob < ApplicationJob
   queue_as :default
 
-  def perform
+  # only_user_ids: optional allow-list used by push:test:run_scheduler to exercise
+  # the real scheduler against a single (admin) user without touching anyone else.
+  def perform(only_user_ids: nil)
     stats = Hash.new(0)
-    candidate_user_ids.each do |user_id|
+    ids = candidate_user_ids
+    ids &= Array(only_user_ids).map(&:to_i) if only_user_ids
+    ids.each do |user_id|
       user = User.find_by(id: user_id)
       next unless user
 
