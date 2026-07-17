@@ -64,8 +64,11 @@ module Api
         # computed in the reporting timezone, not raw UTC DATE() (see
         # Analytics::ReportingTime), so a 22h-local workout counts on the right
         # local day for a Brazilian user base.
-        completed_local = Analytics::ReportingTime.local_date_sql("workout_sessions.completed_at")
-        created_local   = Analytics::ReportingTime.local_date_sql("users.created_at")
+        # Fully-qualified (::Analytics) to escape the Api::V1::Analytics namespace
+        # created by app/controllers/api/v1/analytics/: an unqualified
+        # `Analytics::` resolves to Api::V1::Analytics and raises NameError.
+        completed_local = ::Analytics::ReportingTime.local_date_sql("workout_sessions.completed_at")
+        created_local   = ::Analytics::ReportingTime.local_date_sql("users.created_at")
 
         d1_base    = User.reportable.where("users.created_at <= ?", 1.day.ago).count
         d7_base    = User.reportable.where("users.created_at <= ?", 7.days.ago).count
@@ -85,9 +88,9 @@ module Api
         d30_retained = retained_on.call(30, 31)
 
         retention_detail = {
-          d1:  Analytics::MetricResult.ratio(numerator: d1_retained, denominator: d1_base, definition: "retention_value_d1_v1"),
-          d7:  Analytics::MetricResult.ratio(numerator: d7_retained, denominator: d7_base, definition: "retention_value_d7_v1"),
-          d30: Analytics::MetricResult.ratio(numerator: d30_retained, denominator: d30_base, definition: "retention_value_d30_v1")
+          d1:  ::Analytics::MetricResult.ratio(numerator: d1_retained, denominator: d1_base, definition: "retention_value_d1_v1"),
+          d7:  ::Analytics::MetricResult.ratio(numerator: d7_retained, denominator: d7_base, definition: "retention_value_d7_v1"),
+          d30: ::Analytics::MetricResult.ratio(numerator: d30_retained, denominator: d30_base, definition: "retention_value_d30_v1")
         }
 
         # Conversion funnels
@@ -181,6 +184,16 @@ module Api
           # Composite training block usage
           block_usage_metrics: BlockUsageMetricsService.new.call
         }
+      rescue ActiveRecord::StatementInvalid => e
+        # Tipicamente PG::UndefinedColumn/UndefinedTable quando o schema do banco
+        # esta desatualizado (migration pendente em producao). Degradar para 503
+        # com mensagem clara em vez de 500 cru para nao derrubar o painel inteiro.
+        Rails.logger.error("[AdminController#stats] schema/query failure: #{e.message}")
+        Sentry.capture_exception(e) if defined?(Sentry) && Sentry.initialized?
+        render_error(
+          "Estatisticas indisponiveis: schema do banco desatualizado (migration pendente)",
+          status: :service_unavailable
+        )
       end
 
       def users
