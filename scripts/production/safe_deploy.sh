@@ -36,7 +36,8 @@ assert_migration_applied() {
 
 validate_critical_migrations() {
   log "Validando migrations criticas"
-  for version in 20260706130000 20260709020100 20260709020102 20260709152000; do
+  for version in 20260706130000 20260709020100 20260709020102 20260709152000 \
+                 20260715120000 20260715120001 20260715120002 20260715120003; do
     assert_migration_applied "$version"
   done
 }
