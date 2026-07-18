@@ -45,33 +45,30 @@ class PushDispatchService
   end
 
   def send_to_devices
-    devices = user.device_tokens.active.to_a
-    return skip("no_active_device") if devices.empty?
+    return skip("no_active_device") unless user.device_tokens.active.exists?
 
     message = ActivationPushMessages.build(notification_type: delivery.notification_type, user: user, delivery: delivery)
-    service = FirebasePushService.new
-    result = nil
-    sent_device = nil
+    result = PushNotifications::FcmDispatcher.new.call(
+      user: user,
+      title: message[:title],
+      body: message[:body],
+      data: message[:data],
+      notification_type: delivery.notification_type,
+      correlation_id: "delivery-#{delivery.id}"
+    )
+    return skip("no_active_device") if result.tokens_attempted.zero?
 
-    devices.each do |device|
-      result = service.deliver(token: device.token, title: message[:title], body: message[:body], data: message[:data])
-      track_provider(result, device)
-      device.invalidate!(result.error_code) if result.invalid_token
-      if result.sent?
-        sent_device = device
-        break
-      end
-    end
+    result.outcomes.each { |outcome| track_provider(outcome.result, outcome.device) }
 
-    result&.sent? ? finalize_sent(result, sent_device) : finalize_failed(result)
+    result.sent? ? finalize_sent(result) : finalize_failed(result)
   end
 
-  def finalize_sent(result, device)
+  def finalize_sent(result)
     delivery.update!(
       status: "sent",
       sent_at: Time.current,
-      provider_message_id: result.message_id,
-      push_device_id: device&.id,
+      provider_message_id: result.provider_message_id,
+      push_device_id: result.accepted_device&.id,
       error_code: nil
     )
     stamp_preferences!
@@ -80,17 +77,18 @@ class PushDispatchService
   end
 
   def finalize_failed(result)
+    error_code = result&.last_error_code
     retry_count = delivery.retry_count + 1
     if retry_count >= MAX_RETRIES
-      delivery.update!(status: "failed", retry_count: retry_count, error_code: result&.error_code)
-      track("push_failed", error_code: result&.error_code)
+      delivery.update!(status: "failed", retry_count: retry_count, error_code: error_code)
+      track("push_failed", error_code: error_code)
       :failed
     else
       # Back to scheduled for a later sweep.
       delivery.update!(
         status: "scheduled",
         retry_count: retry_count,
-        error_code: result&.error_code,
+        error_code: error_code,
         scheduled_for: Time.current + RETRY_BACKOFF.call(retry_count)
       )
       :retried
