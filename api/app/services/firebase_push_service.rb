@@ -16,10 +16,14 @@ require "stringio"
 class FirebasePushService
   FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging".freeze
   ENDPOINT_TEMPLATE = "https://fcm.googleapis.com/v1/projects/%s/messages:send".freeze
-  # FCM error statuses that mean "this token is dead, stop using it".
-  INVALID_TOKEN_ERRORS = %w[UNREGISTERED INVALID_ARGUMENT SENDER_ID_MISMATCH].freeze
+  # FCM error statuses that DEFINITIVELY mean "this token is dead, stop using it".
+  # NOTE: INVALID_ARGUMENT is intentionally NOT here — it is ambiguous (most often
+  # a malformed message field, occasionally a bad token). Auto-invalidating on it
+  # risks nuking healthy tokens on a formatting bug, so we keep the token and
+  # surface error_message instead.
+  DEAD_TOKEN_ERRORS = %w[UNREGISTERED SENDER_ID_MISMATCH].freeze
 
-  Result = Struct.new(:status, :message_id, :error_code, :invalid_token, keyword_init: true) do
+  Result = Struct.new(:status, :message_id, :error_code, :error_message, :invalid_token, keyword_init: true) do
     def sent?    = status == "sent"
     def failed?  = status == "failed"
   end
@@ -61,7 +65,7 @@ class FirebasePushService
     interpret(response)
   rescue => e
     Rails.logger.error("[FirebasePushService] send error for token #{masked(token)}: #{e.class}: #{e.message}")
-    Result.new(status: "failed", error_code: "exception", invalid_token: false)
+    Result.new(status: "failed", error_code: "exception", error_message: e.message, invalid_token: false)
   end
 
   private
@@ -99,11 +103,15 @@ class FirebasePushService
     if code == 200
       Result.new(status: "sent", message_id: body["name"], invalid_token: false)
     else
-      fcm_status = body.dig("error", "details", 0, "errorCode") || body.dig("error", "status")
+      error = body["error"] || {}
+      fcm_status = error.dig("details", 0, "errorCode") || error["status"]
       Result.new(
         status: "failed",
         error_code: fcm_status || "http_#{code}",
-        invalid_token: INVALID_TOKEN_ERRORS.include?(fcm_status) || code == 404
+        # Firebase's human-readable explanation (e.g. which field is invalid).
+        # It never echoes the registration token, so it is safe to surface/store.
+        error_message: error["message"].to_s.presence,
+        invalid_token: DEAD_TOKEN_ERRORS.include?(fcm_status) || code == 404
       )
     end
   end
@@ -121,7 +129,7 @@ class FirebasePushService
   end
 
   def unconfigured_result
-    Result.new(status: "failed", error_code: "not_configured", invalid_token: false)
+    Result.new(status: "failed", error_code: "not_configured", error_message: "Firebase not configured", invalid_token: false)
   end
 
   def masked(token)

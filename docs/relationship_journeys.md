@@ -30,6 +30,8 @@ MAKE_WEBHOOK_ENABLED=false
 MAKE_WEBHOOK_TIMEOUT_SECONDS=10
 MAKE_WEBHOOK_PAYLOAD_MODE=minimal
 MAKE_WEBHOOK_ALLOWED_EVENTS=
+MAKE_EVENT_SCHEMA_VERSION=1
+MAKE_EVENT_CHANNEL_ROUTING_ENABLED=false
 ```
 
 `MAKE_WEBHOOK_ALLOWED_EVENTS` é uma whitelist separada por vírgula. Lista vazia não envia nenhum evento por segurança.
@@ -57,7 +59,11 @@ Assinatura:
 OpenSSL::HMAC.hexdigest("SHA256", MAKE_WEBHOOK_SECRET, "#{event_id}.#{timestamp}.#{body_json}")
 ```
 
-`MAKE_WEBHOOK_PAYLOAD_MODE=minimal` envia `user.id`, evento, segmentos, assinatura, assinatura/engajamento e metadata sanitizada. `full` inclui e-mail/nome, mas ainda só quando o usuário é elegível para relacionamento.
+`MAKE_WEBHOOK_PAYLOAD_MODE=minimal` envia `user.id`, evento, segmentos, assinatura/engajamento e metadata sanitizada. `full` inclui e-mail/nome, mas ainda só quando o usuário é elegível para relacionamento.
+
+`MAKE_EVENT_SCHEMA_VERSION=2` adiciona `delivery.channels` e `context`. O Make
+deve usar `delivery.channels` para separar email/push e `event_name` apenas para
+o evento de negocio. Veja `docs/make-event-contract.md`.
 
 ## Jobs
 

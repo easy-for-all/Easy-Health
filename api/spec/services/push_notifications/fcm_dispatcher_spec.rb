@@ -11,8 +11,8 @@ RSpec.describe PushNotifications::FcmDispatcher do
     FirebasePushService::Result.new(status: "failed", error_code: code, invalid_token: true)
   end
 
-  def temp_result(code: "http_500")
-    FirebasePushService::Result.new(status: "failed", error_code: code, invalid_token: false)
+  def temp_result(code: "http_500", message: "backend unavailable")
+    FirebasePushService::Result.new(status: "failed", error_code: code, error_message: message, invalid_token: false)
   end
 
   def stub_fcm(*results)
@@ -61,6 +61,7 @@ RSpec.describe PushNotifications::FcmDispatcher do
     expect(device.reload.invalidated_at).to be_nil
     expect(device.enabled).to be(true)
     expect(result.last_error_code).to eq("http_500")
+    expect(result.last_error_message).to eq("backend unavailable")
   end
 
   it "stops at the first accepted token and does not touch the others" do

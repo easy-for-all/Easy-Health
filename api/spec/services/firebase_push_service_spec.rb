@@ -81,6 +81,38 @@ RSpec.describe FirebasePushService do
       expect(described_class.new.deliver(token: "t", title: "a", body: "b").invalid_token).to be(true)
     end
 
+    it "does NOT invalidate the token on INVALID_ARGUMENT (ambiguous), but surfaces the message" do
+      body = {
+        "error" => {
+          "status" => "INVALID_ARGUMENT",
+          "message" => "The registration token is not a valid FCM registration token"
+        }
+      }.to_json
+      stub_transport(FakeResponse.new("400", body))
+
+      result = described_class.new.deliver(token: "t", title: "a", body: "b")
+
+      expect(result).to have_attributes(status: "failed", error_code: "INVALID_ARGUMENT", invalid_token: false)
+      expect(result.error_message).to eq("The registration token is not a valid FCM registration token")
+    end
+
+    it "reads the detailed errorCode and message from error.details" do
+      body = {
+        "error" => {
+          "status" => "INVALID_ARGUMENT",
+          "message" => "Invalid value at 'message.data[0].value'",
+          "details" => [{ "errorCode" => "UNREGISTERED" }]
+        }
+      }.to_json
+      stub_transport(FakeResponse.new("400", body))
+
+      result = described_class.new.deliver(token: "t", title: "a", body: "b")
+
+      expect(result.error_code).to eq("UNREGISTERED")
+      expect(result.invalid_token).to be(true)
+      expect(result.error_message).to eq("Invalid value at 'message.data[0].value'")
+    end
+
     it "treats a 5xx as temporary (does NOT invalidate the token)" do
       stub_transport(FakeResponse.new("503", "service unavailable"))
       result = described_class.new.deliver(token: "t", title: "a", body: "b")

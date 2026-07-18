@@ -20,6 +20,17 @@ class MakeWebhookEligibility
     %w[full minimal].include?(mode) ? mode : "minimal"
   end
 
+  def self.event_schema_version
+    version = ENV.fetch("MAKE_EVENT_SCHEMA_VERSION", "1").to_s
+    return version.to_i if %w[1 2].include?(version)
+
+    raise ArgumentError, "MAKE_EVENT_SCHEMA_VERSION must be 1 or 2"
+  end
+
+  def self.channel_routing_enabled?
+    ActiveModel::Type::Boolean.new.cast(ENV.fetch("MAKE_EVENT_CHANNEL_ROUTING_ENABLED", "false"))
+  end
+
   def self.allowed_events
     ENV.fetch("MAKE_WEBHOOK_ALLOWED_EVENTS", "")
        .split(",")

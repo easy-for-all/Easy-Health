@@ -204,7 +204,8 @@ module Make
         tokens_attempted_count: result.tokens_attempted,
         tokens_accepted_count: result.tokens_accepted,
         tokens_rejected_count: result.tokens_rejected,
-        last_error_code: result.last_error_code
+        last_error_code: result.last_error_code,
+        last_error_message: result.last_error_message
       )
 
       emit_audit(user, dispatch, result)
@@ -220,17 +221,23 @@ module Make
 
     # `route` is exposed to the app as `target_path` — that is the field the
     # deep-link resolver reads. All FCM data values become strings downstream.
+    #
+    # Keys MUST all be strings: FCM's `data` is a map<string,string> and a Ruby
+    # hash mixing :source and "source" serializes to a DUPLICATE JSON key, which
+    # FCM rejects with INVALID_ARGUMENT ("Repeated map key"). Make's arbitrary
+    # data is the base; our reserved keys override it so a scenario can never
+    # clobber tracking/deep-link fields.
     def fcm_data(dispatch)
-      {
-        type: notification_type,
-        notification_type: notification_type,
-        target_path: route,
-        route: route,
-        correlation_id: dispatch.correlation_id,
-        campaign_key: campaign_key.presence,
-        dispatch_id: dispatch.id,
-        source: "make"
-      }.merge(extra_data).compact
+      extra_data.merge(
+        "type" => notification_type,
+        "notification_type" => notification_type,
+        "target_path" => route,
+        "route" => route,
+        "correlation_id" => dispatch.correlation_id,
+        "campaign_key" => campaign_key.presence,
+        "dispatch_id" => dispatch.id.to_s,
+        "source" => "make"
+      ).compact
     end
 
     # Allowlisted extra data from Make. Strings only; forbidden keys are stripped.
@@ -348,6 +355,7 @@ module Make
           status: "failed",
           dispatch_id: dispatch.id,
           last_error_code: result.last_error_code,
+          last_error_message: result.last_error_message,
           sent: false
         }
       )

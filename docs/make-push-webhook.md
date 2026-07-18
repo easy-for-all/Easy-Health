@@ -28,25 +28,29 @@ Evento de negócio (ex.: activation_workout_created)
 
 ## Payload (versionado, sem PII sensível, NUNCA com token FCM)
 
-`MakeWebhookClient#payload_for`. Campos relevantes para push:
+O contrato completo esta em `docs/make-event-contract.md`. No schema v2, o Make
+deve rotear primeiro por `delivery.channels` e depois por `event_name`.
+
+Campos relevantes para push:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "event_id": 123,
   "event_name": "activation_workout_created",
   "occurred_at": "2026-07-16T10:00:00Z",
-  "source": "activation_push",
+  "source": "easyhealth_backend",
   "environment": "production",
+  "delivery": { "channels": ["push"] },
   "user": { "id": 123, "timezone": "America/Sao_Paulo", "locale": "pt-BR" },
-  "metadata": { "plan_id": 456, "trigger_type": "activation_workout_created" }
+  "context": {},
+  "metadata": { "trigger_source": "activation_push" }
 }
 ```
 
 - `timezone` (de `users.time_zone`, fallback `America/Sao_Paulo`) é o que o Make
   usa para agendar no horário local do usuário.
-- O "context" do enunciado é carregado em `metadata` (mantido para não quebrar os
-  cenários de e-mail já configurados no Make).
+- O schema 1 continua disponivel temporariamente com `MAKE_EVENT_SCHEMA_VERSION=1`.
 - `email`/`name` só aparecem com `MAKE_WEBHOOK_PAYLOAD_MODE=full`.
 
 ## Assinatura (inalterada — mantém o e-mail funcionando)
@@ -54,7 +58,8 @@ Evento de negócio (ex.: activation_workout_created)
 ```
 X-EasyHealth-Signature = HMAC-SHA256(MAKE_WEBHOOK_SECRET, "<event_id>.<timestamp>.<raw_body>")
 ```
-Headers: `X-EasyHealth-Event-Id`, `-Event-Name`, `-Timestamp`, `-Signature`.
+Headers: `X-EasyHealth-Event-Id`, `-Event-Name`, `-Schema-Version`,
+`-Timestamp`, `-Signature`.
 Retry/backoff em `MakeWebhookDeliveryJob` (`MAX_ATTEMPTS=5`); status na própria
 linha do `user_events` (`make_delivery_status`).
 
