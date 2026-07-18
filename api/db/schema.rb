@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_15_120003) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_16_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -643,6 +643,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_120003) do
     t.index ["user_id"], name: "index_public_profiles_on_user_id", unique: true
   end
 
+  create_table "push_dispatches", force: :cascade do |t|
+    t.string "body"
+    t.string "campaign_key"
+    t.string "correlation_id"
+    t.datetime "created_at", null: false
+    t.datetime "dispatched_at"
+    t.string "event_id"
+    t.string "idempotency_key", null: false
+    t.string "last_error_code"
+    t.text "last_error_message"
+    t.string "notification_type", null: false
+    t.datetime "opened_at"
+    t.jsonb "payload_json", default: {}, null: false
+    t.datetime "provider_accepted_at"
+    t.datetime "requested_at"
+    t.string "requested_by", default: "make", null: false
+    t.string "route"
+    t.string "skip_reason"
+    t.string "status", default: "received", null: false
+    t.string "title"
+    t.integer "tokens_accepted_count", default: 0, null: false
+    t.integer "tokens_attempted_count", default: 0, null: false
+    t.integer "tokens_rejected_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["idempotency_key"], name: "index_push_dispatches_on_idempotency_key", unique: true
+    t.index ["status"], name: "index_push_dispatches_on_status"
+    t.index ["user_id", "created_at"], name: "index_push_dispatches_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_push_dispatches_on_user_id"
+  end
+
   create_table "relationship_messages", force: :cascade do |t|
     t.string "channel", null: false
     t.datetime "created_at", null: false
@@ -1032,6 +1063,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_120003) do
   add_foreign_key "personal_notes", "users", column: "personal_id"
   add_foreign_key "product_analytics_events", "users"
   add_foreign_key "public_profiles", "users"
+  add_foreign_key "push_dispatches", "users"
   add_foreign_key "shared_workouts", "users", column: "owner_id"
   add_foreign_key "subscriptions", "users"
   add_foreign_key "trainer_profiles", "users"

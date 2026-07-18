@@ -119,6 +119,14 @@ Rails.application.routes.draw do
         end
       end
 
+      # Internal endpoint called by the Make orchestrator to request a push.
+      # Auth is a dedicated Bearer token (see PushDispatchesController).
+      namespace :integrations do
+        namespace :make do
+          resources :push_dispatches, only: [:create]
+        end
+      end
+
       namespace :ai_agents do
         get :personal_trainer
         get :conditioning

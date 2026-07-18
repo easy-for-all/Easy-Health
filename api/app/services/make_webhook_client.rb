@@ -78,6 +78,7 @@ class MakeWebhookClient
   def payload_for(user_event)
     user = user_event.user
     {
+      schema_version: 1,
       event_id: user_event.id,
       event_name: user_event.event_name,
       occurred_at: user_event.occurred_at&.iso8601,
@@ -91,14 +92,20 @@ class MakeWebhookClient
     }
   end
 
+  # timezone/locale are included in BOTH modes: the Make push orchestrator needs
+  # the timezone to schedule a reminder at the user's local hour. Neither is PII
+  # in the sensitive sense; email/name stay full-mode only.
   def user_payload(user)
-    payload = { id: user.id }
+    payload = {
+      id: user.id,
+      timezone: user.time_zone.presence || "America/Sao_Paulo",
+      locale: "pt-BR"
+    }
     return payload if MakeWebhookEligibility.payload_mode == "minimal"
 
     payload.merge(
       email: user.email,
-      name: user.name,
-      locale: "pt-BR"
+      name: user.name
     )
   end
 

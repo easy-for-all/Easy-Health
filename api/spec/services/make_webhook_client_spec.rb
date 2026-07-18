@@ -48,6 +48,35 @@ RSpec.describe MakeWebhookClient do
     end
   end
 
+  it "includes schema_version, timezone and locale so Make can schedule a push" do
+    captured_request = nil
+    response = Net::HTTPOK.new("1.1", "200", "OK")
+    http = instance_double(Net::HTTP)
+    user.update!(time_zone: "America/Sao_Paulo")
+
+    with_env(make_env) do
+      event.update!(make_delivery_status: "pending")
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request) do |request|
+        captured_request = request
+        response
+      end
+
+      described_class.new.deliver(event)
+
+      body = JSON.parse(captured_request.body)
+      expect(body["schema_version"]).to eq(1)
+      expect(body.dig("user", "timezone")).to eq("America/Sao_Paulo")
+      expect(body.dig("user", "locale")).to eq("pt-BR")
+      # Still no sensitive PII in minimal mode, and never a device token.
+      expect(body.dig("user", "email")).to be_nil
+      expect(captured_request.body).not_to match(/fcm|device_token|"token"/i)
+    end
+  end
+
   it "marks the event failed on HTTP errors" do
     response = Net::HTTPInternalServerError.new("1.1", "500", "Error")
     allow(response).to receive(:body).and_return("broken")
