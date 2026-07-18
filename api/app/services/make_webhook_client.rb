@@ -10,16 +10,12 @@ class MakeWebhookClient
     end
   end
 
-  def deliver(user_event)
+  def deliver(user_event, delivery_channels: nil)
     unless MakeWebhookEligibility.deliverable?(user_event)
       reason = MakeWebhookEligibility.ineligibility_reason(user_event)
       user_event.update!(make_delivery_status: "disabled", make_last_error: reason)
       return Result.new(status: "disabled", error: reason)
     end
-
-    body_json = JSON.generate(payload_for(user_event))
-    timestamp = Time.current.utc.iso8601
-    signature = signature_for(user_event.id, timestamp, body_json)
 
     user_event.update!(
       make_delivery_status: "pending",
@@ -28,7 +24,12 @@ class MakeWebhookClient
       make_last_error: nil
     )
 
-    response = post(body_json, headers_for(user_event, timestamp, signature))
+    payload = payload_for(user_event, delivery_channels: delivery_channels)
+    body_json = JSON.generate(payload)
+    timestamp = Time.current.utc.iso8601
+    signature = signature_for(user_event.id, timestamp, body_json)
+
+    response = post(body_json, headers_for(user_event, timestamp, signature, schema_version_for(payload)))
     if response.is_a?(Net::HTTPSuccess)
       user_event.update!(make_delivery_status: "delivered", make_last_error: nil)
       Result.new(status: "delivered")
@@ -57,11 +58,12 @@ class MakeWebhookClient
     http.request(request)
   end
 
-  def headers_for(user_event, timestamp, signature)
+  def headers_for(user_event, timestamp, signature, schema_version)
     {
       "Content-Type" => "application/json",
       "X-EasyHealth-Event-Id" => user_event.id.to_s,
       "X-EasyHealth-Event-Name" => user_event.event_name,
+      "X-EasyHealth-Schema-Version" => schema_version.to_s,
       "X-EasyHealth-Timestamp" => timestamp,
       "X-EasyHealth-Signature" => signature
     }
@@ -75,58 +77,17 @@ class MakeWebhookClient
     )
   end
 
-  def payload_for(user_event)
-    user = user_event.user
-    {
-      schema_version: 1,
-      event_id: user_event.id,
-      event_name: user_event.event_name,
-      occurred_at: user_event.occurred_at&.iso8601,
-      source: user_event.source,
-      environment: Rails.env,
-      user: user_payload(user),
-      segments: user.user_segments.active.order(:segment_name).pluck(:segment_name),
-      subscription: subscription_payload(user.subscription, user),
-      engagement: engagement_payload(user),
-      metadata: RelationshipEventTracker.sanitize_metadata(user_event.metadata || {})
-    }
-  end
+  def payload_for(user_event, delivery_channels: nil)
+    snapshot = payload_snapshot(user_event)
+    return snapshot if snapshot && delivery_channels.nil?
 
-  # timezone/locale are included in BOTH modes: the Make push orchestrator needs
-  # the timezone to schedule a reminder at the user's local hour. Neither is PII
-  # in the sensitive sense; email/name stay full-mode only.
-  def user_payload(user)
-    payload = {
-      id: user.id,
-      timezone: user.time_zone.presence || "America/Sao_Paulo",
-      locale: "pt-BR"
-    }
-    return payload if MakeWebhookEligibility.payload_mode == "minimal"
+    payload = Make::EventPayloadSerializer.new(
+      event: user_event,
+      delivery_channels: delivery_channels
+    ).as_json
 
-    payload.merge(
-      email: user.email,
-      name: user.name
-    )
-  end
-
-  def subscription_payload(subscription, user)
-    {
-      status: subscription&.status || "none",
-      trial_ends_at: subscription&.trial_end&.iso8601 || user.trial_ends_at&.iso8601,
-      plan: subscription&.plan_name || "none"
-    }
-  end
-
-  def engagement_payload(user)
-    last_workout_at = user.workout_sessions.maximum(:completed_at)
-    {
-      created_at: user.created_at.iso8601,
-      last_sign_in_at: nil,
-      last_workout_at: last_workout_at&.iso8601,
-      total_workouts_created: user.workout_plans.count,
-      total_workouts_completed: user.workout_sessions.count,
-      days_since_last_workout: last_workout_at ? (Date.current - last_workout_at.to_date).to_i : nil
-    }
+    user_event.update!(payload_json: JSON.parse(JSON.generate(payload)))
+    payload
   end
 
   def mark_failed(user_event, error)
@@ -135,5 +96,18 @@ class MakeWebhookClient
       make_last_error: error.to_s.first(1000)
     )
     Result.new(status: "failed", error: error)
+  end
+
+  def payload_snapshot(user_event)
+    payload = user_event.payload_json
+    return unless payload.is_a?(Hash)
+    return unless [1, 2].include?(payload["schema_version"].to_i)
+    return unless payload["event_id"].present?
+
+    payload
+  end
+
+  def schema_version_for(payload)
+    payload[:schema_version] || payload["schema_version"] || MakeWebhookEligibility.event_schema_version
   end
 end

@@ -17,7 +17,7 @@ module PushNotifications
 
     Result = Struct.new(
       :tokens_attempted, :tokens_accepted, :tokens_rejected,
-      :provider_message_id, :last_error_code, :outcomes,
+      :provider_message_id, :last_error_code, :last_error_message, :outcomes,
       keyword_init: true
     ) do
       def sent?
@@ -44,13 +44,15 @@ module PushNotifications
       rejected = 0
       message_id = nil
       last_error = nil
+      last_message = nil
 
       devices.each do |device|
         result = @firebase.deliver(token: device.token, title:, body:, data:)
         outcomes << Outcome.new(device:, result:)
 
-        # Definitive-only invalidation (UNREGISTERED / INVALID_ARGUMENT / 404).
-        # Temporary failures (timeout / 429 / 5xx) leave the token enabled.
+        # Definitive-only invalidation (UNREGISTERED / SENDER_ID_MISMATCH / 404).
+        # Ambiguous (INVALID_ARGUMENT) and temporary (timeout / 429 / 5xx) failures
+        # leave the token enabled.
         device.invalidate!(result.error_code) if result.invalid_token
 
         if result.sent?
@@ -60,6 +62,7 @@ module PushNotifications
         else
           rejected += 1
           last_error = result.error_code
+          last_message = result.error_message
           log_failure(device, result, correlation_id)
         end
       end
@@ -70,6 +73,7 @@ module PushNotifications
         tokens_rejected: rejected,
         provider_message_id: message_id,
         last_error_code: last_error,
+        last_error_message: last_message,
         outcomes: outcomes
       )
     end
@@ -79,7 +83,7 @@ module PushNotifications
     def log_failure(device, result, correlation_id)
       Rails.logger.info(
         "[FcmDispatcher] send failed corr=#{correlation_id} " \
-        "device=#{device.masked_token} error=#{result.error_code}"
+        "device=#{device.masked_token} error=#{result.error_code} #{result.error_message}"
       )
     end
   end

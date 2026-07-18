@@ -1,0 +1,83 @@
+# Central channel routing for EasyHealth business events sent to Make.
+# Omitted known events are valid and resolve to an empty channel list.
+
+user_created:
+  channels:
+    - email
+
+subscription_created:
+  channels:
+    - email
+
+checkout_started:
+  channels:
+    - email
+
+trial_day_3:
+  channels:
+    - email
+
+trial_day_6:
+  channels:
+    - email
+
+trial_expired_without_subscription:
+  channels:
+    - email
+
+first_workout_created:
+  channels:
+    - email
+    - push
+
+first_workout_completed:
+  channels:
+    - email
+    - push
+
+workout_completed_partial:
+  channels:
+    - email
+
+workout_created_not_started:
+  channels:
+    - email
+    - push
+
+activation_workout_created:
+  channels:
+    - push
+
+activation_first_workout_completed:
+  channels:
+    - push
+
+activation_reminder_2h_due:
+  channels:
+    - push
+
+activation_reminder_24h_due:
+  channels:
+    - push
+
+plan_created_but_not_used:
+  channels:
+    - email
+    - push
+
+user_inactive_3_days:
+  channels:
+    - push
+
+user_inactive_7_days:
+  channels:
+    - email
+    - push
+
+never_created_workout:
+  channels:
+    - email
+
+churn_risk:
+  channels:
+    - email

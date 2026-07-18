@@ -176,6 +176,24 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       expect(dispatch.provider_accepted_at).to be_present
     end
 
+    it "builds FCM data with a single source key and reserved keys winning over Make data" do
+      captured = nil
+      allow_any_instance_of(FirebasePushService).to receive(:deliver) do |_svc, **kwargs|
+        captured = kwargs[:data]
+        FirebasePushService::Result.new(status: "sent", message_id: "m", invalid_token: false)
+      end
+
+      # Make sends its own workout_id AND tries to override "source".
+      post_dispatch(valid_payload(data: { "workout_id" => "456", "source" => "make_scenario" }))
+
+      serialized = JSON.parse(captured.to_json)
+      # The duplicate-key bug (:source vs "source") would surface here.
+      expect(serialized.keys.count { |k| k == "source" }).to eq(1)
+      expect(serialized["source"]).to eq("make")            # reserved key wins
+      expect(serialized["target_path"]).to eq("/workouts/456")
+      expect(serialized["workout_id"]).to eq("456")         # Make data passes through
+    end
+
     it "never persists a device token in payload_json" do
       post_dispatch(valid_payload(data: { "workout_id" => "456" }))
       expect(PushDispatch.last.payload_json.to_json).not_to include(DeviceToken.last.token)
@@ -190,6 +208,25 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       post_dispatch(payload)
       expect(json).to include("status" => "duplicate", "sent" => false)
       expect(PushDispatch.count).to eq(1)
+    end
+
+    it "returns 502 with the Firebase message and does NOT invalidate on INVALID_ARGUMENT" do
+      device = user.device_tokens.first
+      allow_any_instance_of(FirebasePushService).to receive(:deliver).and_return(
+        FirebasePushService::Result.new(
+          status: "failed", error_code: "INVALID_ARGUMENT",
+          error_message: "The registration token is not a valid FCM registration token",
+          invalid_token: false
+        )
+      )
+      post_dispatch(valid_payload)
+
+      expect(response).to have_http_status(:bad_gateway)
+      expect(json).to include("status" => "failed", "sent" => false,
+                              "last_error_code" => "INVALID_ARGUMENT")
+      expect(json["last_error_message"]).to match(/registration token/)
+      expect(device.reload.enabled).to be(true)
+      expect(PushDispatch.last.last_error_message).to be_present
     end
 
     it "delivers to a second device when the first is rejected" do
