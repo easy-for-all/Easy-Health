@@ -15,12 +15,15 @@ module ActivationPushAttribution
   # (the user engaged) and, if a push was opened recently, records the conversion.
   def on_workout_started(user, session)
     NotificationDelivery.cancel_pending_for(user, reason: "workout_started")
+    # Legacy internal deliveries (Family B) + Make-orchestrated dispatches (Family A).
     Analytics::PushAttributionService.attribute_start(user, session)
+    Analytics::PushAttributionService.attribute_dispatch_start(user, session)
   end
 
   # Called when a workout session completes. Attributes completion when the start
-  # was already attributed to a push (converted delivery in the window).
+  # was already attributed to a push (converted delivery / opened dispatch).
   def on_workout_completed(user, session)
     Analytics::PushAttributionService.attribute_completion(user, session)
+    Analytics::PushAttributionService.attribute_dispatch_completion(user, session)
   end
 end

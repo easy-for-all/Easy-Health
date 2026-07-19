@@ -25,12 +25,13 @@ RSpec.describe Make::EventPayloadSerializer do
     expect(payload.dig(:user, :email)).to be_nil
   end
 
-  it "serializes schema version 2 with delivery channels, context and trigger_source" do
-    plan = user.workout_plans.create!(active: true, created_at: Time.zone.parse("2026-07-18 14:00:00"))
+  it "serializes schema version 2 with delivery channels, push block, context and trigger_source" do
+    plan = user.workout_plans.create!(active: true, created_at: Time.zone.parse("2026-07-18 13:00:00"))
     event = build_event(
-      event_name: "workout_created_not_started",
+      event_name: "first_workout_not_started_2h",
       metadata: {
         workout_plan_id: plan.id,
+        first_workout_created_at: "2026-07-18T13:00:00Z",
         source: "manual_test",
         token: "must-not-leak",
         nested: { api_key: "nope", safe: "ok" }
@@ -41,13 +42,18 @@ RSpec.describe Make::EventPayloadSerializer do
 
     expect(payload[:schema_version]).to eq(2)
     expect(payload[:source]).to eq("easyhealth_backend")
-    expect(payload.dig(:delivery, :channels)).to eq(%w[email push])
-    expect(payload.dig(:context, :workout_id)).to eq(plan.id)
-    expect(payload.dig(:context, :plan_id)).to eq(plan.id)
-    expect(payload.dig(:context, :minutes_since_creation)).to eq(66)
+    expect(payload.dig(:delivery, :channels)).to eq(%w[push])
+    # Push descriptor: technical only, NEVER title/body.
+    expect(payload[:push]).to eq(
+      notification_type: "activation_reminder",
+      route: "/workouts/ready",
+      campaign_key: "first_workout_not_started_2h"
+    )
+    expect(payload.dig(:context, :first_workout_created_at)).to be_present
+    expect(payload.dig(:context, :hours_since_creation)).to eq(2)
     expect(payload.dig(:metadata, "trigger_source")).to eq("manual_test")
     expect(payload[:metadata]).not_to have_key("source")
-    expect(JSON.generate(payload)).not_to match(/token|api_key|must-not-leak|nope/i)
+    expect(JSON.generate(payload)).not_to match(/token|api_key|must-not-leak|nope|"title"|"body"/i)
   end
 
   it "returns an empty channel array for known events without configured communication" do

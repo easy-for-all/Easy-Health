@@ -1,4 +1,10 @@
-# Activation Push — MVP (Android)
+# Activation Push — MVP (Android) — LEGADO (Família B, desativado)
+
+> ⚠️ **Legado.** Este é o scheduler interno (Família B: `NotificationDelivery` +
+> `PushDispatchService` + cron `push_activation:*`), **desativado na V1**
+> (`ACTIVATION_PUSH_ENABLED=false`). A jornada de push atual é orquestrada pelo
+> Make — ver [push-journey-v1.md](push-journey-v1.md). Código preservado só para
+> rollback; não adicionar novos pushes por aqui.
 
 Push de ativação do **primeiro treino**: no máximo 2 notificações (1 lembrete no horário
 preferido + 1 recuperação no dia seguinte), com opt-in explícito, deep link para o treino,

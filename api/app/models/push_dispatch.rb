@@ -16,6 +16,7 @@ class PushDispatch < ApplicationRecord
   SKIP_REASONS = %w[
     orchestration_disabled user_not_found global_opt_out category_opt_out
     no_active_token permission_denied duplicate invalid_payload rate_limited
+    frequency_capped cooldown_active
   ].freeze
 
   belongs_to :user
@@ -27,6 +28,13 @@ class PushDispatch < ApplicationRecord
   # True once FCM already accepted this dispatch for at least one device.
   def delivered?
     DELIVERED_STATUSES.include?(status)
+  end
+
+  # Stamp the open (idempotent). Promotes an accepted dispatch to "opened";
+  # leaves a failed/skipped row's status untouched but still records opened_at.
+  def mark_opened!
+    promotable = %w[provider_accepted partially_accepted].include?(status)
+    update!(status: promotable ? "opened" : status, opened_at: opened_at || Time.current)
   end
 
   # Guard against ever leaking a token through JSON (defense in depth; the row

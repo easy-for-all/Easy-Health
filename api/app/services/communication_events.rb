@@ -7,11 +7,35 @@ class CommunicationEvents
   class UnknownEventError < ConfigError; end
 
   class << self
-    def channels_for(event_name)
+    # Full technical config for an event (channels/notification_type/route/
+    # engagement). Empty hash for a known event without a YAML entry.
+    def config_for(event_name)
       name = normalize_event_name(event_name)
       validate_event_name!(name)
 
-      config.fetch(name, [])
+      config.fetch(name, {})
+    end
+
+    def channels_for(event_name)
+      config_for(event_name).fetch("channels", [])
+    end
+
+    def notification_type_for(event_name)
+      config_for(event_name)["notification_type"]
+    end
+
+    def route_for(event_name)
+      config_for(event_name)["route"]
+    end
+
+    def engagement?(event_name)
+      config_for(event_name)["engagement"] == true
+    end
+
+    # Derived allowlist — events that route to push. Use this instead of a
+    # parallel constant so the YAML stays the single source of truth.
+    def push_events
+      config.select { |_name, cfg| Array(cfg["channels"]).include?("push") }.keys
     end
 
     def supports_channel?(event_name, channel)
@@ -38,7 +62,7 @@ class CommunicationEvents
       unknown = config.keys - known_events
       raise ConfigError, "unknown communication event(s): #{unknown.join(', ')}" if unknown.any?
 
-      config.each_value { |channels| validate_channels!(channels) }
+      config.each_value { |cfg| validate_channels!(cfg["channels"]) }
       true
     end
 
@@ -54,8 +78,13 @@ class CommunicationEvents
       @config ||= begin
         raw = YAML.safe_load_file(config_path, aliases: false) || {}
         raw.each_with_object({}) do |(event_name, attrs), result|
-          channels = attrs.is_a?(Hash) ? attrs.fetch("channels", []) : []
-          result[normalize_event_name(event_name)] = validate_channels!(channels)
+          attrs = {} unless attrs.is_a?(Hash)
+          result[normalize_event_name(event_name)] = {
+            "channels" => validate_channels!(attrs.fetch("channels", [])),
+            "notification_type" => attrs["notification_type"],
+            "route" => attrs["route"],
+            "engagement" => attrs.fetch("engagement", false) == true
+          }
         end
       end
     end

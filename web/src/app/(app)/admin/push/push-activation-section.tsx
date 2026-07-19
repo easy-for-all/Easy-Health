@@ -23,6 +23,20 @@ type PushStats = {
   experiment: { treatment: number; control: number };
   preferences: { reasons_disabled: Record<string, number>; dislike_reasons: Record<string, number> };
   performance: { sent: number; failed: number; skipped: number; tokens_invalidated: number; retries: number };
+  push_journey?: {
+    period_days: number;
+    opt_outs: number;
+    events: Array<{
+      event_name: string;
+      eligible: number;
+      requested_to_make: number;
+      provider_accepted: number;
+      opened: number;
+      workouts_started_24h: number;
+      workouts_completed_24h: number;
+      skips: number;
+    }>;
+  };
 };
 
 function Card({ label, value, description }: { label: string; value: number | undefined; description: string }) {
@@ -83,6 +97,44 @@ export function PushActivationSection({ stats }: { stats?: PushStats }) {
         <Card label="Tokens inválidos" value={stats.performance.tokens_invalidated} description="invalidados" />
         <Card label="Retries" value={stats.performance.retries} description="tentativas extra" />
       </div>
+
+      {stats.push_journey && (
+        <div className="mt-6">
+          <p className="mb-2 text-xs font-semibold text-[var(--text-dim)]">
+            Jornada de push V1 — por evento (últimos {stats.push_journey.period_days} dias · opt-outs globais: {stats.push_journey.opt_outs})
+          </p>
+          <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-[var(--surface)] text-xs uppercase tracking-wider text-[var(--text-muted)]">
+                <tr>
+                  <th className="px-3 py-2">Evento</th>
+                  <th className="px-3 py-2">Elegíveis</th>
+                  <th className="px-3 py-2">Ao Make</th>
+                  <th className="px-3 py-2">Aceitos FCM</th>
+                  <th className="px-3 py-2">Abertos</th>
+                  <th className="px-3 py-2">Iniciados 24h</th>
+                  <th className="px-3 py-2">Concluídos 24h</th>
+                  <th className="px-3 py-2">Skips</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.push_journey.events.map((row) => (
+                  <tr key={row.event_name} className="border-t border-[var(--border)]">
+                    <td className="px-3 py-2 font-mono text-xs text-[var(--text)]">{row.event_name}</td>
+                    <td className="px-3 py-2">{row.eligible.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-2">{row.requested_to_make.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-2">{row.provider_accepted.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-2">{row.opened.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-2">{row.workouts_started_24h.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-2">{row.workouts_completed_24h.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-2">{row.skips.toLocaleString("pt-BR")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -75,6 +75,11 @@ class RelationshipEventTracker
     admin_push_test_requested
     workout_started_from_push
     workout_completed_from_push
+    first_workout_not_started_2h
+    first_workout_not_started_24h
+    push_event_eligible
+    push_requested_to_make
+    push_dispatch_skipped
     notification_disliked
     notification_type_disabled
     notification_time_changed

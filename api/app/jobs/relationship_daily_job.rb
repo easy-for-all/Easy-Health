@@ -19,7 +19,14 @@ class RelationshipDailyJob < ApplicationJob
           idempotency_key: candidate[:idempotency_key],
           source: "relationship_daily"
         )
-        stats[:events_created] += 1 if event
+        next unless event
+
+        stats[:events_created] += 1
+        # Funnel: mark push-routed events (e.g. user_inactive_3/7_days) eligible.
+        if CommunicationEvents.supports_channel?(candidate[:event_name], "push")
+          PushJourney.track_eligible(user: user, event_name: candidate[:event_name],
+                                     metadata: { campaign_key: candidate[:event_name] })
+        end
       end
     end
 
@@ -47,15 +54,15 @@ class RelationshipDailyJob < ApplicationJob
     return [] if subscriber_active?(user)
 
     days_since_trial_start = (Date.current - user.trial_started_at.to_date).to_i
-    return [] unless [1, 3, 6].include?(days_since_trial_start)
+    return [] unless [ 1, 3, 6 ].include?(days_since_trial_start)
 
     event_name = "trial_day_#{days_since_trial_start}"
-    [{
+    [ {
       event_name: event_name,
       occurred_at: Time.current,
       idempotency_key: "#{event_name}:#{user.id}:#{user.trial_started_at.to_date}",
       metadata: { days_since_trial_start: days_since_trial_start }
-    }]
+    } ]
   end
 
   def trial_expiration_candidates(user)
@@ -96,9 +103,11 @@ class RelationshipDailyJob < ApplicationJob
   def inactivity_candidates(user)
     last_workout_at = user.workout_sessions.maximum(:completed_at)
     return [] unless last_workout_at
+    # Inactivity events route to push; respect the quiet-hours window (V1).
+    return [] unless PushQuietHours.allowed?(user: user)
 
     days_inactive = (Date.current - last_workout_at.to_date).to_i
-    [3, 7, 15].filter_map do |threshold|
+    [ 3, 7 ].filter_map do |threshold|
       next unless days_inactive >= threshold
 
       event_name = "user_inactive_#{threshold}_days"

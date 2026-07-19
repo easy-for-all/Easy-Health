@@ -127,6 +127,9 @@ Rails.application.routes.draw do
         end
       end
 
+      # App-side open tracking for Make-orchestrated pushes (authenticated user).
+      post "push_dispatches/:id/opened", to: "push_dispatches#opened"
+
       namespace :ai_agents do
         get :personal_trainer
         get :conditioning

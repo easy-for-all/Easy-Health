@@ -18,6 +18,13 @@ module Make
     # Categories gated by the functional workout-reminders opt-out.
     REMINDER_CATEGORIES = %w[workout_reminder activation_reminder].freeze
 
+    # Engagement categories subject to the frequency cap + cooldown. progress_update
+    # (first_workout_completed), transactional and account_security are exempt.
+    ENGAGEMENT_CATEGORIES = %w[activation_reminder workout_reminder].freeze
+    ENGAGEMENT_WEEKLY_CAP = 2
+    ENGAGEMENT_WEEKLY_WINDOW = 7.days
+    ENGAGEMENT_COOLDOWN = 20.hours
+
     # Route allowlist mirrored from web/src/shared/lib/push-deep-link.ts.
     ALLOWED_ROUTE_PREFIXES = %w[/workouts /workout /plan].freeze
     DEFAULT_ROUTE = "/workouts/ready".freeze
@@ -57,11 +64,8 @@ module Make
       dispatch = resolve_dispatch(user)
       return duplicate(dispatch) if dispatch.delivered?
 
-      reason = preference_skip_reason(user)
-      if reason
-        dispatch.update!(status: "skipped", skip_reason: reason)
-        return skip(reason, dispatch:)
-      end
+      reason = preference_skip_reason(user) || frequency_skip_reason(user)
+      return skip_dispatch(user, dispatch, reason) if reason
 
       perform_dispatch(dispatch, user)
     rescue ActiveRecord::RecordNotUnique
@@ -181,6 +185,45 @@ module Make
       return "permission_denied" unless active_tokens.where(permission_status: [ nil, "granted" ]).exists?
 
       nil
+    end
+
+    # --- Frequency (engagement only, reuses push_dispatches) ----------------
+
+    def frequency_skip_reason(user)
+      return nil unless engagement_category?
+
+      delivered = PushDispatch
+                  .where(user_id: user.id, notification_type: ENGAGEMENT_CATEGORIES,
+                         status: PushDispatch::DELIVERED_STATUSES)
+
+      return "cooldown_active" if delivered.where("dispatched_at > ?", ENGAGEMENT_COOLDOWN.ago).exists?
+      return "frequency_capped" if delivered.where("dispatched_at > ?", ENGAGEMENT_WEEKLY_WINDOW.ago).count >= ENGAGEMENT_WEEKLY_CAP
+
+      nil
+    end
+
+    def engagement_category?
+      ENGAGEMENT_CATEGORIES.include?(notification_type)
+    end
+
+    # Persist the skip on the dispatch, emit the funnel analytics, return the
+    # structured skip response.
+    def skip_dispatch(user, dispatch, reason)
+      dispatch.update!(status: "skipped", skip_reason: reason)
+      PushJourney.track_dispatch_skipped(
+        user: user,
+        event_name: data_event_name,
+        metadata: {
+          skip_reason: reason, notification_type: notification_type,
+          campaign_key: campaign_key.presence, dispatch_id: dispatch.id,
+          correlation_id: dispatch.correlation_id
+        }
+      )
+      skip(reason, dispatch: dispatch)
+    end
+
+    def data_event_name
+      (extra_data_source["event_name"] || extra_data_source[:event_name]).to_s.presence || campaign_key.presence
     end
 
     # --- Send ---------------------------------------------------------------

@@ -5,6 +5,8 @@ module Make
     class IncompleteEventError < StandardError; end
 
     REQUIRED_CONTEXT = {
+      "first_workout_not_started_2h" => %i[first_workout_created_at],
+      "first_workout_not_started_24h" => %i[first_workout_created_at],
       "workout_created_not_started" => %i[workout_id],
       "first_workout_created" => %i[plan_id],
       "first_workout_completed" => %i[workout_session_id],
@@ -71,8 +73,27 @@ module Make
         metadata: schema_two_metadata
       }
 
+      pb = push_block
+      payload[:push] = pb if pb
+
       validate_context!(payload)
       payload
+    end
+
+    # Technical push descriptor from communication_events.yml. Copy (title/body)
+    # is chosen by Make from event_name and is NEVER included here. campaign_key
+    # equals event_name (V1). Absent for email-only events.
+    def push_block
+      notification_type = CommunicationEvents.notification_type_for(event.event_name)
+      return nil if notification_type.blank?
+
+      {
+        notification_type: notification_type,
+        route: CommunicationEvents.route_for(event.event_name),
+        campaign_key: event.event_name
+      }
+    rescue CommunicationEvents::UnknownEventError
+      nil
     end
 
     def user

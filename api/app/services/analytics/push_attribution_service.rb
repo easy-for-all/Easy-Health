@@ -16,6 +16,8 @@ module Analytics
   class PushAttributionService
     START_WINDOW = 2.hours
     COMPLETE_WINDOW = 24.hours
+    # Make-orchestrated pushes (push_dispatches) attribute within 24h of the open.
+    DISPATCH_WINDOW = 24.hours
 
     def self.attribute_start(user, session)
       new(user, session).attribute_start
@@ -23,6 +25,14 @@ module Analytics
 
     def self.attribute_completion(user, session)
       new(user, session).attribute_completion
+    end
+
+    def self.attribute_dispatch_start(user, session)
+      new(user, session).attribute_dispatch_start
+    end
+
+    def self.attribute_dispatch_completion(user, session)
+      new(user, session).attribute_dispatch_completion
     end
 
     def initialize(user, session)
@@ -71,7 +81,77 @@ module Analytics
       delivery
     end
 
+    # --- Family A (Make) attribution on push_dispatches, 24h after open ------
+
+    # A workout STARTED within 24h after a push_dispatch open (opened at/before
+    # the start). Anti-double-credit via a deterministic idempotency_key per
+    # dispatch (relationship event + product_analytics mirror).
+    def attribute_dispatch_start
+      dispatch = eligible_opened_dispatch(workout_started_at)
+      return nil if dispatch.nil?
+
+      key = "pushattr:start:dispatch:#{dispatch.id}"
+      return dispatch if UserEvent.exists?(user: @user, event_name: "workout_started_from_push", idempotency_key: key)
+
+      UserEventService.track(
+        user: @user, event_name: "workout_started_from_push", source: "make_push",
+        suppress_make_delivery: true, idempotency_key: key, metadata: dispatch_props(dispatch)
+      )
+      ServerEvents.record(
+        event_name: "workout_started_after_push", user: @user, platform: "android",
+        occurred_at: workout_started_at, idempotency_key: key, source: "push_attribution",
+        properties: dispatch_props(dispatch)
+      )
+      dispatch
+    end
+
+    # A workout COMPLETED within 24h of a dispatch open whose start was already
+    # attributed to that dispatch.
+    def attribute_dispatch_completion
+      dispatch = eligible_opened_dispatch(completed_at)
+      return nil if dispatch.nil?
+      return nil unless UserEvent.exists?(user: @user, event_name: "workout_started_from_push",
+                                          idempotency_key: "pushattr:start:dispatch:#{dispatch.id}")
+
+      key = "pushattr:complete:dispatch:#{dispatch.id}"
+      return dispatch if UserEvent.exists?(user: @user, event_name: "workout_completed_from_push", idempotency_key: key)
+
+      UserEventService.track(
+        user: @user, event_name: "workout_completed_from_push", source: "make_push",
+        suppress_make_delivery: true, idempotency_key: key, metadata: dispatch_props(dispatch)
+      )
+      ServerEvents.record(
+        event_name: "workout_completed_after_push", user: @user, platform: "android",
+        idempotency_key: key, source: "push_attribution", properties: dispatch_props(dispatch)
+      )
+      dispatch
+    end
+
     private
+
+    def eligible_opened_dispatch(at)
+      PushDispatch
+        .where(user_id: @user.id)
+        .where.not(opened_at: nil)
+        .where(opened_at: DISPATCH_WINDOW.ago..)
+        .where("opened_at <= ?", at)
+        .order(opened_at: :desc)
+        .first
+    end
+
+    def completed_at
+      @session.completed_at || Time.current
+    end
+
+    def dispatch_props(dispatch)
+      {
+        notification_type: dispatch.notification_type,
+        dispatch_id: dispatch.id,
+        campaign_key: dispatch.campaign_key,
+        event_name: dispatch.payload_json.is_a?(Hash) ? dispatch.payload_json.dig("data", "event_name") : nil,
+        workout_id: @session.workout_day_id
+      }.compact
+    end
 
     # Most recent opened, unconverted delivery within START_WINDOW whose open
     # happened AT OR BEFORE the workout start (started after the push open).

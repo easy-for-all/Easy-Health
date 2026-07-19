@@ -391,6 +391,15 @@ async function handleActionPerformed(data: Record<string, unknown>): Promise<voi
       /* attribution is best-effort */
     }
   }
+  // Make-orchestrated pushes (Family A) carry a dispatch_id instead.
+  const dispatchId = data.dispatch_id;
+  if (dispatchId != null) {
+    try {
+      await api.post(`/api/v1/push_dispatches/${dispatchId}/opened`, {});
+    } catch {
+      /* attribution is best-effort */
+    }
+  }
   const path = resolveDeepLink(data);
   lastAction = { path, type: data.type != null ? String(data.type) : null, at: new Date().toISOString() };
   // Carry the delivery id so the target screen can offer "não gostei" feedback.

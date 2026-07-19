@@ -256,6 +256,44 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
     end
   end
 
+  describe "engagement frequency" do
+    before { create(:device_token, user: user) }
+
+    def seed_dispatch(dispatched_at:, notification_type: "workout_reminder", status: "provider_accepted")
+      PushDispatch.create!(
+        user: user, notification_type: notification_type, status: status,
+        idempotency_key: "seed:#{SecureRandom.hex(4)}", dispatched_at: dispatched_at
+      )
+    end
+
+    it "skips cooldown_active when an engagement push was delivered in the last 20h" do
+      seed_dispatch(dispatched_at: 1.hour.ago)
+      post_dispatch(valid_payload)
+      expect(json).to include("status" => "skipped", "reason" => "cooldown_active", "sent" => false)
+    end
+
+    it "skips frequency_capped after 2 engagement pushes in 7 days (outside cooldown)" do
+      seed_dispatch(dispatched_at: 2.days.ago)
+      seed_dispatch(dispatched_at: 3.days.ago)
+      post_dispatch(valid_payload)
+      expect(json).to include("status" => "skipped", "reason" => "frequency_capped", "sent" => false)
+    end
+
+    it "sends an engagement push when under the cap and cooldown" do
+      seed_dispatch(dispatched_at: 4.days.ago)
+      post_dispatch(valid_payload)
+      expect(json["status"]).to eq("provider_accepted")
+    end
+
+    it "exempts first_workout_completed (progress_update) from cooldown and cap" do
+      seed_dispatch(dispatched_at: 1.hour.ago)
+      seed_dispatch(dispatched_at: 2.days.ago)
+      post_dispatch(valid_payload(notification_type: "progress_update", campaign_key: "first_workout_completed",
+                                  route: "/workouts"))
+      expect(json["status"]).to eq("provider_accepted")
+    end
+  end
+
   def json
     JSON.parse(response.body)
   end

@@ -290,17 +290,20 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
         expect(body["exercise_logs"].first["reps"]).to eq([ 10, 9 ])
       end
 
-      it "tracks activation_first_workout_completed on the user's first completed session" do
+      it "tracks first_workout_completed (V1 push event) on the first completed session" do
         authed_post "/api/v1/workout_sessions/start", as: user, params: { source: "web" }
         session_id = JSON.parse(response.body)["id"]
 
         authed_post "/api/v1/workout_sessions/#{session_id}/finish", as: user, params: { fatigue_level: 3 }
 
         expect(response).to have_http_status(:ok)
-        event = UserEvent.find_by(user: user, event_name: "activation_first_workout_completed")
+        event = UserEvent.find_by(user: user, event_name: "first_workout_completed")
         expect(event).to be_present
-        expect(event.idempotency_key).to eq("activation_first_workout_completed:#{user.id}:#{session_id}")
-        expect(event.metadata.dig("activation", "has_completed_first_workout")).to eq(true)
+        expect(event.idempotency_key).to eq("first_workout_completed:#{user.id}:#{session_id}")
+        # The duplicate activation_first_workout_completed event was removed in V1.
+        expect(UserEvent.exists?(user: user, event_name: "activation_first_workout_completed")).to be(false)
+        # Funnel: the completion is marked eligible for the push.
+        expect(UserEvent.exists?(user: user, event_name: "push_event_eligible")).to be(true)
       end
 
       it "posting the same set_number twice updates instead of duplicating (retry safety)" do
