@@ -1,6 +1,8 @@
 module Make
   module EventContextBuilders
     BUILDER_NAMES = {
+      "first_workout_not_started_2h" => "Make::EventContextBuilders::FirstWorkoutNotStarted",
+      "first_workout_not_started_24h" => "Make::EventContextBuilders::FirstWorkoutNotStarted",
       "workout_created_not_started" => "Make::EventContextBuilders::WorkoutCreatedNotStarted",
       "first_workout_created" => "Make::EventContextBuilders::FirstWorkoutCreated",
       "first_workout_completed" => "Make::EventContextBuilders::FirstWorkoutCompleted",

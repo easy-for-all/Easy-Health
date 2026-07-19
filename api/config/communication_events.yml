@@ -1,6 +1,14 @@
-# Central channel routing for EasyHealth business events sent to Make.
-# Omitted known events are valid and resolve to an empty channel list.
+# Central technical config for EasyHealth business events sent to Make.
+# Single source of truth for the push journey (V1): channels, technical
+# notification_type, deep-link route and whether the event counts toward the
+# engagement frequency cap. Copy (title/body/emoji) lives in the Make scenario,
+# NOT here. Omitted known events resolve to an empty channel list.
+#
+# Push journey V1 = 5 events only:
+#   first_workout_not_started_2h, first_workout_not_started_24h,
+#   first_workout_completed, user_inactive_3_days, user_inactive_7_days
 
+# --- Email-only relationship journeys (orchestrated by Make) ---
 user_created:
   channels:
     - email
@@ -25,54 +33,9 @@ trial_expired_without_subscription:
   channels:
     - email
 
-first_workout_created:
-  channels:
-    - email
-    - push
-
-first_workout_completed:
-  channels:
-    - email
-    - push
-
 workout_completed_partial:
   channels:
     - email
-
-workout_created_not_started:
-  channels:
-    - email
-    - push
-
-activation_workout_created:
-  channels:
-    - push
-
-activation_first_workout_completed:
-  channels:
-    - push
-
-activation_reminder_2h_due:
-  channels:
-    - push
-
-activation_reminder_24h_due:
-  channels:
-    - push
-
-plan_created_but_not_used:
-  channels:
-    - email
-    - push
-
-user_inactive_3_days:
-  channels:
-    - push
-
-user_inactive_7_days:
-  channels:
-    - email
-    - push
 
 never_created_workout:
   channels:
@@ -81,3 +44,50 @@ never_created_workout:
 churn_risk:
   channels:
     - email
+
+# first_workout_created / plan_created_but_not_used stay as email/analytics
+# events but NO LONGER trigger push (V1 simplification).
+first_workout_created:
+  channels:
+    - email
+
+plan_created_but_not_used:
+  channels:
+    - email
+
+# --- Push journey V1 (the only 5 push events) ---
+first_workout_not_started_2h:
+  channels:
+    - push
+  notification_type: activation_reminder
+  route: /workouts/ready
+  engagement: true
+
+first_workout_not_started_24h:
+  channels:
+    - push
+  notification_type: activation_reminder
+  route: /workouts/ready
+  engagement: true
+
+first_workout_completed:
+  channels:
+    - push
+  notification_type: progress_update
+  route: /workouts
+  engagement: false
+
+user_inactive_3_days:
+  channels:
+    - push
+  notification_type: workout_reminder
+  route: /workouts/ready
+  engagement: true
+
+user_inactive_7_days:
+  channels:
+    - push
+    - email
+  notification_type: workout_reminder
+  route: /workouts/ready
+  engagement: true

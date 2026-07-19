@@ -458,28 +458,20 @@ module Api
 
         return unless is_first_workout
 
-        UserEventService.track(
+        # Push journey V1: the single first-workout completion event. Routed to
+        # push via communication_events.yml (Make selects copy and dispatches).
+        # The old activation_first_workout_completed duplicate was removed.
+        first_completed = UserEventService.track(
           user: current_user,
           event: :first_workout_completed,
           metadata: metadata,
           occurred_at: session.completed_at,
           idempotency_key: "first_workout_completed:#{current_user.id}:#{session.id}"
         )
-
-        UserEventService.track(
-          user: current_user,
-          event: :activation_first_workout_completed,
-          metadata: metadata.merge(
-            trigger_type: "activation_first_workout_completed",
-            activation: {
-              onboarding_variant: current_user.onboarding_flow,
-              has_started_workout: true,
-              has_completed_first_workout: true
-            }
-          ),
-          occurred_at: session.completed_at,
-          idempotency_key: "activation_first_workout_completed:#{current_user.id}:#{session.id}"
-        )
+        if first_completed
+          PushJourney.track_eligible(user: current_user, event_name: "first_workout_completed",
+                                     metadata: { campaign_key: "first_workout_completed" })
+        end
       end
 
       def update_params

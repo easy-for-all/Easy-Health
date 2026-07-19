@@ -111,7 +111,7 @@ RSpec.describe MakeWebhookClient do
       expect(result).to be_success
       expect(captured_request["X-EasyHealth-Schema-Version"]).to eq("2")
       expect(body["schema_version"]).to eq(2)
-      expect(body.dig("delivery", "channels")).to eq(%w[email push])
+      expect(body.dig("delivery", "channels")).to eq(%w[email])
       expect(body.dig("context", "plan_id")).to eq(plan.id)
       expect(body.dig("metadata", "trigger_source")).to eq("relationship_daily")
       expect(user_event.reload.payload_json["schema_version"]).to eq(2)

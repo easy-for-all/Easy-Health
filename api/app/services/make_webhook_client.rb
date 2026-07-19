@@ -32,6 +32,7 @@ class MakeWebhookClient
     response = post(body_json, headers_for(user_event, timestamp, signature, schema_version_for(payload)))
     if response.is_a?(Net::HTTPSuccess)
       user_event.update!(make_delivery_status: "delivered", make_last_error: nil)
+      track_push_requested_to_make(user_event)
       Result.new(status: "delivered")
     else
       error = "HTTP #{response.code}: #{response.body.to_s.first(500)}"
@@ -90,6 +91,20 @@ class MakeWebhookClient
     payload
   end
 
+  # Funnel: the event was actually delivered to Make. Only push-routed events
+  # count; suppressed so it never loops back through the webhook.
+  def track_push_requested_to_make(user_event)
+    return unless CommunicationEvents.supports_channel?(user_event.event_name, "push")
+
+    PushJourney.track_requested_to_make(
+      user: user_event.user,
+      event_name: user_event.event_name,
+      metadata: { campaign_key: user_event.event_name, source_event_id: user_event.id }
+    )
+  rescue CommunicationEvents::UnknownEventError
+    nil
+  end
+
   def mark_failed(user_event, error)
     user_event.update!(
       make_delivery_status: "failed",
@@ -101,7 +116,7 @@ class MakeWebhookClient
   def payload_snapshot(user_event)
     payload = user_event.payload_json
     return unless payload.is_a?(Hash)
-    return unless [1, 2].include?(payload["schema_version"].to_i)
+    return unless [ 1, 2 ].include?(payload["schema_version"].to_i)
     return unless payload["event_id"].present?
 
     payload

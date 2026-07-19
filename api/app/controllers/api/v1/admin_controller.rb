@@ -198,7 +198,7 @@ module Api
 
       def users
         filter  = params[:filter]
-        page    = [params[:page].to_i, 1].max
+        page    = [ params[:page].to_i, 1 ].max
         per     = 25
 
         # Evitar expor PII na listagem administrativa para reduzir risco em prints e compartilhamento de tela.
@@ -309,7 +309,48 @@ module Api
             skipped: by_status["skipped"].to_i,
             tokens_invalidated: DeviceToken.where.not(invalidated_at: nil).count,
             retries: deliveries.sum(:retry_count)
+          },
+          # V1 push journey — one row per event (Family A / Make).
+          push_journey: push_journey_stats
+        }
+      end
+
+      # Per-event funnel for the 5 push journey events. Reuses user_events
+      # (funnel/attribution) and push_dispatches. Filters: period_days, event_name.
+      def push_journey_stats
+        since = (params[:period_days].presence&.to_i || 30).days.ago
+        events = CommunicationEvents.push_events
+        events &= [ params[:event_name] ] if params[:event_name].present?
+
+        ue = UserEvent.where(created_at: since..)
+        pd = PushDispatch.where(created_at: since..)
+        by_meta = ->(name) { ue.where(event_name: name).group(Arel.sql("metadata->>'event_name'")).count }
+
+        eligible = by_meta.call("push_event_eligible")
+        requested = by_meta.call("push_requested_to_make")
+        skipped = by_meta.call("push_dispatch_skipped")
+        started = by_meta.call("workout_started_from_push")
+        completed = by_meta.call("workout_completed_from_push")
+        accepted = pd.where(status: PushDispatch::DELIVERED_STATUSES).group(:campaign_key).count
+        opened = pd.where.not(opened_at: nil).group(:campaign_key).count
+
+        rows = events.map do |name|
+          {
+            event_name: name,
+            eligible: eligible[name].to_i,
+            requested_to_make: requested[name].to_i,
+            provider_accepted: accepted[name].to_i,
+            opened: opened[name].to_i,
+            workouts_started_24h: started[name].to_i,
+            workouts_completed_24h: completed[name].to_i,
+            skips: skipped[name].to_i
           }
+        end
+
+        {
+          period_days: (params[:period_days].presence&.to_i || 30),
+          opt_outs: UserNotificationPreferences.where.not(notifications_disabled_at: nil).count,
+          events: rows
         }
       end
 
@@ -482,7 +523,7 @@ module Api
       def last_activity_for(user)
         last_event   = user.user_events.max_by(&:created_at)
         last_session = user.workout_sessions.max_by(&:completed_at)
-        last_time    = [last_event&.created_at, last_session&.completed_at].compact.max
+        last_time    = [ last_event&.created_at, last_session&.completed_at ].compact.max
         { at: last_time&.iso8601, label: last_time ? relative_time_label(last_time) : "Nunca" }
       end
 
