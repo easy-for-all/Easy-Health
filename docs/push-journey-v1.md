@@ -85,6 +85,43 @@ Nunca contém `title`, `body` nem token FCM.
 - Engajamento = `activation_reminder`, `workout_reminder`. **`progress_update`
   (first_workout_completed), `transactional`, `account_security` são isentos.**
 
+> ⚠️ **Armadilha de smoke test.** `first_workout_completed` é `progress_update`, que
+> é isento de **duas** portas: a frequência acima **e** o opt-out de categoria
+> (`workout_reminders_enabled`, que vale só para `workout_reminder` e
+> `activation_reminder`). Logo, "o completed chegou" **não** prova que a config de
+> push do usuário está boa — os outros 4 eventos podem estar sendo barrados por
+> `category_opt_out` ou `cooldown_active`. Diagnostique com
+> `rake push_journey:diagnose[email]` antes de mexer no body do Make.
+
+## Bypass de frequência para smoke test (produção)
+
+Dispara os 4 eventos de engajamento em sequência sem esbarrar no cooldown de 20h
+nem no cap semanal. **Só a frequência é dispensada** — consentimento
+(`push_enabled`), opt-out de categoria, permissão do device, token ativo,
+allowlist de rota e Firebase continuam obrigatórios.
+
+As 5 condições precisam valer **ao mesmo tempo**:
+
+| # | Condição |
+| --- | --- |
+| 1 | `MAKE_PUSH_TEST_BYPASS_ENABLED=true` no ambiente |
+| 2 | header `X-Push-Test-Token` batendo com `MAKE_PUSH_TEST_BYPASS_TOKEN` |
+| 3 | `data.source == "manual_push_test"` |
+| 4 | `data.bypass_engagement_frequency == true` |
+| 5 | usuário-alvo é `admin` **e** está em `MAKE_PUSH_TEST_BYPASS_EMAILS` |
+
+O token do header é **separado** do Bearer de dispatch: o cenário de produção do
+Make tem só o Bearer, então nunca consegue um bypass mesmo que alguém edite o
+body. Toda tentativa — concedida ou negada — vai para o log e para `user_events`
+(`push_frequency_bypass_granted` / `push_frequency_bypass_denied`).
+
+```env
+# NÃO habilitar por padrão; ligar só durante o smoke test e desligar depois.
+MAKE_PUSH_TEST_BYPASS_ENABLED=false
+MAKE_PUSH_TEST_BYPASS_TOKEN=<segredo, diferente do MAKE_PUSH_DISPATCH_TOKEN>
+MAKE_PUSH_TEST_BYPASS_EMAILS=mail.marcus.reis@gmail.com
+```
+
 ## Config manual — VPS (.env)
 
 ```env

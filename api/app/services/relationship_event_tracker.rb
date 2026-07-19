@@ -73,6 +73,8 @@ class RelationshipEventTracker
     push_provider_accepted
     push_provider_rejected
     admin_push_test_requested
+    push_frequency_bypass_granted
+    push_frequency_bypass_denied
     workout_started_from_push
     workout_completed_from_push
     first_workout_not_started_2h

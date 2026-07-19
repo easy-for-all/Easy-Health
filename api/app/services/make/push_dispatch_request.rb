@@ -38,14 +38,38 @@ module Make
     RATE_LIMIT_PER_USER = ->(env) { env.presence&.to_i || 10 }
     RATE_LIMIT_WINDOW = 1.minute
 
+    # --- Smoke-test bypass --------------------------------------------------
+    # Production smoke tests need to fire the same event twice in a row, which
+    # the 20h cooldown and the 2-per-7-days cap legitimately block. This bypass
+    # waives ONLY those two frequency rules. Consent (push_enabled), category
+    # opt-out, device permission, active token, route allowlist, payload
+    # validation and Firebase config remain mandatory — they are never bypassed.
+    #
+    # Five independent conditions must ALL hold, so neither the production Make
+    # scenario (which holds the dispatch bearer but not the test token) nor a
+    # non-admin user can ever reach it:
+    #   1. MAKE_PUSH_TEST_BYPASS_ENABLED explicitly on for the environment;
+    #   2. a dedicated X-Push-Test-Token header matching
+    #      MAKE_PUSH_TEST_BYPASS_TOKEN (verified in the controller, distinct
+    #      from the dispatch bearer);
+    #   3. data.source == "manual_push_test";
+    #   4. data.bypass_engagement_frequency == true;
+    #   5. the target user is an admin AND on the e-mail allowlist.
+    BYPASS_SOURCE = "manual_push_test".freeze
+    BYPASS_FLAG = "bypass_engagement_frequency".freeze
+    DEFAULT_BYPASS_EMAILS = %w[mail.marcus.reis@gmail.com].freeze
+    # Stripped from the outgoing FCM payload — test plumbing, not app data.
+    BYPASS_DATA_KEYS = [ BYPASS_FLAG ].freeze
+
     Response = Struct.new(:http_status, :body, keyword_init: true)
 
-    def self.call(params:)
-      new(params:).call
+    def self.call(params:, test_token_valid: false)
+      new(params:, test_token_valid:).call
     end
 
-    def initialize(params:)
+    def initialize(params:, test_token_valid: false)
       @params = params || {}
+      @test_token_valid = test_token_valid
     end
 
     def call
@@ -191,6 +215,7 @@ module Make
 
     def frequency_skip_reason(user)
       return nil unless engagement_category?
+      return nil if frequency_bypassed?(user)
 
       delivered = PushDispatch
                   .where(user_id: user.id, notification_type: ENGAGEMENT_CATEGORIES,
@@ -204,6 +229,80 @@ module Make
 
     def engagement_category?
       ENGAGEMENT_CATEGORIES.include?(notification_type)
+    end
+
+    # True only when every one of the five conditions documented on BYPASS_SOURCE
+    # holds. Memoised because it both gates the frequency rules and is reported
+    # in the response/audit trail.
+    def frequency_bypassed?(user)
+      return @frequency_bypassed unless @frequency_bypassed.nil?
+
+      @frequency_bypassed = evaluate_bypass(user)
+    end
+
+    def evaluate_bypass(user)
+      return false unless bypass_requested?
+
+      # From here on the caller ASKED for a bypass — every outcome is audited,
+      # including refusals, so an attempt by a non-admin is visible.
+      unless bypass_enabled_for_env?
+        return audit_bypass(user, granted: false, reason: "bypass_disabled_for_env")
+      end
+      unless @test_token_valid
+        return audit_bypass(user, granted: false, reason: "invalid_test_token")
+      end
+      unless bypass_allowed_user?(user)
+        return audit_bypass(user, granted: false, reason: "user_not_allowlisted")
+      end
+
+      audit_bypass(user, granted: true, reason: nil)
+    end
+
+    def bypass_requested?
+      raw = extra_data_source[BYPASS_FLAG] || extra_data_source[BYPASS_FLAG.to_sym]
+      return false unless ActiveModel::Type::Boolean.new.cast(raw)
+
+      source = (extra_data_source["source"] || extra_data_source[:source]).to_s
+      source == BYPASS_SOURCE
+    end
+
+    def bypass_enabled_for_env?
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch("MAKE_PUSH_TEST_BYPASS_ENABLED", "false"))
+    end
+
+    # Admin flag AND e-mail allowlist — either one alone is not enough.
+    def bypass_allowed_user?(user)
+      return false unless user.admin?
+
+      user.email.to_s.downcase.in?(bypass_allowed_emails)
+    end
+
+    def bypass_allowed_emails
+      configured = ENV["MAKE_PUSH_TEST_BYPASS_EMAILS"].to_s.split(",").map { |e| e.strip.downcase }.reject(&:blank?)
+      (configured.presence || DEFAULT_BYPASS_EMAILS).map(&:downcase)
+    end
+
+    # Every bypass attempt lands in the log AND in user_events. Returns `granted`
+    # so callers can use it as the predicate value directly.
+    def audit_bypass(user, granted:, reason:)
+      Rails.logger.warn(
+        "[Make::PushDispatches] engagement frequency bypass #{granted ? 'GRANTED' : 'DENIED'} " \
+        "user_id=#{user.id} admin=#{user.admin?} campaign_key=#{campaign_key.presence.inspect} " \
+        "notification_type=#{notification_type} correlation_id=#{correlation_id}#{reason ? " denied_reason=#{reason}" : ''}"
+      )
+      UserEventService.track(
+        user: user,
+        event_name: granted ? "push_frequency_bypass_granted" : "push_frequency_bypass_denied",
+        metadata: {
+          notification_type: notification_type,
+          campaign_key: campaign_key.presence,
+          correlation_id: correlation_id,
+          denied_reason: reason
+        }.compact,
+        source: "make_push",
+        suppress_make_delivery: true
+      )
+      granted
     end
 
     # Persist the skip on the dispatch, emit the funnel analytics, return the
@@ -271,7 +370,7 @@ module Make
     # data is the base; our reserved keys override it so a scenario can never
     # clobber tracking/deep-link fields.
     def fcm_data(dispatch)
-      extra_data.merge(
+      extra_data.except(*BYPASS_DATA_KEYS).merge(
         "type" => notification_type,
         "notification_type" => notification_type,
         "target_path" => route,
@@ -348,29 +447,48 @@ module Make
     # --- Responses ----------------------------------------------------------
 
     def disabled
-      Response.new(
-        http_status: :ok,
-        body: { status: "skipped", reason: "orchestration_disabled", sent: false }
-      )
+      skip("orchestration_disabled")
     end
 
     def invalid_payload(reason)
-      Response.new(
-        http_status: :unprocessable_entity,
-        body: { status: "skipped", reason: "invalid_payload", detail: reason, sent: false }
-      )
+      # `detail` is kept for backwards compatibility with the existing Make
+      # scenario; skip_reason carries the specific validation failure.
+      skip("invalid_payload", http_status: :unprocessable_entity, extra: { detail: reason })
     end
 
-    def skip(reason, dispatch: nil, http_status: :ok)
-      body = { status: "skipped", reason: reason, sent: false }
-      body[:dispatch_id] = dispatch.id if dispatch
+    # Canonical skip envelope. Every non-send answer goes through here so an
+    # operator can always read WHY from a single field, plus enough context
+    # (dispatch/type/campaign) to find the row without another query.
+    #
+    # `reason` is a deprecated alias of `skip_reason`, kept so existing Make
+    # scenarios and dashboards do not break on this change.
+    def skip(reason, dispatch: nil, http_status: :ok, extra: {})
+      body = {
+        status: "skipped",
+        sent: false,
+        skip_reason: reason,
+        reason: reason,
+        dispatch_id: dispatch&.id,
+        notification_type: notification_type.presence,
+        campaign_key: campaign_key.presence,
+        correlation_id: correlation_id
+      }.merge(extra).compact
       Response.new(http_status: http_status, body: body)
     end
 
     def duplicate(dispatch)
       Response.new(
         http_status: :ok,
-        body: { status: "duplicate", dispatch_id: dispatch.id, sent: false }
+        body: {
+          status: "duplicate",
+          sent: false,
+          skip_reason: "duplicate",
+          reason: "duplicate",
+          dispatch_id: dispatch.id,
+          notification_type: notification_type.presence,
+          campaign_key: campaign_key.presence,
+          correlation_id: dispatch.correlation_id
+        }.compact
       )
     end
 
