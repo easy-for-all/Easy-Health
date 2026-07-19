@@ -19,7 +19,10 @@ module Api
           before_action :reject_forbidden_fields
 
           def create
-            response = ::Make::PushDispatchRequest.call(params: dispatch_params)
+            response = ::Make::PushDispatchRequest.call(
+              params: dispatch_params,
+              test_token_valid: test_bypass_token_valid?
+            )
             render json: response.body, status: response.http_status
           rescue => e
             Rails.logger.error("[Make::PushDispatches] #{e.class}: #{e.message}")
@@ -59,6 +62,19 @@ module Api
           def bearer_token
             header = request.headers["Authorization"].to_s
             header[/\ABearer\s+(.+)\z/, 1]
+          end
+
+          # Smoke-test bypass credential. Deliberately a SEPARATE header and
+          # secret from the dispatch bearer: the production Make scenario holds
+          # only the bearer, so it can never obtain a frequency bypass even if a
+          # scenario were edited to send the flag. Absence of the header is the
+          # normal case and is not an error.
+          def test_bypass_token_valid?
+            expected = ENV["MAKE_PUSH_TEST_BYPASS_TOKEN"].to_s
+            provided = request.headers["X-Push-Test-Token"].to_s
+            return false if expected.blank? || provided.blank?
+
+            ActiveSupport::SecurityUtils.secure_compare(expected, provided)
           end
 
           def allowed_dispatch_tokens

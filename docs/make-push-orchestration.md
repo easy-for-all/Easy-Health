@@ -66,15 +66,30 @@ Chave = `event_id + campaign_key + user_id + notification_type` (derivada do cor
 
 ### Ignorado (200) — decisão de consentimento é da EasyHealth
 ```json
-{ "status": "skipped", "reason": "category_opt_out", "sent": false }
+{
+  "status": "skipped",
+  "sent": false,
+  "skip_reason": "category_opt_out",
+  "dispatch_id": 123,
+  "notification_type": "workout_reminder",
+  "campaign_key": "user-inactive-3-days-v1",
+  "correlation_id": "make-evt_ab12"
+}
 ```
-`reason` ∈ `orchestration_disabled`, `user_not_found`, `global_opt_out`,
-`category_opt_out`, `no_active_token`, `permission_denied`. `user_not_found` volta como
-skip neutro (200) de propósito, para não permitir enumeração de usuários.
+`skip_reason` ∈ `orchestration_disabled`, `user_not_found`, `global_opt_out`,
+`category_opt_out`, `no_active_token`, `permission_denied`, `cooldown_active`,
+`frequency_capped`, `rate_limited`, `invalid_payload`, `duplicate`.
+`user_not_found` volta como skip neutro (200) de propósito, para não permitir
+enumeração de usuários. `dispatch_id` só aparece quando a linha chegou a ser
+criada (skips anteriores à persistência não têm id).
+
+> `reason` continua sendo devolvido como **alias depreciado** de `skip_reason`,
+> para não quebrar cenários já publicados. Consumidores novos devem ler
+> `skip_reason`.
 
 ### Duplicado (200)
 ```json
-{ "status": "duplicate", "dispatch_id": 42, "sent": false }
+{ "status": "duplicate", "sent": false, "skip_reason": "duplicate", "dispatch_id": 42 }
 ```
 
 ### Erros

@@ -294,6 +294,155 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
     end
   end
 
+  # Regression guard for the smoke-test incident: the four engagement events were
+  # silently dropped while first_workout_completed went through, because
+  # progress_update is exempt from BOTH the reminder opt-out and the frequency
+  # rules. The skip envelope must make that readable without a DB query.
+  describe "skip envelope" do
+    before { create(:device_token, user: user) }
+
+    it "reports skip_reason, dispatch_id, notification_type and campaign_key on a preference skip" do
+      user.notification_preferences!.update!(workout_reminders_enabled: false)
+      post_dispatch(valid_payload(campaign_key: "user-inactive-3-days-v1"))
+
+      expect(response).to have_http_status(:ok)
+      expect(json).to include(
+        "status" => "skipped",
+        "sent" => false,
+        "skip_reason" => "category_opt_out",
+        "notification_type" => "workout_reminder",
+        "campaign_key" => "user-inactive-3-days-v1"
+      )
+      expect(json["dispatch_id"]).to eq(PushDispatch.last.id)
+    end
+
+    it "keeps the legacy reason key as an alias of skip_reason" do
+      user.notification_preferences!.update!(push_enabled: false)
+      post_dispatch(valid_payload)
+      expect(json["reason"]).to eq(json["skip_reason"])
+      expect(json["skip_reason"]).to eq("global_opt_out")
+    end
+
+    it "reports skip_reason on a cooldown skip" do
+      PushDispatch.create!(user: user, notification_type: "workout_reminder", status: "provider_accepted",
+                           idempotency_key: "seed:#{SecureRandom.hex(4)}", dispatched_at: 1.hour.ago)
+      post_dispatch(valid_payload)
+      expect(json).to include("skip_reason" => "cooldown_active", "sent" => false)
+    end
+  end
+
+  describe "smoke-test frequency bypass" do
+    let(:test_token) { "push-test-secret" }
+
+    before do
+      create(:device_token, user: user)
+      # Cooldown is active: without a bypass every example here would skip.
+      PushDispatch.create!(user: user, notification_type: "workout_reminder", status: "provider_accepted",
+                           idempotency_key: "seed:#{SecureRandom.hex(4)}", dispatched_at: 1.hour.ago)
+    end
+
+    def bypass_payload
+      valid_payload(data: { "source" => "manual_push_test", "bypass_engagement_frequency" => true })
+    end
+
+    def bypass_headers(token = test_token)
+      auth_headers.merge("X-Push-Test-Token" => token)
+    end
+
+    def with_bypass_env(enabled: "true", &block)
+      with_env("MAKE_PUSH_TEST_BYPASS_ENABLED" => enabled,
+               "MAKE_PUSH_TEST_BYPASS_TOKEN" => test_token,
+               "MAKE_PUSH_TEST_BYPASS_EMAILS" => user.email, &block)
+    end
+
+    context "when every condition holds" do
+      before { user.update!(admin: true) }
+
+      it "waives the cooldown and sends" do
+        with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+        expect(json["status"]).to eq("provider_accepted")
+        expect(json["sent"]).to be(true)
+      end
+
+      it "audits the granted bypass" do
+        expect {
+          with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+        }.to change { UserEvent.where(event_name: "push_frequency_bypass_granted", user_id: user.id).count }.by(1)
+      end
+
+      it "does not leak the bypass flag into the FCM data payload" do
+        expect_any_instance_of(FirebasePushService).to receive(:deliver) do |_, args|
+          expect(args[:data]).not_to have_key("bypass_engagement_frequency")
+          FirebasePushService::Result.new(status: "sent", message_id: "mock/1", invalid_token: false)
+        end
+        with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+      end
+    end
+
+    context "when a condition is missing" do
+      it "refuses for a non-admin user" do
+        with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
+      it "refuses for an admin who is not on the allowlist" do
+        user.update!(admin: true)
+        with_env("MAKE_PUSH_TEST_BYPASS_ENABLED" => "true",
+                 "MAKE_PUSH_TEST_BYPASS_TOKEN" => test_token,
+                 "MAKE_PUSH_TEST_BYPASS_EMAILS" => "someone-else@example.com") do
+          post_dispatch(bypass_payload, headers: bypass_headers)
+        end
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
+      it "refuses when the environment does not enable the bypass" do
+        user.update!(admin: true)
+        with_bypass_env(enabled: "false") { post_dispatch(bypass_payload, headers: bypass_headers) }
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
+      it "refuses when the dispatch bearer is presented without the test token" do
+        user.update!(admin: true)
+        with_bypass_env { post_dispatch(bypass_payload, headers: auth_headers) }
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
+      it "refuses when the test token is wrong" do
+        user.update!(admin: true)
+        with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers("nope")) }
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
+      it "refuses when the flag is set but source is not manual_push_test" do
+        user.update!(admin: true)
+        payload = valid_payload(data: { "source" => "make", "bypass_engagement_frequency" => true })
+        with_bypass_env { post_dispatch(payload, headers: bypass_headers) }
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
+      it "audits the refused attempt" do
+        expect {
+          with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+        }.to change { UserEvent.where(event_name: "push_frequency_bypass_denied", user_id: user.id).count }.by(1)
+      end
+    end
+
+    it "never waives consent: an opted-out admin is still skipped" do
+      user.update!(admin: true)
+      user.notification_preferences!.update!(workout_reminders_enabled: false)
+      with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+      expect(json["skip_reason"]).to eq("category_opt_out")
+      expect(json["sent"]).to be(false)
+    end
+
+    it "never waives the active-token requirement" do
+      user.update!(admin: true)
+      user.device_tokens.each { |t| t.invalidate!("test") }
+      with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+      expect(json["skip_reason"]).to eq("no_active_token")
+    end
+  end
+
   def json
     JSON.parse(response.body)
   end
