@@ -11,6 +11,7 @@ import {
   isKnownEvent,
 } from "./taxonomy";
 import { enqueueServerEvent, isServerEvent } from "./server";
+import { registerInstallation } from "./installation";
 
 declare global {
   interface Window {
@@ -97,6 +98,10 @@ export function trackScreenView(screen: string, params?: EventParams): void {
 export function identifyUser(userId: string | number): void {
   const id = String(userId);
   setUserId(id);
+  // Re-register the installation now that the session cookie is present, so the
+  // backend associates this install to the user (last_authenticated_at). Safe on
+  // web/PWA too — it no-ops off-native or when the feature flag is off.
+  void registerInstallation();
   if (typeof window === "undefined" || !sinksEnabled()) return;
   if (typeof window.gtag === "function") {
     window.gtag("set", { user_id: id });
@@ -123,6 +128,12 @@ export function startAnalyticsSession(): string {
 }
 
 export { getAnalyticsContext };
+export {
+  getInstallationId,
+  getInstallationIdSync,
+  registerInstallation,
+  refreshInstallation,
+} from "./installation";
 
 // send_to labels: get from Google Ads -> Conversions -> select action -> Tag setup
 export const CONVERSIONS = {
