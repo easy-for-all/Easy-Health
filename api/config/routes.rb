@@ -170,6 +170,12 @@ Rails.application.routes.draw do
         post "events", to: "events#create"
       end
 
+      # App installation register/refresh (auth optional; associates user post-login)
+      namespace :app do
+        post  "installations/register",           to: "installations#register"
+        patch "installations/:installation_id",   to: "installations#update"
+      end
+
       # Privacy & public profile
       resource :privacy_settings, only: [:show, :update]
       resource :public_profile, only: [:show, :update]
