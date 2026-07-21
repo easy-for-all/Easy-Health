@@ -56,6 +56,38 @@ RSpec.describe Make::EventPayloadSerializer do
     expect(JSON.generate(payload)).not_to match(/token|api_key|must-not-leak|nope|"title"|"body"/i)
   end
 
+  it "enriches delivery with communication_type and engagement, and adds an email block" do
+    event = build_event(event_name: "trial_day_3", metadata: { days_since_trial_start: 3 })
+
+    payload = described_class.new(event: event, schema_version: 2).as_json
+
+    expect(payload[:delivery]).to include(
+      channels: %w[email],
+      communication_type: "lifecycle",
+      engagement: false
+    )
+    expect(payload[:email]).to eq(template_key: "trial_day_3")
+    expect(payload).not_to have_key(:push)
+  end
+
+  it "adds both email and push blocks for a multichannel event" do
+    session = user.workout_sessions.create!(
+      status: "completed", completion_status: "completed",
+      completed_at: 8.days.ago, duration_minutes: 30
+    )
+    event = build_event(
+      event_name: "user_inactive_7_days",
+      metadata: { last_workout_at: session.completed_at.iso8601 }
+    )
+
+    payload = described_class.new(event: event, schema_version: 2).as_json
+
+    expect(payload.dig(:delivery, :channels)).to eq(%w[push email])
+    expect(payload.dig(:delivery, :communication_type)).to eq("retention")
+    expect(payload[:email]).to eq(template_key: "user_inactive_7_days")
+    expect(payload.dig(:push, :campaign_key)).to eq("user_inactive_7_days")
+  end
+
   it "returns an empty channel array for known events without configured communication" do
     event = build_event(event_name: "workout_started")
 
@@ -88,6 +120,42 @@ RSpec.describe Make::EventPayloadSerializer do
 
     expect(payload.dig(:context, :workout_session_id)).to eq(session.id)
     expect(payload.dig(:context, :duration_minutes)).to eq(42)
+  end
+
+  it "builds context and delivery campaign for scheduled_workout_reminder_due" do
+    plan = user.workout_plans.create!(active: true)
+    day = plan.workout_days.create!(name: "Treino A", day_of_week: 1)
+    event = build_event(
+      event_name: "scheduled_workout_reminder_due",
+      metadata: {
+        campaign: "first_workout_scheduled_reminder_v1",
+        activation: {
+          plan_id: plan.id,
+          workout_id: day.id,
+          preferred_workout_time: "07:00",
+          reminder_time: "06:30",
+          reminder_local_date: "2026-07-21",
+          reminder_number: 1,
+          maximum_reminders: 3,
+          days_since_workout_created: 1,
+          first_workout_completed: false
+        }
+      }
+    )
+
+    payload = described_class.new(event: event, schema_version: 2).as_json
+
+    expect(payload.dig(:delivery, :channels)).to eq(%w[push])
+    expect(payload.dig(:delivery, :campaign)).to eq("first_workout_scheduled_reminder_v1")
+    expect(payload[:push]).to eq(
+      notification_type: "activation_reminder",
+      route: "/workouts/ready",
+      campaign_key: "scheduled_workout_reminder_due"
+    )
+    expect(payload.dig(:context, :activation, "plan_id")).to eq(plan.id)
+    expect(payload.dig(:context, :activation, "workout_id")).to eq(day.id)
+    expect(payload.dig(:context, :activation, "reminder_number")).to eq(1)
+    expect(JSON.generate(payload)).not_to match(/"title"|"body"|device_token|fcm_token/i)
   end
 
   it "rejects invalid schema versions clearly" do

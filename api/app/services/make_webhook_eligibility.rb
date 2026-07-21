@@ -20,15 +20,14 @@ class MakeWebhookEligibility
     %w[full minimal].include?(mode) ? mode : "minimal"
   end
 
+  # Schema 2 is the canonical contract (explicit delivery.channels). The env var
+  # stays as an override so production can roll back to schema 1 without a
+  # redeploy; the default is 2 so a fresh environment is correct by default.
   def self.event_schema_version
-    version = ENV.fetch("MAKE_EVENT_SCHEMA_VERSION", "1").to_s
+    version = ENV.fetch("MAKE_EVENT_SCHEMA_VERSION", "2").to_s
     return version.to_i if %w[1 2].include?(version)
 
     raise ArgumentError, "MAKE_EVENT_SCHEMA_VERSION must be 1 or 2"
-  end
-
-  def self.channel_routing_enabled?
-    ActiveModel::Type::Boolean.new.cast(ENV.fetch("MAKE_EVENT_CHANNEL_ROUTING_ENABLED", "false"))
   end
 
   def self.allowed_events

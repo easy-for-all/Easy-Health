@@ -7,6 +7,7 @@ module Make
       "first_workout_created" => "Make::EventContextBuilders::FirstWorkoutCreated",
       "first_workout_completed" => "Make::EventContextBuilders::FirstWorkoutCompleted",
       "plan_created_but_not_used" => "Make::EventContextBuilders::PlanCreatedButNotUsed",
+      "scheduled_workout_reminder_due" => "Make::EventContextBuilders::ScheduledWorkoutReminderDue",
       "user_inactive_3_days" => "Make::EventContextBuilders::Inactivity",
       "user_inactive_7_days" => "Make::EventContextBuilders::Inactivity",
       "user_inactive_15_days" => "Make::EventContextBuilders::Inactivity"
