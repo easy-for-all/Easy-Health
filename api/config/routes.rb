@@ -158,6 +158,8 @@ Rails.application.routes.draw do
         get "users/:id", action: :user_detail
         # Product analytics by domain (rollout gradual; source: product_analytics_events)
         get "analytics/platform_comparison", to: "analytics#platform_comparison"
+        # APP ANDROID panel — real installed base (source: app_installations)
+        get "analytics/android_installations", to: "analytics#android_installations"
         # Admin-only diagnostic: sends a test push to the CURRENT admin's own
         # device tokens (never accepts a user_id). See AdminPushTestService.
         post :push_test
