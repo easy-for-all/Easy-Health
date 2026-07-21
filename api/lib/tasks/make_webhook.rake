@@ -11,7 +11,6 @@ namespace :make_webhook do
     puts "MAKE_WEBHOOK_PAYLOAD_MODE : #{MakeWebhookEligibility.payload_mode}"
     puts "MAKE_WEBHOOK_ALLOWED_EVENTS: #{MakeWebhookEligibility.allowed_events.join(', ').presence || '(none — no events will be sent)'}"
     puts "MAKE_EVENT_SCHEMA_VERSION : #{MakeWebhookEligibility.event_schema_version}"
-    puts "MAKE_EVENT_CHANNEL_ROUTING_ENABLED: #{MakeWebhookEligibility.channel_routing_enabled?}"
     puts ""
     puts "configured? => #{MakeWebhookEligibility.configured?}"
     puts ""

@@ -43,9 +43,13 @@ RSpec.describe MakeWebhookClient do
       expect(result).to be_success
       expect(event.reload.make_delivery_status).to eq("delivered")
       expect(captured_request["X-EasyHealth-Event-Id"]).to eq(event.id.to_s)
-      expect(captured_request["X-EasyHealth-Schema-Version"]).to eq("1")
+      # Schema 2 is the canonical default now that no env override is set.
+      expect(captured_request["X-EasyHealth-Schema-Version"]).to eq("2")
       expect(captured_request["X-EasyHealth-Signature"]).to be_present
-      expect(JSON.parse(captured_request.body).dig("user", "email")).to be_nil
+      body = JSON.parse(captured_request.body)
+      expect(body["schema_version"]).to eq(2)
+      expect(body.dig("delivery", "channels")).to eq(%w[push])
+      expect(body.dig("user", "email")).to be_nil
     end
   end
 
@@ -69,7 +73,7 @@ RSpec.describe MakeWebhookClient do
       described_class.new.deliver(event)
 
       body = JSON.parse(captured_request.body)
-      expect(body["schema_version"]).to eq(1)
+      expect(body["schema_version"]).to eq(2)
       expect(body.dig("user", "timezone")).to eq("America/Sao_Paulo")
       expect(body.dig("user", "locale")).to eq("pt-BR")
       # Still no sensitive PII in minimal mode, and never a device token.
@@ -157,6 +161,30 @@ RSpec.describe MakeWebhookClient do
   end
 
   it "marks an incoherent schema version 2 event failed without posting" do
+    # A configured communication event whose required context is missing must
+    # fail loudly (not post), distinct from an unconfigured event which skips.
+    user_event = UserEvent.create!(
+      user: user,
+      event_name: "first_workout_completed",
+      occurred_at: Time.current,
+      source: "relationship_daily",
+      metadata: {},
+      make_delivery_status: "pending"
+    )
+
+    with_env(make_env.merge("MAKE_EVENT_SCHEMA_VERSION" => "2")) do
+      expect(Net::HTTP).not_to receive(:new)
+
+      result = described_class.new.deliver(user_event)
+
+      expect(result.status).to eq("failed")
+      expect(user_event.reload.make_delivery_status).to eq("failed")
+      expect(user_event.make_last_error).to include("missing_required_context")
+      expect(user_event.make_attempts_count).to eq(1)
+    end
+  end
+
+  it "skips an event that is not a configured communication event" do
     user_event = UserEvent.create!(
       user: user,
       event_name: "workout_created_not_started",
@@ -166,18 +194,14 @@ RSpec.describe MakeWebhookClient do
       make_delivery_status: "pending"
     )
 
-    with_env(make_env.merge(
-      "MAKE_EVENT_SCHEMA_VERSION" => "2",
-      "MAKE_WEBHOOK_ALLOWED_EVENTS" => "workout_created_not_started"
-    )) do
+    with_env(make_env.merge("MAKE_WEBHOOK_ALLOWED_EVENTS" => "workout_created_not_started")) do
       expect(Net::HTTP).not_to receive(:new)
 
       result = described_class.new.deliver(user_event)
 
-      expect(result.status).to eq("failed")
-      expect(user_event.reload.make_delivery_status).to eq("failed")
-      expect(user_event.make_last_error).to include("missing_required_context")
-      expect(user_event.make_attempts_count).to eq(1)
+      expect(result.status).to eq("skipped")
+      expect(user_event.reload.make_delivery_status).to eq("skipped")
+      expect(user_event.make_last_error).to eq("communication_event_disabled")
     end
   end
 

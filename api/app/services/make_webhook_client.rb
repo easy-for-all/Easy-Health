@@ -17,6 +17,13 @@ class MakeWebhookClient
       return Result.new(status: "disabled", error: reason)
     end
 
+    skip_reason = communication_skip_reason(user_event)
+    if skip_reason
+      log_skipped(user_event, skip_reason)
+      user_event.update!(make_delivery_status: "skipped", make_last_error: skip_reason)
+      return Result.new(status: "skipped", error: skip_reason)
+    end
+
     user_event.update!(
       make_delivery_status: "pending",
       make_attempts_count: user_event.make_attempts_count.to_i + 1,
@@ -29,6 +36,7 @@ class MakeWebhookClient
     timestamp = Time.current.utc.iso8601
     signature = signature_for(user_event.id, timestamp, body_json)
 
+    log_prepared(user_event, payload)
     response = post(body_json, headers_for(user_event, timestamp, signature, schema_version_for(payload)))
     if response.is_a?(Net::HTTPSuccess)
       user_event.update!(make_delivery_status: "delivered", make_last_error: nil)
@@ -46,6 +54,44 @@ class MakeWebhookClient
   end
 
   private
+
+  # A communication event must be known AND enabled with at least one channel.
+  # Anything else is recorded as skipped — never sent with an empty/implicit
+  # channel list and never given a default channel.
+  def communication_skip_reason(user_event)
+    name = user_event.event_name
+    return "unknown_communication_event" unless CommunicationEvents.known?(name)
+    return "communication_event_disabled" unless CommunicationEvents.enabled?(name)
+
+    nil
+  end
+
+  def log_prepared(user_event, payload)
+    delivery = payload[:delivery] || payload["delivery"] || {}
+    channels = delivery[:channels] || delivery["channels"] || []
+    Rails.logger.info(
+      {
+        message: "make_communication_event_prepared",
+        event_id: user_event.id,
+        event_name: user_event.event_name,
+        schema_version: schema_version_for(payload),
+        requested_channels: channels,
+        user_id: user_event.user_id,
+        source: user_event.source
+      }.to_json
+    )
+  end
+
+  def log_skipped(user_event, reason)
+    Rails.logger.info(
+      {
+        message: "make_communication_event_skipped",
+        event_id: user_event.id,
+        event_name: user_event.event_name,
+        reason: reason
+      }.to_json
+    )
+  end
 
   def post(body_json, headers)
     uri = URI.parse(MakeWebhookEligibility.webhook_url)

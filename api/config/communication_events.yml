@@ -1,64 +1,88 @@
 # Central technical config for EasyHealth business events sent to Make.
-# Single source of truth for the push journey (V1): channels, technical
-# notification_type, deep-link route and whether the event counts toward the
-# engagement frequency cap. Copy (title/body/emoji) lives in the Make scenario,
-# NOT here. Omitted known events resolve to an empty channel list.
+# Single source of truth for communication channels: which channels each event
+# routes to, the technical push descriptor (notification_type/route), the
+# communication_type bucket and whether the event counts toward the engagement
+# frequency cap. Copy (title/body/emoji) and email HTML live in the Make
+# scenario, NOT here. Omitted known events resolve to an empty channel list and
+# are never delivered as communication.
 #
-# Push journey V1 = 5 events only:
-#   first_workout_not_started_2h, first_workout_not_started_24h,
-#   first_workout_completed, user_inactive_3_days, user_inactive_7_days
+# Conventions (keep the YAML lean):
+#   enabled       : optional, defaults to true. Set `enabled: false` to keep the
+#                   event configured but stop it from being delivered.
+#   channels      : email | push. At least one is required when enabled.
+#   communication_type: required editorial bucket (lifecycle | activation |
+#                   progress | retention). Sent in delivery.communication_type.
+#   template_key  : optional. Defaults to the event_name for email events; only
+#                   set it when the Make email template key differs.
+#   notification_type + route: required for push events.
+#
+# Push journey V1 push events: first_workout_not_started_2h,
+# first_workout_not_started_24h, scheduled_workout_reminder_due,
+# first_workout_completed, user_inactive_3_days, user_inactive_7_days.
 
 # --- Email-only relationship journeys (orchestrated by Make) ---
 user_created:
   channels:
     - email
+  communication_type: lifecycle
 
 subscription_created:
   channels:
     - email
+  communication_type: lifecycle
 
 checkout_started:
   channels:
     - email
+  communication_type: lifecycle
 
 trial_day_3:
   channels:
     - email
+  communication_type: lifecycle
 
 trial_day_6:
   channels:
     - email
+  communication_type: lifecycle
 
 trial_expired_without_subscription:
   channels:
     - email
+  communication_type: lifecycle
 
 workout_completed_partial:
   channels:
     - email
+  communication_type: activation
 
 never_created_workout:
   channels:
     - email
+  communication_type: activation
 
 churn_risk:
   channels:
     - email
+  communication_type: retention
 
 # first_workout_created / plan_created_but_not_used stay as email/analytics
 # events but NO LONGER trigger push (V1 simplification).
 first_workout_created:
   channels:
     - email
+  communication_type: activation
 
 plan_created_but_not_used:
   channels:
     - email
+  communication_type: activation
 
-# --- Push journey V1 (the only 5 push events) ---
+# --- Push journey V1 ---
 first_workout_not_started_2h:
   channels:
     - push
+  communication_type: activation
   notification_type: activation_reminder
   route: /workouts/ready
   engagement: true
@@ -66,6 +90,15 @@ first_workout_not_started_2h:
 first_workout_not_started_24h:
   channels:
     - push
+  communication_type: activation
+  notification_type: activation_reminder
+  route: /workouts/ready
+  engagement: true
+
+scheduled_workout_reminder_due:
+  channels:
+    - push
+  communication_type: activation
   notification_type: activation_reminder
   route: /workouts/ready
   engagement: true
@@ -73,6 +106,7 @@ first_workout_not_started_24h:
 first_workout_completed:
   channels:
     - push
+  communication_type: progress
   notification_type: progress_update
   route: /workouts
   engagement: false
@@ -80,6 +114,7 @@ first_workout_completed:
 user_inactive_3_days:
   channels:
     - push
+  communication_type: retention
   notification_type: workout_reminder
   route: /workouts/ready
   engagement: true
@@ -88,6 +123,7 @@ user_inactive_7_days:
   channels:
     - push
     - email
+  communication_type: retention
   notification_type: workout_reminder
   route: /workouts/ready
   engagement: true

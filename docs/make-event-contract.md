@@ -10,47 +10,74 @@ por `delivery.channels` e, dentro de cada canal, separar por `event_name`.
 
 ## Schema version 2
 
-Exemplo para `workout_created_not_started`:
+Schema 2 e o contrato canonico (default). O bloco `delivery` e sempre explicito
+e o payload traz um bloco tecnico por canal: `email` (quando o evento envia
+email) e `push` (quando envia push).
+
+### Exemplo — email (`trial_day_3`)
 
 ```json
 {
   "schema_version": 2,
-  "event_id": 1120,
-  "event_name": "workout_created_not_started",
-  "occurred_at": "2026-07-18T15:06:35Z",
+  "event_id": 5332,
+  "event_name": "trial_day_3",
+  "occurred_at": "2026-07-20T08:00:11Z",
   "source": "easyhealth_backend",
-  "environment": "development",
+  "environment": "production",
   "delivery": {
-    "channels": ["email", "push"]
+    "channels": ["email"],
+    "communication_type": "lifecycle",
+    "engagement": false
+  },
+  "email": {
+    "template_key": "trial_day_3"
   },
   "user": {
-    "id": 9,
-    "timezone": "America/Sao_Paulo",
+    "id": 479,
+    "timezone": "America/Fortaleza",
     "locale": "pt-BR"
   },
-  "segments": [],
-  "subscription": {
-    "status": "none",
-    "trial_ends_at": "2026-06-28T12:17:08Z",
-    "plan": "none"
-  },
-  "engagement": {
-    "created_at": "2026-05-17T15:37:04Z",
-    "last_sign_in_at": null,
-    "last_workout_at": null,
-    "total_workouts_created": 1,
-    "total_workouts_completed": 0,
-    "days_since_last_workout": null
-  },
-  "context": {
-    "workout_id": 123,
-    "plan_id": 123,
-    "workout_created_at": "2026-07-18T14:00:00Z",
-    "minutes_since_creation": 66
-  },
   "metadata": {
-    "trigger_source": "manual_test",
-    "note": "make webhook smoke test"
+    "days_since_trial_start": 3
+  }
+}
+```
+
+### Exemplo — push (`first_workout_not_started_2h`)
+
+```json
+{
+  "schema_version": 2,
+  "event_id": 5400,
+  "event_name": "first_workout_not_started_2h",
+  "delivery": {
+    "channels": ["push"],
+    "communication_type": "activation",
+    "engagement": true
+  },
+  "push": {
+    "notification_type": "activation_reminder",
+    "route": "/workouts/ready",
+    "campaign_key": "first_workout_not_started_2h"
+  },
+  "user": { "id": 13, "locale": "pt-BR", "timezone": "America/Sao_Paulo" }
+}
+```
+
+### Exemplo — multicanal (`user_inactive_7_days`)
+
+```json
+{
+  "delivery": {
+    "channels": ["push", "email"],
+    "communication_type": "retention",
+    "engagement": true
+  },
+  "email": { "template_key": "user_inactive_7_days" },
+  "push": {
+    "notification_type": "workout_reminder",
+    "route": "/workouts/ready",
+    "campaign_key": "user_inactive_7_days"
   }
 }
 ```
@@ -61,12 +88,20 @@ Campos:
 - `event_id`: id do `user_events`, usado para correlacao e idempotencia.
 - `event_name`: evento de negocio, sem prefixo de canal.
 - `source`: origem raiz fixa do produtor do contrato, `easyhealth_backend`.
-- `delivery.channels`: canais suportados pelo evento. Valores atuais: `email`, `push`.
+- `delivery.channels`: canais do evento. Valores atuais: `email`, `push`.
+- `delivery.communication_type`: bucket editorial (`lifecycle`, `activation`,
+  `progress`, `retention`).
+- `delivery.engagement`: `true` se o evento conta para o cap de frequencia.
+- `email.template_key`: chave do template no Make (default = `event_name`). A
+  copia/HTML fica no Make, nunca no payload.
+- `push.notification_type` / `push.route` / `push.campaign_key`: descritor
+  tecnico do push. `campaign_key` = `event_name`. Titulo/corpo ficam no Make.
 - `context`: dados de negocio diretamente ligados ao evento.
 - `metadata`: diagnostico operacional; use `trigger_source`, nao `source`.
 
-`delivery.channels` pode ser `[]`. Isso significa evento observavel sem
-comunicacao configurada.
+Eventos sem comunicacao configurada NAO chegam ao Make: o backend marca a
+entrega como `skipped` (`unknown_communication_event` /
+`communication_event_disabled`) e nao inventa canal padrao.
 
 ## Canais
 
@@ -110,43 +145,77 @@ Dentro de cada canal, use tambem o evento:
 ```text
 delivery.channels contem "push"
 AND
-event_name = "workout_created_not_started"
+event_name = "first_workout_not_started_2h"
 ```
 
-Nao crie `email_workout_created_not_started` nem
-`push_workout_created_not_started`. Nao duplique o Custom Webhook apenas para
-mudar canal.
+IMPORTANTE: as rotas de email e push NAO sao exclusivas. Em um evento multicanal
+(`["push","email"]`) as DUAS rotas devem executar. Use um roteador com filtros
+independentes por canal (ou dois filtros paralelos), nunca um router exclusivo
+onde so a primeira condicao verdadeira roda.
 
-## Migracao
+Nao crie `email_<event>` nem `push_<event>`. Nao duplique o Custom Webhook
+apenas para mudar canal.
 
-Variaveis:
+## Divisao de responsabilidade
+
+Antes do Make (Rails decide): evento conhecido/habilitado, canais previstos,
+consentimento basico e elegibilidade tecnica, e se o webhook e disparado.
+
+No Make (Make decide): template, titulo, corpo, idioma, variante, provedor,
+sequencia, atraso, roteamento de canal e a chamada final ao endpoint de push ou
+ao provedor de email.
+
+Elegibilidade final de push e decidida quando o Make chama
+`POST /api/v1/integrations/make/push_dispatches` (o endpoint retorna
+`status`/`sent`/`skip_reason`). O Make NAO deve tratar HTTP 200 como envio
+confirmado — precisa inspecionar `sent` e `skip_reason`.
+
+## Migracao e schema 1
+
+Variavel:
+
+```env
+MAKE_EVENT_SCHEMA_VERSION=2
+```
+
+Schema 2 e o default do codigo. `MAKE_EVENT_SCHEMA_VERSION` existe apenas como
+override de rollback. Nao ha mais `MAKE_EVENT_CHANNEL_ROUTING_ENABLED`.
+
+Cauda de schema 1: eventos persistidos antes desta entrega podem, em retries,
+reemitir o payload salvo em `user_events.payload_json` (schema 1). Cada emissao
+schema 1 loga `make_schema_v1_emitted` (event_id, event_name). Criterio de
+remocao do caminho schema 1: quando `make_schema_v1_emitted` zerar por 7 dias
+consecutivos, remover `schema_one_payload` e a rota de compatibilidade no Make.
+
+Rollback imediato (sem redeploy):
 
 ```env
 MAKE_EVENT_SCHEMA_VERSION=1
-MAKE_EVENT_CHANNEL_ROUTING_ENABLED=false
 ```
-
-Etapas:
-
-1. Em development, ativar `MAKE_EVENT_SCHEMA_VERSION=2` e
-   `MAKE_EVENT_CHANNEL_ROUTING_ENABLED=true`.
-2. Validar no Make que `delivery.channels` chega como array.
-3. Adicionar router principal por canal e manter router por `event_name` dentro
-   de cada canal.
-4. Testar eventos somente email, somente push, multicanal e sem canal.
-5. Ativar schema 2 em producao sem remover schema 1 imediatamente.
-
-Rollback:
-
-```env
-MAKE_EVENT_SCHEMA_VERSION=1
-MAKE_EVENT_CHANNEL_ROUTING_ENABLED=false
-```
-
-Eventos ja em retry mantem o payload salvo em `user_events.payload_json`, para a
-assinatura e a idempotencia continuarem estaveis.
 
 ## Tasks de teste
+
+Auditoria read-only da configuracao canonica (exit != 0 se invalida):
+
+```bash
+bundle exec rake communication_events:audit
+```
+
+Preview do payload canonico por `event_name` (sem persistir nem enviar):
+
+```bash
+bundle exec rake "communication_events:preview[trial_day_3,mail.marcus.reis@gmail.com]"
+```
+
+Envio manual controlado pelo pipeline canonico (respeita consentimento,
+`source=manual_communication_test`, idempotency key unica de smoke test):
+
+```bash
+bundle exec rake "communication_events:deliver[trial_day_3,mail.marcus.reis@gmail.com]"
+```
+
+As tasks `make:*` abaixo continuam disponiveis e aceitam override manual de
+canal (`CHANNELS=`) para cenarios de smoke test especificos.
 
 Preview sem persistir nem enviar:
 

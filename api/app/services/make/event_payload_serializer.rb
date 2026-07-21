@@ -11,6 +11,7 @@ module Make
       "first_workout_created" => %i[plan_id],
       "first_workout_completed" => %i[workout_session_id],
       "plan_created_but_not_used" => %i[plan_id],
+      "scheduled_workout_reminder_due" => %i[activation],
       "user_inactive_3_days" => %i[last_workout_at],
       "user_inactive_7_days" => %i[last_workout_at],
       "user_inactive_15_days" => %i[last_workout_at]
@@ -37,7 +38,13 @@ module Make
 
     attr_reader :event, :schema_version, :delivery_channels
 
+    # Legacy contract. Kept only for a compatibility tail (retries of events
+    # persisted before schema 2). Emitting one is logged so the tail can be
+    # monitored and the path removed once it drops to zero.
     def schema_one_payload
+      Rails.logger.info(
+        { message: "make_schema_v1_emitted", event_id: event.id, event_name: event.event_name }.to_json
+      )
       {
         schema_version: 1,
         event_id: event.id,
@@ -62,9 +69,7 @@ module Make
         occurred_at: event.occurred_at&.iso8601,
         source: SOURCE,
         environment: Rails.env,
-        delivery: {
-          channels: resolved_channels
-        },
+        delivery: delivery_payload,
         user: user_payload,
         segments: segments_payload,
         subscription: subscription_payload,
@@ -75,6 +80,9 @@ module Make
 
       pb = push_block
       payload[:push] = pb if pb
+
+      eb = email_block
+      payload[:email] = eb if eb
 
       validate_context!(payload)
       payload
@@ -92,6 +100,17 @@ module Make
         route: CommunicationEvents.route_for(event.event_name),
         campaign_key: event.event_name
       }
+    rescue CommunicationEvents::UnknownEventError
+      nil
+    end
+
+    # Technical email descriptor from communication_events.yml. Only template_key
+    # is sent; the HTML/subject/copy is owned by the Make email template.
+    def email_block
+      cfg = CommunicationEvents.email_config_for(event.event_name)
+      return nil if cfg.nil?
+
+      { template_key: cfg["template_key"] }
     rescue CommunicationEvents::UnknownEventError
       nil
     end
@@ -162,6 +181,21 @@ module Make
         CommunicationEvents.validate_event_name!(event.event_name)
         CommunicationEvents.validate_channels!(delivery_channels)
       end
+    end
+
+    # Channels come from the override (smoke test) or the canonical config;
+    # communication_type and engagement always come from the canonical config so
+    # Make can route and cap without a second source of truth.
+    def delivery_payload
+      payload = {
+        channels: resolved_channels,
+        communication_type: CommunicationEvents.communication_type_for(event.event_name),
+        engagement: CommunicationEvents.engagement?(event.event_name)
+      }
+      campaign = sanitized_metadata["campaign"].presence ||
+                 sanitized_metadata.dig("delivery", "campaign").presence
+      payload[:campaign] = campaign if campaign.present?
+      payload
     end
 
     def validate_context!(payload)
