@@ -6,6 +6,12 @@ import {
   startAnalyticsSession,
 } from "./context";
 import { trackEvent, trackServerEvent } from "./index";
+import {
+  backgroundDurationMs,
+  clearBackground,
+  markBackgrounded,
+  shouldStartNewSession,
+} from "./session";
 
 // Native app lifecycle instrumentation via @capacitor/app. WebView-only: the
 // app is a Capacitor shell around the remote site, so there is no native SDK —
@@ -44,13 +50,25 @@ export async function initAnalyticsLifecycle(): Promise<void> {
       trackEvent("app_opened");
     }
 
+    // Cold start always opens a fresh session.
+    startAnalyticsSession();
+    trackEvent("session_started", { reason: "cold_start" });
+
     // Foreground/background transitions. Guard against duplicate resume events.
+    // A resume only starts a NEW session after SESSION_TIMEOUT_MINUTES in the
+    // background; a quick return keeps the same session.
     let wasActive = true;
     App.addListener("appStateChange", ({ isActive }) => {
       if (isActive && !wasActive) {
-        startAnalyticsSession();
-        trackEvent("app_resumed");
+        const bgMs = backgroundDurationMs() ?? 0;
+        if (shouldStartNewSession(bgMs)) {
+          startAnalyticsSession();
+          trackEvent("session_started", { reason: "resume_timeout" });
+        }
+        trackEvent("app_resumed", { background_seconds: Math.round(bgMs / 1000) });
+        clearBackground();
       } else if (!isActive && wasActive) {
+        markBackgrounded();
         trackEvent("app_backgrounded");
       }
       wasActive = isActive;

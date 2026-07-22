@@ -26,6 +26,9 @@ events:
   app_backgrounded:         { version: 1, sinks: [ga4] }
   app_resumed:              { version: 1, sinks: [ga4] }
   app_updated:              { version: 1, sinks: [server, ga4] }
+  session_started:          { version: 1, sinks: [server, ga4] }
+  session_ended:            { version: 1, sinks: [ga4] }
+  screen_view:              { version: 1, sinks: [ga4] }
   web_session_started:      { version: 1, sinks: [server, ga4] }
   pwa_installed:            { version: 1, sinks: [server, ga4] }
   pwa_opened:               { version: 1, sinks: [ga4] }
@@ -102,6 +105,9 @@ events:
   # ── Subscription ───────────────────────────────────────────────────────────
   paywall_viewed:           { version: 1, sinks: [server, ga4, clarity] }
   checkout_started:         { version: 1, sinks: [server, ga4] }
+  checkout_session_created: { version: 1, sinks: [server] }
+  checkout_failed:          { version: 1, sinks: [server, ga4] }
+  checkout_redirect_opened: { version: 1, sinks: [server, ga4] }
   checkout_completed:       { version: 1, sinks: [server, ga4] }
   subscription_started:     { version: 1, sinks: [server, ga4] }
   subscription_renewed:     { version: 1, sinks: [server] }
