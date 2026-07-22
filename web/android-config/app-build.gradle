@@ -64,6 +64,14 @@ try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
         apply plugin: 'com.google.gms.google-services'
+        // Analytics/Crashlytics/Performance native SDKs are provided by the
+        // @capacitor-firebase/* Capacitor plugins (synced via cap sync). Here we
+        // only apply the Crashlytics + Performance Gradle plugins (mapping upload
+        // and automatic instrumentation) — same google-services.json, no second
+        // Firebase project. Kept inside this guard so a build without the file
+        // (local debug) is never affected.
+        apply plugin: 'com.google.firebase.crashlytics'
+        apply plugin: 'com.google.firebase.firebase-perf'
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
