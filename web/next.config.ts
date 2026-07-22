@@ -39,6 +39,16 @@ const securityHeaders = [
 const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ["framer-motion", "canvas-confetti", "html-to-image"],
+  // @capacitor-firebase/* web builds statically import the firebase JS SDK, but
+  // firebase is a NO-OP on web/PWA by design (GA4 handles web) and native uses
+  // the Capacitor bridge. Alias the firebase subpaths to a stub so the build
+  // resolves them without shipping the real SDK. See analytics/firebase-web-stub.ts.
+  turbopack: {
+    resolveAlias: {
+      "firebase/analytics": "./src/shared/lib/analytics/firebase-web-stub.ts",
+      "firebase/performance": "./src/shared/lib/analytics/firebase-web-stub.ts",
+    },
+  },
   devIndicators: false as const,
   allowedDevOrigins: ["easyhealth.art"],
 
