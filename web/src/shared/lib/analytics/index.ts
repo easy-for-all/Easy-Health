@@ -12,6 +12,12 @@ import {
 } from "./taxonomy";
 import { enqueueServerEvent, isServerEvent } from "./server";
 import { registerInstallation } from "./installation";
+import {
+  firebaseAnalyticsActive,
+  logFirebaseEvent,
+  setFirebaseScreen,
+  setFirebaseUserId,
+} from "./firebase";
 
 declare global {
   interface Window {
@@ -50,9 +56,15 @@ export function trackEvent(eventName: string, params?: EventParams): void {
   }
   if (!sinksEnabled()) return;
 
-  // GA4 (behavioural). Preserve legacy behaviour: any name is forwarded.
-  if (typeof window.gtag === "function") {
+  // Destination routing (anti-duplication): Web/PWA -> GA4 (gtag). Native Android
+  // with Firebase Analytics active -> Firebase native ONLY, and GA4 is suppressed
+  // so the same event is not counted twice (WebView gtag + native SDK).
+  const routeToFirebase = firebaseAnalyticsActive();
+  if (typeof window.gtag === "function" && !routeToFirebase) {
     window.gtag("event", eventName, params);
+  }
+  if (routeToFirebase) {
+    void logFirebaseEvent(eventName, params);
   }
 
   if (isKnownEvent(eventName)) {
@@ -91,6 +103,9 @@ export function trackOnce(key: string, eventName: string, params?: EventParams):
 }
 
 export function trackScreenView(screen: string, params?: EventParams): void {
+  // Native screen tracking uses Firebase's dedicated setCurrentScreen; trackEvent
+  // handles GA4 (web) vs Firebase-event (native) routing for the screen_view event.
+  if (firebaseAnalyticsActive()) void setFirebaseScreen(screen);
   trackEvent("screen_view", { screen, ...params });
 }
 
@@ -102,6 +117,8 @@ export function identifyUser(userId: string | number): void {
   // backend associates this install to the user (last_authenticated_at). Safe on
   // web/PWA too — it no-ops off-native or when the feature flag is off.
   void registerInstallation();
+  // Native: set a pseudonymous internal user id on Firebase (never email / installation_id).
+  void setFirebaseUserId(id);
   if (typeof window === "undefined" || !sinksEnabled()) return;
   if (typeof window.gtag === "function") {
     window.gtag("set", { user_id: id });
@@ -118,6 +135,7 @@ export function identifyUser(userId: string | number): void {
 // On logout: drop the user_id but KEEP anonymous_id (same install/visitor).
 export function resetIdentity(): void {
   setUserId(undefined);
+  void setFirebaseUserId(null); // drop Firebase user id; installation_id is preserved
   if (typeof window !== "undefined" && typeof window.gtag === "function" && sinksEnabled()) {
     window.gtag("set", { user_id: null });
   }

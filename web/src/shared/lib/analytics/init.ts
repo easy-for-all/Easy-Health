@@ -3,6 +3,8 @@ import { detectPlatform } from "./context";
 import { flushOnBackground } from "./server";
 import { initAnalyticsLifecycle } from "./lifecycle";
 import { registerInstallation } from "./installation";
+import { initFirebase } from "./firebase";
+import { storedConsent } from "./consent";
 import { trackOnce } from "./index";
 
 // Single entry point, called once from the client on app boot. The Consent Mode
@@ -20,6 +22,8 @@ export function initAnalytics(): void {
     // Register the installation (upsert) so the backend/admin panel can count
     // this real Android install — anonymously now, associated after login.
     void registerInstallation();
+    // Native Firebase (Analytics/Crashlytics) — no-op unless flags are on.
+    void initFirebase(storedConsent() === "granted");
   } else {
     // Web/PWA session start (idempotent per tab session).
     trackOnce("web_session_started", "web_session_started", {
