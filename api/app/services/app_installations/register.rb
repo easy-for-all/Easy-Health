@@ -19,12 +19,23 @@ module AppInstallations
       analytics_consent tracking_version
     ].freeze
 
+    # Install-referrer attributes, gated by INSTALL_REFERRER_ENABLED and written
+    # ONCE (first valid attribution; never overwritten by a blank).
+    REFERRER_ATTRS = %i[
+      install_referrer utm_source utm_medium utm_campaign
+      referrer_source referrer_click_at install_begin_at
+    ].freeze
+
     MAX_STRING_BYTES = 256
 
     Result = Struct.new(:installation, :created, :ok, keyword_init: true)
 
     def self.enabled?
       ActiveModel::Type::Boolean.new.cast(ENV.fetch("MOBILE_ANALYTICS_ENABLED", "false"))
+    end
+
+    def self.install_referrer_enabled?
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch("INSTALL_REFERRER_ENABLED", "false"))
     end
 
     def initialize(user:, installation_id:, attributes: {})
@@ -41,6 +52,7 @@ module AppInstallations
       created = install.new_record?
 
       apply_context!(install)
+      apply_referrer!(install)
       stamp_timeline!(install, created)
       associate_user!(install)
 
@@ -60,6 +72,18 @@ module AppInstallations
         install.public_send("#{key}=", coerce(key, value))
       end
       install.source ||= "register"
+    end
+
+    # First valid attribution wins: only set the referrer when the flag is on and
+    # the install has none yet, and never overwrite it with a blank.
+    def apply_referrer!(install)
+      return unless self.class.install_referrer_enabled?
+      return if install.install_referrer.present?
+
+      referrer = @attributes.to_h.symbolize_keys.slice(*REFERRER_ATTRS)
+      return if referrer.values.all?(&:blank?)
+
+      referrer.each { |key, value| install.public_send("#{key}=", value.presence) }
     end
 
     def coerce(key, value)

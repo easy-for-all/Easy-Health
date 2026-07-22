@@ -64,6 +64,31 @@ RSpec.describe AppInstallations::Register do
     expect(result.installation.analytics_consent).to be(false)
   end
 
+  describe "install referrer" do
+    before { allow(described_class).to receive(:install_referrer_enabled?).and_return(true) }
+
+    it "stores the first valid attribution" do
+      result = register(
+        installation_id: "inst-ref",
+        attributes: { install_referrer: "utm_source=google", utm_source: "google", utm_campaign: "launch" }
+      )
+      expect(result.installation.install_referrer).to eq("utm_source=google")
+      expect(result.installation.utm_source).to eq("google")
+    end
+
+    it "never overwrites an existing referrer with a blank" do
+      register(installation_id: "inst-ref2", attributes: { install_referrer: "utm_source=fb" })
+      register(installation_id: "inst-ref2", attributes: { install_referrer: "" })
+      expect(AppInstallation.find_by(installation_id: "inst-ref2").install_referrer).to eq("utm_source=fb")
+    end
+
+    it "ignores referrer when the flag is off" do
+      allow(described_class).to receive(:install_referrer_enabled?).and_return(false)
+      result = register(installation_id: "inst-ref3", attributes: { install_referrer: "utm_source=x" })
+      expect(result.installation.install_referrer).to be_nil
+    end
+  end
+
   it "is a no-op when the feature flag is disabled" do
     allow(described_class).to receive(:enabled?).and_return(false)
     result = register

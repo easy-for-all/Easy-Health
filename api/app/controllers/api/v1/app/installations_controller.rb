@@ -57,7 +57,9 @@ module Api
         end
 
         def installation_params
-          params.permit(*AppInstallations::Register::ALLOWED_ATTRS).to_h.symbolize_keys
+          permitted = AppInstallations::Register::ALLOWED_ATTRS +
+                      AppInstallations::Register::REFERRER_ATTRS
+          params.permit(*permitted).to_h.symbolize_keys
         end
       end
     end

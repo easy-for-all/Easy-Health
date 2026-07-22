@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_20_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_21_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -160,6 +160,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_120000) do
     t.string "device_model"
     t.bigint "device_token_id"
     t.datetime "first_seen_at"
+    t.datetime "install_begin_at"
+    t.string "install_referrer"
     t.string "installation_id", null: false
     t.datetime "installed_at"
     t.datetime "last_authenticated_at"
@@ -172,12 +174,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_120000) do
     t.string "operating_system_version"
     t.string "platform", default: "unknown", null: false
     t.boolean "push_enabled", default: false, null: false
+    t.datetime "referrer_click_at"
+    t.string "referrer_source"
     t.string "source"
     t.string "timezone"
     t.datetime "tracking_started_at"
     t.integer "tracking_version"
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.string "utm_campaign"
+    t.string "utm_medium"
+    t.string "utm_source"
     t.index ["app_version"], name: "index_app_installations_on_app_version"
     t.index ["device_token_id"], name: "index_app_installations_on_device_token_id"
     t.index ["installation_id"], name: "index_app_installations_on_installation_id", unique: true
