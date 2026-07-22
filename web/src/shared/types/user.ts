@@ -10,6 +10,8 @@ export interface User {
   admin?: boolean;
   created_at: string;
   first_workout_completed_at?: string | null;
+  completed_workouts_count?: number;
+  has_completed_workout?: boolean;
   avatar_url?: string | null;
   billing_status?: BillingStatus | null;
   account_type?: AccountType;

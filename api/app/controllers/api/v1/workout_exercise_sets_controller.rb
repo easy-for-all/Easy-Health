@@ -15,7 +15,7 @@ module Api
         return render json: { error: "Not found" }, status: :not_found unless exercise_session
 
         set = exercise_session.exercise_sets.find_or_initialize_by(set_number: params[:set_number])
-        set.weight_kg = params[:weight_kg]
+        set.weight_kg = normalized_weight_for(set, params[:weight_kg])
         set.reps = params[:reps]
         set.is_warmup = ActiveModel::Type::Boolean.new.cast(params[:is_warmup])
         set.completed_at = Time.current
@@ -25,6 +25,15 @@ module Api
         else
           render json: { errors: set.errors.full_messages }, status: :unprocessable_entity
         end
+      end
+
+      private
+
+      def normalized_weight_for(set, incoming_weight)
+        return incoming_weight if incoming_weight.to_s.to_f.positive?
+        return set.weight_kg if set.weight_kg.to_s.to_f.positive?
+
+        nil
       end
     end
   end

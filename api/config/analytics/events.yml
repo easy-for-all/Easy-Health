@@ -62,6 +62,9 @@ events:
   workout_start_clicked:    { version: 1, sinks: [server, ga4, clarity] }
   workout_started:          { version: 1, sinks: [server, ga4, clarity] }
   workout_first_exercise_started: { version: 1, sinks: [server, ga4] }
+  exercise_weight_changed:  { version: 1, sinks: [server, ga4] }
+  exercise_set_completed:   { version: 1, sinks: [server, ga4] }
+  exercise_load_progressed: { version: 1, sinks: [server, ga4] }
   workout_exercise_completed:     { version: 1, sinks: [ga4] }
   workout_abandoned:        { version: 1, sinks: [server, ga4, clarity] }
   workout_completed:        { version: 1, sinks: [server, ga4] }

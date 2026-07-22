@@ -1,12 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
 import type { CreationMode } from "../types";
 
+type CreationOption = CreationMode | "photo" | "chat";
+
+const MODE_AVAILABILITY: Record<CreationOption, boolean> = {
+  quick: true,
+  complete: true,
+  photo: false,
+  chat: false,
+};
+
 interface ModeOption {
-  value: CreationMode | "photo" | "chat";
+  value: CreationOption;
   icon: string;
   title: string;
   badge?: { label: string; tone: "primary" | "good" };
@@ -29,13 +37,13 @@ const MODES: ModeOption[] = [
   },
   {
     value: "photo", icon: "📷", title: "Pela sua foto",
-    badge: { label: "Em breve", tone: "primary" },
+    badge: { label: "EM BREVE", tone: "primary" },
     text: "Use fotos para a IA entender melhor seu corpo e objetivo.",
-    hint: "", disabled: true,
+    hint: "",
   },
   {
     value: "chat", icon: "✨", title: "Conversar com a IA",
-    badge: { label: "Novo", tone: "good" },
+    badge: { label: "EM BREVE", tone: "primary" },
     text: "Conte sua rotina, objetivo e limitações em linguagem natural.",
     hint: "",
   },
@@ -43,7 +51,7 @@ const MODES: ModeOption[] = [
 
 export function CreateStart({ onSelect, onCancel }: { onSelect: (mode: CreationMode) => void; onCancel?: () => void }) {
   const [selected, setSelected] = useState<CreationMode>("quick");
-  const router = useRouter();
+  const safeSelected: CreationMode = MODE_AVAILABILITY[selected] ? selected : "quick";
 
   return (
     <div>
@@ -56,22 +64,20 @@ export function CreateStart({ onSelect, onCancel }: { onSelect: (mode: CreationM
 
       <div className="opts">
         {MODES.map((m) => {
-          const isSelected = !m.disabled && selected === m.value;
+          const isEnabled = MODE_AVAILABILITY[m.value];
+          const isSelected = isEnabled && safeSelected === m.value;
           return (
             <button
               key={m.value}
               type="button"
-              disabled={m.disabled}
+              disabled={!isEnabled}
+              aria-disabled={!isEnabled}
               onClick={() => {
-                if (m.disabled) return;
-                if (m.value === "chat") {
-                  router.push("/plan/ai-chat");
-                  return;
-                }
+                if (!isEnabled) return;
                 setSelected(m.value as CreationMode);
               }}
               className={`opt${isSelected ? " sel" : ""}`}
-              style={m.disabled ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+              style={!isEnabled ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
             >
               <span className="oicon" style={{ fontSize: 20 }} aria-hidden>{m.icon}</span>
               <span className="otxt">
@@ -109,11 +115,11 @@ export function CreateStart({ onSelect, onCancel }: { onSelect: (mode: CreationM
         className="wizard-cta"
         onClick={() => {
           trackOnboardingEvent("onboarding_flow_selected", {
-            onboardingFlow: selected,
+            onboardingFlow: safeSelected,
             stepName: "choose_flow",
-            metadata: { selected_option: selected },
+            metadata: { selected_option: safeSelected },
           });
-          onSelect(selected);
+          onSelect(safeSelected);
         }}
       >
         Continuar

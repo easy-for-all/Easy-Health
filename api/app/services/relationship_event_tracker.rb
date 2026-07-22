@@ -14,6 +14,9 @@ class RelationshipEventTracker
     first_workout_created
     workout_started
     first_workout_started
+    exercise_weight_changed
+    exercise_set_completed
+    exercise_load_progressed
     workout_completed
     first_workout_completed
     workout_completed_partial
@@ -46,6 +49,9 @@ class RelationshipEventTracker
     bioimpedance_added
     paywall_viewed
     checkout_started
+    checkout_session_created
+    checkout_failed
+    checkout_redirect_opened
     workout_strategy_created
     ai_workout_generated
     ai_workout_validation_failed

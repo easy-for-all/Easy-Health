@@ -241,6 +241,15 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
         expect(response).to have_http_status(:created)
         expect(UserEvent.where(user: user, event_name: "first_workout_started").count).to eq(0)
       end
+
+      it "does not let an in-progress session with default completion_status block first_workout_started" do
+        user.workout_sessions.create!(status: "in_progress")
+
+        authed_post "/api/v1/workout_sessions/start", as: user, params: { source: "web" }
+
+        expect(response).to have_http_status(:created)
+        expect(UserEvent.where(user: user, event_name: "first_workout_started").count).to eq(1)
+      end
     end
 
     describe "POST /api/v1/workout_sessions/:id/cancel" do
@@ -304,6 +313,17 @@ RSpec.describe "Api::V1::WorkoutSessions", type: :request do
         expect(UserEvent.exists?(user: user, event_name: "activation_first_workout_completed")).to be(false)
         # Funnel: the completion is marked eligible for the push.
         expect(UserEvent.exists?(user: user, event_name: "push_event_eligible")).to be(true)
+      end
+
+      it "does not let an unrelated in-progress session block first_workout_completed" do
+        user.workout_sessions.create!(status: "in_progress")
+        authed_post "/api/v1/workout_sessions/start", as: user, params: { source: "web" }
+        session_id = JSON.parse(response.body)["id"]
+
+        authed_post "/api/v1/workout_sessions/#{session_id}/finish", as: user, params: { fatigue_level: 3 }
+
+        expect(response).to have_http_status(:ok)
+        expect(UserEvent.exists?(user: user, event_name: "first_workout_completed")).to be(true)
       end
 
       it "posting the same set_number twice updates instead of duplicating (retry safety)" do

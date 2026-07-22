@@ -36,8 +36,9 @@ RSpec.describe LoadProgressionService do
       it "returns maintain with only one session" do
         create_session(log: build_log(weight: 15.0, reps: [ 10, 10, 10 ]))
         result = described_class.new(user: user, exercise_id: exercise_id).call
-        expect(result[:action]).to eq("maintain")
-        expect(result[:current_weight]).to be_nil
+        expect(result[:action]).to eq("recorded")
+        expect(result[:current_weight]).to eq(15.0)
+        expect(result[:reason]).to include("Carga registrada")
       end
     end
 
@@ -57,7 +58,7 @@ RSpec.describe LoadProgressionService do
         create_session(log: build_log(weight: 8.0, reps: [ 10, 10, 10 ]), days_ago: 3)
 
         result = described_class.new(user: user, exercise_id: exercise_id).call
-        expect(result[:suggested_weight]).to eq(8.5)
+        expect(result[:suggested_weight]).to eq(9)
       end
 
       it "uses correct increment for weights between 10-30kg" do
@@ -65,7 +66,7 @@ RSpec.describe LoadProgressionService do
         create_session(log: build_log(weight: 20.0, reps: [ 10, 10, 10 ]), days_ago: 3)
 
         result = described_class.new(user: user, exercise_id: exercise_id).call
-        expect(result[:suggested_weight]).to eq(21.25)
+        expect(result[:suggested_weight]).to eq(22.5)
       end
 
       it "uses 2.5kg increment for weights over 30kg" do
@@ -108,17 +109,17 @@ RSpec.describe LoadProgressionService do
     end
 
     context "with partial completion" do
-      it "maintains weight when last workout was partial" do
+      it "does not use a partial workout as progression history" do
         create_session(log: build_log(weight: 15.0, reps: [ 10, 10, 10 ]), days_ago: 7)
         create_session(
-          log: build_log(weight: 15.0, reps: [ 10, 10, 10 ]),
+          log: build_log(weight: 30.0, reps: [ 10, 10, 10 ]),
           completion_status: "completed_partial",
           days_ago: 3
         )
 
         result = described_class.new(user: user, exercise_id: exercise_id).call
-        expect(result[:action]).to eq("maintain")
-        expect(result[:reason]).to include("parcial")
+        expect(result[:action]).to eq("recorded")
+        expect(result[:current_weight]).to eq(15.0)
       end
     end
 
@@ -151,6 +152,76 @@ RSpec.describe LoadProgressionService do
 
         result = described_class.new(user: user, exercise_id: exercise_id).call
         expect(result[:action]).to eq("maintain")
+      end
+    end
+
+    context "with relational exercise sets" do
+      let(:exercise) { Exercise.create!(id: exercise_id, name: "Supino Reto", exercise_type: "musculacao", muscle_group: "chest") }
+
+      def create_relational_session(weight:, reps: [ 10, 10, 10 ], days_ago: 3)
+        workout_session = user.workout_sessions.create!(
+          status: "completed",
+          completion_status: "completed",
+          completed_at: days_ago.days.ago,
+          duration_minutes: 45,
+          exercise_logs: []
+        )
+        exercise_session = workout_session.exercise_sessions.create!(
+          exercise: exercise,
+          order_index: 0,
+          exercise_kind: "strength",
+          status: "completed",
+          planned_sets: reps.size,
+          started_at: days_ago.days.ago,
+          completed_at: days_ago.days.ago
+        )
+        reps.each_with_index do |rep, index|
+          exercise_session.exercise_sets.create!(
+            set_number: index + 1,
+            weight_kg: weight,
+            reps: rep,
+            is_warmup: false,
+            completed_at: days_ago.days.ago
+          )
+        end
+      end
+
+      it "celebrates a real weight increase from the completed relational sets" do
+        create_relational_session(weight: 25.0, days_ago: 7)
+        create_relational_session(weight: 30.0, days_ago: 3)
+
+        result = described_class.new(user: user, exercise_id: exercise_id).call
+
+        expect(result[:action]).to eq("progressed")
+        expect(result[:previous_weight]).to eq(25.0)
+        expect(result[:current_weight]).to eq(30.0)
+        expect(result[:reason]).to include("Boa evolução")
+      end
+
+      it "uses the last non-warmup set as the completed reference" do
+        workout_session = user.workout_sessions.create!(
+          status: "completed",
+          completion_status: "completed",
+          completed_at: 3.days.ago,
+          duration_minutes: 45,
+          exercise_logs: []
+        )
+        exercise_session = workout_session.exercise_sessions.create!(
+          exercise: exercise,
+          order_index: 0,
+          exercise_kind: "strength",
+          status: "completed",
+          planned_sets: 2,
+          started_at: 3.days.ago,
+          completed_at: 3.days.ago
+        )
+        exercise_session.exercise_sets.create!(set_number: 1, weight_kg: 10, reps: 10, is_warmup: true, completed_at: 3.days.ago)
+        exercise_session.exercise_sets.create!(set_number: 2, weight_kg: 30, reps: 8, is_warmup: false, completed_at: 3.days.ago)
+
+        result = described_class.new(user: user, exercise_id: exercise_id).call
+
+        expect(result[:action]).to eq("recorded")
+        expect(result[:current_weight]).to eq(30.0)
       end
     end
   end

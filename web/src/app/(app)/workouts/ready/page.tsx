@@ -15,6 +15,8 @@ import { ProgressiveProfilingSheet } from "@/features/workout/progressive-profil
 import { PrePermissionCard } from "@/features/notifications/pre-permission-card";
 import { AppPromoCard } from "@/features/app-promo/app-promo-card";
 import { PushFeedbackLink } from "@/features/notifications/push-feedback-link";
+import { useAuth } from "@/features/auth/auth-context";
+import { workoutStartCopy } from "@/features/workout/first-workout";
 import { muscleLabel } from "@/shared/utils/muscle-labels";
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay, WorkoutDayExercise } from "@/shared/types/workout";
@@ -31,6 +33,7 @@ export default function WorkoutReadyPage() {
 
 function WorkoutReadyContent() {
   const router = useRouter();
+  const { user } = useAuth();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [day, setDay] = useState<WorkoutDay | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,6 +113,7 @@ function WorkoutReadyContent() {
 
   const dayName = day?.custom_name || day?.name || "Seu treino";
   const rationale = plan?.ai_rationale || plan?.user_explanation;
+  const startCopy = workoutStartCopy(user);
 
   return (
     <div style={{ minHeight: "100svh", background: "var(--bg)", color: "var(--text)", padding: "52px 20px 100px" }}>
@@ -224,7 +228,7 @@ function WorkoutReadyContent() {
           cursor: "pointer", boxShadow: "var(--glow)", marginBottom: 10,
         }}
       >
-        ▶ Fazer meu primeiro treino
+        {startCopy}
       </button>
       <button
         onClick={handleViewFull}
