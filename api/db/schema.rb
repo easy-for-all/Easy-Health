@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_16_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_21_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -149,6 +149,48 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_120000) do
     t.index ["experiment_key", "user_id"], name: "index_analytics_experiments_unique_user", unique: true, where: "(user_id IS NOT NULL)"
     t.index ["experiment_key", "variant"], name: "idx_on_experiment_key_variant_60f2dbba2f"
     t.index ["user_id"], name: "index_analytics_experiment_assignments_on_user_id"
+  end
+
+  create_table "app_installations", force: :cascade do |t|
+    t.boolean "analytics_consent", default: false, null: false
+    t.string "app_build"
+    t.string "app_version"
+    t.datetime "created_at", null: false
+    t.string "device_manufacturer"
+    t.string "device_model"
+    t.bigint "device_token_id"
+    t.datetime "first_seen_at"
+    t.datetime "install_begin_at"
+    t.string "install_referrer"
+    t.string "installation_id", null: false
+    t.datetime "installed_at"
+    t.datetime "last_authenticated_at"
+    t.datetime "last_seen_at"
+    t.datetime "last_session_at"
+    t.string "locale"
+    t.boolean "native", default: false, null: false
+    t.string "notification_permission"
+    t.string "operating_system"
+    t.string "operating_system_version"
+    t.string "platform", default: "unknown", null: false
+    t.boolean "push_enabled", default: false, null: false
+    t.datetime "referrer_click_at"
+    t.string "referrer_source"
+    t.string "source"
+    t.string "timezone"
+    t.datetime "tracking_started_at"
+    t.integer "tracking_version"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.string "utm_campaign"
+    t.string "utm_medium"
+    t.string "utm_source"
+    t.index ["app_version"], name: "index_app_installations_on_app_version"
+    t.index ["device_token_id"], name: "index_app_installations_on_device_token_id"
+    t.index ["installation_id"], name: "index_app_installations_on_installation_id", unique: true
+    t.index ["last_seen_at"], name: "index_app_installations_on_last_seen_at"
+    t.index ["platform"], name: "index_app_installations_on_platform"
+    t.index ["user_id"], name: "index_app_installations_on_user_id"
   end
 
   create_table "blocked_emails", force: :cascade do |t|
@@ -1027,6 +1069,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_120000) do
   add_foreign_key "ai_usage_logs", "users"
   add_foreign_key "ai_workout_chat_conversations", "users"
   add_foreign_key "analytics_experiment_assignments", "users"
+  add_foreign_key "app_installations", "device_tokens"
+  add_foreign_key "app_installations", "users"
   add_foreign_key "client_permissions", "personal_client_relationships"
   add_foreign_key "coach_insights", "fitness_profiles"
   add_foreign_key "coach_insights", "users"

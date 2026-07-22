@@ -22,6 +22,7 @@ export interface AnalyticsContext {
   locale?: string;
   timezone?: string;
   anonymous_id: string;
+  installation_id?: string;
   session_id: string;
   user_id?: string;
 }
@@ -31,10 +32,15 @@ const SESSION_KEY = "eh_session_id";
 const LS_APP_VERSION = "eh_app_version";
 const LS_BUILD_NUMBER = "eh_build_number";
 const INSTALL_FLAG = "eh_installed";
+// Synchronous mirror of the installation_id (source of truth is
+// @capacitor/preferences on native — see installation.ts). Lets getAnalyticsContext
+// stay synchronous while still carrying the id once it has been resolved once.
+const LS_INSTALLATION_ID = "eh_installation_id";
 
 let currentUserId: string | undefined;
 let cachedAppVersion: string | undefined;
 let cachedBuildNumber: string | undefined;
+let cachedInstallationId: string | undefined;
 
 function hasWindow(): boolean {
   return typeof window !== "undefined";
@@ -60,18 +66,41 @@ function isMobileUA(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
 }
 
+// Robust native detection. The app is a Capacitor shell that loads the REMOTE
+// site in a WebView, so `isNativePlatform()` alone was the single point of
+// failure behind "Android counted as web" (see docs/android-tracking-audit.md).
+// We corroborate with getPlatform(), which returns "android"/"ios" natively and
+// "web" in the browser, and never fall through to "web" when either signal says
+// native.
+function nativePlatform(): "android" | "ios" | null {
+  try {
+    const p = Capacitor.getPlatform();
+    if (p === "android" || p === "ios") return p;
+    // Bridge asserts native but the platform string is unexpected — trust the
+    // bridge (Android is the only native target shipped) rather than "web".
+    if (Capacitor.isNativePlatform()) return "android";
+  } catch {
+    /* Capacitor unavailable — treat as web below */
+  }
+  return null;
+}
+
+export function isNativeApp(): boolean {
+  return nativePlatform() !== null;
+}
+
 export function detectPlatform(): Platform {
   if (!hasWindow()) return "unknown";
-  if (Capacitor.isNativePlatform()) {
-    return Capacitor.getPlatform() === "android" ? "android" : "unknown";
-  }
+  const native = nativePlatform();
+  if (native === "android") return "android";
+  if (native === "ios") return "unknown"; // iOS app not shipped — never "web"
   if (isStandaloneDisplay()) return "pwa";
   return "web";
 }
 
 export function detectAppSurface(): AppSurface {
   if (!hasWindow()) return "unknown";
-  if (Capacitor.isNativePlatform()) return "native_shell";
+  if (isNativeApp()) return "native_shell";
   if (isStandaloneDisplay()) {
     return "installed_pwa";
   }
@@ -199,6 +228,18 @@ function getTimezone(): string | undefined {
   }
 }
 
+// Synchronous accessors for the installation_id mirror. The async source of
+// truth lives in installation.ts (@capacitor/preferences on native); it calls
+// setCachedInstallationId once resolved so events can carry the id.
+export function getCachedInstallationId(): string | undefined {
+  return cachedInstallationId ?? readLocalStorage(LS_INSTALLATION_ID) ?? undefined;
+}
+
+export function setCachedInstallationId(id: string): void {
+  cachedInstallationId = id;
+  writeLocalStorage(LS_INSTALLATION_ID, id);
+}
+
 export function getAnalyticsContext(): AnalyticsContext {
   return {
     platform: detectPlatform(),
@@ -209,6 +250,7 @@ export function getAnalyticsContext(): AnalyticsContext {
     locale: getLocale(),
     timezone: getTimezone(),
     anonymous_id: getAnonymousId(),
+    installation_id: getCachedInstallationId(),
     session_id: getSessionId(),
     user_id: currentUserId,
   };

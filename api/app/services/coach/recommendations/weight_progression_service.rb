@@ -74,10 +74,21 @@ module Coach
       end
 
       def session_count(exercise_id)
-        @user.workout_sessions
+        relational_session_ids = ExerciseSession
+          .joins(:workout_session)
+          .where(exercise_id: exercise_id, status: "completed")
+          .where(workout_sessions: { user_id: @user.id, status: "completed", completion_status: "completed" })
+          .where("workout_sessions.completed_at > ?", 60.days.ago)
+          .distinct
+          .pluck(:workout_session_id)
+
+        legacy_scope = @user.workout_sessions
+          .where(status: "completed", completion_status: "completed")
           .where("exercise_logs @> ?", [{ exercise_id: exercise_id }].to_json)
           .where("completed_at > ?", 60.days.ago)
-          .count
+        legacy_scope = legacy_scope.where.not(id: relational_session_ids) if relational_session_ids.any?
+
+        relational_session_ids.size + legacy_scope.count
       end
 
       def calculate_confidence(exercise_id)

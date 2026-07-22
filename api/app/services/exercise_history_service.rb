@@ -18,7 +18,7 @@ class ExerciseHistoryService
     @last_completed_session ||= ExerciseSession
       .joins(:workout_session)
       .where(exercise_id: @exercise_id, status: "completed")
-      .where(workout_sessions: { user_id: @user.id, status: "completed" })
+      .where(workout_sessions: { user_id: @user.id, status: "completed", completion_status: "completed" })
       .order(completed_at: :desc)
       .first
   end
@@ -111,7 +111,7 @@ class ExerciseHistoryService
     relational_best = ExerciseSet
       .joins(exercise_session: :workout_session)
       .where(exercise_sessions: { exercise_id: @exercise_id }, is_warmup: false)
-      .where(workout_sessions: { user_id: @user.id, status: "completed" })
+      .where(workout_sessions: { user_id: @user.id, status: "completed", completion_status: "completed" })
       .where.not(weight_kg: nil)
       .order(weight_kg: :desc, completed_at: :desc)
       .first
@@ -129,7 +129,7 @@ class ExerciseHistoryService
 
   def legacy_session
     @legacy_session ||= @user.workout_sessions
-      .where(status: "completed")
+      .where(status: "completed", completion_status: "completed")
       .where("exercise_logs @> ?", [ { exercise_id: @exercise_id } ].to_json)
       .order(completed_at: :desc)
       .first
@@ -148,7 +148,7 @@ class ExerciseHistoryService
     best = nil
 
     @user.workout_sessions
-      .where(status: "completed")
+      .where(status: "completed", completion_status: "completed")
       .where("exercise_logs @> ?", [ { exercise_id: @exercise_id } ].to_json)
       .find_each do |session|
         log = Array(session.exercise_logs).find { |l| l["exercise_id"].to_i == @exercise_id }

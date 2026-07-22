@@ -48,6 +48,10 @@ jobs:
         working-directory: web
         run: |
           cp android-config/app-build.gradle android/app/build.gradle
+          # Root build.gradle carries the Firebase Crashlytics/Performance Gradle
+          # plugin classpaths (applied in app/build.gradle only when
+          # google-services.json is present). Must be deployed for those to load.
+          cp android-config/build.gradle android/build.gradle
           cp android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           cp android-config/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
           # Push notifications: manifest (POST_NOTIFICATIONS + FCM meta-data) and

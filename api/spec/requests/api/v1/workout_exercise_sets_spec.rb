@@ -32,6 +32,15 @@ RSpec.describe "Api::V1::WorkoutExerciseSets", type: :request do
       expect(exercise_session.exercise_sets.count).to eq(1)
     end
 
+    it "does not let a zero or missing retry overwrite a valid recorded load" do
+      path = "/api/v1/workout_sessions/#{workout_session.id}/exercise_sessions/#{exercise_session.id}/sets"
+      authed :post, path, params: { set_number: 1, weight_kg: 25, reps: 10, is_warmup: false }
+      authed :post, path, params: { set_number: 1, weight_kg: 0, reps: 10, is_warmup: false }
+      authed :post, path, params: { set_number: 1, reps: 10, is_warmup: false }
+
+      expect(exercise_session.exercise_sets.sole.weight_kg).to eq(25.0)
+    end
+
     it "returns 404 for an exercise_session belonging to another user" do
       other_session = create(:user).workout_sessions.create!(status: "in_progress")
       other_exercise_session = other_session.exercise_sessions.create!(exercise: exercise, order_index: 0, exercise_kind: "strength", started_at: Time.current)

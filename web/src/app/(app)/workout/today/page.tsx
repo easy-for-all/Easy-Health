@@ -522,8 +522,19 @@ function WorkoutTodayContent() {
   function updateCurrentSetWeight(exercise: WorkoutDayExercise, weight: string) {
     const state = runtimeFor(exerciseRuntime, exercise);
     const weightBySet = [...state.weight_by_set];
+    const previousWeight = Number(weightBySet[currentSet - 1]) || 0;
+    const currentWeight = Number(weight) || 0;
     weightBySet[currentSet - 1] = weight;
     updateRuntime(exercise.workout_day_exercise_id, { weight_by_set: weightBySet });
+    if (previousWeight !== currentWeight) {
+      trackEvent(EVENTS.EXERCISE_WEIGHT_CHANGED, {
+        exercise_id: exercise.exercise_id,
+        workout_day_exercise_id: exercise.workout_day_exercise_id,
+        previous_weight: previousWeight,
+        current_weight: currentWeight,
+        source: "workout_today",
+      });
+    }
   }
 
   function changePlannedSets(exercise: WorkoutDayExercise, nextSets: number) {
@@ -624,6 +635,8 @@ function WorkoutTodayContent() {
       return;
     }
     setWeightError(false);
+    const currentWeightNumber = Number(currentWeight) || 0;
+    const previousReferenceWeight = Number(exercise.last_weight_kg) || 0;
 
     const repsBySet = [...state.reps_by_set];
     repsBySet[currentSet - 1] ||= exercise.reps;
@@ -644,6 +657,23 @@ function WorkoutTodayContent() {
     }
 
     updateRuntime(exercise.workout_day_exercise_id, { reps_by_set: repsBySet, weight_by_set: weightBySet });
+    trackEvent(EVENTS.EXERCISE_SET_COMPLETED, {
+      exercise_id: exercise.exercise_id,
+      workout_day_exercise_id: exercise.workout_day_exercise_id,
+      set_number: currentSet,
+      current_weight: currentWeightNumber,
+      source: "workout_today",
+    });
+    if (!isCurrentWarmupSet(state, currentSet) && previousReferenceWeight > 0 && currentWeightNumber > previousReferenceWeight) {
+      trackEvent(EVENTS.EXERCISE_LOAD_PROGRESSED, {
+        exercise_id: exercise.exercise_id,
+        workout_day_exercise_id: exercise.workout_day_exercise_id,
+        previous_weight: previousReferenceWeight,
+        current_weight: currentWeightNumber,
+        progression_type: "completed_set",
+        source: "workout_today",
+      });
+    }
 
     navigator.vibrate?.(80);
     setSetFlash(true);
@@ -2066,7 +2096,13 @@ function OverviewScreen({
                         {suggestion === "loading" && <p className="mt-0.5 text-xs text-slate-500">Calculando...</p>}
                         {suggestion && suggestion !== "loading" && suggestion.action && (
                           <p className={`mt-0.5 text-xs font-semibold ${suggestion.action === "increase" ? "text-green-400" : "text-slate-400"}`}>
-                            {suggestion.action === "increase" ? `↑ Teste ${suggestion.suggested_weight}kg hoje` : "→ Mantenha a carga"}
+                            {suggestion.action === "increase"
+                              ? `↑ Teste ${suggestion.suggested_weight}kg hoje`
+                              : suggestion.action === "progressed"
+                                ? "✓ Boa evolução registrada"
+                                : suggestion.action === "recorded"
+                                  ? "✓ Carga registrada"
+                                  : "→ Mantenha a carga"}
                           </p>
                         )}
                       </div>
@@ -2582,7 +2618,7 @@ function DoneScreen({
               weight_kg: firstWeight(state.weight_by_set),
               weight_by_set: state.weight_by_set.map((value) => value ? Number(value) : null),
               is_warmup_by_set: state.warmup_by_set ?? [],
-              planned_sets: exercise.sets,
+              planned_sets: state.planned_sets,
               sets: state.planned_sets,
               reps: state.reps_by_set,
               rest_seconds: state.rest_seconds,
@@ -2679,7 +2715,7 @@ function DoneScreen({
             weight_kg: firstWeight(state.weight_by_set),
             weight_by_set: state.weight_by_set.map((value) => value ? Number(value) : null),
             is_warmup_by_set: state.warmup_by_set ?? [],
-            planned_sets: exercise.sets,
+            planned_sets: state.planned_sets,
             sets: state.planned_sets,
             reps: state.reps_by_set,
             rest_seconds: state.rest_seconds,
@@ -3185,6 +3221,10 @@ function getHistoricalMaxWeight(sessions: WorkoutSession[], exerciseId: number):
     }
   }
   return max;
+}
+
+function isCurrentWarmupSet(state: ExerciseRuntime, currentSet: number): boolean {
+  return state.warmup_by_set?.[currentSet - 1] ?? false;
 }
 
 function firstWeight(weights: string[]) {

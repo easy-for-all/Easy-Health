@@ -14,7 +14,7 @@ class BlockLoadContextService
   def self.adjust(base_weight, block_type)
     return base_weight if base_weight.blank?
 
-    (base_weight.to_f * FACTORS.fetch(block_type, 1.0)).round(1)
+    round_to_supported_increment(base_weight.to_f * FACTORS.fetch(block_type, 1.0))
   end
 
   def self.reason_suffix(block_type)
@@ -22,5 +22,17 @@ class BlockLoadContextService
     return nil if factor == 1.0
 
     "Ajustado para bloco: #{block_type} (~#{(factor * 100).round}% da carga isolada)"
+  end
+
+  def self.round_to_supported_increment(value)
+    step = if value >= 60
+      5.0
+    elsif value >= 20
+      2.5
+    else
+      1.0
+    end
+    rounded = (value / step).round * step
+    rounded % 1 == 0 ? rounded.to_i : rounded.round(1)
   end
 end

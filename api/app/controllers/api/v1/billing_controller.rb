@@ -3,16 +3,41 @@ module Api
     class BillingController < BaseController
       VALID_PLANS = %w[pro_monthly pro_yearly].freeze
 
-      def checkout
-        plan = params[:plan]
-        unless VALID_PLANS.include?(plan)
-          return render_error("Invalid plan. Must be one of: #{VALID_PLANS.join(', ')}")
-        end
+      prepend_before_action :render_authentication_required, only: [:checkout], unless: :user_signed_in?
 
-        checkout_url = StripeCheckoutService.call(user: current_user, plan: plan)
-        render json: { checkout_url: checkout_url }
-      rescue Stripe::StripeError => e
-        render_error(e.message, status: :bad_gateway)
+      def checkout
+        plan = params[:plan].to_s
+        platform = billing_platform
+
+        result = StripeCheckoutService.call(
+          user: current_user,
+          plan: plan,
+          request_id: request.request_id,
+          platform: platform
+        )
+
+        UserEventService.track(
+          user: current_user,
+          event_name: "checkout_session_created",
+          metadata: { plan_type: plan, platform: platform, request_id: request.request_id },
+          idempotency_key: "checkout_session_created:#{current_user.id}:#{result[:session_id]}"
+        )
+
+        render json: result
+      rescue StripeCheckoutService::BillingError => e
+        track_checkout_failure(plan: plan, platform: platform, code: e.code)
+        report_billing_exception(e) unless e.code == "billing_invalid_plan"
+        log_billing_failure(plan: plan, platform: platform, error: e)
+        render_billing_error(code: e.code, message: e.public_message, status: e.status)
+      rescue StandardError => e
+        track_checkout_failure(plan: plan, platform: platform, code: "billing_checkout_creation_failed")
+        report_billing_exception(e)
+        log_billing_failure(plan: plan, platform: platform, error: e, code: "billing_checkout_creation_failed")
+        render_billing_error(
+          code: "billing_checkout_creation_failed",
+          message: "Não foi possível iniciar o checkout.",
+          status: :bad_gateway
+        )
       end
 
       def portal
@@ -86,6 +111,61 @@ module Api
       end
 
       private
+
+      def render_authentication_required
+        render_billing_error(
+          code: "authentication_required",
+          message: "Sua sessão expirou. Entre novamente para continuar.",
+          status: :unauthorized
+        )
+      end
+
+      def render_billing_error(code:, message:, status:)
+        render json: {
+          error: {
+            code: code,
+            message: message,
+            request_id: request.request_id
+          },
+          error_code: code,
+          message: message
+        }, status: status
+      end
+
+      def billing_platform
+        params[:platform].presence ||
+          request.headers["X-EasyHealth-Platform"].presence ||
+          (request.user_agent.to_s.include?("; wv") ? "android_webview" : "web")
+      end
+
+      def track_checkout_failure(plan:, platform:, code:)
+        return unless current_user
+
+        UserEventService.track(
+          user: current_user,
+          event_name: "checkout_failed",
+          metadata: { plan_type: plan, platform: platform, error_code: code, request_id: request.request_id },
+          idempotency_key: "checkout_failed:#{current_user.id}:#{request.request_id}"
+        )
+      end
+
+      def report_billing_exception(error)
+        Sentry.capture_exception(error) if defined?(Sentry) && Sentry.initialized?
+      end
+
+      def log_billing_failure(plan:, platform:, error:, code: nil)
+        payload = {
+          request_id: request.request_id,
+          user_id: current_user&.id,
+          plan: plan,
+          platform: platform,
+          stage: "checkout_controller",
+          result: "failure",
+          error_code: code || (error.respond_to?(:code) ? error.code : nil),
+          exception_class: error.class.name
+        }
+        Rails.logger.error("[BillingCheckout] #{payload.compact.to_json}")
+      end
 
       def billing_sub_json(sub)
         {

@@ -7,6 +7,7 @@ import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { OnboardingAnalyticsSection } from "./onboarding-analytics";
 import { PlatformComparisonSection } from "./platform-comparison-section";
+import { AndroidInstallationsSection } from "./android-installations-section";
 import { PushActivationSection } from "./push/push-activation-section";
 import { PushDiagnosticsSection } from "./push/push-diagnostics-section";
 import type { OnboardingAnalytics } from "./onboarding-analytics/types";
@@ -327,6 +328,8 @@ export default function AdminPage() {
         </section>
 
         <OnboardingAnalyticsSection />
+
+        <AndroidInstallationsSection />
 
         <PlatformComparisonSection />
 

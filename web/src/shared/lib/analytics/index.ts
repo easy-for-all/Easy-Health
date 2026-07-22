@@ -11,6 +11,13 @@ import {
   isKnownEvent,
 } from "./taxonomy";
 import { enqueueServerEvent, isServerEvent } from "./server";
+import { registerInstallation } from "./installation";
+import {
+  firebaseAnalyticsActive,
+  logFirebaseEvent,
+  setFirebaseScreen,
+  setFirebaseUserId,
+} from "./firebase";
 
 declare global {
   interface Window {
@@ -49,9 +56,15 @@ export function trackEvent(eventName: string, params?: EventParams): void {
   }
   if (!sinksEnabled()) return;
 
-  // GA4 (behavioural). Preserve legacy behaviour: any name is forwarded.
-  if (typeof window.gtag === "function") {
+  // Destination routing (anti-duplication): Web/PWA -> GA4 (gtag). Native Android
+  // with Firebase Analytics active -> Firebase native ONLY, and GA4 is suppressed
+  // so the same event is not counted twice (WebView gtag + native SDK).
+  const routeToFirebase = firebaseAnalyticsActive();
+  if (typeof window.gtag === "function" && !routeToFirebase) {
     window.gtag("event", eventName, params);
+  }
+  if (routeToFirebase) {
+    void logFirebaseEvent(eventName, params);
   }
 
   if (isKnownEvent(eventName)) {
@@ -90,6 +103,9 @@ export function trackOnce(key: string, eventName: string, params?: EventParams):
 }
 
 export function trackScreenView(screen: string, params?: EventParams): void {
+  // Native screen tracking uses Firebase's dedicated setCurrentScreen; trackEvent
+  // handles GA4 (web) vs Firebase-event (native) routing for the screen_view event.
+  if (firebaseAnalyticsActive()) void setFirebaseScreen(screen);
   trackEvent("screen_view", { screen, ...params });
 }
 
@@ -97,6 +113,12 @@ export function trackScreenView(screen: string, params?: EventParams): void {
 export function identifyUser(userId: string | number): void {
   const id = String(userId);
   setUserId(id);
+  // Re-register the installation now that the session cookie is present, so the
+  // backend associates this install to the user (last_authenticated_at). Safe on
+  // web/PWA too — it no-ops off-native or when the feature flag is off.
+  void registerInstallation();
+  // Native: set a pseudonymous internal user id on Firebase (never email / installation_id).
+  void setFirebaseUserId(id);
   if (typeof window === "undefined" || !sinksEnabled()) return;
   if (typeof window.gtag === "function") {
     window.gtag("set", { user_id: id });
@@ -113,6 +135,7 @@ export function identifyUser(userId: string | number): void {
 // On logout: drop the user_id but KEEP anonymous_id (same install/visitor).
 export function resetIdentity(): void {
   setUserId(undefined);
+  void setFirebaseUserId(null); // drop Firebase user id; installation_id is preserved
   if (typeof window !== "undefined" && typeof window.gtag === "function" && sinksEnabled()) {
     window.gtag("set", { user_id: null });
   }
@@ -123,6 +146,12 @@ export function startAnalyticsSession(): string {
 }
 
 export { getAnalyticsContext };
+export {
+  getInstallationId,
+  getInstallationIdSync,
+  registerInstallation,
+  refreshInstallation,
+} from "./installation";
 
 // send_to labels: get from Google Ads -> Conversions -> select action -> Tag setup
 export const CONVERSIONS = {
@@ -151,9 +180,15 @@ export const EVENTS = {
   ONBOARDING_COMPLETED: "onboarding_completed",
   WORKOUT_CREATED:      "workout_created",
   WORKOUT_STARTED:      "workout_started",
+  EXERCISE_WEIGHT_CHANGED: "exercise_weight_changed",
+  EXERCISE_SET_COMPLETED: "exercise_set_completed",
+  EXERCISE_LOAD_PROGRESSED: "exercise_load_progressed",
   WORKOUT_COMPLETED:    "workout_completed",
   PAYWALL_VIEWED:       "paywall_viewed",
   CHECKOUT_STARTED:     "checkout_started",
+  CHECKOUT_SESSION_CREATED: "checkout_session_created",
+  CHECKOUT_FAILED:      "checkout_failed",
+  CHECKOUT_REDIRECT_OPENED: "checkout_redirect_opened",
   SUBSCRIPTION_CREATED: "subscription_created",
   AI_TIP_VIEWED:        "ai_tip_viewed",
   AI_WORKOUT_GENERATED: "ai_workout_generated",

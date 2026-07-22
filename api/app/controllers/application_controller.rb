@@ -44,6 +44,7 @@ class ApplicationController < ActionController::API
   end
 
   def user_json(user)
+    completed_workouts_count = completed_workouts_count_for(user)
     {
       id: user.id,
       name: user.name,
@@ -51,6 +52,8 @@ class ApplicationController < ActionController::API
       admin: user.admin?,
       created_at: user.created_at,
       first_workout_completed_at: user.first_workout_completed_at,
+      completed_workouts_count: completed_workouts_count,
+      has_completed_workout: completed_workouts_count.positive?,
       avatar_url: blob_path(user.avatar),
       billing_status: user.billing_status,
       account_type: user.account_type,
@@ -58,5 +61,9 @@ class ApplicationController < ActionController::API
       community_enabled: user.community_enabled,
       referral_code: user.referral_code
     }
+  end
+
+  def completed_workouts_count_for(user)
+    user.workout_sessions.where(status: "completed", completion_status: "completed").count
   end
 end

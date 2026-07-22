@@ -1,6 +1,7 @@
 // Google Consent Mode v2 (LGPD). Analytics/ads storage default to "denied";
 // granted only after the visitor opts in. Call setDefaultConsent() BEFORE the
 // gtag config runs so no cookie is written without consent.
+import { setFirebaseAnalyticsConsent } from "./firebase";
 
 type ConsentState = "granted" | "denied";
 const CONSENT_KEY = "eh_consent";
@@ -45,6 +46,8 @@ export function updateConsent(state: ConsentState): void {
     ad_personalization: state,
     analytics_storage: state,
   });
+  // Mirror consent onto native Firebase Analytics collection (no-op on web).
+  void setFirebaseAnalyticsConsent(state === "granted");
 }
 
 export function hasDecidedConsent(): boolean {

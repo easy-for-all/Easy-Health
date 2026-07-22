@@ -12,6 +12,13 @@ module Api
         def platform_comparison
           render json: ::Analytics::PlatformComparison.new.call
         end
+
+        # GET /api/v1/admin/analytics/android_installations
+        # "APP ANDROID" (Fase 23) — the real installed base from app_installations,
+        # separating installations / devices / users / sessions.
+        def android_installations
+          render json: ::Analytics::AndroidInstallations.new.call
+        end
       end
     end
   end

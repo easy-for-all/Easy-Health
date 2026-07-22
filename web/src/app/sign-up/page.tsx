@@ -5,8 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
+import { checkoutErrorCode, checkoutErrorMessage, reportCheckoutException } from "@/features/billing/checkout-errors";
 import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
-import { trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
+import { checkoutEventParams, trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
 import { Capacitor } from "@capacitor/core";
 import {
   googleAuthWebUrl,
@@ -47,6 +48,8 @@ const PLAN_COPY: Record<PendingPlan, {
     note: "Equivale a R$ 9,90/mês",
   },
 };
+
+type CheckoutResponse = { checkout_url: string; session_id?: string };
 
 export default function SignUpPage() {
   const { signUp } = useAuth();
@@ -159,13 +162,27 @@ export default function SignUpPage() {
       trackConversion(CONVERSIONS.SIGNUP);
       const pending = getPendingPlan();
       if (pending) {
-        clearPendingPlan();
         trackCheckoutStarted(pending, "signup_pending_plan");
-        const { checkout_url } = await api.post<{ checkout_url: string }>(
-          "/api/v1/billing/checkout",
-          { plan: pending }
-        );
-        window.location.href = checkout_url;
+        try {
+          const { checkout_url, session_id } = await api.post<CheckoutResponse>(
+            "/api/v1/billing/checkout",
+            { plan: pending }
+          );
+          clearPendingPlan();
+          trackEvent(EVENTS.CHECKOUT_SESSION_CREATED, {
+            ...checkoutEventParams(pending, "signup_pending_plan"),
+            session_id,
+          });
+          trackEvent(EVENTS.CHECKOUT_REDIRECT_OPENED, checkoutEventParams(pending, "signup_pending_plan"));
+          window.location.href = checkout_url;
+        } catch (checkoutError) {
+          reportCheckoutException(checkoutError, { plan: pending, source: "signup_pending_plan" });
+          trackEvent(EVENTS.CHECKOUT_FAILED, {
+            ...checkoutEventParams(pending, "signup_pending_plan"),
+            error_code: checkoutErrorCode(checkoutError),
+          });
+          setError(checkoutErrorMessage(checkoutError));
+        }
       } else {
         router.push("/onboarding");
       }

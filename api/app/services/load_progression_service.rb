@@ -3,153 +3,256 @@ class LoadProgressionService
   MAX_FATIGUE_FOR_INCREASE = 3
   MAX_DAYS_SINCE_LAST = 10
 
+  Performance = Struct.new(
+    :completed_at,
+    :weight,
+    :total_reps,
+    :planned_sets,
+    :completed_sets,
+    :fatigue_level,
+    :completion_status,
+    :workout_session_id,
+    keyword_init: true
+  )
+
   def initialize(user:, exercise_id:)
     @user = user
     @exercise_id = exercise_id.to_i
-    @sessions = fetch_relevant_sessions
+    @performances = fetch_relevant_performances
   end
 
   def call
-    return insufficient_data if @sessions.length < SESSIONS_NEEDED
+    return insufficient_data if @performances.empty?
 
-    last = @sessions.first
-    prev = @sessions.second
+    last = @performances.first
+    return insufficient_data unless positive_weight?(last.weight)
+    return first_record(last.weight) if @performances.length < SESSIONS_NEEDED
 
-    last_log = find_exercise_log(last)
-    prev_log = find_exercise_log(prev)
-    return insufficient_data unless last_log && prev_log
+    prev = @performances.second
+    return first_record(last.weight) unless prev && positive_weight?(prev.weight)
 
-    last_weight = avg_weight(last_log)
-    last_reps = total_reps(last_log)
-    prev_reps = total_reps(prev_log)
-    last_planned_sets = last_log["planned_sets"].to_i
-    last_completed_sets = completed_sets(last_log)
-    last_fatigue = last.fatigue_level.to_i
-    last_completion = last.completion_status || "completed"
-    days_since = (Date.today - last.completed_at.to_date).to_i
+    days_since = (Date.current - last.completed_at.to_date).to_i
+    return too_long_since(last.weight) if days_since > MAX_DAYS_SINCE_LAST
+    return high_fatigue(last.weight) if last.fatigue_level.to_i >= 4
+    return sets_incomplete(last.weight) if last.planned_sets.to_i > 0 && last.completed_sets.to_i < last.planned_sets.to_i
+    return progressed(last.weight, prev.weight) if last.weight.to_f > prev.weight.to_f
+    return reduced_load(last.weight, prev.weight) if last.weight.to_f < prev.weight.to_f
+    return reps_dropped(last.weight) if last.total_reps.to_i < prev.total_reps.to_i
 
-    return too_long_since if days_since > MAX_DAYS_SINCE_LAST
-    return high_fatigue(last_weight) if last_fatigue >= 4
-    return partial_workout(last_weight) if last_completion != "completed"
-    return reps_dropped(last_weight) if last_reps < prev_reps
-    return sets_incomplete(last_weight) if last_planned_sets > 0 && last_completed_sets < last_planned_sets
-
-    if consistent_performance?(last_log, prev_log)
-      suggest_increase(last_weight)
+    if consistent_performance?(last, prev)
+      suggest_increase(last.weight)
     else
-      maintain(last_weight)
+      maintain(last.weight)
     end
   end
 
   private
 
-  def fetch_relevant_sessions
-    @user.workout_sessions
-      .where(status: "completed")
+  def fetch_relevant_performances
+    relational = relational_performances
+    relational_session_ids = relational.map(&:workout_session_id)
+    legacy = legacy_performances(except_session_ids: relational_session_ids)
+
+    (relational + legacy)
+      .sort_by(&:completed_at)
+      .reverse
+      .first(5)
+  end
+
+  def relational_performances
+    ExerciseSession
+      .joins(:workout_session)
+      .includes(:exercise_sets, :workout_session)
+      .where(exercise_id: @exercise_id, status: "completed")
+      .where(workout_sessions: { user_id: @user.id, status: "completed", completion_status: "completed" })
+      .order("workout_sessions.completed_at DESC")
+      .limit(5)
+      .filter_map { |exercise_session| performance_from_exercise_session(exercise_session) }
+  end
+
+  def legacy_performances(except_session_ids:)
+    scope = @user.workout_sessions
+      .where(status: "completed", completion_status: "completed")
       .where("exercise_logs @> ?", [{ exercise_id: @exercise_id }].to_json)
       .order(completed_at: :desc)
       .limit(5)
+    scope = scope.where.not(id: except_session_ids) if except_session_ids.any?
+
+    scope.filter_map { |session| performance_from_legacy_session(session) }
   end
 
-  def find_exercise_log(session)
-    (session.exercise_logs || []).find { |log| log["exercise_id"].to_i == @exercise_id }
+  def performance_from_exercise_session(exercise_session)
+    sets = exercise_session.exercise_sets.sort_by(&:set_number)
+    weight = representative_weight_from_sets(sets)
+    return nil unless positive_weight?(weight)
+
+    Performance.new(
+      completed_at: exercise_session.workout_session.completed_at,
+      weight: weight.to_f,
+      total_reps: sets.sum { |set| set.reps.to_i },
+      planned_sets: exercise_session.planned_sets.to_i,
+      completed_sets: sets.count,
+      fatigue_level: exercise_session.workout_session.fatigue_level,
+      completion_status: exercise_session.workout_session.completion_status,
+      workout_session_id: exercise_session.workout_session_id
+    )
   end
 
-  def avg_weight(log)
-    weights = (log["weight_by_set"] || [log["weight_kg"]]).compact.map(&:to_f).reject(&:zero?)
-    weights.any? ? (weights.sum / weights.size).round(1) : 0.0
+  def performance_from_legacy_session(session)
+    log = Array(session.exercise_logs).find { |entry| entry["exercise_id"].to_i == @exercise_id }
+    return nil unless log
+
+    entry = ExerciseLogEntry.new(log, completed_at: session.completed_at)
+    weight = entry.last_used_weight
+    return nil unless positive_weight?(weight)
+
+    Performance.new(
+      completed_at: session.completed_at,
+      weight: weight.to_f,
+      total_reps: entry.total_reps,
+      planned_sets: entry.planned_sets.to_i,
+      completed_sets: entry.completed_sets_count,
+      fatigue_level: session.fatigue_level,
+      completion_status: session.completion_status,
+      workout_session_id: session.id
+    )
   end
 
-  def total_reps(log)
-    reps = log["reps"] || []
-    reps.map(&:to_i).sum
+  def representative_weight_from_sets(sets)
+    working = sets.select { |set| !set.is_warmup && positive_weight?(set.weight_kg) }
+    fallback = sets.select { |set| positive_weight?(set.weight_kg) }
+
+    (working.last || fallback.last)&.weight_kg
   end
 
-  def completed_sets(log)
-    reps = log["reps"] || []
-    reps.map(&:to_i).count(&:positive?)
+  def positive_weight?(value)
+    value.to_f.positive?
   end
 
-  def consistent_performance?(last_log, prev_log)
-    last_reps = total_reps(last_log)
-    prev_reps = total_reps(prev_log)
-    last_weight = avg_weight(last_log)
-    prev_weight = avg_weight(prev_log)
-
-    last_reps >= prev_reps && last_weight >= prev_weight
+  def consistent_performance?(last, prev)
+    last.total_reps.to_i >= prev.total_reps.to_i && last.weight.to_f >= prev.weight.to_f
   end
 
   def suggest_increase(current_weight)
-    increment = current_weight < 10 ? 0.5 : current_weight < 30 ? 1.25 : 2.5
-    suggested = (current_weight + increment).round(2)
+    suggested = round_to_supported_increment(current_weight.to_f + increment_for(current_weight))
     {
       action: "increase",
+      progression_type: "increase_suggested",
       suggested_weight: suggested,
-      current_weight: current_weight,
-      reason: "Execução consistente nas últimas #{SESSIONS_NEEDED} sessões. Teste #{suggested}kg mantendo controle total.",
+      current_weight: current_weight.to_f,
+      reason: "Boa consistência! Você manteve #{format_weight(current_weight)} com controle. Teste #{format_weight(suggested)} no próximo treino.",
+    }
+  end
+
+  def progressed(current_weight, previous_weight)
+    {
+      action: "progressed",
+      progression_type: "progressed",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      previous_weight: previous_weight.to_f,
+      reason: "Boa evolução! Você aumentou de #{format_weight(previous_weight)} para #{format_weight(current_weight)} neste exercício.",
+    }
+  end
+
+  def first_record(current_weight)
+    {
+      action: "recorded",
+      progression_type: "first_record",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      reason: "Carga registrada. Usaremos #{format_weight(current_weight)} como referência nos próximos treinos.",
     }
   end
 
   def maintain(current_weight)
     {
       action: "maintain",
-      suggested_weight: current_weight,
-      current_weight: current_weight,
-      reason: "Mantenha #{current_weight}kg e foque em execução limpa.",
+      progression_type: "maintain",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      reason: "Boa consistência! Mantenha #{format_weight(current_weight)} com controle.",
     }
   end
 
   def high_fatigue(current_weight)
     {
       action: "maintain",
-      suggested_weight: current_weight,
-      current_weight: current_weight,
-      reason: "Fadiga elevada no último treino. Mantenha #{current_weight}kg e priorize recuperação.",
-    }
-  end
-
-  def partial_workout(current_weight)
-    {
-      action: "maintain",
-      suggested_weight: current_weight,
-      current_weight: current_weight,
-      reason: "Último treino foi parcial. Mantenha #{current_weight}kg e conclua o treino completo antes de progredir.",
+      progression_type: "fatigue",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      reason: "Fadiga elevada no último treino. Mantenha #{format_weight(current_weight)} e priorize recuperação.",
     }
   end
 
   def reps_dropped(current_weight)
     {
       action: "maintain",
-      suggested_weight: current_weight,
-      current_weight: current_weight,
-      reason: "As repetições caíram em relação à sessão anterior. Consolide #{current_weight}kg antes de aumentar.",
+      progression_type: "reps_dropped",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      reason: "As repetições caíram em relação à sessão anterior. Consolide #{format_weight(current_weight)} antes de aumentar.",
+    }
+  end
+
+  def reduced_load(current_weight, previous_weight)
+    {
+      action: "maintain",
+      progression_type: "reduced",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      previous_weight: previous_weight.to_f,
+      reason: "Carga ajustada de #{format_weight(previous_weight)} para #{format_weight(current_weight)}. Mantenha uma execução segura.",
     }
   end
 
   def sets_incomplete(current_weight)
     {
       action: "maintain",
-      suggested_weight: current_weight,
-      current_weight: current_weight,
-      reason: "Séries incompletas no último treino. Complete todas as séries com #{current_weight}kg primeiro.",
+      progression_type: "sets_incomplete",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      reason: "Séries incompletas no último treino. Complete todas as séries com #{format_weight(current_weight)} primeiro.",
     }
   end
 
-  def too_long_since(current_weight = 0)
+  def too_long_since(current_weight)
     {
       action: "maintain",
-      suggested_weight: current_weight,
-      current_weight: current_weight,
-      reason: "Longo intervalo desde o último treino. Retome com carga conservadora e ajuste conforme sentir.",
+      progression_type: "long_break",
+      suggested_weight: current_weight.to_f,
+      current_weight: current_weight.to_f,
+      reason: "Longo intervalo desde o último treino. Retome com #{format_weight(current_weight)} e ajuste conforme sentir.",
     }
   end
 
   def insufficient_data
     {
       action: "maintain",
+      progression_type: "insufficient_data",
       suggested_weight: nil,
       current_weight: nil,
       reason: "Dados insuficientes para sugerir progressão.",
     }
+  end
+
+  def increment_for(current_weight)
+    weight = current_weight.to_f
+    return 5.0 if weight >= 60
+    return 2.5 if weight >= 20
+
+    1.0
+  end
+
+  def round_to_supported_increment(value)
+    step = increment_for(value)
+    rounded = (value.to_f / step).round * step
+    rounded % 1 == 0 ? rounded.to_i : rounded.round(1)
+  end
+
+  def format_weight(value)
+    number = value.to_f
+    formatted = number % 1 == 0 ? number.to_i.to_s : number.round(1).to_s.tr(".", ",")
+    "#{formatted} kg"
   end
 end

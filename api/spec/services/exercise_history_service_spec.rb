@@ -7,7 +7,11 @@ RSpec.describe ExerciseHistoryService do
 
   def create_exercise_session(status:, workout_session_status: "completed", completed_at: Time.current)
     workout_session = user.workout_sessions.create!(
-      status: workout_session_status, duration_minutes: 40, completed_at: completed_at, exercise_logs: []
+      status: workout_session_status,
+      completion_status: (workout_session_status == "completed" ? "completed" : "completed_partial"),
+      duration_minutes: 40,
+      completed_at: completed_at,
+      exercise_logs: []
     )
     workout_session.exercise_sessions.create!(
       exercise: exercise, order_index: 0, exercise_kind: "strength",
@@ -65,7 +69,7 @@ RSpec.describe ExerciseHistoryService do
 
     it "falls back to legacy exercise_logs JSONB when no relational data exists for this exercise" do
       user.workout_sessions.create!(
-        status: "completed", completed_at: 2.days.ago, duration_minutes: 40,
+        status: "completed", completion_status: "completed", completed_at: 2.days.ago, duration_minutes: 40,
         exercise_logs: [ { "exercise_id" => exercise.id, "weight_by_set" => [ 20.0 ], "reps" => [ 8 ], "is_warmup_by_set" => [ false ] } ]
       )
 
@@ -76,29 +80,29 @@ RSpec.describe ExerciseHistoryService do
   describe "#suggested_starting_weight / #progression_reason with block context" do
     before do
       user.workout_sessions.create!(
-        status: "completed", completed_at: 10.days.ago, duration_minutes: 40,
+        status: "completed", completion_status: "completed", completed_at: 10.days.ago, duration_minutes: 40,
         exercise_logs: [ { "exercise_id" => exercise.id, "weight_by_set" => [ 20.0 ], "reps" => [ 10 ], "planned_sets" => 1 } ]
       )
       user.workout_sessions.create!(
-        status: "completed", completed_at: 2.days.ago, duration_minutes: 40,
-        exercise_logs: [ { "exercise_id" => exercise.id, "weight_by_set" => [ 20.0 ], "reps" => [ 8 ], "planned_sets" => 1 } ]
+        status: "completed", completion_status: "completed", completed_at: 2.days.ago, duration_minutes: 40,
+        exercise_logs: [ { "exercise_id" => exercise.id, "weight_by_set" => [ 20.0 ], "reps" => [ 10 ], "planned_sets" => 1 } ]
       )
     end
 
-    it "suggests 100% of the last load when the exercise is a single block (default)" do
-      expect(service.suggested_starting_weight).to eq(20.0)
+    it "suggests the next realistic load when the exercise is a single block (default)" do
+      expect(service.suggested_starting_weight).to eq(22.5)
       expect(service.progression_reason).not_to include("Ajustado para bloco")
     end
 
     it "discounts to ~90% when performed inside a superset" do
       superset_service = described_class.new(user: user, exercise_id: exercise.id, block_type: "superset")
-      expect(superset_service.suggested_starting_weight).to eq(18.0)
+      expect(superset_service.suggested_starting_weight).to eq(20.0)
       expect(superset_service.progression_reason).to include("Ajustado para bloco: superset (~90% da carga isolada)")
     end
 
     it "discounts to ~77.5% when performed inside a circuit" do
       circuit_service = described_class.new(user: user, exercise_id: exercise.id, block_type: "circuit")
-      expect(circuit_service.suggested_starting_weight).to eq(15.5)
+      expect(circuit_service.suggested_starting_weight).to eq(17)
     end
 
     it "never invents a weight when there is no history at all" do

@@ -12,6 +12,7 @@ import { AITrainerBubble } from "@/shared/components/ai-trainer";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { WorkoutRow } from "@/shared/components/workout/workout-row";
 import { RenameWorkoutModal } from "@/shared/components/workout/rename-workout-modal";
+import { hasCompletedWorkout } from "@/features/workout/first-workout";
 import "@/shared/components/workout/workout-ui.css";
 import type { WorkoutPlan, WorkoutDay, WorkoutSession } from "@/shared/types/workout";
 import { relativeDate, relativeDayLabel } from "@/shared/utils/relative-date";
@@ -61,7 +62,7 @@ function WorkoutsContent() {
   const [activePhase, setActivePhase] = useState<string | null>(null);
   const [renamingDay, setRenamingDay] = useState<WorkoutDay | null>(null);
   const [rationaleExpanded, setRationaleExpanded] = useState(false);
-  const isFirstTimer = !user?.first_workout_completed_at;
+  const isFirstTimer = user ? !hasCompletedWorkout(user) : false;
 
   useEffect(() => {
     try {

@@ -5,7 +5,11 @@ import Link from "next/link";
 import { api, ApiError } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { BillingStatus } from "@/shared/types/subscription";
-import { trackCheckoutStarted } from "@/shared/lib/analytics";
+import { EVENTS, checkoutEventParams, trackCheckoutStarted, trackEvent } from "@/shared/lib/analytics";
+import { checkoutErrorCode, checkoutErrorMessage, reportCheckoutException } from "@/features/billing/checkout-errors";
+
+type BillingPlan = "pro_monthly" | "pro_yearly";
+type CheckoutResponse = { checkout_url: string; session_id?: string };
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -112,6 +116,7 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryCheckoutPlan, setRetryCheckoutPlan] = useState<BillingPlan | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
@@ -121,25 +126,39 @@ export default function BillingPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleCheckout = useCallback(async (plan: "pro_monthly" | "pro_yearly") => {
+  const handleCheckout = useCallback(async (plan: BillingPlan) => {
+    if (actionLoading !== null) return;
     setActionLoading(plan);
     setError(null);
+    setRetryCheckoutPlan(null);
     trackCheckoutStarted(plan, "billing");
     try {
-      const { checkout_url } = await api.post<{ checkout_url: string }>(
+      const { checkout_url, session_id } = await api.post<CheckoutResponse>(
         "/api/v1/billing/checkout",
         { plan }
       );
+      trackEvent(EVENTS.CHECKOUT_SESSION_CREATED, {
+        ...checkoutEventParams(plan, "billing"),
+        session_id,
+      });
+      trackEvent(EVENTS.CHECKOUT_REDIRECT_OPENED, checkoutEventParams(plan, "billing"));
       window.location.href = checkout_url;
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Erro ao iniciar checkout.");
+      setError(checkoutErrorMessage(e));
+      setRetryCheckoutPlan(plan);
+      reportCheckoutException(e, { plan, source: "billing" });
+      trackEvent(EVENTS.CHECKOUT_FAILED, {
+        ...checkoutEventParams(plan, "billing"),
+        error_code: checkoutErrorCode(e),
+      });
       setActionLoading(null);
     }
-  }, []);
+  }, [actionLoading]);
 
   const handlePortal = useCallback(async () => {
     setActionLoading("portal");
     setError(null);
+    setRetryCheckoutPlan(null);
     try {
       const { portal_url } = await api.post<{ portal_url: string }>("/api/v1/billing/portal", {});
       window.location.href = portal_url;
@@ -152,6 +171,7 @@ export default function BillingPage() {
   const handleChangePlan = useCallback(async (plan: "pro_monthly" | "pro_yearly") => {
     setActionLoading(`change_${plan}`);
     setError(null);
+    setRetryCheckoutPlan(null);
     try {
       await api.post("/api/v1/billing/change_plan", { plan });
       const updated = await api.get<BillingStatus>("/api/v1/billing/status");
@@ -166,6 +186,7 @@ export default function BillingPage() {
   const handleCancel = useCallback(async () => {
     setActionLoading("cancel");
     setError(null);
+    setRetryCheckoutPlan(null);
     try {
       await api.post("/api/v1/billing/cancel", {});
       const updated = await api.get<BillingStatus>("/api/v1/billing/status");
@@ -181,6 +202,7 @@ export default function BillingPage() {
   const handleReactivate = useCallback(async () => {
     setActionLoading("reactivate");
     setError(null);
+    setRetryCheckoutPlan(null);
     try {
       await api.post("/api/v1/billing/reactivate", {});
       const updated = await api.get<BillingStatus>("/api/v1/billing/status");
@@ -195,6 +217,7 @@ export default function BillingPage() {
   const handleSync = useCallback(async () => {
     setActionLoading("sync");
     setError(null);
+    setRetryCheckoutPlan(null);
     try {
       const result = await api.post<{ message: string; subscription: BillingStatus }>("/api/v1/billing/sync", {});
       setBilling(result.subscription);
@@ -236,7 +259,16 @@ export default function BillingPage() {
 
         {error && (
           <div className="bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 rounded-xl px-4 py-3 text-sm mb-4">
-            {error}
+            <p>{error}</p>
+            {retryCheckoutPlan && (
+              <button
+                onClick={() => handleCheckout(retryCheckoutPlan)}
+                disabled={actionLoading !== null}
+                className="mt-2 text-xs font-semibold underline underline-offset-2 disabled:opacity-50"
+              >
+                Tentar novamente
+              </button>
+            )}
           </div>
         )}
 

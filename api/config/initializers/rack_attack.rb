@@ -26,6 +26,12 @@ class Rack::Attack
     req.ip if req.path == "/api/v1/analytics/events" && req.post?
   end
 
+  # App installation register/refresh: idempotent upsert, called on boot and on
+  # a few lifecycle transitions. Not a hot path per install.
+  throttle("app-installations/ip", limit: 60, period: 1.minute) do |req|
+    req.ip if req.path.start_with?("/api/v1/app/installations") && (req.post? || req.patch?)
+  end
+
   self.throttled_responder = lambda do |_req|
     [
       429,
