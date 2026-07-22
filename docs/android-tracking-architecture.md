@@ -62,3 +62,34 @@ Regra de roteamento (anti-duplicidade, `index.ts`):
 1. Boot nativo → `registerInstallation()` (anônimo) → `app_installations` (source `register`).
 2. Login → `identifyUser()` re-registra com cookie de sessão → associa `user_id`.
 3. Painel "App Android" conta a base real; backfill recupera o histórico de `device_tokens`.
+
+## Feature flags e constantes
+
+| Flag / constante | Onde | Default | Papel |
+|---|---|---|---|
+| `MOBILE_ANALYTICS_ENABLED` | backend `AppInstallations::Register` | off | liga registro de instalação |
+| `NEXT_PUBLIC_MOBILE_ANALYTICS_ENABLED` | `installation.ts` | off | liga register/refresh no app |
+| `NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED` | `firebase.ts` | off | Analytics nativo + roteamento anti-dup |
+| `NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED` | `firebase.ts` | off | Crashlytics nativo |
+| `NEXT_PUBLIC_FIREBASE_PERFORMANCE_ENABLED` | `firebase.ts` | off | Performance nativo |
+| `INSTALL_REFERRER_ENABLED` | backend `Register` | off | captura do Play Install Referrer |
+| `ANALYTICS_INGESTION_ENABLED` | `Analytics::Ingestion` | on | ingestão de eventos (já existente) |
+| `SESSION_TIMEOUT_MINUTES` | `session.ts` | 30 | janela de sessão |
+| `TRACKING_VERSION` | `installation.ts` | 2 | versão do tracking enviada no register |
+| `START_WINDOW` / `COMPLETE_WINDOW` | `Analytics::PushAttributionService` | 2h / 24h | janela de atribuição push→treino |
+
+Todas as flags têm default **seguro (off)**; ligar exige set explícito. Padrão backend:
+`ActiveModel::Type::Boolean.new.cast(ENV.fetch("FLAG","false"))`.
+
+## Resiliência (offline/retry) e observabilidade — status
+- **Fila offline + retry**: `server.ts` já implementa fila batched (cap 100), TTL 6h,
+  flush no background via `sendBeacon`, sem PII, nunca bloqueia o app. Não foi criada
+  mensageria nova (reuso, conforme Fase 20).
+- **Eventos de erro de negócio**: já na taxonomia (`workout_load_failed`,
+  `workout_save_failed`, `push_registration_failed`, `deep_link_failed`,
+  `analytics_event_rejected`). Ingestão registra rejeições sem payload sensível.
+- **Logs estruturados**: `AppInstallations::Register` loga `installation_registered` /
+  `installation_refreshed` (JSON, sem PII); ingestão loga falhas por classe.
+- **Sampling** (`TELEMETRY_SAMPLE_RATE`): recomendado para telemetria de alto volume —
+  configurar quando `screen_view`/lifecycle nativos entrarem em produção.
+
