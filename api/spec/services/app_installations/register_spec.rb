@@ -1,10 +1,15 @@
 require "rails_helper"
 
 RSpec.describe AppInstallations::Register do
+  include ActiveSupport::Testing::TimeHelpers
+
   before { allow(described_class).to receive(:enabled?).and_return(true) }
 
-  def register(user: nil, installation_id: "inst-1", attributes: {})
-    described_class.new(user: user, installation_id: installation_id, attributes: attributes).call
+  def register(user: nil, installation_id: "inst-1", attributes: {}, session_started: false)
+    described_class.new(
+      user: user, installation_id: installation_id,
+      attributes: attributes, session_started: session_started
+    ).call
   end
 
   it "creates an anonymous installation and stamps the timeline" do
@@ -87,6 +92,85 @@ RSpec.describe AppInstallations::Register do
       result = register(installation_id: "inst-ref3", attributes: { install_referrer: "utm_source=x" })
       expect(result.installation.install_referrer).to be_nil
     end
+  end
+
+  describe "session timeline (last_seen_at vs last_session_at)" do
+    it "refreshes last_seen_at on every valid contact" do
+      register(installation_id: "inst-seen", attributes: { platform: "android", native: true })
+      first_seen_at = AppInstallation.find_by(installation_id: "inst-seen").last_seen_at
+
+      travel_to(1.hour.from_now) do
+        register(installation_id: "inst-seen", attributes: { platform: "android", native: true })
+      end
+      expect(AppInstallation.find_by(installation_id: "inst-seen").last_seen_at).to be > first_seen_at
+    end
+
+    it "does NOT stamp last_session_at on a plain refresh (no session_started)" do
+      result = register(installation_id: "inst-nosess", attributes: { platform: "android", native: true })
+      expect(result.installation.last_session_at).to be_nil
+    end
+
+    it "stamps last_session_at only when session_started is signalled" do
+      result = register(
+        installation_id: "inst-sess", session_started: true,
+        attributes: { platform: "android", native: true }
+      )
+      expect(result.installation.last_session_at).to be_present
+    end
+  end
+
+  describe "activation_platform association" do
+    it "fills a blank activation_platform when a native Android install is associated" do
+      user = create(:user)
+      expect(user.activation_platform).to be_nil
+
+      register(user: user, installation_id: "inst-ap", attributes: { platform: "android", native: true })
+      expect(user.reload.activation_platform).to eq("android")
+    end
+
+    it "never overwrites an existing activation_platform" do
+      user = create(:user)
+      user.update_column(:activation_platform, "web")
+
+      register(user: user, installation_id: "inst-ap2", attributes: { platform: "android", native: true })
+      expect(user.reload.activation_platform).to eq("web")
+    end
+
+    it "does not set activation_platform for a web install" do
+      user = create(:user)
+      register(user: user, installation_id: "inst-web", attributes: { platform: "web", native: false })
+      expect(user.reload.activation_platform).to be_nil
+    end
+
+    it "does not set activation_platform for a pwa install" do
+      user = create(:user)
+      register(user: user, installation_id: "inst-pwa", attributes: { platform: "pwa", native: false })
+      expect(user.reload.activation_platform).to be_nil
+    end
+
+    it "leaves activation_platform untouched for an anonymous install" do
+      result = register(installation_id: "inst-anon", attributes: { platform: "android", native: true })
+      expect(result.installation.user_id).to be_nil
+      expect(result.installation.last_authenticated_at).to be_nil
+    end
+  end
+
+  it "registers a native Android install without any DeviceToken" do
+    result = register(installation_id: "inst-nodt", attributes: { platform: "android", native: true })
+    expect(result.ok).to be(true)
+    expect(result.installation.device_token_id).to be_nil
+    expect(result.installation.source).to eq("register")
+  end
+
+  it "keeps activation_platform and consent_source as distinct semantics" do
+    user = create(:user)
+    user.update_column(:consent_source, "web") # consent collected on the web form (inside the WebView)
+
+    register(user: user, installation_id: "inst-distinct", attributes: { platform: "android", native: true })
+
+    user.reload
+    expect(user.activation_platform).to eq("android") # runtime platform
+    expect(user.consent_source).to eq("web")          # where consent was collected
   end
 
   it "is a no-op when the feature flag is disabled" do

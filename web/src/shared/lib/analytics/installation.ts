@@ -18,8 +18,11 @@ import {
 // Backed by the app_installations backend (POST /api/v1/app/installations/register).
 
 const PREF_KEY = "eh_installation_id";
+// Default-ON kill-switch: tracking runs unless explicitly disabled. Only "false"
+// turns it off — an unset/empty env keeps it enabled (a build-time env that was
+// silently never set is exactly what kept this dark in production).
 const MOBILE_ANALYTICS_ENABLED =
-  process.env.NEXT_PUBLIC_MOBILE_ANALYTICS_ENABLED === "true";
+  process.env.NEXT_PUBLIC_MOBILE_ANALYTICS_ENABLED !== "false";
 
 // Concurrency guard: a single in-flight resolution so a burst of callers on boot
 // can never generate two UUIDs.
@@ -129,7 +132,15 @@ export interface InstallationOverrides {
   analytics_consent?: boolean;
 }
 
-async function buildPayload(overrides: InstallationOverrides) {
+export interface RegisterOptions {
+  // True only when the call represents a genuine native session start (app boot).
+  sessionStarted?: boolean;
+}
+
+async function buildPayload(
+  overrides: InstallationOverrides,
+  opts: RegisterOptions = {}
+) {
   const [installation_id, device, appInfo] = await Promise.all([
     getInstallationId(),
     getDeviceContext(),
@@ -146,6 +157,9 @@ async function buildPayload(overrides: InstallationOverrides) {
     locale: ctx.locale,
     timezone: ctx.timezone,
     tracking_version: TRACKING_VERSION,
+    // Only a real native session start (app boot) stamps last_session_at server-side.
+    // A post-login re-register is NOT a new session and must omit this.
+    ...(opts.sessionStarted ? { session_started: true } : {}),
     ...device,
     ...overrides,
   };
@@ -157,11 +171,12 @@ export const TRACKING_VERSION = 2;
 // never break the boot. Associates to the user automatically when the session
 // cookie is present (the backend reads current_user; never trusts a client id).
 export async function registerInstallation(
-  overrides: InstallationOverrides = {}
+  overrides: InstallationOverrides = {},
+  opts: RegisterOptions = {}
 ): Promise<void> {
   if (typeof window === "undefined" || !MOBILE_ANALYTICS_ENABLED) return;
   try {
-    const payload = await buildPayload(overrides);
+    const payload = await buildPayload(overrides, opts);
     await api.post("/api/v1/app/installations/register", payload);
   } catch {
     /* swallow — endpoint is fire-and-forget, backend logs failures */

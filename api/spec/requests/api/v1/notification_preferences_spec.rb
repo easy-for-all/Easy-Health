@@ -44,4 +44,72 @@ RSpec.describe "Api::V1::NotificationPreferences", type: :request do
     expect(user.device_tokens.active).to be_empty
     expect(user.notification_preferences.reload.notifications_disabled_at).to be_present
   end
+
+  it "creates preferences with push_enabled true on explicit consent when none exist" do
+    expect(user.notification_preferences).to be_nil
+
+    patch "/api/v1/notification_preferences", params: { push_enabled: true }
+
+    expect(response).to have_http_status(:ok)
+    prefs = user.notification_preferences.reload
+    expect(prefs.push_enabled).to be(true)
+    expect(prefs.notifications_disabled_at).to be_nil
+    expect(prefs.disabled_reason).to be_nil
+  end
+
+  it "enables workout reminders only when explicitly accepted" do
+    patch "/api/v1/notification_preferences", params: { push_enabled: true, workout_reminders_enabled: true }
+    expect(user.notification_preferences.reload.workout_reminders_enabled).to be(true)
+  end
+
+  it "does not enable workout reminders implicitly when only push is accepted" do
+    patch "/api/v1/notification_preferences", params: { push_enabled: true }
+    expect(user.notification_preferences.reload.workout_reminders_enabled).to be(false)
+  end
+
+  it "keeps push_enabled false and does not set opt-out when consent is declined" do
+    patch "/api/v1/notification_preferences", params: { push_enabled: false }
+
+    prefs = user.notification_preferences.reload
+    expect(prefs.push_enabled).to be(false)
+    expect(prefs.notifications_disabled_at).to be_nil
+  end
+
+  it "sets a coherent disabled_reason when globally disabling push" do
+    user.notification_preferences!.update!(push_enabled: true)
+
+    patch "/api/v1/notification_preferences", params: { push_enabled: false }
+
+    prefs = user.notification_preferences.reload
+    expect(prefs.push_enabled).to be(false)
+    expect(prefs.notifications_disabled_at).to be_present
+    expect(prefs.disabled_reason).to eq("user_settings")
+    expect(UserNotificationPreferences::DISABLED_REASONS).to include(prefs.disabled_reason)
+  end
+
+  it "does not globally opt out when only reminders are disabled" do
+    user.notification_preferences!.update!(push_enabled: true, workout_reminders_enabled: true)
+
+    patch "/api/v1/notification_preferences", params: { workout_reminders_enabled: false }
+
+    prefs = user.notification_preferences.reload
+    expect(prefs.push_enabled).to be(true)
+    expect(prefs.workout_reminders_enabled).to be(false)
+    expect(prefs.notifications_disabled_at).to be_nil
+  end
+
+  it "clears prior opt-out state when push is re-enabled" do
+    user.notification_preferences!.update!(
+      push_enabled: false,
+      notifications_disabled_at: Time.current,
+      disabled_reason: "user_settings"
+    )
+
+    patch "/api/v1/notification_preferences", params: { push_enabled: true }
+
+    prefs = user.notification_preferences.reload
+    expect(prefs.push_enabled).to be(true)
+    expect(prefs.notifications_disabled_at).to be_nil
+    expect(prefs.disabled_reason).to be_nil
+  end
 end

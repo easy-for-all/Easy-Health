@@ -14,7 +14,7 @@ class PushDispatch < ApplicationRecord
   DELIVERED_STATUSES = %w[provider_accepted partially_accepted opened].freeze
 
   SKIP_REASONS = %w[
-    orchestration_disabled user_not_found global_opt_out category_opt_out
+    orchestration_disabled user_not_found no_preferences global_opt_out category_opt_out
     no_active_token permission_denied duplicate invalid_payload rate_limited
     frequency_capped cooldown_active
   ].freeze

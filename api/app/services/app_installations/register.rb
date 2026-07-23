@@ -30,18 +30,21 @@ module AppInstallations
 
     Result = Struct.new(:installation, :created, :ok, keyword_init: true)
 
+    # Default-ON kill-switch: tracking runs unless MOBILE_ANALYTICS_ENABLED is
+    # explicitly set to a falsey value. An unset env keeps it enabled.
     def self.enabled?
-      ActiveModel::Type::Boolean.new.cast(ENV.fetch("MOBILE_ANALYTICS_ENABLED", "false"))
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch("MOBILE_ANALYTICS_ENABLED", "true"))
     end
 
     def self.install_referrer_enabled?
       ActiveModel::Type::Boolean.new.cast(ENV.fetch("INSTALL_REFERRER_ENABLED", "false"))
     end
 
-    def initialize(user:, installation_id:, attributes: {})
+    def initialize(user:, installation_id:, attributes: {}, session_started: false)
       @user = user
       @installation_id = installation_id.to_s.strip
       @attributes = attributes || {}
+      @session_started = ActiveModel::Type::Boolean.new.cast(session_started)
     end
 
     def call
@@ -60,7 +63,10 @@ module AppInstallations
       Rails.logger.info(structured_log(install, created))
       Result.new(installation: install, created: created, ok: true)
     rescue StandardError => e
+      # Never break the caller (tracking is best-effort), but keep the failure
+      # observable — a swallowed DB/schema/programming error must reach Sentry.
       Rails.logger.warn("[installations] register failed: #{e.class}: #{e.message}")
+      Sentry.capture_exception(e) if defined?(Sentry) && Sentry.initialized?
       Result.new(installation: nil, created: false, ok: false)
     end
 
@@ -110,14 +116,33 @@ module AppInstallations
         install.first_seen_at ||= now
         install.tracking_started_at ||= now
       end
+      # last_seen_at: any valid contact with the backend.
       install.last_seen_at = now
+      # last_session_at: ONLY a real native session start (app boot), signalled
+      # explicitly by the caller — never inflated by a login re-register or a refresh.
+      install.last_session_at = now if @session_started
+      # installed_at is never invented here when unknown.
     end
 
     def associate_user!(install)
+      # last_authenticated_at: only when a current_user is present and associated.
       return if @user.nil?
 
       install.user = @user
       install.last_authenticated_at = Time.current
+      backfill_activation_platform!(install)
+    end
+
+    # Fill User#activation_platform from a native Android install the first time it
+    # is associated, but only when it is still blank — an existing valid origin is
+    # never overwritten. Idempotent and non-blocking.
+    def backfill_activation_platform!(install)
+      return unless install.native && install.platform == "android"
+      return if @user.activation_platform.present?
+
+      @user.update_column(:activation_platform, "android")
+    rescue StandardError => e
+      Rails.logger.warn("[installations] activation_platform set failed: #{e.class}: #{e.message}")
     end
 
     def structured_log(install, created)
