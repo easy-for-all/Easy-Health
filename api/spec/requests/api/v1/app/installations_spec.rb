@@ -57,11 +57,55 @@ RSpec.describe "Api::V1::App::Installations", type: :request do
       expect(response).to have_http_status(:bad_request)
     end
 
+    it "rejects a platform outside the allowlist (422, not a silent coerce)" do
+      post "/api/v1/app/installations/register", params: payload(platform: "iphone"), as: :json
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(AppInstallation.count).to eq(0)
+    end
+
+    it "rejects an oversized installation_id (422)" do
+      post "/api/v1/app/installations/register", params: payload(installation_id: "x" * 200), as: :json
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(AppInstallation.count).to eq(0)
+    end
+
+    it "sets activation_platform=android on the associated user for a native install" do
+      user = create(:user)
+      sign_in user
+
+      post "/api/v1/app/installations/register", params: payload(installation_id: "inst-ap-req"), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(user.reload.activation_platform).to eq("android")
+    end
+
+    it "stamps last_session_at only when session_started is sent" do
+      post "/api/v1/app/installations/register",
+           params: payload(installation_id: "inst-boot", session_started: true), as: :json
+      expect(AppInstallation.find_by(installation_id: "inst-boot").last_session_at).to be_present
+
+      post "/api/v1/app/installations/register",
+           params: payload(installation_id: "inst-plain"), as: :json
+      expect(AppInstallation.find_by(installation_id: "inst-plain").last_session_at).to be_nil
+    end
+
     it "never persists when the flag is off (accepts silently)" do
       allow(AppInstallations::Register).to receive(:enabled?).and_return(false)
       post "/api/v1/app/installations/register", params: payload, as: :json
       expect(response).to have_http_status(:accepted)
       expect(AppInstallation.count).to eq(0)
+    end
+
+    it "stays non-blocking and observable on an unexpected internal error" do
+      allow(Sentry).to receive(:initialized?).and_return(true)
+      allow_any_instance_of(AppInstallations::Register).to receive(:call).and_raise(StandardError, "boom")
+      expect(Sentry).to receive(:capture_exception)
+      expect(Rails.logger).to receive(:error).with(/installations. endpoint error/)
+
+      post "/api/v1/app/installations/register", params: payload, as: :json
+
+      # Never a 500 (must not break the app), never a false success.
+      expect(response).to have_http_status(:accepted)
     end
   end
 
@@ -75,6 +119,15 @@ RSpec.describe "Api::V1::App::Installations", type: :request do
       expect(response).to have_http_status(:ok)
       install = AppInstallation.find_by(installation_id: "inst-patch")
       expect(install.notification_permission).to eq("denied")
+    end
+
+    it "never stamps last_session_at on a refresh, even if the client sends the flag" do
+      create(:app_installation, installation_id: "inst-refresh", last_session_at: nil)
+
+      patch "/api/v1/app/installations/inst-refresh",
+            params: { session_started: true, push_enabled: false }, as: :json
+
+      expect(AppInstallation.find_by(installation_id: "inst-refresh").last_session_at).to be_nil
     end
   end
 end

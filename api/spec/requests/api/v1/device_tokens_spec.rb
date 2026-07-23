@@ -20,6 +20,15 @@ RSpec.describe "Api::V1::DeviceTokens", type: :request do
       expect(token.enabled).to be(true)
     end
 
+    it "does not create notification preferences or enable push for a granted token" do
+      post "/api/v1/device_tokens", params: { token: "abc123", platform: "android", permission_status: "granted" }
+
+      expect(response).to have_http_status(:ok)
+      # Native permission grant is NOT product consent — prefs stay absent until
+      # the explicit EasyHealth consent flow runs.
+      expect(user.notification_preferences).to be_nil
+    end
+
     it "re-attaches a token previously owned by another user (unique index, single row)" do
       other = create(:user)
       shared = other.device_tokens.create!(token: "shared-device", platform: "android")

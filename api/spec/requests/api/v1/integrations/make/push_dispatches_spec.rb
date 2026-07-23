@@ -130,8 +130,24 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       expect(json).to include("status" => "skipped", "reason" => "user_not_found", "sent" => false)
     end
 
+    it "skips with no_preferences when the user never completed the consent flow" do
+      no_prefs_user = create(:user)
+      create(:device_token, user: no_prefs_user)
+      expect(no_prefs_user.notification_preferences).to be_nil
+
+      post_dispatch(valid_payload(user_id: no_prefs_user.id))
+      expect(json["reason"]).to eq("no_preferences")
+    end
+
     it "skips global opt-out" do
       user.notification_preferences.update!(push_enabled: false)
+      create(:device_token, user: user)
+      post_dispatch(valid_payload)
+      expect(json["reason"]).to eq("global_opt_out")
+    end
+
+    it "skips global opt-out when notifications_disabled_at is present" do
+      user.notification_preferences.update!(notifications_disabled_at: Time.current)
       create(:device_token, user: user)
       post_dispatch(valid_payload)
       expect(json["reason"]).to eq("global_opt_out")

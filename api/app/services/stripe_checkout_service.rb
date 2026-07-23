@@ -67,7 +67,9 @@ class StripeCheckoutService
       result: "failure",
       duration_ms: duration_ms(started_at),
       exception_class: e.class.name,
-      error_code: e.code
+      error_code: e.code,
+      stripe_error_class: e.details[:stripe_error_class],
+      stripe_message: e.details[:stripe_message]
     )
     raise
   rescue Stripe::APIConnectionError, Stripe::APIError, Stripe::RateLimitError => e
@@ -87,7 +89,8 @@ class StripeCheckoutService
       result: "failure",
       duration_ms: duration_ms(started_at),
       exception_class: e.class.name,
-      error_code: error.code
+      error_code: error.code,
+      stripe_message: e.message
     )
     raise error
   rescue Stripe::StripeError => e
@@ -197,7 +200,11 @@ class StripeCheckoutService
       code: "billing_customer_error",
       public_message: "Não foi possível iniciar o checkout.",
       status: :bad_gateway,
-      details: { stripe_request_id: e.respond_to?(:request_id) ? e.request_id : nil }
+      details: {
+        stripe_request_id: e.respond_to?(:request_id) ? e.request_id : nil,
+        stripe_error_class: e.class.name,
+        stripe_message: e.message
+      }
     )
   end
 

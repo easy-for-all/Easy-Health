@@ -76,7 +76,10 @@ module Api
           current_user.device_tokens.active.find_each { |d| d.invalidate!("user_disabled_push") }
           NotificationDelivery.cancel_pending_for(current_user, reason: "push_disabled")
           prefs.update!(notifications_disabled_at: Time.current, disabled_reason: "user_settings")
-        elsif prefs.push_enabled? && prefs.notifications_disabled_at.present?
+        elsif prefs.push_enabled?
+          # Explicit opt-in: always clear any prior global opt-out state so the
+          # consent flow is the single source that (re)enables push. Idempotent —
+          # also repairs an inconsistent row (disabled_reason set, disabled_at nil).
           prefs.update!(notifications_disabled_at: nil, disabled_reason: nil)
         end
       end

@@ -116,6 +116,8 @@ export function identifyUser(userId: string | number): void {
   // Re-register the installation now that the session cookie is present, so the
   // backend associates this install to the user (last_authenticated_at). Safe on
   // web/PWA too — it no-ops off-native or when the feature flag is off.
+  // Deliberately NO sessionStarted: a login is not a new session, so it must not
+  // stamp last_session_at (only app boot does — see init.ts).
   void registerInstallation();
   // Native: set a pseudonymous internal user id on Firebase (never email / installation_id).
   void setFirebaseUserId(id);

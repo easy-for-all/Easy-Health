@@ -99,6 +99,14 @@ RSpec.describe ScheduledWorkoutReminderEligibility do
     expect(result_for(denied_device).reason).to eq("no_active_device_token")
   end
 
+  it "rejects a candidate with no preferences row (stays blocked)" do
+    user, = build_candidate
+    user.notification_preferences.destroy!
+    user.reload
+
+    expect(result_for(user).reason).to eq("push_disabled")
+  end
+
   it "rejects a missing current plan" do
     user, plan = build_candidate
     plan.destroy!

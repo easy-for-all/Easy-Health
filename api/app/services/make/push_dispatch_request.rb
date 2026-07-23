@@ -200,7 +200,10 @@ module Make
 
     def preference_skip_reason(user)
       prefs = user.notification_preferences
-      return "global_opt_out" if prefs.nil? || !prefs.push_enabled? || prefs.notifications_disabled_at.present?
+      # No preferences row means the user never completed the explicit EasyHealth
+      # consent flow — absence is never opt-in (schema defaults are all-OFF).
+      return "no_preferences" if prefs.nil?
+      return "global_opt_out" if !prefs.push_enabled? || prefs.notifications_disabled_at.present?
       return "category_opt_out" if REMINDER_CATEGORIES.include?(notification_type) && !prefs.workout_reminders_enabled?
 
       active_tokens = user.device_tokens.active

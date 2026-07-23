@@ -20,6 +20,12 @@ RSpec.describe PushActivationEligibility do
     end
   end
 
+  it "is not eligible when the user has no preferences row" do
+    user = create(:user)
+    expect(user.notification_preferences).to be_nil
+    expect(reason(user)).to eq("no_preferences")
+  end
+
   it "is not eligible without opt-in" do
     user = build_eligible_push_user
     user.notification_preferences.update!(workout_reminders_enabled: false)
