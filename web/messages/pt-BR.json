@@ -158,7 +158,13 @@
     "resetSuccess": "Senha redefinida com sucesso! Faça login.",
     "passwordMismatch": "As senhas não coincidem.",
     "passwordTooShort": "A senha deve ter no mínimo 8 caracteres.",
-    "invalidToken": "Link inválido ou expirado. Solicite um novo."
+    "invalidToken": "Link inválido ou expirado. Solicite um novo.",
+    "networkError": "Não foi possível conectar ao servidor. Tente novamente.",
+    "continueWithGoogle": "Continuar com Google",
+    "signingInWithGoogle": "Entrando com Google...",
+    "loadingButton": "Carregando...",
+    "googleAccountNotRegistered": "Esta conta Google ainda não está cadastrada. Para criar sua conta, aceite os Termos de Uso e a Política de Privacidade.",
+    "createAccountWithGoogle": "Criar conta com Google"
   },
   "dashboard": {
     "hello": "Olá,",

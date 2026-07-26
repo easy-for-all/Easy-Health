@@ -41,8 +41,12 @@ module Api
         end
 
         def handle_google_callback(mobile:)
-          Rails.logger.info("[GoogleOAuth] started uid=#{request.env.dig('omniauth.auth', 'uid')} mobile=#{mobile}")
-          user = User.from_omniauth(request.env["omniauth.auth"], consent: oauth_consent_params)
+          consent = oauth_consent_params
+          Rails.logger.info(
+            "[GoogleOAuth] started flow=web uid=#{request.env.dig('omniauth.auth', 'uid')} " \
+            "mobile=#{mobile} consent_present=#{User.required_consent_given?(consent)}"
+          )
+          user = User.from_omniauth(request.env["omniauth.auth"], consent: consent)
 
           if user.anonymized_at.present?
             Rails.logger.info("[GoogleOAuthCallback] blocked login for anonymized user_id=#{user.id}")
@@ -51,7 +55,7 @@ module Api
           end
 
           new_user = user.previously_new_record? || (user.created_at > 5.minutes.ago && user.health_profile.nil?)
-          Rails.logger.info("[GoogleOAuthCallback] email=#{user.email} new_user=#{new_user}")
+          Rails.logger.info("[GoogleOAuthCallback] flow=web user_id=#{user.id} new_user=#{new_user}")
 
           if mobile
             code = MobileAuthCode.issue_for!(user: user, platform: "android")
@@ -66,8 +70,10 @@ module Api
           Rails.logger.info("[GoogleOAuthCallback] blocked email attempted signup")
           redirect_to "#{FRONTEND}/login?error=account_deleted", allow_other_host: true
         rescue User::ConsentRequiredError
-          Rails.logger.info("[GoogleOAuthCallback] blocked signup missing consent")
-          redirect_to "#{FRONTEND}/sign-up?error=consent_required", allow_other_host: true
+          Rails.logger.info("[GoogleOAuthCallback] blocked signup missing consent flow=web")
+          # `provider` only opens the sign-up screen in the Google context; the
+          # consent itself was never collected, so nothing is pre-accepted.
+          redirect_to "#{FRONTEND}/sign-up?error=consent_required&provider=google", allow_other_host: true
         rescue => e
           Rails.logger.error("[GoogleOAuthError] #{e.class}: #{e.message}")
           redirect_to "#{FRONTEND}/login?error=oauth_failed", allow_other_host: true

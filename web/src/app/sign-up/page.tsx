@@ -8,13 +8,12 @@ import { api, ApiError } from "@/shared/lib/api";
 import { checkoutErrorCode, checkoutErrorMessage, reportCheckoutException } from "@/features/billing/checkout-errors";
 import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
 import { checkoutEventParams, trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
-import { Capacitor } from "@capacitor/core";
+import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
 import {
-  googleAuthWebUrl,
   GoogleAuthError,
   authLog,
-  nativeGoogleSignIn,
-  postGoogleNative,
+  classifyGoogleAuthError,
+  startGoogleAuth,
   type GoogleConsent,
 } from "@/shared/lib/googleAuth";
 
@@ -67,7 +66,17 @@ export default function SignUpPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
   const submittingRef = useRef(false);
+  const googleRef = useRef(false);
   const consentCheckboxRef = useRef<HTMLInputElement>(null);
+  const hydrated = useIsHydrated();
+  const isNative = useIsNativePlatform();
+  // Arriving from the login screen's "create account with Google" CTA. Only
+  // highlights the Google option — it never pre-accepts anything nor starts OAuth.
+  const fromGoogle = searchParams.get("provider") === "google";
+  const consentRefused = searchParams.get("error") === "consent_required";
+  // Derived rather than stored: a refused social sign-in must surface the same
+  // warning as a blocked submit, without a setState-in-effect round trip.
+  const showTermsWarning = (termsWarning || consentRefused) && !acceptedTerms;
 
   const passwordValid = password.length >= 8;
   // Single checkbox covers both Terms of Use and Privacy Policy.
@@ -77,43 +86,63 @@ export default function SignUpPage() {
     marketingConsent,
   };
 
-  async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
+  async function handleGoogleAuth(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+
     // Defense in depth: block the social flow before ANY side effect when the
     // required consent is missing — same gate as the email/password submit.
     if (!acceptedTerms) {
-      e.preventDefault();
       setTermsWarning(true);
       consentCheckboxRef.current?.focus();
       authLog("auth_blocked_missing_consent", {
         provider: "google",
         surface: "signup",
-        platform: Capacitor.isNativePlatform() ? "android" : "web",
+        platform: isNative ? "android" : "web",
         missing_terms: true,
         missing_privacy: true,
       });
       return;
     }
 
-    // Web keeps the server-side OmniAuth flow (follows the <a href>, which
-    // already carries the consent query params).
-    if (!Capacitor.isNativePlatform()) return;
-    // Android uses native Google Sign-In (no browser, no intermediate screen).
-    e.preventDefault();
+    if (googleRef.current) return;
+    googleRef.current = true;
+
     setError("");
     setGoogleLoading(true);
     try {
-      const idToken = await nativeGoogleSignIn();
-      const { redirectPath } = await postGoogleNative(idToken, consent);
-      window.location.replace(redirectPath);
+      const outcome = await startGoogleAuth({ native: isNative, consent });
+      if (outcome.navigated) return; // leaving the page; keep the loading state
+      window.location.replace(outcome.redirectPath);
     } catch (err) {
+      googleRef.current = false;
       setGoogleLoading(false);
       const code = err instanceof GoogleAuthError ? err.code : "unknown";
+      const failure = classifyGoogleAuthError(err);
       authLog("signup_failed", {
         code,
+        failure,
         name: (err as Error)?.name,
         message: (err as Error)?.message,
       });
-      setError(`Não foi possível entrar com Google. (${code})`);
+
+      switch (failure) {
+        case "consent_required":
+          setTermsWarning(true);
+          consentCheckboxRef.current?.focus();
+          setError("Aceite os Termos de Uso e a Política de Privacidade para criar sua conta.");
+          break;
+        case "cancelled":
+          break; // the user chose to back out — not an error to report
+        case "account_deleted":
+          setError("Esta conta foi excluída e não pode ser reativada.");
+          break;
+        case "network":
+          setError("Não foi possível conectar ao servidor. Tente novamente.");
+          break;
+        default:
+          setError("Não foi possível entrar com o Google. Tente novamente.");
+      }
     }
   }
 
@@ -121,14 +150,12 @@ export default function SignUpPage() {
     trackEvent(EVENTS.SIGNUP_STARTED);
   }, []);
 
-  // A social sign-in that was refused for missing consent lands here; highlight
-  // the same checkbox the email/password flow uses.
+  // A social sign-in that was refused for missing consent lands here; the
+  // warning is derived above, so this effect only moves focus (a real DOM side
+  // effect). The checkbox itself is never pre-checked.
   useEffect(() => {
-    if (searchParams.get("error") === "consent_required") {
-      setTermsWarning(true);
-      consentCheckboxRef.current?.focus();
-    }
-  }, [searchParams]);
+    if (consentRefused) consentCheckboxRef.current?.focus();
+  }, [consentRefused]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -239,13 +266,29 @@ export default function SignUpPage() {
           </div>
         )}
 
-        {/* Google OAuth */}
-        <a
-          href={acceptedTerms ? googleAuthWebUrl(consent) : undefined}
+        {/* Came from the login screen's "create account with Google" CTA. */}
+        {(fromGoogle || consentRefused) && (
+          <p className="mb-3 rounded-xl border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-300">
+            {consentRefused
+              ? "Para criar sua conta com o Google, aceite os Termos de Uso e a Política de Privacidade abaixo e tente novamente."
+              : "Esta conta Google ainda não está cadastrada. Aceite os Termos de Uso e a Política de Privacidade abaixo para criar sua conta."}
+          </p>
+        )}
+
+        {/* Google OAuth — a <button>, never an <a href>: the server-rendered
+            markup must not carry a working OAuth link, and the consent params
+            now travel through an explicit navigation instead of an attribute. */}
+        <button
+          type="button"
           onClick={handleGoogleAuth}
+          disabled={!hydrated || googleLoading}
           aria-busy={googleLoading}
           aria-disabled={!acceptedTerms}
-          className={`flex w-full items-center justify-center gap-3 rounded-full border border-slate-700 bg-slate-900 py-3 text-sm font-semibold text-white transition ${acceptedTerms ? "hover:bg-slate-800" : "cursor-not-allowed opacity-50"}`}
+          className={`flex w-full items-center justify-center gap-3 rounded-full border py-3 text-sm font-semibold text-white transition ${
+            acceptedTerms && hydrated
+              ? "border-slate-700 bg-slate-900 hover:bg-slate-800"
+              : "cursor-not-allowed border-slate-700 bg-slate-900 opacity-50"
+          } ${fromGoogle ? "ring-2 ring-primary-500/60" : ""}`}
         >
           <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M47.532 24.552c0-1.636-.143-3.2-.41-4.704H24.48v8.892h12.968c-.56 2.996-2.24 5.54-4.768 7.252v6.02h7.716c4.516-4.16 7.136-10.284 7.136-17.46z" fill="#4285F4"/>
@@ -253,8 +296,8 @@ export default function SignUpPage() {
             <path d="M10.956 28.504A14.51 14.51 0 0 1 10.2 24c0-1.568.264-3.088.756-4.504v-6.216H3.048A23.98 23.98 0 0 0 .48 24c0 3.876.924 7.536 2.568 10.72l7.908-6.216z" fill="#FBBC05"/>
             <path d="M24.48 9.548c3.54 0 6.72 1.216 9.22 3.604l6.908-6.908C36.384 2.4 30.948 0 24.48 0 15.156 0 6.996 5.364 3.048 13.28l7.908 6.216c1.908-5.704 7.236-9.948 13.524-9.948z" fill="#EA4335"/>
           </svg>
-          {googleLoading ? "Entrando com Google..." : "Continuar com Google"}
-        </a>
+          {!hydrated ? "Carregando..." : googleLoading ? "Entrando com Google..." : "Continuar com Google"}
+        </button>
 
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-slate-800" />
@@ -366,7 +409,7 @@ export default function SignUpPage() {
           >
             {loading ? "Criando conta..." : "Criar conta"}
           </button>
-          {termsWarning && !acceptedTerms && (
+          {showTermsWarning && (
             <p className="text-center text-xs text-amber-400">Aceite os termos para continuar</p>
           )}
         </form>

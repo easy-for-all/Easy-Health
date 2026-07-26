@@ -158,7 +158,13 @@
     "resetSuccess": "Password reset successfully! Please sign in.",
     "passwordMismatch": "Passwords do not match.",
     "passwordTooShort": "Password must be at least 8 characters.",
-    "invalidToken": "Invalid or expired link. Please request a new one."
+    "invalidToken": "Invalid or expired link. Please request a new one.",
+    "networkError": "Could not reach the server. Please try again.",
+    "continueWithGoogle": "Continue with Google",
+    "signingInWithGoogle": "Signing in with Google...",
+    "loadingButton": "Loading...",
+    "googleAccountNotRegistered": "This Google account is not registered yet. To create your account, accept the Terms of Use and the Privacy Policy.",
+    "createAccountWithGoogle": "Create account with Google"
   },
   "dashboard": {
     "hello": "Hello,",

@@ -6,8 +6,10 @@ Rails.application.routes.draw do
   # Google OAuth — OmniAuth middleware handles the initiation at /users/auth/google_oauth2
   # and /users/auth/google_oauth2_mobile (the latter used by the Capacitor app).
   devise_scope :user do
-    get  "/auth/google/web",                     to: redirect("/users/auth/google_oauth2", status: 302)
-    post "/auth/google/web",                     to: redirect("/users/auth/google_oauth2", status: 302)
+    # Not a bare redirect(): that form drops the query string, which is how the
+    # consent flags reach OmniAuth. See Api::V1::Auth::GoogleOauthController.
+    get  "/auth/google/web",                     to: "api/v1/auth/google_oauth#web"
+    post "/auth/google/web",                     to: "api/v1/auth/google_oauth#web"
     get  "/auth/google/android",                 to: redirect("/users/auth/google_oauth2_mobile", status: 302)
     post "/auth/google/android",                 to: redirect("/users/auth/google_oauth2_mobile", status: 302)
     get  "/users/auth/google_oauth2/callback",        to: "api/v1/auth/omniauth_callbacks#google_oauth2"

@@ -33,3 +33,21 @@ const noopSubscribe = () => () => {};
 export function useAppPromoTarget(): AppPromoTarget {
   return useSyncExternalStore(noopSubscribe, getAppPromoTarget, () => "hidden");
 }
+
+// False during SSR and through hydration, true from the first client render on.
+// Auth screens use it to keep the Google button inert until React has attached
+// its handler — otherwise a tap in that window would fall through to whatever
+// the server-rendered markup happened to do.
+export function useIsHydrated(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
+// Same SSR-safe read for "is this the native app?". Capacitor decides purely on
+// the presence of window.androidBridge, which does not exist on the server.
+export function useIsNativePlatform(): boolean {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => Capacitor.isNativePlatform(),
+    () => false,
+  );
+}

@@ -5,37 +5,39 @@ import SignUpPage from "@/app/sign-up/page";
 
 const {
   mockIsNative,
-  mockNativeSignIn,
-  mockPostGoogleNative,
-  mockGoogleAuthWebUrl,
+  mockIsHydrated,
+  mockStartGoogleAuth,
+  mockClassify,
   mockAuthLog,
   mockSignUp,
   mockPush,
+  mockSearchParams,
 } = vi.hoisted(() => ({
   mockIsNative: vi.fn(() => false),
-  mockNativeSignIn: vi.fn(),
-  mockPostGoogleNative: vi.fn(),
-  mockGoogleAuthWebUrl: vi.fn(() => "https://api.test/auth/google/web?terms_accepted=1"),
+  mockIsHydrated: vi.fn(() => true),
+  mockStartGoogleAuth: vi.fn(),
+  mockClassify: vi.fn(() => "unknown"),
   mockAuthLog: vi.fn(),
   mockSignUp: vi.fn(),
   mockPush: vi.fn(),
+  mockSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
-vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => mockIsNative() },
+vi.mock("@/shared/lib/platform", () => ({
+  useIsNativePlatform: () => mockIsNative(),
+  useIsHydrated: () => mockIsHydrated(),
 }));
 
 vi.mock("@/shared/lib/googleAuth", () => ({
-  googleAuthWebUrl: mockGoogleAuthWebUrl,
   GoogleAuthError: class GoogleAuthError extends Error {},
   authLog: mockAuthLog,
-  nativeGoogleSignIn: mockNativeSignIn,
-  postGoogleNative: mockPostGoogleNative,
+  startGoogleAuth: mockStartGoogleAuth,
+  classifyGoogleAuthError: mockClassify,
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams(),
 }));
 
 vi.mock("@/features/auth/auth-context", () => ({
@@ -61,7 +63,8 @@ vi.mock("@/features/billing/checkout-intent", () => ({
 }));
 
 function googleButton() {
-  return screen.getByText("Continuar com Google").closest("a") as HTMLAnchorElement;
+  // The label swaps to "Carregando..." while the page is not hydrated yet.
+  return screen.getByRole("button", { name: /Google|Carregando/i });
 }
 
 function consentCheckbox() {
@@ -73,22 +76,23 @@ describe("SignUp consent gate for Google sign-in", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsNative.mockReturnValue(false);
-    mockNativeSignIn.mockResolvedValue("id-token");
-    mockPostGoogleNative.mockResolvedValue({ redirectPath: "/onboarding" });
+    mockIsHydrated.mockReturnValue(true);
+    mockClassify.mockReturnValue("unknown");
+    mockSearchParams.mockReturnValue(new URLSearchParams());
+    mockStartGoogleAuth.mockResolvedValue({ navigated: false, redirectPath: "/onboarding" });
     Object.defineProperty(window, "location", {
-      value: { replace: vi.fn(), href: "" },
+      value: { replace: vi.fn(), assign: vi.fn(), href: "" },
       writable: true,
     });
   });
 
-  it("blocks Google when nothing is checked (web): no native call, no navigation, warning shown", async () => {
+  it("blocks Google when nothing is checked (web): no auth call, no navigation, warning shown", async () => {
     const user = userEvent.setup();
     render(<SignUpPage />);
 
     await user.click(googleButton());
 
-    expect(mockNativeSignIn).not.toHaveBeenCalled();
-    expect(mockPostGoogleNative).not.toHaveBeenCalled();
+    expect(mockStartGoogleAuth).not.toHaveBeenCalled();
     expect(screen.getByText("Aceite os termos para continuar")).toBeInTheDocument();
     expect(mockAuthLog).toHaveBeenCalledWith(
       "auth_blocked_missing_consent",
@@ -96,9 +100,19 @@ describe("SignUp consent gate for Google sign-in", () => {
     );
   });
 
-  it("does not expose a navigable href on the Google button while consent is missing (web)", () => {
+  it("exposes no OAuth link at all — the CTA is a button, never an <a href>", () => {
     render(<SignUpPage />);
-    expect(googleButton().getAttribute("href")).toBeNull();
+
+    expect(googleButton().tagName).toBe("BUTTON");
+    expect(googleButton()).not.toHaveAttribute("href");
+    expect(document.querySelector('a[href*="auth/google"]')).toBeNull();
+  });
+
+  it("keeps the button inert until React has hydrated", () => {
+    mockIsHydrated.mockReturnValue(false);
+    render(<SignUpPage />);
+
+    expect(googleButton()).toBeDisabled();
   });
 
   it("blocks the native handler even when the click fires (direct bypass guard)", async () => {
@@ -108,7 +122,7 @@ describe("SignUp consent gate for Google sign-in", () => {
 
     await user.click(googleButton());
 
-    expect(mockNativeSignIn).not.toHaveBeenCalled();
+    expect(mockStartGoogleAuth).not.toHaveBeenCalled();
     expect(screen.getByText("Aceite os termos para continuar")).toBeInTheDocument();
   });
 
@@ -130,23 +144,58 @@ describe("SignUp consent gate for Google sign-in", () => {
     await user.click(consentCheckbox());
     await user.click(googleButton());
 
-    await waitFor(() => expect(mockNativeSignIn).toHaveBeenCalledTimes(1));
-    expect(mockPostGoogleNative).toHaveBeenCalledTimes(1);
-    expect(mockPostGoogleNative).toHaveBeenCalledWith(
-      "id-token",
-      expect.objectContaining({ termsAccepted: true, privacyAccepted: true }),
-    );
+    await waitFor(() => expect(mockStartGoogleAuth).toHaveBeenCalledTimes(1));
+    expect(mockStartGoogleAuth).toHaveBeenCalledWith({
+      native: true,
+      consent: expect.objectContaining({ termsAccepted: true, privacyAccepted: true }),
+    });
   });
 
-  it("exposes the consent-carrying web URL once consent is accepted", async () => {
+  it("hands the browser to the OmniAuth flow carrying the accepted consent", async () => {
+    mockStartGoogleAuth.mockResolvedValue({ navigated: true });
     const user = userEvent.setup();
     render(<SignUpPage />);
 
     await user.click(consentCheckbox());
+    await user.click(googleButton());
 
-    expect(googleButton().getAttribute("href")).toBe(
-      "https://api.test/auth/google/web?terms_accepted=1",
+    await waitFor(() =>
+      expect(mockStartGoogleAuth).toHaveBeenCalledWith({
+        native: false,
+        consent: { termsAccepted: true, privacyAccepted: true, marketingConsent: false },
+      }),
     );
+  });
+
+  it("passes the marketing choice through instead of assuming an opt-in", async () => {
+    const user = userEvent.setup();
+    render(<SignUpPage />);
+
+    await user.click(consentCheckbox());
+    await user.click(screen.getByRole("checkbox", { name: /dicas personalizadas/i }));
+    await user.click(googleButton());
+
+    await waitFor(() =>
+      expect(mockStartGoogleAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ consent: expect.objectContaining({ marketingConsent: true }) }),
+      ),
+    );
+  });
+
+  it("starts the flow only once on a double click", async () => {
+    mockIsNative.mockReturnValue(true);
+    mockStartGoogleAuth.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ navigated: true }), 20)),
+    );
+    const user = userEvent.setup();
+    render(<SignUpPage />);
+
+    await user.click(consentCheckbox());
+    const button = googleButton();
+    await user.click(button);
+    await user.click(button);
+
+    expect(mockStartGoogleAuth).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the email/password flow working (calls signUp) once consent is accepted", async () => {
@@ -161,6 +210,44 @@ describe("SignUp consent gate for Google sign-in", () => {
 
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
     expect(mockSignUp).toHaveBeenCalledWith("Marcus", "marcus@test.com", "supersecret", false);
-    expect(mockNativeSignIn).not.toHaveBeenCalled();
+    expect(mockStartGoogleAuth).not.toHaveBeenCalled();
+  });
+});
+
+describe("SignUp arriving from the login screen's Google CTA", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsNative.mockReturnValue(false);
+    mockIsHydrated.mockReturnValue(true);
+    mockStartGoogleAuth.mockResolvedValue({ navigated: true });
+    Object.defineProperty(window, "location", {
+      value: { replace: vi.fn(), assign: vi.fn(), href: "" },
+      writable: true,
+    });
+  });
+
+  it("explains why the user landed here without pre-accepting anything", () => {
+    mockSearchParams.mockReturnValue(new URLSearchParams("provider=google"));
+    render(<SignUpPage />);
+
+    expect(screen.getByText(/ainda não está cadastrada/i)).toBeInTheDocument();
+    expect(consentCheckbox()).not.toBeChecked();
+  });
+
+  it("never starts OAuth on its own from provider=google", () => {
+    mockSearchParams.mockReturnValue(new URLSearchParams("provider=google"));
+    render(<SignUpPage />);
+
+    expect(mockStartGoogleAuth).not.toHaveBeenCalled();
+  });
+
+  it("tells the user what to do after a refused consent, checkbox still unchecked", () => {
+    mockSearchParams.mockReturnValue(new URLSearchParams("error=consent_required&provider=google"));
+    render(<SignUpPage />);
+
+    expect(screen.getByText(/aceite os Termos de Uso e a Política de Privacidade abaixo/i))
+      .toBeInTheDocument();
+    expect(consentCheckbox()).not.toBeChecked();
+    expect(mockStartGoogleAuth).not.toHaveBeenCalled();
   });
 });

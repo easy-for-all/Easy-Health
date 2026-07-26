@@ -45,7 +45,61 @@ RSpec.describe "Api::V1::Auth::GoogleNative", type: :request do
       end.not_to change(User, :count)
 
       expect(response).to have_http_status(:unprocessable_entity)
+      body = response.parsed_body
+      expect(body["error_code"]).to eq("consent_required")
+      # The login screen keys off `action` to offer the sign-up route instead of
+      # leaving the user on a dead-end error message.
+      expect(body["action"]).to eq("sign_up")
+      expect(body["message"]).to be_present
+    end
+
+    it "refuses when only the terms were accepted" do
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
+
+      expect do
+        post "/api/v1/auth/google/native",
+             params: { id_token: "valid.jwt", platform: "android", terms_accepted: true, privacy_accepted: false },
+             as: :json
+      end.not_to change(User, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["error_code"]).to eq("consent_required")
+    end
+
+    it "refuses when only the privacy policy was accepted" do
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
+
+      expect do
+        post "/api/v1/auth/google/native",
+             params: { id_token: "valid.jwt", platform: "android", terms_accepted: false, privacy_accepted: true },
+             as: :json
+      end.not_to change(User, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error_code"]).to eq("consent_required")
+    end
+
+    it "stores marketing_consent as false when the user declined it" do
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
+
+      post "/api/v1/auth/google/native",
+           params: { id_token: "valid.jwt", platform: "android", terms_accepted: true,
+                     privacy_accepted: true, marketing_consent: false },
+           as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(User.find_by(email: "native@example.com").marketing_consent).to be(false)
+    end
+
+    it "never opts the user into marketing by omission" do
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
+
+      post "/api/v1/auth/google/native",
+           params: { id_token: "valid.jwt", platform: "android", terms_accepted: true, privacy_accepted: true },
+           as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(User.find_by(email: "native@example.com").marketing_consent).to be(false)
     end
 
     it "lets an existing user sign in without consent and does not overwrite acceptance dates" do
