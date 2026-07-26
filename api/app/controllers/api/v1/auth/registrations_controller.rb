@@ -2,6 +2,8 @@ module Api
   module V1
     module Auth
       class RegistrationsController < ApplicationController
+        include AppInstallationReconciliation
+
         before_action :authenticate_user!, only: [:destroy]
 
         def create

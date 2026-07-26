@@ -53,6 +53,21 @@ RSpec.describe AppInstallations::Register do
     expect(AppInstallation.find_by(installation_id: "inst-x").user_id).to eq(user.id)
   end
 
+  it "never steals an installation already owned by another user" do
+    owner = create(:user)
+    register(user: owner, installation_id: "inst-owned")
+    previous = AppInstallation.find_by(installation_id: "inst-owned").last_authenticated_at
+
+    other = create(:user)
+    allow(Rails.logger).to receive(:warn)
+    travel_to(2.hours.from_now) { register(user: other, installation_id: "inst-owned") }
+
+    install = AppInstallation.find_by(installation_id: "inst-owned")
+    expect(install.user_id).to eq(owner.id)
+    expect(install.last_authenticated_at).to be_within(1.second).of(previous)
+    expect(Rails.logger).to have_received(:warn).with(/association_conflict/)
+  end
+
   it "ignores non-allowlisted attributes (e.g. a forged user_id / fcm_token)" do
     other = create(:user)
     result = register(

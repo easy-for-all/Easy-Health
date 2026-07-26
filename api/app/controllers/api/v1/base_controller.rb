@@ -4,6 +4,7 @@ module Api
       include AiLogging
       include RateLimiter
       include RequiresActiveAccess
+      include AppInstallationReconciliation
 
       before_action :authenticate_user!
       before_action :set_sentry_user_context
