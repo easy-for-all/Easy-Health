@@ -14,10 +14,19 @@ module Api
         end
 
         # GET /api/v1/admin/analytics/android_installations
-        # "APP ANDROID" (Fase 23) — the real installed base from app_installations,
-        # separating installations / devices / users / sessions.
+        # "APP ANDROID" — the real installed base from app_installations,
+        # separating installations / devices / users / sessions, and splitting
+        # historical / current tracking (build >= reconciliation threshold) /
+        # legacy so the tracking health rate is never diluted by old builds.
         def android_installations
           render json: ::Analytics::AndroidInstallations.new.call
+        rescue StandardError => e
+          # Only real failures are logged — a normal dashboard load stays silent.
+          Rails.logger.error(
+            "[Admin::Analytics#android_installations] #{e.class}: #{e.message}"
+          )
+          render json: { error: "Métricas de instalação indisponíveis no momento." },
+                 status: :service_unavailable
         end
       end
     end

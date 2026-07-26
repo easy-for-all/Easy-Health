@@ -45,6 +45,24 @@ nos últimos 7 dias (janela em timezone de reporte).
    (nota de viés de seleção obrigatória).
 7. **Qualidade operacional Android** — first opens, instalações ativas, versão/build,
    push permission, tokens ativos, deep link success, login success, crashes (Sentry).
+8. **Instalações Android** — fonte única `AppInstallation` (nunca `activation_platform`,
+   `DeviceToken` ou `ProductAnalyticsEvent`). Ver `ANDROID_ANALYTICS.md` para as definições
+   completas. Definições emitidas pelo serviço `Analytics::AndroidInstallations`:
+   - `android_link_rate_v1` — instalações vinculadas (`user_id` presente) ÷ instalações
+     Android, **histórico completo**.
+   - `android_current_build_link_rate_v1` — o mesmo, restrito a `app_build >= 45`
+     (`AppInstallation::RECONCILIATION_MIN_BUILD`). É a métrica de saúde do tracking:
+     builds legados **não** entram no denominador.
+   - `android_daily_link_rate_v1` — taxa de vínculo das instalações novas de cada dia
+     (janela de 14 dias, corte em timezone de reporte), para detectar regressão.
+   - `android_latest_build_share_v1` — instalações no maior build numérico conhecido ÷
+     instalações Android; mede a adoção após cada publicação.
+   - `android_user_funnel_step_v1` — passos medidos sobre **usuários vinculados**
+     (nunca sobre instalações): vinculados → criou treino → concluiu treino.
+   - `android_installation_provenance_v1` — instalações registradas ao vivo (`source:
+     register`) ÷ total. É **procedência do registro**, não saúde do tracking.
+     _Renomeado de `android_tracking_coverage_v1`, cujo nome colidia com a saúde do
+     tracking; a métrica antiga não existe mais._
 
 ## Cobertura & proveniência
 
