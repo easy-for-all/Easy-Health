@@ -2,6 +2,8 @@ module Api
   module V1
     module Auth
       class MobileCallbacksController < ApplicationController
+        include AppInstallationReconciliation
+
         skip_before_action :authenticate_user!, raise: false
 
         def exchange

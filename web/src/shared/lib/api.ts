@@ -1,4 +1,15 @@
+import { getCachedInstallationId } from "./analytics/context";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+// X-Installation-Id lets the backend re-link this installation to the signed-in
+// user on any authenticated request (see AppInstallationReconciliation), instead
+// of depending on a fire-and-forget register that may never run after login.
+// Read from context.ts (not installation.ts) to avoid an import cycle back here.
+function installationHeader(): Record<string, string> {
+  const installationId = getCachedInstallationId();
+  return installationId ? { "X-Installation-Id": installationId } : {};
+}
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -51,7 +62,7 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown, opti
   const res = await fetch(`${API_URL}${path}`, {
     method,
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...installationHeader() },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -74,6 +85,8 @@ async function upload<T>(method: HttpMethod, path: string, formData: FormData): 
   const res = await fetch(`${API_URL}${path}`, {
     method,
     credentials: "include",
+    // No Content-Type here on purpose: the browser must set the multipart boundary.
+    headers: installationHeader(),
     body: formData,
   });
 

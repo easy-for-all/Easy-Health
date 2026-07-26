@@ -74,6 +74,36 @@ RSpec.describe "Api::V1::Auth::GoogleNative", type: :request do
       expect(response.parsed_body["id"]).to eq(existing.id)
     end
 
+    it "links the installation sent in X-Installation-Id within the sign_in cycle" do
+      existing = create(:user, email: "native@example.com")
+      installation = create(:app_installation, :anonymous)
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
+
+      post "/api/v1/auth/google/native",
+           params: { id_token: "valid.jwt", platform: "android" },
+           headers: { "X-Installation-Id" => installation.installation_id },
+           as: :json
+
+      expect(response).to have_http_status(:ok)
+      installation.reload
+      expect(installation.user_id).to eq(existing.id)
+      expect(installation.last_authenticated_at).to be_present
+    end
+
+    it "does not link the installation when the token is rejected" do
+      installation = create(:app_installation, :anonymous)
+      allow(Auth::GoogleIdTokenVerifier).to receive(:verify!)
+        .and_raise(Auth::GoogleIdTokenVerifier::VerificationError, "bad aud")
+
+      post "/api/v1/auth/google/native",
+           params: { id_token: "bad.jwt", platform: "android" },
+           headers: { "X-Installation-Id" => installation.installation_id },
+           as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(installation.reload.user_id).to be_nil
+    end
+
     it "rejects an invalid id token with 401" do
       allow(Auth::GoogleIdTokenVerifier).to receive(:verify!)
         .and_raise(Auth::GoogleIdTokenVerifier::VerificationError, "bad aud")

@@ -128,6 +128,16 @@ module AppInstallations
       # last_authenticated_at: only when a current_user is present and associated.
       return if @user.nil?
 
+      # An installation already owned by someone else is never stolen — a shared
+      # or re-sold device must not move its history to the new account.
+      if install.user_id.present? && install.user_id != @user.id
+        Rails.logger.warn(
+          "[installations] association_conflict installation_id=#{install.installation_id} " \
+          "owner_user_id=#{install.user_id} request_user_id=#{@user.id}"
+        )
+        return
+      end
+
       install.user = @user
       install.last_authenticated_at = Time.current
       backfill_activation_platform!(install)

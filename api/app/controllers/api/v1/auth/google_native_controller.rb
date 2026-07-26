@@ -6,6 +6,8 @@ module Api
       # and posts it here. We verify the token and reuse the same user
       # provisioning as the web OmniAuth flow (User.from_omniauth).
       class GoogleNativeController < ApplicationController
+        include AppInstallationReconciliation
+
         skip_before_action :authenticate_user!, raise: false
         skip_before_action :verify_authenticity_token, raise: false
 
