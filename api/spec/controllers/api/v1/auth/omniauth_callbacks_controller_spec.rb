@@ -21,13 +21,46 @@ RSpec.describe Api::V1::Auth::OmniauthCallbacksController, type: :controller do
   end
 
   it "keeps the web flow redirecting to the app dashboard" do
+    request.env["omniauth.params"] = { "terms_accepted" => "1", "privacy_accepted" => "1" }
+
     get :google_oauth2
 
     expect(response).to redirect_to("https://easyhealth.art/onboarding")
     expect(MobileAuthCode.count).to eq(0)
   end
 
+  it "creates the account from the consent carried in omniauth.params" do
+    request.env["omniauth.params"] = {
+      "terms_accepted" => "1", "privacy_accepted" => "1", "marketing_consent" => "0"
+    }
+
+    expect { get :google_oauth2 }.to change(User, :count).by(1)
+
+    user = User.find_by(email: "google@example.com")
+    expect(user.consent_source).to eq("web")
+    expect(user.marketing_consent).to be(false)
+  end
+
+  it "refuses to create an account when omniauth.params carries no consent" do
+    expect { get :google_oauth2 }.not_to change(User, :count)
+
+    expect(response).to redirect_to("https://easyhealth.art/sign-up?error=consent_required&provider=google")
+  end
+
+  it "signs an existing user in without requiring consent again" do
+    accepted_at = 3.days.ago
+    existing = create(:user, email: "google@example.com", terms_accepted_at: accepted_at,
+                             created_at: 1.day.ago)
+
+    expect { get :google_oauth2 }.not_to change(User, :count)
+
+    expect(response).to redirect_to("https://easyhealth.art/dashboard")
+    expect(existing.reload.terms_accepted_at).to be_within(1.second).of(accepted_at)
+  end
+
   it "redirects the android flow to the mobile callback with a one-time code" do
+    request.env["omniauth.params"] = { "terms_accepted" => "1", "privacy_accepted" => "1" }
+
     get :google_oauth2_mobile
 
     expect(response).to have_http_status(:found)

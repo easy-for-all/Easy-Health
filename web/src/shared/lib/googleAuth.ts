@@ -16,6 +16,7 @@ export interface GoogleNativeUser extends User {
 // Consent carried into the social sign-up flows. Only sent from the sign-up
 // screen (after its consent gate); the login screen omits it, so the backend
 // refuses to CREATE a new account there but still lets existing users in.
+// The backend is the authority: we never guess whether an account exists.
 export interface GoogleConsent {
   termsAccepted: boolean;
   privacyAccepted: boolean;
@@ -198,4 +199,65 @@ export async function postGoogleNative(idToken: string, consent?: GoogleConsent)
     authLog("exchange_error", { code, message: (err as Error)?.message });
     throw new GoogleAuthError((err as Error)?.message ?? "Falha ao autenticar", code);
   }
+}
+
+/**
+ * Single entry point for both auth screens. Keeps the native-vs-web decision and
+ * the web navigation in one place so neither screen depends on an `<a href>`
+ * being present in the server-rendered HTML — a link that used to be followed by
+ * taps landing before hydration, sending the Android WebView into the browser
+ * OAuth flow that Google rejects with `disallowed_useragent`.
+ *
+ * `consent` is only ever passed by the sign-up screen, after its own gate.
+ */
+export type GoogleAuthOutcome =
+  | { navigated: true }
+  | { navigated: false; redirectPath: string };
+
+export async function startGoogleAuth(
+  { native, consent }: { native: boolean; consent?: GoogleConsent },
+): Promise<GoogleAuthOutcome> {
+  if (!native) {
+    // Browsers keep the server-side OmniAuth flow. Navigating explicitly (rather
+    // than relying on a link) means the consent query params can never be lost.
+    window.location.assign(googleAuthWebUrl(consent));
+    return { navigated: true };
+  }
+
+  const idToken = await nativeGoogleSignIn();
+  const { redirectPath } = await postGoogleNative(idToken, consent);
+  return { navigated: false, redirectPath };
+}
+
+// What actually went wrong, so each screen can respond instead of collapsing
+// every outcome into "Não foi possível entrar".
+// - consent_required: this Google account does not exist yet → send to sign-up.
+// - cancelled:        the user dismissed the account picker → say nothing.
+export type GoogleAuthFailure =
+  | "consent_required"
+  | "cancelled"
+  | "account_deleted"
+  | "invalid_token"
+  | "network"
+  | "unknown";
+
+// The capgo plugin surfaces a dismissed picker without a stable contract, so
+// both the code and the message are inspected. Android's canonical value is
+// 12501 (SIGN_IN_CANCELLED); other builds return a "cancelled"/"canceled" string.
+const CANCELLED_PATTERN = /cancel/i;
+
+export function classifyGoogleAuthError(err: unknown): GoogleAuthFailure {
+  const code = err instanceof GoogleAuthError ? err.code : "";
+  const message = (err as Error)?.message ?? "";
+
+  if (code === "consent_required") return "consent_required";
+  if (code === "account_deleted") return "account_deleted";
+  if (code === "invalid_token") return "invalid_token";
+  if (code === "12501" || CANCELLED_PATTERN.test(code) || CANCELLED_PATTERN.test(message)) {
+    return "cancelled";
+  }
+  if (code === "exchange_failed" || err instanceof TypeError || (err as Error)?.name === "TimeoutError") {
+    return "network";
+  }
+  return "unknown";
 }

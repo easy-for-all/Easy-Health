@@ -136,27 +136,34 @@ class User < ApplicationRecord
     user
   end
 
+  # Single normalizer for every consent flag, whatever transport it arrived on
+  # (JSON booleans from the native app, "1"/"0" query params from the web flow).
+  # Deliberately stricter than ActiveModel::Type::Boolean: consent is an opt-in,
+  # so only an explicit affirmative counts and everything else — nil, "0",
+  # "false", "yes", junk — is a refusal.
+  def self.explicit_true?(value)
+    value == true || value.to_s == "1" || value.to_s.casecmp("true").zero?
+  end
+
   # True only when BOTH Terms of Use and Privacy Policy were accepted. The
   # sign-up screen uses a single checkbox covering both, so callers may pass the
   # same flag for each.
   def self.required_consent_given?(consent)
-    boolean = ActiveModel::Type::Boolean.new
-    boolean.cast(consent[:terms_accepted]) && boolean.cast(consent[:privacy_accepted])
+    explicit_true?(consent[:terms_accepted]) && explicit_true?(consent[:privacy_accepted])
   end
 
   # Consent columns to stamp on a newly created account. Timestamps/versions are
-  # authoritative on the server; marketing_consent defaults to true when the
-  # caller does not send it (preserves prior social behaviour).
+  # authoritative on the server. marketing_consent is never inferred: an absent
+  # or unchecked flag stays false, matching the column default.
   def self.consent_attributes(consent)
     now = Time.current
-    marketing = consent[:marketing_consent].nil? ? true : ActiveModel::Type::Boolean.new.cast(consent[:marketing_consent])
     {
       terms_accepted_at: now,
       privacy_policy_accepted_at: now,
       terms_version: CURRENT_TERMS_VERSION,
       privacy_policy_version: CURRENT_PRIVACY_POLICY_VERSION,
       consent_source: consent[:source],
-      marketing_consent: marketing
+      marketing_consent: explicit_true?(consent[:marketing_consent])
     }
   end
 

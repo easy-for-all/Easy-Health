@@ -8,13 +8,12 @@ import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
 import { trackCheckoutStarted } from "@/shared/lib/analytics";
-import { Capacitor } from "@capacitor/core";
+import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
 import {
-  GOOGLE_AUTH_WEB_URL,
   GoogleAuthError,
   authLog,
-  nativeGoogleSignIn,
-  postGoogleNative,
+  classifyGoogleAuthError,
+  startGoogleAuth,
 } from "@/shared/lib/googleAuth";
 
 const OAUTH_ERROR_MESSAGE_KEYS: Record<string, string> = {
@@ -36,31 +35,57 @@ export default function LoginPage() {
   );
   const [loading, setLoading]   = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // A Google account the backend has never seen. Kept apart from `error` so the
+  // recovery CTA survives re-renders instead of being replaced by a plain string.
+  const [googleSignUpNeeded, setGoogleSignUpNeeded] = useState(false);
   const submittingRef = useRef(false);
+  const googleRef = useRef(false);
+  const hydrated = useIsHydrated();
+  const isNative = useIsNativePlatform();
 
-  async function handleGoogleAuth(e: React.MouseEvent<HTMLAnchorElement>) {
-    // Web keeps the server-side OmniAuth flow (follows the <a href>).
-    if (!Capacitor.isNativePlatform()) return;
-    // Android uses native Google Sign-In (no browser, no intermediate screen).
+  async function handleGoogleAuth(e: React.MouseEvent<HTMLButtonElement>) {
+    // preventDefault/stopPropagation first, unconditionally: no platform check
+    // may run before them, or a click could escape into a default navigation.
     e.preventDefault();
+    e.stopPropagation();
+    if (googleRef.current) return;
+    googleRef.current = true;
+
     setError("");
+    setGoogleSignUpNeeded(false);
     setGoogleLoading(true);
     try {
-      const idToken = await nativeGoogleSignIn();
-      const { redirectPath } = await postGoogleNative(idToken);
-      window.location.replace(redirectPath);
+      // No consent from this screen: signing in is not consenting. A brand-new
+      // account is refused by the backend and routed to /sign-up below.
+      const outcome = await startGoogleAuth({ native: isNative });
+      if (outcome.navigated) return; // leaving the page; keep the loading state
+      window.location.replace(outcome.redirectPath);
     } catch (err) {
+      googleRef.current = false;
       setGoogleLoading(false);
       const code = err instanceof GoogleAuthError ? err.code : "unknown";
+      const failure = classifyGoogleAuthError(err);
       authLog("login_failed", {
         code,
+        failure,
         name: (err as Error)?.name,
         message: (err as Error)?.message,
       });
-      if (code === "consent_required") {
-        setError(t("consentRequiredError"));
-      } else {
-        setError(`Não foi possível entrar com Google. (${code})`);
+
+      switch (failure) {
+        case "consent_required":
+          setGoogleSignUpNeeded(true);
+          break;
+        case "cancelled":
+          break; // the user chose to back out — not an error to report
+        case "account_deleted":
+          setError(t("accountDeletedError"));
+          break;
+        case "network":
+          setError(t("networkError"));
+          break;
+        default:
+          setError(t("oauthError"));
       }
     }
   }
@@ -123,17 +148,22 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Google OAuth */}
-        <a
-          href={GOOGLE_AUTH_WEB_URL}
+        {/* Google OAuth — a <button>, never an <a href>: the server-rendered
+            markup must not carry a working OAuth link, or a tap landing before
+            hydration would follow it instead of running the handler below. */}
+        <button
+          type="button"
           onClick={handleGoogleAuth}
+          disabled={!hydrated || googleLoading}
           aria-busy={googleLoading}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
             width: "100%", padding: "14px 16px", borderRadius: "var(--r-pill)",
             border: "1.5px solid var(--border)", background: "var(--bg-2)",
-            fontSize: 15, fontWeight: 600, color: "var(--text)",
+            fontFamily: "inherit", fontSize: 15, fontWeight: 600, color: "var(--text)",
             textDecoration: "none", marginBottom: 20, transition: "background .15s",
+            cursor: hydrated && !googleLoading ? "pointer" : "not-allowed",
+            opacity: hydrated ? 1 : 0.65,
           }}
         >
           <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -142,8 +172,41 @@ export default function LoginPage() {
             <path d="M10.956 28.504A14.51 14.51 0 0 1 10.2 24c0-1.568.264-3.088.756-4.504v-6.216H3.048A23.98 23.98 0 0 0 .48 24c0 3.876.924 7.536 2.568 10.72l7.908-6.216z" fill="#FBBC05"/>
             <path d="M24.48 9.548c3.54 0 6.72 1.216 9.22 3.604l6.908-6.908C36.384 2.4 30.948 0 24.48 0 15.156 0 6.996 5.364 3.048 13.28l7.908 6.216c1.908-5.704 7.236-9.948 13.524-9.948z" fill="#EA4335"/>
           </svg>
-          {googleLoading ? "Entrando com Google..." : "Continuar com Google"}
-        </a>
+          {!hydrated
+            ? t("loadingButton")
+            : googleLoading
+              ? t("signingInWithGoogle")
+              : t("continueWithGoogle")}
+        </button>
+
+        {/* This Google account has no EasyHealth account yet. Consent was never
+            collected, so we route to sign-up to collect it — nothing is carried
+            over, and no personal data goes into the URL. */}
+        {googleSignUpNeeded && (
+          <div
+            role="alert"
+            style={{
+              background: "var(--bg-2)", border: "1.5px solid var(--border)",
+              borderRadius: "var(--r-md)", padding: "14px 16px", marginBottom: 20,
+              display: "flex", flexDirection: "column", gap: 12,
+            }}
+          >
+            <p style={{ fontSize: 14, color: "var(--text)", margin: 0 }}>
+              {t("googleAccountNotRegistered")}
+            </p>
+            <Link
+              href="/sign-up?provider=google"
+              style={{
+                display: "block", textAlign: "center", padding: "12px 16px",
+                borderRadius: "var(--r-pill)", fontSize: 15, fontWeight: 700,
+                background: "linear-gradient(180deg, var(--primary), var(--primary-2))",
+                color: "var(--on-primary)", textDecoration: "none",
+              }}
+            >
+              {t("createAccountWithGoogle")}
+            </Link>
+          </div>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <div style={{ flex: 1, height: 1, background: "var(--border)" }} />

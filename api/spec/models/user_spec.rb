@@ -104,5 +104,29 @@ RSpec.describe User do
         described_class.from_omniauth(auth_double(uid: "uid-3", email: "blocked@example.com"))
       }.to raise_error(User::BlockedEmailError)
     end
+
+    it "never opts a new account into marketing when the flag is absent" do
+      user = described_class.from_omniauth(auth_double(uid: "uid-12", email: "nomkt@example.com"), consent: full_consent)
+
+      expect(user.marketing_consent).to be(false)
+    end
+  end
+
+  describe ".explicit_true?" do
+    # Consent is an opt-in, so the normalizer is deliberately stricter than
+    # ActiveModel::Type::Boolean: only an explicit affirmative counts.
+    it "accepts only explicit affirmatives" do
+      expect(described_class.explicit_true?(true)).to be(true)
+      expect(described_class.explicit_true?("1")).to be(true)
+      expect(described_class.explicit_true?("true")).to be(true)
+      expect(described_class.explicit_true?("TRUE")).to be(true)
+      expect(described_class.explicit_true?(1)).to be(true)
+    end
+
+    it "treats everything else as a refusal" do
+      [ nil, false, "", "0", "false", "yes", "on", "maybe", 0 ].each do |value|
+        expect(described_class.explicit_true?(value)).to be(false), "expected #{value.inspect} to be refused"
+      end
+    end
   end
 end
