@@ -127,7 +127,8 @@ export function PlatformComparisonSection() {
             {data.note}
           </p>
           <p className="mt-1 text-[10px] text-[var(--text-dim)]">
-            Cobertura: dados próprios a partir da ativação do rastreamento (event_tracked).
+            Cobertura: dados próprios a partir da ativação do rastreamento (event_tracked). Coortes de usuários por
+            plataforma de ativação — não é contagem de instalações (ver &ldquo;App Android&rdquo;).
           </p>
         </>
       )}

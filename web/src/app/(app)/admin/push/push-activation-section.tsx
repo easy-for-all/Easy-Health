@@ -76,7 +76,11 @@ export function PushActivationSection({ stats }: { stats?: PushStats }) {
         <Card label="Push ativo" value={stats.permission.push_enabled} description="push_enabled on" />
         <Card label="Permissão concedida" value={stats.permission.permission_granted} description="granted" />
         <Card label="Opt-out" value={stats.permission.opted_out} description="desativaram" />
-        <Card label="Devices ativos" value={stats.permission.active_devices} description="Android válidos" />
+        <Card
+          label="Devices ativos"
+          value={stats.permission.active_devices}
+          description="tokens de push Android válidos (não é instalações)"
+        />
       </div>
 
       <p className="mb-2 text-xs font-semibold text-[var(--text-dim)]">Funil</p>

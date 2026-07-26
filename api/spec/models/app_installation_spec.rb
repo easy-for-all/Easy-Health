@@ -43,6 +43,66 @@ RSpec.describe AppInstallation, type: :model do
     end
   end
 
+  describe "linkage scopes" do
+    let!(:linked_confirmed) { create(:app_installation, user: create(:user), last_authenticated_at: Time.current) }
+    let!(:linked_unconfirmed) { create(:app_installation, user: create(:user), last_authenticated_at: nil) }
+    let!(:anonymous_install) { create(:app_installation, :anonymous) }
+
+    it "counts every install with a user as linked" do
+      expect(described_class.linked).to contain_exactly(linked_confirmed, linked_unconfirmed)
+    end
+
+    it "requires last_authenticated_at for fully_authenticated" do
+      expect(described_class.fully_authenticated).to contain_exactly(linked_confirmed)
+    end
+
+    it "treats a missing user as anonymous" do
+      expect(described_class.anonymous).to contain_exactly(anonymous_install)
+    end
+
+    # The old name is kept so existing callers keep working; it must stay an
+    # exact alias of :linked, never drift into its own definition.
+    it "keeps the deprecated :authenticated scope as an alias of :linked" do
+      expect(described_class.authenticated.to_a).to match_array(described_class.linked.to_a)
+    end
+  end
+
+  describe "build scopes" do
+    # app_build is a free-form string coming from the client.
+    {
+      nil => :legacy,
+      "" => :legacy,
+      "unknown" => :legacy,
+      "1.0.45" => :legacy,
+      "44" => :legacy,
+      "45" => :current,
+      "0045" => :current,
+      "46" => :current,
+      "120" => :current
+    }.each do |build_value, expected|
+      it "classifies app_build #{build_value.inspect} as #{expected}" do
+        install = create(:app_installation, app_build: build_value)
+
+        if expected == :current
+          expect(described_class.current_build).to include(install)
+          expect(described_class.legacy_build).not_to include(install)
+        else
+          expect(described_class.legacy_build).to include(install)
+          expect(described_class.current_build).not_to include(install)
+        end
+      end
+    end
+
+    it "never raises on a mixed set of valid and malformed builds" do
+      %w[45 44 unknown 0045].each { |b| create(:app_installation, app_build: b) }
+      create(:app_installation, app_build: nil)
+
+      expect { described_class.current_build.count }.not_to raise_error
+      expect(described_class.current_build.count).to eq(2)
+      expect(described_class.legacy_build.count).to eq(3)
+    end
+  end
+
   it "never exposes device_token_id in JSON" do
     install = create(:app_installation, device_token: create(:device_token))
     expect(install.as_json).not_to have_key("device_token_id")
