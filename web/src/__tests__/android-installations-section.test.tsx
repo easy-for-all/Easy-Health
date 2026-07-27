@@ -34,12 +34,12 @@ const emptyMetrics: AndroidInstallationMetrics = {
   source: "app_installations",
   generated_at: "2026-07-26T12:00:00-03:00",
   definitions: {
-    reconciliation_min_build: 45,
     active_7d_since: "2026-07-19T12:00:00-03:00",
     active_30d_since: "2026-06-26T12:00:00-03:00",
     timeline_days: 14,
     healthy_link_rate: 95,
     attention_link_rate: 85,
+    reconciliation_rate: "linked_at / first_authenticated_request_at",
   },
   overview: {
     total_installations: 0,
@@ -50,21 +50,25 @@ const emptyMetrics: AndroidInstallationMetrics = {
     users_with_multiple_installations: 0,
     active_installations_7d: 0,
     active_installations_30d: 0,
+    new_installations_24h: 0,
+    new_installations_7d: 0,
     new_installations_30d: 0,
     link_rate: metric(0, 0),
   },
-  current_tracking: {
-    min_build: 45,
-    total_installations: 0,
+  reconciliation: {
+    observed_authenticated_installations: 0,
+    link_attempted_installations: 0,
     linked_installations: 0,
-    anonymous_installations: 0,
-    authenticated_installations: 0,
+    authenticated_unlinked_installations: 0,
+    conflicts: 0,
+    failures_by_code: {},
     link_rate: metric(0, 0),
   },
-  legacy: { max_build: 44, total_installations: 0, linked_installations: 0, anonymous_installations: 0 },
   data_quality: {
     linked_without_last_authenticated_at: 0,
     authenticated_at_without_user: 0,
+    linked_without_linked_at: 0,
+    linked_without_observed_request: 0,
     missing_app_build: 0,
     invalid_app_build: 0,
     missing_app_version: 0,
@@ -133,7 +137,7 @@ describe("AndroidInstallationsSection", () => {
     await screen.findByText("Instalações Android registradas");
     expect(container.textContent).not.toMatch(/NaN|undefined/);
     expect(screen.getByText("Nenhuma inconsistência detectada.")).toBeInTheDocument();
-    expect(screen.getByText("Nenhuma instalação nova no período.")).toBeInTheDocument();
+    expect(screen.getByText("Nenhuma requisição autenticada observada no período.")).toBeInTheDocument();
   });
 
   it("renders the overview cards with installation and user counts apart", async () => {
@@ -159,31 +163,31 @@ describe("AndroidInstallationsSection", () => {
     expect(screen.getByText("Instalações ainda anônimas")).toBeInTheDocument();
   });
 
-  it("labels the tracking health block with the build from the payload", async () => {
+  it("renders reconciliation health from observed authenticated requests", async () => {
     renderWith(
       withData({
-        current_tracking: {
-          ...emptyMetrics.current_tracking,
-          total_installations: 3,
+        reconciliation: {
+          ...emptyMetrics.reconciliation,
+          observed_authenticated_installations: 3,
           linked_installations: 3,
           link_rate: metric(3, 3),
         },
       }),
     );
 
-    expect(await screen.findByText("Saúde do tracking — build 45+")).toBeInTheDocument();
+    expect(await screen.findByText("Reconciliação")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByText("Saudável")).toBeInTheDocument();
     // A rate is never shown without its sample.
-    expect(screen.getByText(/3 de 3 instalações do build 45\+/)).toBeInTheDocument();
+    expect(screen.getByText(/3 de 3 instalações observadas autenticadas/)).toBeInTheDocument();
   });
 
   it("flags an attention link rate", async () => {
     renderWith(
       withData({
-        current_tracking: {
-          ...emptyMetrics.current_tracking,
-          total_installations: 10,
+        reconciliation: {
+          ...emptyMetrics.reconciliation,
+          observed_authenticated_installations: 10,
           linked_installations: 9,
           link_rate: metric(9, 10),
         },
@@ -196,9 +200,9 @@ describe("AndroidInstallationsSection", () => {
   it("flags a critical link rate", async () => {
     renderWith(
       withData({
-        current_tracking: {
-          ...emptyMetrics.current_tracking,
-          total_installations: 10,
+        reconciliation: {
+          ...emptyMetrics.reconciliation,
+          observed_authenticated_installations: 10,
           linked_installations: 5,
           link_rate: metric(5, 10),
         },
@@ -208,22 +212,19 @@ describe("AndroidInstallationsSection", () => {
     expect(await screen.findByText("Crítico")).toBeInTheDocument();
   });
 
-  it("shows 'sem dados' and no percentage when there is no build 45+ sample", async () => {
+  it("shows 'sem dados' and no percentage when there is no observed authenticated sample", async () => {
     renderWith(emptyMetrics);
 
     expect(await screen.findByText("Sem dados")).toBeInTheDocument();
-    expect(screen.getByText(/sem instalações do build 45\+ nesta faixa ainda/)).toBeInTheDocument();
+    expect(screen.getByText(/sem instalações observadas autenticadas nesta faixa ainda/)).toBeInTheDocument();
   });
 
-  it("keeps legacy installs in their own block with the explanatory warning", async () => {
-    renderWith(
-      withData({
-        legacy: { max_build: 44, total_installations: 8, linked_installations: 1, anonymous_installations: 7 },
-      }),
-    );
+  it("treats build as descriptive metadata, not reconciliation eligibility", async () => {
+    const { container } = renderWith(emptyMetrics);
 
-    expect(await screen.findByText("Instalações legadas — antes do build 45")).toBeInTheDocument();
-    expect(screen.getByText(/não devem ser usados para avaliar a saúde do tracking atual/i)).toBeInTheDocument();
+    await screen.findByText("Adoção de versão");
+    expect(container.textContent).toMatch(/build é dimensão descritiva/i);
+    expect(container.textContent).not.toMatch(/build 45\+/i);
   });
 
   it("lists data quality issues when they exist", async () => {
@@ -245,7 +246,6 @@ describe("AndroidInstallationsSection", () => {
             app_version: "1.0.45",
             app_build: "45",
             build_number: 45,
-            current_tracking: true,
             total_installations: 3,
             linked_installations: 3,
             anonymous_installations: 0,
@@ -256,7 +256,6 @@ describe("AndroidInstallationsSection", () => {
             app_version: null,
             app_build: null,
             build_number: null,
-            current_tracking: false,
             total_installations: 1,
             linked_installations: 0,
             anonymous_installations: 1,
@@ -293,8 +292,18 @@ describe("AndroidInstallationsSection", () => {
     renderWith(
       withData({
         health_timeline: [
-          { date: "2026-07-26", new_installations: 2, linked_installations: 2, link_rate: metric(2, 2) },
-          { date: "2026-07-25", new_installations: 4, linked_installations: 2, link_rate: metric(2, 4) },
+          {
+            date: "2026-07-26",
+            observed_authenticated_installations: 2,
+            linked_installations: 2,
+            link_rate: metric(2, 2),
+          },
+          {
+            date: "2026-07-25",
+            observed_authenticated_installations: 4,
+            linked_installations: 2,
+            link_rate: metric(2, 4),
+          },
         ],
       }),
     );

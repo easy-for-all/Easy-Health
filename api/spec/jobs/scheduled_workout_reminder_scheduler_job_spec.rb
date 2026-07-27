@@ -34,7 +34,7 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     user.user_events.where(event_name: "scheduled_workout_reminder_due")
   end
 
-  def create_reminder_event(user, plan, local_date:, reminder_number: 1, status: "delivered")
+  def create_reminder_event(user, plan, local_date:, reminder_number: 1, status: "accepted_by_make")
     user.user_events.create!(
       event_name: "scheduled_workout_reminder_due",
       occurred_at: Time.zone.parse("#{local_date} 09:30:00"),

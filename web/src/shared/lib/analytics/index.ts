@@ -11,7 +11,7 @@ import {
   isKnownEvent,
 } from "./taxonomy";
 import { enqueueServerEvent, isServerEvent } from "./server";
-import { registerInstallation } from "./installation";
+import { ensureInstallationRegistered } from "./installation";
 import {
   firebaseAnalyticsActive,
   logFirebaseEvent,
@@ -118,7 +118,7 @@ export function identifyUser(userId: string | number): void {
   // web/PWA too — it no-ops off-native or when the feature flag is off.
   // Deliberately NO sessionStarted: a login is not a new session, so it must not
   // stamp last_session_at (only app boot does — see init.ts).
-  void registerInstallation();
+  void ensureInstallationRegistered();
   // Native: set a pseudonymous internal user id on Firebase (never email / installation_id).
   void setFirebaseUserId(id);
   if (typeof window === "undefined" || !sinksEnabled()) return;
@@ -151,6 +151,8 @@ export { getAnalyticsContext };
 export {
   getInstallationId,
   getInstallationIdSync,
+  ensureInstallationRegistered,
+  ensureInstallationForAuth,
   registerInstallation,
   refreshInstallation,
 } from "./installation";

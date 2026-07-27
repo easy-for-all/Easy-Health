@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/auth-context";
@@ -262,6 +263,15 @@ export default function AdminPage() {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+          <Link href="/admin/analytics/event-deliveries" className="text-sm font-semibold text-primary-600 hover:text-primary-700">
+            Log de eventos e entregas
+          </Link>
+          <Link href="/admin/observability" className="text-sm font-semibold text-primary-600 hover:text-primary-700">
+            Observabilidade
+          </Link>
+        </div>
+
         {error && (
           <div className="rounded-xl bg-[var(--hot-soft)] px-4 py-3 text-sm text-[var(--hot)]">{error}</div>
         )}
@@ -300,7 +310,7 @@ export default function AdminPage() {
             <StatCard label="Inativos 7d" value={stats?.inactive_7_days_count} description="Segmento ativo" />
             <StatCard label="Churn risk" value={stats?.churn_risk_count} description="Assinantes em risco" />
             <StatCard label="Parcial recente" value={stats?.completed_partial_recently_count} description="Últimos 7 dias" />
-            <StatCard label="Make hoje" value={stats?.make_events_delivered_today} description="Eventos entregues" />
+            <StatCard label="Make hoje" value={stats?.make_events_delivered_today} description="Aceitos pelo webhook" />
             <StatCard label="Make falhou" value={stats?.make_events_failed} description="Eventos com erro" />
             <StatCard label="Trial sem assinatura" value={stats?.trial_expired_without_subscription_count} description="Expirados" />
           </div>

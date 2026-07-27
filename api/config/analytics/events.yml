@@ -129,3 +129,20 @@ events:
   workout_load_failed:      { version: 1, sinks: [server, ga4] }
   workout_save_failed:      { version: 1, sinks: [server, ga4] }
   push_registration_failed: { version: 1, sinks: [server, ga4] }
+
+  # ── Observability (server-only) ────────────────────────────────────────────
+  # Emitted by the backend itself (Observability::Events), never by a client.
+  # They are the auditable substrate for the health checks in
+  # docs/observability/ALERT_MATRIX.md — deliberately `server` sink only, since
+  # sending operational diagnostics to GA4 would be both noisy and pointless.
+  android_registration_started:   { version: 1, sinks: [server] }
+  android_registration_succeeded: { version: 1, sinks: [server] }
+  android_registration_failed:    { version: 1, sinks: [server] }
+  google_auth_started:            { version: 1, sinks: [server] }
+  google_auth_succeeded:          { version: 1, sinks: [server] }
+  google_auth_failed:             { version: 1, sinks: [server] }
+  installation_link_attempted:    { version: 1, sinks: [server] }
+  installation_link_succeeded:    { version: 1, sinks: [server] }
+  installation_link_failed:       { version: 1, sinks: [server] }
+  integration_delivery_succeeded: { version: 1, sinks: [server] }
+  integration_delivery_failed:    { version: 1, sinks: [server] }

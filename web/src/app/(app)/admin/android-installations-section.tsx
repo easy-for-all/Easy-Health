@@ -5,9 +5,8 @@
 // The panel keeps three views strictly apart so a number is never read as
 // something it is not:
 //   - histórico          : every Android installation ever registered.
-//   - tracking atual     : builds >= the reconciliation threshold, the only
-//                          honest measure of how the current flow is doing.
-//   - legado             : older builds, whose anonymous rows are expected.
+//   - reconciliação      : linked_at over first_authenticated_request_at.
+//   - dimensões          : build, manufacturer and tokens as descriptive cuts.
 // Installations ≠ devices ≠ users ≠ sessions ≠ Google Play downloads.
 import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api";
@@ -137,8 +136,6 @@ export function AndroidInstallationsSection() {
       .catch(() => setError(true));
   }, []);
 
-  const minBuild = data?.definitions.reconciliation_min_build;
-
   return (
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="mb-3 flex items-baseline justify-between gap-2">
@@ -194,41 +191,29 @@ export function AndroidInstallationsSection() {
             {formatCount(data.overview.authenticated_installations)} com autenticação confirmada.
           </p>
 
-          {/* 2 — Saúde do tracking atual */}
-          <Block
-            title={`Saúde do tracking — build ${minBuild}+`}
-            hint="somente builds que enviam o identificador de instalação"
-          >
-            <HealthHeadline
-              metric={data.current_tracking.link_rate}
-              noun={`instalações do build ${minBuild}+`}
-            />
+          {/* 2 — Reconciliação */}
+          <Block title="Reconciliação" hint={data.definitions.reconciliation_rate}>
+            <HealthHeadline metric={data.reconciliation.link_rate} noun="instalações observadas autenticadas" />
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Mini label="instalações" value={formatCount(data.current_tracking.total_installations)} />
-              <Mini label="vinculadas" value={formatCount(data.current_tracking.linked_installations)} />
-              <Mini label="anônimas" value={formatCount(data.current_tracking.anonymous_installations)} />
               <Mini
-                label="autenticação confirmada"
-                value={formatCount(data.current_tracking.authenticated_installations)}
+                label="observadas"
+                value={formatCount(data.reconciliation.observed_authenticated_installations)}
+              />
+              <Mini label="tentativas" value={formatCount(data.reconciliation.link_attempted_installations)} />
+              <Mini label="vinculadas" value={formatCount(data.reconciliation.linked_installations)} />
+              <Mini
+                label="sem vínculo"
+                value={formatCount(data.reconciliation.authenticated_unlinked_installations)}
               />
             </div>
+            {data.reconciliation.conflicts > 0 && (
+              <p className="mt-2 text-[10px] leading-snug text-[var(--hot)]">
+                {formatCount(data.reconciliation.conflicts)} conflito(s) de vínculo detectado(s).
+              </p>
+            )}
           </Block>
 
-          {/* 3 — Legado */}
-          <Block title={`Instalações legadas — antes do build ${minBuild}`}>
-            <div className="grid grid-cols-3 gap-3">
-              <Mini label="instalações" value={formatCount(data.legacy.total_installations)} />
-              <Mini label="vinculadas" value={formatCount(data.legacy.linked_installations)} />
-              <Mini label="anônimas" value={formatCount(data.legacy.anonymous_installations)} />
-            </div>
-            <p className="mt-2 text-[10px] leading-snug text-[var(--text-dim)]">
-              Builds anteriores ao {minBuild} não enviavam o identificador de instalação em todas as requisições
-              autenticadas. Registros anônimos desse grupo não devem ser usados para avaliar a saúde do tracking
-              atual.
-            </p>
-          </Block>
-
-          {/* 4 — Qualidade dos dados */}
+          {/* 3 — Qualidade dos dados */}
           <Block title="Qualidade dos dados">
             {!hasDataQualityIssues(data.data_quality) ? (
               <p className="text-xs text-[var(--text-dim)]">Nenhuma inconsistência detectada.</p>
@@ -242,6 +227,14 @@ export function AndroidInstallationsSection() {
                   label="last_authenticated_at sem usuário"
                   value={formatCount(data.data_quality.authenticated_at_without_user)}
                 />
+                <Mini
+                  label="vinculada sem linked_at"
+                  value={formatCount(data.data_quality.linked_without_linked_at)}
+                />
+                <Mini
+                  label="vinculada sem requisição observada"
+                  value={formatCount(data.data_quality.linked_without_observed_request)}
+                />
                 <Mini label="build ausente" value={formatCount(data.data_quality.missing_app_build)} />
                 <Mini label="build inválido" value={formatCount(data.data_quality.invalid_app_build)} />
                 <Mini label="versão ausente" value={formatCount(data.data_quality.missing_app_version)} />
@@ -250,8 +243,8 @@ export function AndroidInstallationsSection() {
             )}
           </Block>
 
-          {/* 5 — Adoção de versão */}
-          <Block title="Adoção de versão" hint="útil logo após cada publicação">
+          {/* 4 — Adoção de versão */}
+          <Block title="Adoção de versão" hint="build é dimensão descritiva, não elegibilidade de reconciliação">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Mini label="versão mais usada" value={displayLabel(data.adoption.most_used_version)} />
               <Mini label="build mais usado" value={displayLabel(data.adoption.most_used_build)} />
@@ -263,19 +256,19 @@ export function AndroidInstallationsSection() {
             </p>
           </Block>
 
-          {/* 6 — Health timeline */}
+          {/* 5 — Health timeline */}
           <Block
             title="Vínculo por dia"
-            hint={`novas instalações nos últimos ${data.definitions.timeline_days} dias`}
+            hint={`requisições autenticadas observadas nos últimos ${data.definitions.timeline_days} dias`}
           >
             {data.health_timeline.length === 0 ? (
-              <p className="text-xs text-[var(--text-dim)]">Nenhuma instalação nova no período.</p>
+              <p className="text-xs text-[var(--text-dim)]">Nenhuma requisição autenticada observada no período.</p>
             ) : (
-              <Table headers={["Data", "Novas", "Vinculadas", "Taxa"]}>
+              <Table headers={["Data", "Observadas", "Vinculadas", "Taxa"]}>
                 {data.health_timeline.map((row) => (
                   <tr key={row.date} className="border-t border-[var(--border)]">
                     <Cell first>{formatDate(row.date)}</Cell>
-                    <Cell>{formatCount(row.new_installations)}</Cell>
+                    <Cell>{formatCount(row.observed_authenticated_installations)}</Cell>
                     <Cell>{formatCount(row.linked_installations)}</Cell>
                     <Cell muted>{formatRate(row.link_rate)}</Cell>
                   </tr>
@@ -284,7 +277,7 @@ export function AndroidInstallationsSection() {
             )}
           </Block>
 
-          {/* 7 — Saúde operacional */}
+          {/* 6 — Saúde operacional */}
           <Block title="Saúde operacional" hint="derivada apenas de sinais reais">
             <ul className="grid gap-1.5 sm:grid-cols-2">
               {data.operational_health.map((component) => {
@@ -311,8 +304,8 @@ export function AndroidInstallationsSection() {
             </ul>
           </Block>
 
-          {/* 8 — Versões do app */}
-          <Block title="Versões do app" hint="builds numéricos mais recentes primeiro; sem build por último">
+          {/* 7 — Versões do app */}
+          <Block title="Versões do app" hint="dimensão descritiva; sem build por último">
             {data.versions.length === 0 ? (
               <p className="text-xs text-[var(--text-dim)]">Nenhuma instalação registrada.</p>
             ) : (
@@ -321,9 +314,6 @@ export function AndroidInstallationsSection() {
                   <tr key={`${row.app_version ?? "?"}-${row.app_build ?? "?"}`} className="border-t border-[var(--border)]">
                     <Cell first>
                       {displayLabel(row.app_version)}
-                      {row.current_tracking && (
-                        <span className="ml-1 text-[9px] uppercase text-[var(--good)]">tracking</span>
-                      )}
                     </Cell>
                     <Cell>{displayLabel(row.app_build)}</Cell>
                     <Cell>{formatCount(row.total_installations)}</Cell>
@@ -337,8 +327,8 @@ export function AndroidInstallationsSection() {
             )}
           </Block>
 
-          {/* 9 — Dispositivos */}
-          <Block title="Dispositivos">
+          {/* 8 — Dispositivos */}
+          <Block title="Dispositivos" hint="fabricante e modelo são dimensões descritivas">
             <div className="grid gap-4 lg:grid-cols-2">
               <div>
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-dim)]">
@@ -408,7 +398,7 @@ export function AndroidInstallationsSection() {
             </div>
           </Block>
 
-          {/* 10 — Pipeline de analytics (nunca instalações) */}
+          {/* 9 — Pipeline de analytics (nunca instalações) */}
           <Block title="Pipeline de analytics" hint="eventos e sessões — não é contagem de instalações">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Mini label="eventos Android" value={formatCount(data.analytics_pipeline.android_events_total)} />
@@ -421,7 +411,7 @@ export function AndroidInstallationsSection() {
             </div>
           </Block>
 
-          {/* 11 — Google Play (ainda não integrado) */}
+          {/* 10 — Google Play (ainda não integrado) */}
           <Block title="Google Play" hint={data.google_play.configured ? undefined : "não integrado"}>
             <div className="grid grid-cols-3 gap-3">
               <Mini label="instalações oficiais" value={formatCount(data.google_play.official_installs)} />

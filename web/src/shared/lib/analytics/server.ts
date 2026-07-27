@@ -8,6 +8,25 @@ import { EventName, SERVER_TRACKED_EVENTS } from "./taxonomy";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const ENDPOINT = "/api/v1/analytics/events";
 
+// Mirrors shared/lib/api.ts: omit any header whose value is not available yet
+// rather than sending "undefined" and minting a junk dimension value.
+function correlationHeaders(): Record<string, string> {
+  try {
+    const context = getAnalyticsContext();
+    const headers: Record<string, string> = {};
+
+    if (context.installation_id) headers["X-Installation-Id"] = context.installation_id;
+    if (context.platform) headers["X-Platform"] = context.platform;
+    if (context.app_version) headers["X-App-Version"] = context.app_version;
+    if (context.build_number) headers["X-App-Build"] = context.build_number;
+    if (context.session_id) headers["X-Session-Id"] = context.session_id;
+
+    return headers;
+  } catch {
+    return {};
+  }
+}
+
 const MAX_BATCH = 20;
 const MAX_QUEUE = 100; // hard cap so a broken network can't grow memory unbounded
 const FLUSH_DELAY_MS = 3000;
@@ -119,7 +138,12 @@ export async function flush(useBeacon = false): Promise<void> {
     const res = await fetch(`${API_URL}${ENDPOINT}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      // This sender bypasses shared/lib/api.ts, so the correlation headers have
+      // to be added here too — otherwise ingestion requests are the only
+      // traffic the backend cannot attribute to a platform or build.
+      // sendBeacon above cannot carry custom headers; those events still carry
+      // the same dimensions inside the body.
+      headers: { "Content-Type": "application/json", ...correlationHeaders() },
       body: payload,
       keepalive: true,
     });

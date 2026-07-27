@@ -4,7 +4,7 @@ module AppInstallations
   # - Accepts anonymous installs (user may be nil pre-login).
   # - user comes ONLY from the authenticated session — never from the payload.
   # - On first sight, stamps first_seen_at + tracking_started_at.
-  # - Always refreshes last_seen_at; associates the user when present.
+  # - Always refreshes last_seen_at; delegates any user link to LinkToUser.
   # - Never raises to the caller for a bad field — tracking must not break the app.
   #
   # Feature-flagged by MOBILE_ANALYTICS_ENABLED (default off): when disabled the
@@ -28,7 +28,7 @@ module AppInstallations
 
     MAX_STRING_BYTES = 256
 
-    Result = Struct.new(:installation, :created, :ok, keyword_init: true)
+    Result = Struct.new(:installation, :created, :ok, :link_result, keyword_init: true)
 
     # Default-ON kill-switch: tracking runs unless MOBILE_ANALYTICS_ENABLED is
     # explicitly set to a falsey value. An unset env keeps it enabled.
@@ -57,11 +57,12 @@ module AppInstallations
       apply_context!(install)
       apply_referrer!(install)
       stamp_timeline!(install, created)
-      associate_user!(install)
 
       install.save!
+      record_authenticated_request!(install)
+      link_result = link_user!(install)
       Rails.logger.info(structured_log(install, created))
-      Result.new(installation: install, created: created, ok: true)
+      Result.new(installation: install, created: created, ok: true, link_result: link_result)
     rescue StandardError => e
       # Never break the caller (tracking is best-effort), but keep the failure
       # observable — a swallowed DB/schema/programming error must reach Sentry.
@@ -75,7 +76,10 @@ module AppInstallations
     def apply_context!(install)
       allowed = @attributes.to_h.symbolize_keys.slice(*ALLOWED_ATTRS)
       allowed.each do |key, value|
-        install.public_send("#{key}=", coerce(key, value))
+        coerced = coerce(key, value)
+        next if coerced.nil? && install.persisted?
+
+        install.public_send("#{key}=", coerced)
       end
       install.source ||= "register"
     end
@@ -124,23 +128,28 @@ module AppInstallations
       # installed_at is never invented here when unknown.
     end
 
-    def associate_user!(install)
-      # last_authenticated_at: only when a current_user is present and associated.
+    def record_authenticated_request!(install)
       return if @user.nil?
+      return if install.first_authenticated_request_at.present?
 
-      # An installation already owned by someone else is never stolen — a shared
-      # or re-sold device must not move its history to the new account.
-      if install.user_id.present? && install.user_id != @user.id
-        Rails.logger.warn(
-          "[installations] association_conflict installation_id=#{install.installation_id} " \
-          "owner_user_id=#{install.user_id} request_user_id=#{@user.id}"
-        )
-        return
-      end
+      now = Time.current
+      install.update_columns(first_authenticated_request_at: now, updated_at: now)
+    rescue StandardError => e
+      Rails.logger.warn("[installations] authenticated_request_signal failed: #{e.class}: #{e.message}")
+    end
 
-      install.user = @user
-      install.last_authenticated_at = Time.current
-      backfill_activation_platform!(install)
+    def link_user!(install)
+      return nil if @user.nil?
+
+      result = AppInstallations::LinkToUser.call(
+        installation: install,
+        user: @user,
+        source: "register",
+        runtime_context: runtime_context_for(install),
+        build_number: install.app_build
+      )
+      backfill_activation_platform!(install) if result.success
+      result
     end
 
     # Fill User#activation_platform from a native Android install the first time it
@@ -158,11 +167,18 @@ module AppInstallations
     def structured_log(install, created)
       {
         event: created ? "installation_registered" : "installation_refreshed",
-        installation_id: install.installation_id,
+        installation_id_hash: Digest::SHA256.hexdigest(install.installation_id.to_s)[0, 12],
         platform: install.platform,
         native: install.native,
         authenticated: install.user_id.present?
       }.to_json
+    end
+
+    def runtime_context_for(install)
+      AppInstallations::RequestContext::RUNTIME_BY_PLATFORM.fetch(
+        install.platform.to_s,
+        AppInstallations::RequestContext::UNKNOWN_RUNTIME
+      )
     end
   end
 end

@@ -11,9 +11,8 @@ RSpec.describe "Api::V1::Admin::Analytics#android_installations", type: :request
     body = response.parsed_body
     expect(body["source"]).to eq("app_installations")
     expect(body["overview"]["total_installations"]).to eq(1)
-    expect(body["current_tracking"]["min_build"]).to eq(AppInstallation::RECONCILIATION_MIN_BUILD)
-    expect(body["current_tracking"]["link_rate"]).to include("value", "numerator", "denominator")
-    expect(body["legacy"]).to include("total_installations")
+    expect(body["reconciliation"]["link_rate"]).to include("value", "numerator", "denominator")
+    expect(body["definitions"]["reconciliation_rate"]).to eq("linked_at / first_authenticated_request_at")
     expect(body["data_quality"]).to include("missing_app_build")
     expect(body["operational_health"]).to be_an(Array)
     expect(body["google_play"]["configured"]).to be(false)

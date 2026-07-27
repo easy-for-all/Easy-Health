@@ -1,4 +1,4 @@
-import { getCachedInstallationId } from "./analytics/context";
+import { getAnalyticsContext, getCachedInstallationId } from "./analytics/context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -9,6 +9,34 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 function installationHeader(): Record<string, string> {
   const installationId = getCachedInstallationId();
   return installationId ? { "X-Installation-Id": installationId } : {};
+}
+
+// Correlation headers consumed by Observability::Headers on the backend, where
+// they become the platform/version/build dimensions on logs, events and health
+// checks. Without them the server cannot tell which build a failure came from.
+//
+// Every header is omitted when its value is missing: the analytics context is
+// not populated on the very first paint, and sending the string "undefined"
+// would create a bogus dimension value that survives forever in the data.
+function correlationHeaders(): Record<string, string> {
+  try {
+    const context = getAnalyticsContext();
+    const headers: Record<string, string> = {};
+
+    if (context.platform) headers["X-Platform"] = context.platform;
+    if (context.app_version) headers["X-App-Version"] = context.app_version;
+    if (context.build_number) headers["X-App-Build"] = context.build_number;
+    if (context.session_id) headers["X-Session-Id"] = context.session_id;
+
+    return headers;
+  } catch {
+    // Diagnostics must never break a request.
+    return {};
+  }
+}
+
+function contextHeaders(): Record<string, string> {
+  return { ...installationHeader(), ...correlationHeaders() };
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -62,7 +90,7 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown, opti
   const res = await fetch(`${API_URL}${path}`, {
     method,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...installationHeader() },
+    headers: { "Content-Type": "application/json", ...contextHeaders() },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -86,7 +114,7 @@ async function upload<T>(method: HttpMethod, path: string, formData: FormData): 
     method,
     credentials: "include",
     // No Content-Type here on purpose: the browser must set the multipart boundary.
-    headers: installationHeader(),
+    headers: contextHeaders(),
     body: formData,
   });
 

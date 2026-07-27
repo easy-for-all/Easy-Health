@@ -8,12 +8,13 @@ RSpec.describe MakeWebhookDeliveryJob, type: :job do
       event_name: "first_workout_completed",
       idempotency_key: "first_workout_completed:max_attempts"
     )
-    event.update!(make_delivery_status: "failed", make_attempts_count: described_class::MAX_ATTEMPTS)
+    event.update!(make_delivery_status: "retrying", make_attempts_count: described_class::MAX_ATTEMPTS)
 
     expect(MakeWebhookClient).not_to receive(:new)
 
     described_class.perform_now(event.id)
 
-    expect(event.reload.make_last_error).to eq("max_attempts_reached")
+    expect(event.reload.make_delivery_status).to eq("dead_letter")
+    expect(event.make_last_error).to eq("max_attempts_reached")
   end
 end

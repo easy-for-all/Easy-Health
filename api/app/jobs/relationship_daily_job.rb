@@ -1,4 +1,8 @@
 class RelationshipDailyJob < ApplicationJob
+  # Runs once a day from cron; silence here means the whole relationship
+  # journey (segments, Make events, push eligibility) has stopped.
+  def self.observability_heartbeat_key = "relationship_daily_job"
+
   queue_as :default
 
   def perform

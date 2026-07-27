@@ -1,8 +1,7 @@
 require "rails_helper"
 
-# Marco 1/3: every authenticated request carrying X-Installation-Id re-links the
-# installation to the signed-in user, so a missed register no longer leaves the
-# installation anonymous forever.
+# Marco 1/3: every authenticated request carrying X-Installation-Id records the
+# request signal first, then delegates the user link to AppInstallations::LinkToUser.
 RSpec.describe "AppInstallation reconciliation", type: :request do
   let(:user) { create(:user) }
   let(:header) { { "X-Installation-Id" => installation.installation_id } }
@@ -43,13 +42,16 @@ RSpec.describe "AppInstallation reconciliation", type: :request do
   describe "when the installation is anonymous" do
     let!(:installation) { create(:app_installation, :anonymous) }
 
-    it "associates it to the current user and stamps last_authenticated_at" do
+    it "associates it to the current user and stamps the request/link signals" do
       sign_in user
       authenticated_request(header)
 
       expect(response).to have_http_status(:ok)
       installation.reload
       expect(installation.user_id).to eq(user.id)
+      expect(installation.first_authenticated_request_at).to be_present
+      expect(installation.first_link_attempt_at).to be_present
+      expect(installation.linked_at).to be_present
       expect(installation.last_authenticated_at).to be_present
     end
 
@@ -63,7 +65,8 @@ RSpec.describe "AppInstallation reconciliation", type: :request do
 
   describe "when the installation already belongs to the same user" do
     let!(:installation) do
-      create(:app_installation, user: user, last_authenticated_at: 3.hours.ago)
+      create(:app_installation, user: user, last_authenticated_at: 3.hours.ago,
+                                first_authenticated_request_at: 3.hours.ago, linked_at: 3.hours.ago)
     end
 
     it "keeps user_id and refreshes last_authenticated_at once the interval elapsed" do
@@ -78,7 +81,9 @@ RSpec.describe "AppInstallation reconciliation", type: :request do
     end
 
     it "skips the write while inside the touch interval" do
-      installation.update_columns(last_authenticated_at: 5.minutes.ago)
+      installation.update_columns(last_authenticated_at: 5.minutes.ago,
+                                  first_authenticated_request_at: 5.minutes.ago,
+                                  linked_at: 5.minutes.ago)
       installation.reload
       previous_auth = installation.last_authenticated_at
       previous_updated = installation.updated_at
@@ -95,7 +100,8 @@ RSpec.describe "AppInstallation reconciliation", type: :request do
   describe "when the installation belongs to another user" do
     let(:owner) { create(:user) }
     let!(:installation) do
-      create(:app_installation, user: owner, last_authenticated_at: 3.hours.ago)
+      create(:app_installation, user: owner, last_authenticated_at: 3.hours.ago,
+                                first_authenticated_request_at: 3.hours.ago, linked_at: 3.hours.ago)
     end
 
     it "never overwrites the owner and logs the conflict" do
@@ -109,7 +115,8 @@ RSpec.describe "AppInstallation reconciliation", type: :request do
       installation.reload
       expect(installation.user_id).to eq(owner.id)
       expect(installation.last_authenticated_at).to eq(previous)
-      expect(Rails.logger).to have_received(:warn).with(/association_conflict/)
+      expect(installation.last_link_failure_code).to eq("user_conflict")
+      expect(Rails.logger).to have_received(:warn).with(/installation_link_conflict/)
     end
   end
 

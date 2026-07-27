@@ -15,45 +15,40 @@ RSpec.describe MobileTracking::BackfillInstallations do
     expect(user.reload.activation_platform).to be_nil
   end
 
-  it "creates one installation per android device_token and stamps provenance" do
+  it "stays read-only even when dry_run is false" do
     user = create(:user)
     token = create(:device_token, user: user, platform: "android", app_version: "1.1.0")
 
-    described_class.new(dry_run: false).call
+    report = described_class.new(dry_run: false).call
 
-    install = AppInstallation.find_by(installation_id: "dt-#{token.id}")
-    expect(install).to be_present
-    expect(install.source).to eq("backfill_device_token")
-    expect(install.platform).to eq("android")
-    expect(install.native).to be(true)
-    expect(install.user_id).to eq(user.id)
-    expect(install.device_token_id).to eq(token.id)
-    expect(install.app_version).to eq("1.1.0")
-    expect(install.installed_at).to be_nil # never faked
-    expect(install.first_seen_at).to be_present
+    expect(report.dry_run).to be(false)
+    expect(report.installations_created).to eq(1)
+    expect(AppInstallation.find_by(installation_id: "dt-#{token.id}")).to be_nil
+    expect(user.reload.activation_platform).to be_nil
   end
 
-  it "is idempotent (re-run creates no duplicates)" do
+  it "reports existing historical candidates without creating duplicates" do
     user = create(:user)
-    create(:device_token, user: user, platform: "android")
+    token = create(:device_token, user: user, platform: "android")
+    create(:app_installation, installation_id: "dt-#{token.id}", platform: "android")
 
-    described_class.new(dry_run: false).call
-    second = described_class.new(dry_run: false).call
+    report = described_class.new(dry_run: false).call
 
     expect(AppInstallation.count).to eq(1)
-    expect(second.installations_created).to eq(0)
-    expect(second.installations_existing).to eq(1)
+    expect(report.installations_created).to eq(0)
+    expect(report.installations_existing).to eq(1)
   end
 
-  it "backfills activation_platform='android' only when blank" do
+  it "reports activation_platform candidates without writing users" do
     android_user = create(:user, activation_platform: nil)
     create(:device_token, user: android_user, platform: "android")
     already = create(:user, activation_platform: "web")
     create(:device_token, user: already, platform: "android")
 
-    described_class.new(dry_run: false).call
+    report = described_class.new(dry_run: false).call
 
-    expect(android_user.reload.activation_platform).to eq("android")
+    expect(report.activation_platform_backfilled).to eq(1)
+    expect(android_user.reload.activation_platform).to be_nil
     expect(already.reload.activation_platform).to eq("web") # never overwritten
   end
 end

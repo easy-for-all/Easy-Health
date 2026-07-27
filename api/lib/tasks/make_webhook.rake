@@ -82,12 +82,52 @@ namespace :make_webhook do
     puts ""
   end
 
+  # The ActiveJob adapter is :async (in-process), so every restart or deploy
+  # drops whatever retries were queued and leaves those UserEvents sitting in
+  # "pending" forever. Nothing re-drives them today. This task is that sweeper,
+  # and it carries the "make_pending_retry" heartbeat so its own silence is
+  # detectable — see docs/observability/RUNBOOK.md.
+  desc "Re-drive Make deliveries stuck in pending (dropped by an in-process queue restart)"
+  task retry_pending: :environment do
+    Observability::Context.for_task("make_pending_retry") do
+      Observability::Heartbeat.track("make_pending_retry") do
+        age_minutes = Observability::Config.make_backlog_age_minutes
+        limit = Integer(ENV.fetch("LIMIT", "200"), exception: false) || 200
+
+        stuck = UserEvent.pending_make_delivery
+                         .where(created_at: ..age_minutes.minutes.ago)
+                         .order(:created_at)
+                         .limit(limit)
+
+        stats = { considered: 0, delivered: 0, failed: 0 }
+
+        stuck.each do |user_event|
+          stats[:considered] += 1
+          result = MakeWebhookClient.new.deliver(user_event)
+          result.success? ? stats[:delivered] += 1 : stats[:failed] += 1
+        rescue StandardError => e
+          # One poisoned event must not stop the sweep.
+          stats[:failed] += 1
+          Rails.logger.warn("[make_webhook:retry_pending] event=#{user_event.id} error=#{e.class}")
+        end
+
+        puts "\n=== Make pending retry ==="
+        puts "  older than    : #{age_minutes} min"
+        puts "  considered    : #{stats[:considered]}"
+        puts "  delivered     : #{stats[:delivered]}"
+        puts "  failed        : #{stats[:failed]}"
+        puts ""
+        stats
+      end
+    end
+  end
+
   desc "Show recent Make delivery stats"
   task stats: :environment do
     puts "\n=== Make Webhook Delivery Stats ==="
     UserEvent::DELIVERY_STATUSES.each do |status|
       count = UserEvent.where(make_delivery_status: status).count
-      puts "  #{status.ljust(10)}: #{count}"
+      puts "  #{status.ljust(22)}: #{count}"
     end
 
     recent_failed = UserEvent.failed_make_delivery.order(updated_at: :desc).limit(5)
@@ -98,6 +138,38 @@ namespace :make_webhook do
       end
     end
     puts ""
+  end
+
+  desc "Audit Make delivery data without mutating it. Usage: rake make_webhook:audit [EXPECT_DATA=1] [HOURS=24] [LIMIT=20]"
+  task audit: :environment do
+    generated_at = Time.current
+    hours = make_positive_integer_env("HOURS", 24)
+    limit = make_positive_integer_env("LIMIT", 20, max: 100)
+    since = generated_at - hours.hours
+    expect_data = ActiveModel::Type::Boolean.new.cast(ENV.fetch("EXPECT_DATA", "false"))
+
+    base_counts = {
+      users: User.count,
+      app_installations: AppInstallation.count,
+      device_tokens: DeviceToken.count,
+      user_events: UserEvent.count
+    }
+    empty_database = base_counts.values.all?(&:zero?)
+
+    report = {
+      audit: "make_delivery_audit_v3",
+      ok: !(expect_data && empty_database),
+      result: expect_data && empty_database ? "empty_database" : "ok",
+      expect_data: expect_data,
+      generated_at: generated_at.iso8601,
+      window_hours: hours,
+      counts: base_counts.merge(user_events_in_window: UserEvent.where(created_at: since..generated_at).count),
+      delivery_statuses: make_group_counts(UserEvent.all, :make_delivery_status, UserEvent::DELIVERY_STATUSES),
+      processing_statuses: make_group_counts(UserEvent.all, :make_processing_status, UserEvent::PROCESSING_STATUSES),
+      recent_events: make_recent_delivery_events(limit)
+    }
+
+    puts JSON.pretty_generate(JSON.parse(JSON.generate(report)))
   end
 
   def resolve_user(input)
@@ -115,6 +187,35 @@ namespace :make_webhook do
     return value if value.length <= 8
 
     "#{value[0..3]}...#{value[-4..]}"
+  end
+
+  def make_positive_integer_env(key, default, max: nil)
+    value = Integer(ENV.fetch(key, default.to_s), exception: false)
+    value = default if value.nil? || value <= 0
+    max ? [ value, max ].min : value
+  end
+
+  def make_group_counts(scope, column, known_values)
+    grouped = scope.group(column).count.transform_keys { |key| key.to_s.presence || "(blank)" }
+    known_values.index_with { |value| grouped[value].to_i }.merge(grouped.except(*known_values))
+  end
+
+  def make_recent_delivery_events(limit)
+    UserEvent.order(created_at: :desc).limit(limit).map do |event|
+      {
+        id: event.id,
+        event_name: event.event_name,
+        user_id: event.user_id,
+        delivery_status: event.make_delivery_status,
+        processing_status: event.make_processing_status,
+        attempts: event.make_attempts_count,
+        http_status: event.make_last_http_status,
+        destination: event.make_destination,
+        channels: event.make_delivery_channels_list,
+        created_at: event.created_at&.iso8601,
+        updated_at: event.updated_at&.iso8601
+      }.compact
+    end
   end
 
   def abort_task(msg)

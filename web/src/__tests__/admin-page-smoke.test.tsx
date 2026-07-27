@@ -2,10 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import AdminPage from "@/app/(app)/admin/page";
 
-const { mockGet, mockPush, mockReplace } = vi.hoisted(() => ({
+const { mockGet, mockPush, mockReplace, mockShow } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPush: vi.fn(),
   mockReplace: vi.fn(),
+  mockShow: vi.fn(),
 }));
 
 vi.mock("@/shared/lib/api", () => ({
@@ -18,6 +19,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({ user: { id: 1, admin: true }, loading: false }),
+}));
+
+vi.mock("@/shared/components/ui/toast-provider", () => ({
+  useToast: () => ({ show: mockShow }),
 }));
 
 const baseStats = {

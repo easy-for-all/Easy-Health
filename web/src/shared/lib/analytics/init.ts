@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { detectPlatform } from "./context";
 import { flushOnBackground } from "./server";
 import { initAnalyticsLifecycle } from "./lifecycle";
-import { registerInstallation } from "./installation";
+import { ensureInstallationRegistered } from "./installation";
 import { initFirebase } from "./firebase";
 import { storedConsent } from "./consent";
 import { trackOnce } from "./index";
@@ -22,7 +22,7 @@ export function initAnalytics(): void {
     // Register the installation (upsert) so the backend/admin panel can count
     // this real Android install — anonymously now, associated after login.
     // App boot is a genuine native session start, so stamp last_session_at.
-    void registerInstallation({}, { sessionStarted: true });
+    void ensureInstallationRegistered({}, { sessionStarted: true });
     // Native Firebase (Analytics/Crashlytics) — no-op unless flags are on.
     void initFirebase(storedConsent() === "granted");
   } else {

@@ -18,6 +18,12 @@ Rails.application.configure do
   config.silence_healthcheck_path = "/up"
   config.active_support.report_deprecations = false
 
+  # Without this Rails falls back to :file_store, writing cache entries to disk
+  # inside an ephemeral container. :memory_store is correct while config/puma.rb
+  # declares no `workers` (single process); revisit both together if that ever
+  # changes. Used by the admin observability dashboard's short TTL.
+  config.cache_store = :memory_store, { size: 32.megabytes }
+
   config.i18n.fallbacks = true
   config.active_record.dump_schema_after_migration = false
   config.active_record.attributes_for_inspect = [ :id ]

@@ -8,8 +8,6 @@ RSpec.describe Analytics::AndroidInstallations do
   # Every temporal assertion is frozen, so a spec never depends on the real clock.
   around { |example| travel_to(Time.zone.parse("2026-07-26 12:00:00")) { example.run } }
 
-  let(:min_build) { AppInstallation::RECONCILIATION_MIN_BUILD }
-
   def android(**attrs)
     create(:app_installation, { platform: "android", native: true }.merge(attrs))
   end
@@ -27,7 +25,7 @@ RSpec.describe Analytics::AndroidInstallations do
       expect(result[:overview][:total_installations]).to eq(0)
       expect(result[:overview][:unique_linked_users]).to eq(0)
       expect(result[:overview][:link_rate].value).to eq(0.0)
-      expect(result[:current_tracking][:link_rate].value).to eq(0.0)
+      expect(result[:reconciliation][:link_rate].value).to eq(0.0)
       expect(result[:versions]).to eq([])
       expect(result[:health_timeline]).to eq([])
     end
@@ -102,44 +100,50 @@ RSpec.describe Analytics::AndroidInstallations do
     end
   end
 
-  describe "build classification" do
-    it "keeps legacy builds out of the current tracking rate" do
-      android(app_build: "44", user: nil)                                # legacy anonymous
-      android(app_build: min_build.to_s, user: create(:user))            # current linked
-      android(app_build: "0045", user: create(:user))                    # zero-padded, current
-      android(app_build: "50", user: create(:user))                      # above threshold
+  describe "reconciliation" do
+    it "uses authenticated request observation as the denominator, not build" do
+      android(app_build: "34", user: nil, first_authenticated_request_at: 1.hour.ago)
+      android(app_build: "45", user: create(:user),
+              first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+      android(app_build: "unknown", user: create(:user),
+              first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+      android(app_build: "50", user: create(:user), linked_at: 1.hour.ago) # no observed request
 
-      current = result[:current_tracking]
-      expect(current[:min_build]).to eq(min_build)
-      expect(current[:total_installations]).to eq(3)
-      expect(current[:linked_installations]).to eq(3)
-      expect(current[:anonymous_installations]).to eq(0)
-      expect(current[:link_rate].value).to eq(100.0)
-
-      legacy = result[:legacy]
-      expect(legacy[:total_installations]).to eq(1)
-      expect(legacy[:anonymous_installations]).to eq(1)
-
-      # The historical rate DOES include the legacy install.
-      expect(result[:overview][:link_rate].value).to eq(75.0)
+      reconciliation = result[:reconciliation]
+      expect(reconciliation[:observed_authenticated_installations]).to eq(3)
+      expect(reconciliation[:linked_installations]).to eq(2)
+      expect(reconciliation[:link_rate].value).to eq(66.7)
+      expect(result[:data_quality][:linked_without_observed_request]).to eq(1)
     end
 
-    it "treats nil, blank and non-numeric builds as legacy without breaking" do
+    it "reports link attempts, conflicts and failures by code" do
+      android(first_authenticated_request_at: 1.hour.ago, first_link_attempt_at: 1.hour.ago,
+              last_link_failure_code: "user_conflict")
+      android(first_authenticated_request_at: 1.hour.ago, first_link_attempt_at: 1.hour.ago,
+              last_link_failure_code: "validation_failed")
+      android(first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+
+      reconciliation = result[:reconciliation]
+      expect(reconciliation[:link_attempted_installations]).to eq(2)
+      expect(reconciliation[:conflicts]).to eq(1)
+      expect(reconciliation[:failures_by_code]).to include("user_conflict" => 1, "validation_failed" => 1)
+    end
+
+    it "treats nil, blank and non-numeric builds as descriptive data-quality only" do
       android(app_build: nil)
       android(app_build: "")
       android(app_build: "unknown")
 
       expect { result }.not_to raise_error
-      expect(result[:legacy][:total_installations]).to eq(3)
-      expect(result[:current_tracking][:total_installations]).to eq(0)
+      expect(result[:reconciliation][:observed_authenticated_installations]).to eq(0)
       expect(result[:data_quality][:missing_app_build]).to eq(2)
       expect(result[:data_quality][:invalid_app_build]).to eq(1)
     end
 
-    it "returns 0.0 instead of NaN when there is no current build install" do
+    it "returns 0.0 instead of NaN when there is no observed authenticated request" do
       android(app_build: "44")
 
-      rate = result[:current_tracking][:link_rate]
+      rate = result[:reconciliation][:link_rate]
       expect(rate.value).to eq(0.0)
       expect(rate.denominator).to eq(0)
       expect(rate.status).to eq("no_coverage")
@@ -178,7 +182,6 @@ RSpec.describe Analytics::AndroidInstallations do
       expect(newest[:linked_installations]).to eq(1)
       expect(newest[:anonymous_installations]).to eq(1)
       expect(newest[:link_rate].value).to eq(50.0)
-      expect(newest[:current_tracking]).to be(true)
 
       expect(result[:versions].last[:app_build]).to eq("44")
     end
@@ -270,14 +273,14 @@ RSpec.describe Analytics::AndroidInstallations do
 
   describe "health timeline" do
     it "reports one row per day with that day's link rate, newest first" do
-      android(first_seen_at: 1.day.ago, user: create(:user))
-      android(first_seen_at: 1.day.ago, user: nil)
-      android(first_seen_at: 2.days.ago, user: create(:user))
-      android(first_seen_at: 40.days.ago, user: nil) # outside the window
+      android(first_authenticated_request_at: 1.day.ago, linked_at: 1.day.ago)
+      android(first_authenticated_request_at: 1.day.ago, linked_at: nil)
+      android(first_authenticated_request_at: 2.days.ago, linked_at: 2.days.ago)
+      android(first_authenticated_request_at: 40.days.ago, linked_at: nil) # outside the window
 
       timeline = result[:health_timeline]
       expect(timeline.size).to eq(2)
-      expect(timeline.first[:new_installations]).to eq(2)
+      expect(timeline.first[:observed_authenticated_installations]).to eq(2)
       expect(timeline.first[:linked_installations]).to eq(1)
       expect(timeline.first[:link_rate].value).to eq(50.0)
       expect(timeline.last[:link_rate].value).to eq(100.0)
@@ -319,9 +322,11 @@ RSpec.describe Analytics::AndroidInstallations do
       expect(component[:status]).to eq("unknown")
     end
 
-    it "flags reconciliation as critical when current build installs are mostly anonymous" do
-      8.times { android(app_build: "45", user: nil) }
-      2.times { android(app_build: "45", user: create(:user)) }
+    it "flags reconciliation as critical when observed authenticated installs are mostly unlinked" do
+      8.times { android(first_authenticated_request_at: 1.hour.ago, user: nil) }
+      2.times do
+        android(user: create(:user), first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+      end
 
       component = result[:operational_health].find { |c| c[:key] == :reconciliation }
       expect(component[:status]).to eq("critical")
@@ -329,7 +334,9 @@ RSpec.describe Analytics::AndroidInstallations do
     end
 
     it "reports reconciliation as ok at a full link rate" do
-      3.times { android(app_build: "45", user: create(:user)) }
+      3.times do
+        android(user: create(:user), first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+      end
 
       component = result[:operational_health].find { |c| c[:key] == :reconciliation }
       expect(component[:status]).to eq("ok")
@@ -376,7 +383,7 @@ RSpec.describe Analytics::AndroidInstallations do
 
     it "declares the definitions the UI renders" do
       expect(result[:definitions]).to include(
-        reconciliation_min_build: min_build,
+        reconciliation_rate: "linked_at / first_authenticated_request_at",
         timeline_days: described_class::TIMELINE_DAYS
       )
       expect(result[:source]).to eq("app_installations")

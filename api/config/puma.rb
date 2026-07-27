@@ -25,6 +25,14 @@
 # Any libraries that use a connection pool or another resource pool should
 # be configured to provide at least as many connections as the number of
 # threads. This includes Active Record's `pool` parameter in `database.yml`.
+# OBSERVABILITY TRIPWIRE: this file declares no `workers`, so the API runs as a
+# single process. Two things depend on that and become silently wrong the moment
+# a `workers` line is added here:
+#   * Observability::HttpStats (in-process rolling HTTP aggregate, feeds the
+#     admin "API & Infraestrutura" card) would only see one worker's traffic.
+#   * config.cache_store = :memory_store in config/environments/production.rb
+#     would give each worker its own cache.
+# See docs/observability/ARCHITECTURE.md before enabling clustered mode.
 threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
 threads threads_count, threads_count
 

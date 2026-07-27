@@ -11,11 +11,19 @@ class AppInstallation < ApplicationRecord
   # app; "backfill_*" = inferred from an existing reliable source (never faked).
   SOURCES = %w[register backfill_device_token].freeze
 
-  # Single source of truth for the build that started sending X-Installation-Id
-  # on every authenticated request (app v1.0.45). Installs below it predate the
-  # reconciliation and stay anonymous for reasons that are NOT a tracking bug,
-  # so they must never be mixed into the current tracking health.
-  RECONCILIATION_MIN_BUILD = 45
+  # Where a linking request came from. Purely descriptive: never an eligibility
+  # rule, never inferred from the device manufacturer.
+  #
+  # "android_webview" is reserved and currently emitted by nothing — a Capacitor
+  # WebView with the bridge is indistinguishable from a plain Android WebView
+  # from the server side, so everything native reports "android_native".
+  RUNTIME_CONTEXTS = %w[android_native android_webview web pwa unknown].freeze
+
+  # Single source of truth for how long an installation_id may be. Both the
+  # register endpoint and the header parser must agree: an id the register
+  # accepts has to remain findable by AppInstallations::RequestContext, or it
+  # would create rows that can never be linked.
+  INSTALLATION_ID_MAX_BYTES = 128
 
   # app_build is a free-form string: nil, "", "unknown", "45" and "0045" all
   # coexist. The CASE guarantees the cast only ever runs on digits, so a single
@@ -29,6 +37,7 @@ class AppInstallation < ApplicationRecord
   validates :platform, inclusion: { in: PLATFORMS }
   validates :notification_permission,
             inclusion: { in: PERMISSION_STATUSES }, allow_blank: true
+  validates :runtime_context, inclusion: { in: RUNTIME_CONTEXTS }, allow_blank: true
 
   before_validation :normalize
 
@@ -50,21 +59,14 @@ class AppInstallation < ApplicationRecord
   #   confirmed authentication. Kept so existing callers keep working.
   scope :authenticated, -> { linked }
 
-  scope :current_build, lambda {
-    where(Arel.sql("(#{NUMERIC_BUILD_SQL}) >= #{RECONCILIATION_MIN_BUILD}"))
-  }
-
-  # Legacy = build below the threshold, absent or non-numeric.
-  scope :legacy_build, lambda {
-    where(Arel.sql("(#{NUMERIC_BUILD_SQL}) IS NULL OR (#{NUMERIC_BUILD_SQL}) < #{RECONCILIATION_MIN_BUILD}"))
-  }
-
-  # Associate this install to a user after authentication. Idempotent; preserves
-  # the anonymous history (first_seen_at/installed_at are never rewritten here).
+  # @deprecated Use AppInstallations::LinkToUser directly. Kept temporarily for
+  # compatibility, but all write semantics live in the service.
   def associate_user!(target_user)
-    return if target_user.nil? || user_id == target_user.id
-
-    update!(user: target_user, last_authenticated_at: Time.current)
+    AppInstallations::LinkToUser.call(
+      installation: self,
+      user: target_user,
+      source: "model_deprecated"
+    )
   end
 
   # Guard against accidentally exposing sensitive linkage in JSON.

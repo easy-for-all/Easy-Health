@@ -49,3 +49,78 @@ jobs:
       # (react-hooks/set-state-in-effect, React Compiler memoization) are fixed
       - run: npm run lint
         continue-on-error: true
+
+  vitest:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # TODO: drop continue-on-error once the pre-existing failure in
+      # analytics-installation.test.ts is fixed. Kept non-blocking so the job
+      # can be added now and start reporting, rather than waiting.
+      - run: npm test
+        continue-on-error: true
+
+  rspec:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RAILS_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      # No ruby-version input on purpose: setup-ruby reads api/.ruby-version
+      # from working-directory, so the version stays defined in one place.
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: api
+
+      - name: Prepare database
+        run: bin/rails db:test:prepare
+
+      # db/schema.rb is Ruby-format and cannot carry SQL views, so a database
+      # built from the schema has none of the bi_observability_* views. The spec
+      # suite also applies them in before(:suite); this makes the requirement
+      # explicit and fails loudly here rather than inside a spec.
+      # See docs/observability/BI_VIEWS.md.
+      - name: Apply BI views
+        run: bin/rails observability:bi_views:apply
+
+      # TODO: drop continue-on-error once the pre-existing failures
+      # (personal/clients, coach/recommendations, block_load_context_service)
+      # are fixed. The job reports today; it starts gating once the suite is green.
+      - run: bundle exec rspec
+        continue-on-error: true

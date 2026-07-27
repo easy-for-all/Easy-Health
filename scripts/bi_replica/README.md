@@ -158,3 +158,41 @@ Se o PostgreSQL estiver em Docker, valide:
 - producao sem acesso direto pela internet.
 
 Melhor pratica: usar uma instancia PostgreSQL separada para BI. Para primeira fase, pode ser a mesma VPS, desde que exista banco separado, usuario separado, senha forte e firewall restrito.
+
+## Heartbeat de observabilidade
+
+O `refresh_bi_replica.sh` registra o heartbeat `bi_replica_refresh` no banco da
+aplicacao (`started` no inicio, `succeeded` ao fim, `failed` no trap de saida),
+para que a ausencia do refresh seja detectavel pelo check `replica_refresh_stale`
+em `/admin/observability`.
+
+O registro e **best-effort**: se o docker nao responder, o script apenas avisa no
+log e continua. O refresh da replica nunca falha por causa da observabilidade.
+
+Variaveis (no env file, geralmente `/etc/easyhealth/bi_replica.env`):
+
+```bash
+EASYHEALTH_COMPOSE_FILE=/home/easy/Easy-Health/docker-compose.prod.yml
+OBSERVABILITY_HEARTBEAT_ENABLED=true   # false desliga o registro
+BI_EXPECTED_VIEW_COUNT=5               # views bi_observability_* esperadas
+```
+
+> **Mantenha o horario coerente.** O check `replica_refresh_stale` so avalia
+> depois de `BI_REPLICA_EXPECTED_HOUR` (padrao 3) + `BI_REPLICA_GRACE_MINUTES`
+> (padrao 90), no fuso de producao. Se voce mudar `CRON_SCHEDULE` aqui, ajuste
+> `BI_REPLICA_EXPECTED_HOUR` no `.env` da aplicacao — senao o alerta dispara na
+> hora errada. Confira o cron real com `crontab -l`.
+
+## Views de observabilidade
+
+Apos a troca de banco, o script verifica que a replica tem as 5 views
+`bi_observability_*` e falha se faltar alguma — evitando que o Power BI leia uma
+replica incompleta em silencio.
+
+Se a verificacao falhar, rode na producao:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T api bundle exec rake observability:bi_views:apply
+```
+
+Detalhes em [docs/observability/BI_VIEWS.md](../../docs/observability/BI_VIEWS.md).
