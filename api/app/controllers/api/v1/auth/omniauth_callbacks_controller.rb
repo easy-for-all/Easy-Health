@@ -22,6 +22,7 @@ module Api
 
         def failure
           Rails.logger.error("[GoogleOAuthFailure] message=#{params[:message]}")
+          Observability::Events.google_auth_failed(flow: "web", error_code: "provider_error")
           redirect_to "#{FRONTEND}/login?error=oauth_failed", allow_other_host: true
         end
 
@@ -42,20 +43,27 @@ module Api
 
         def handle_google_callback(mobile:)
           consent = oauth_consent_params
-          Rails.logger.info(
-            "[GoogleOAuth] started flow=web uid=#{request.env.dig('omniauth.auth', 'uid')} " \
-            "mobile=#{mobile} consent_present=#{User.required_consent_given?(consent)}"
+          @auth_flow = mobile ? "web_mobile" : "web"
+          @consent_given = User.required_consent_given?(consent)
+          Observability::Context.auth_flow = @auth_flow
+
+          Observability::Events.google_auth_started(
+            flow: @auth_flow, intent: auth_intent, terms_accepted: @consent_given
           )
+
           user = User.from_omniauth(request.env["omniauth.auth"], consent: consent)
 
           if user.anonymized_at.present?
-            Rails.logger.info("[GoogleOAuthCallback] blocked login for anonymized user_id=#{user.id}")
+            oauth_failed("account_deleted")
             redirect_to "#{FRONTEND}/login?error=account_deleted", allow_other_host: true
             return
           end
 
           new_user = user.previously_new_record? || (user.created_at > 5.minutes.ago && user.health_profile.nil?)
-          Rails.logger.info("[GoogleOAuthCallback] flow=web user_id=#{user.id} new_user=#{new_user}")
+          Observability::Context.user_id = user.id
+          Observability::Events.google_auth_succeeded(
+            flow: @auth_flow, user: user, new_user: new_user, intent: auth_intent
+          )
 
           if mobile
             code = MobileAuthCode.issue_for!(user: user, platform: "android")
@@ -67,16 +75,34 @@ module Api
             redirect_to "#{FRONTEND}#{new_user ? '/onboarding' : '/dashboard'}", allow_other_host: true
           end
         rescue User::BlockedEmailError
-          Rails.logger.info("[GoogleOAuthCallback] blocked email attempted signup")
+          oauth_failed("account_deleted")
           redirect_to "#{FRONTEND}/login?error=account_deleted", allow_other_host: true
         rescue User::ConsentRequiredError
-          Rails.logger.info("[GoogleOAuthCallback] blocked signup missing consent flow=web")
+          oauth_failed("consent_required")
           # `provider` only opens the sign-up screen in the Google context; the
           # consent itself was never collected, so nothing is pre-accepted.
           redirect_to "#{FRONTEND}/sign-up?error=consent_required&provider=google", allow_other_host: true
         rescue => e
           Rails.logger.error("[GoogleOAuthError] #{e.class}: #{e.message}")
+          Sentry.capture_exception(e) if defined?(Sentry) && Sentry.initialized?
+          oauth_failed("internal_error")
           redirect_to "#{FRONTEND}/login?error=oauth_failed", allow_other_host: true
+        end
+
+        def oauth_failed(error_code)
+          Observability::Events.google_auth_failed(
+            flow: @auth_flow || "web",
+            error_code: error_code,
+            intent: auth_intent,
+            terms_accepted: @consent_given
+          )
+        end
+
+        # On the web flow consent is only ever supplied by the sign-up screen,
+        # so its presence is the intent. A consent_required raised while
+        # @consent_given is true is the anomaly the check looks for.
+        def auth_intent
+          @consent_given ? "sign_up" : "login"
         end
       end
     end

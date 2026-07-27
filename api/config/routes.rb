@@ -126,6 +126,7 @@ Rails.application.routes.draw do
       namespace :integrations do
         namespace :make do
           resources :push_dispatches, only: [:create]
+          resources :event_delivery_callbacks, only: [:create]
         end
       end
 
@@ -162,9 +163,19 @@ Rails.application.routes.draw do
         get "analytics/platform_comparison", to: "analytics#platform_comparison"
         # APP ANDROID panel — real installed base (source: app_installations)
         get "analytics/android_installations", to: "analytics#android_installations"
+        get "analytics/event_deliveries", to: "analytics#event_deliveries"
+        get "analytics/event_deliveries/:id", to: "analytics#event_delivery"
         # Admin-only diagnostic: sends a test push to the CURRENT admin's own
         # device tokens (never accepts a user_id). See AdminPushTestService.
         post :push_test
+
+        # Observability panel (six cards, three tables, investigation timeline).
+        # Source: observability_check_results / _incidents / _heartbeats.
+        get "observability", to: "observability#show"
+        get "observability/incidents", to: "observability#incidents"
+        get "observability/timeline", to: "observability#timeline"
+        post "observability/incidents/:id/acknowledge", to: "observability#acknowledge"
+        post "observability/incidents/:id/resolve", to: "observability#resolve"
       end
 
       post "onboarding_events", to: "onboarding_events#create"

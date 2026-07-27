@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // Platform classification is the root of the "Android counted as web" bug
 // (docs/android-tracking-audit.md). These tests pin the hardened detection so a
@@ -15,6 +15,12 @@ describe("detectPlatform (hardened)", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.doUnmock("@capacitor/core");
+    vi.resetModules();
+    vi.restoreAllMocks();
   });
 
   it("classifies a native Android shell as 'android'", async () => {

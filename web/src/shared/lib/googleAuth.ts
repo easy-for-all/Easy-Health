@@ -1,5 +1,5 @@
 import { api } from "@/shared/lib/api";
-import { getInstallationId } from "@/shared/lib/analytics/installation";
+import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
 import type { User } from "@/shared/types/user";
 
 // Web (browser) Google login still goes through the server-side OmniAuth flow.
@@ -173,11 +173,11 @@ export async function postGoogleNative(idToken: string, consent?: GoogleConsent)
   // Boot registers the installation fire-and-forget, so on a fast login the id
   // may not be cached yet and api.post would omit X-Installation-Id. Resolving it
   // here lets the backend link the installation in this very sign_in cycle.
-  // Best-effort: a failure only defers the link to the next authenticated request.
-  try {
-    await getInstallationId();
-  } catch {
-    /* header stays absent — reconciliation is continuous */
+  // Time-boxed and best-effort: a failure only defers the link to the next
+  // authenticated request, and is left as a Sentry breadcrumb rather than swallowed.
+  const installation = await ensureInstallationForAuth();
+  if (!installation.installationId) {
+    authLog("installation_unavailable", { failureCode: installation.failureCode });
   }
   try {
     const user = await api.post<GoogleNativeUser>("/api/v1/auth/google/native", {

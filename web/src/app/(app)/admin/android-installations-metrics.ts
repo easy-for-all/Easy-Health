@@ -27,7 +27,6 @@ export interface VersionRow {
   app_version: string | null;
   app_build: string | null;
   build_number: number | null;
-  current_tracking: boolean;
   total_installations: number;
   linked_installations: number;
   anonymous_installations: number;
@@ -56,7 +55,7 @@ export interface OsVersionRow {
 
 export interface TimelineRow {
   date: string;
-  new_installations: number;
+  observed_authenticated_installations: number;
   linked_installations: number;
   link_rate: Metric;
 }
@@ -80,12 +79,12 @@ export interface AndroidInstallationMetrics {
   source: string;
   generated_at: string;
   definitions: {
-    reconciliation_min_build: number;
     active_7d_since: string;
     active_30d_since: string;
     timeline_days: number;
     healthy_link_rate: number;
     attention_link_rate: number;
+    reconciliation_rate: string;
   };
   overview: {
     total_installations: number;
@@ -96,26 +95,25 @@ export interface AndroidInstallationMetrics {
     users_with_multiple_installations: number;
     active_installations_7d: number;
     active_installations_30d: number;
+    new_installations_24h: number;
+    new_installations_7d: number;
     new_installations_30d: number;
     link_rate: Metric;
   };
-  current_tracking: {
-    min_build: number;
-    total_installations: number;
+  reconciliation: {
+    observed_authenticated_installations: number;
+    link_attempted_installations: number;
     linked_installations: number;
-    anonymous_installations: number;
-    authenticated_installations: number;
+    authenticated_unlinked_installations: number;
+    conflicts: number;
+    failures_by_code: Record<string, number>;
     link_rate: Metric;
-  };
-  legacy: {
-    max_build: number;
-    total_installations: number;
-    linked_installations: number;
-    anonymous_installations: number;
   };
   data_quality: {
     linked_without_last_authenticated_at: number;
     authenticated_at_without_user: number;
+    linked_without_linked_at: number;
+    linked_without_observed_request: number;
     missing_app_build: number;
     invalid_app_build: number;
     missing_app_version: number;

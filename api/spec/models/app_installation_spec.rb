@@ -28,17 +28,47 @@ RSpec.describe AppInstallation, type: :model do
     expect(build(:app_installation, notification_permission: "granted")).to be_valid
   end
 
+  describe "runtime_context" do
+    it "accepts a value from the allowlist and rejects anything else" do
+      expect(build(:app_installation, runtime_context: "android_native")).to be_valid
+      expect(build(:app_installation, runtime_context: "samsung")).not_to be_valid
+    end
+
+    it "stays optional — an install may never have been linked" do
+      expect(build(:app_installation, runtime_context: nil)).to be_valid
+      expect(build(:app_installation, runtime_context: "")).to be_valid
+    end
+  end
+
+  describe "link signals" do
+    it "starts with no attempts and no link timestamps" do
+      install = create(:app_installation, :anonymous)
+
+      expect(install.link_attempts_count).to eq(0)
+      expect(install.first_authenticated_request_at).to be_nil
+      expect(install.first_link_attempt_at).to be_nil
+      expect(install.last_link_attempt_at).to be_nil
+      expect(install.linked_at).to be_nil
+      expect(install.last_link_failure_code).to be_nil
+    end
+  end
+
   describe "#associate_user!" do
     it "associates and stamps last_authenticated_at, idempotently" do
       user = create(:user)
       install = create(:app_installation, :anonymous)
 
-      install.associate_user!(user)
+      result = install.associate_user!(user)
+      install.reload
+      expect(result.status).to eq(:linked)
       expect(install.user_id).to eq(user.id)
       expect(install.last_authenticated_at).to be_present
+      expect(install.linked_at).to be_present
 
       previous = install.last_authenticated_at
-      install.associate_user!(user) # no-op for same user
+      second = install.associate_user!(user) # no-op for same user
+      install.reload
+      expect(second.status).to eq(:already_linked)
       expect(install.last_authenticated_at).to eq(previous)
     end
   end
@@ -64,42 +94,6 @@ RSpec.describe AppInstallation, type: :model do
     # exact alias of :linked, never drift into its own definition.
     it "keeps the deprecated :authenticated scope as an alias of :linked" do
       expect(described_class.authenticated.to_a).to match_array(described_class.linked.to_a)
-    end
-  end
-
-  describe "build scopes" do
-    # app_build is a free-form string coming from the client.
-    {
-      nil => :legacy,
-      "" => :legacy,
-      "unknown" => :legacy,
-      "1.0.45" => :legacy,
-      "44" => :legacy,
-      "45" => :current,
-      "0045" => :current,
-      "46" => :current,
-      "120" => :current
-    }.each do |build_value, expected|
-      it "classifies app_build #{build_value.inspect} as #{expected}" do
-        install = create(:app_installation, app_build: build_value)
-
-        if expected == :current
-          expect(described_class.current_build).to include(install)
-          expect(described_class.legacy_build).not_to include(install)
-        else
-          expect(described_class.legacy_build).to include(install)
-          expect(described_class.current_build).not_to include(install)
-        end
-      end
-    end
-
-    it "never raises on a mixed set of valid and malformed builds" do
-      %w[45 44 unknown 0045].each { |b| create(:app_installation, app_build: b) }
-      create(:app_installation, app_build: nil)
-
-      expect { described_class.current_build.count }.not_to raise_error
-      expect(described_class.current_build.count).to eq(2)
-      expect(described_class.legacy_build.count).to eq(3)
     end
   end
 

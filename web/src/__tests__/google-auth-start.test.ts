@@ -7,14 +7,16 @@ import {
   startGoogleAuth,
 } from "@/shared/lib/googleAuth";
 
-const { mockPost, mockGetInstallationId } = vi.hoisted(() => ({
+const { mockPost, mockGetInstallationId, mockEnsureInstallationForAuth } = vi.hoisted(() => ({
   mockPost: vi.fn(),
   mockGetInstallationId: vi.fn(),
+  mockEnsureInstallationForAuth: vi.fn(),
 }));
 
 vi.mock("@/shared/lib/api", () => ({ api: { post: mockPost } }));
 vi.mock("@/shared/lib/analytics/installation", () => ({
   getInstallationId: mockGetInstallationId,
+  ensureInstallationForAuth: mockEnsureInstallationForAuth,
 }));
 
 const assign = vi.fn();
@@ -22,6 +24,10 @@ const assign = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetInstallationId.mockResolvedValue("installation-1");
+  mockEnsureInstallationForAuth.mockResolvedValue({
+    installationId: "installation-1",
+    remoteRegistered: true,
+  });
   mockPost.mockResolvedValue({ id: 1, new_user: true });
   Object.defineProperty(window, "location", { value: { assign, replace: vi.fn() }, writable: true });
 });
@@ -62,6 +68,37 @@ describe("startGoogleAuth — web branch", () => {
 });
 
 describe("postGoogleNative payload", () => {
+  // The whole point of resolving the installation here is that the sign-in
+  // request itself carries X-Installation-Id, so the backend can link inside
+  // this very cycle instead of waiting for a later authenticated request.
+  it("resolves the installation BEFORE exchanging the token", async () => {
+    const order: string[] = [];
+    mockEnsureInstallationForAuth.mockImplementation(async () => {
+      order.push("installation");
+      return { installationId: "installation-1", remoteRegistered: true };
+    });
+    mockPost.mockImplementation(async () => {
+      order.push("exchange");
+      return { id: 1, new_user: true };
+    });
+
+    await postGoogleNative("id-token");
+
+    expect(order).toEqual([ "installation", "exchange" ]);
+  });
+
+  it("still exchanges the token when the installation is unavailable", async () => {
+    mockEnsureInstallationForAuth.mockResolvedValue({
+      installationId: null,
+      remoteRegistered: false,
+      failureCode: "transient",
+    });
+
+    await expect(postGoogleNative("id-token")).resolves.toMatchObject({
+      redirectPath: "/onboarding",
+    });
+  });
+
   it("omits the consent fields entirely when none was collected", async () => {
     await postGoogleNative("id-token");
 

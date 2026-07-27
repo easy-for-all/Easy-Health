@@ -5,13 +5,9 @@ module Analytics
   # events and sessions are complementary signals that live in their own blocks
   # and must never be read as an installation count.
   #
-  # Three views are kept strictly apart (Marco 2):
-  #   - overview          : every Android install ever registered (historical).
-  #   - current_tracking  : builds >= RECONCILIATION_MIN_BUILD, i.e. the ones that
-  #                         send X-Installation-Id on every authenticated request.
-  #                         This is the only honest measure of tracking health.
-  #   - legacy            : builds below the threshold, missing or non-numeric.
-  #                         Anonymous rows here are expected, not a defect.
+  # Operational reconciliation is measured from observed authenticated requests,
+  # never from app_build. The Android shell loads the remote web bundle, so the
+  # native build is useful release metadata but not eligibility for linking.
   #
   # This panel never reports Google Play downloads: an installation record is
   # created when the app first talks to the API, which is a different (smaller)
@@ -45,8 +41,7 @@ module Analytics
         generated_at: ReportingTime.now.iso8601,
         definitions: definitions,
         overview: overview,
-        current_tracking: current_tracking,
-        legacy: legacy,
+        reconciliation: reconciliation,
         data_quality: data_quality,
         adoption: adoption,
         health_timeline: health_timeline,
@@ -69,10 +64,6 @@ module Analytics
       AppInstallation.for_platform(PLATFORM)
     end
 
-    def min_build
-      AppInstallation::RECONCILIATION_MIN_BUILD
-    end
-
     # Parenthesised so it can be embedded in any comparison safely.
     def numeric_build
       "(#{AppInstallation::NUMERIC_BUILD_SQL})"
@@ -88,12 +79,12 @@ module Analytics
 
     def definitions
       {
-        reconciliation_min_build: min_build,
         active_7d_since: active_7d_since.iso8601,
         active_30d_since: active_30d_since.iso8601,
         timeline_days: TIMELINE_DAYS,
         healthy_link_rate: HEALTHY_LINK_RATE,
-        attention_link_rate: ATTENTION_LINK_RATE
+        attention_link_rate: ATTENTION_LINK_RATE,
+        reconciliation_rate: "linked_at / first_authenticated_request_at"
       }
     end
 
@@ -118,8 +109,8 @@ module Analytics
       linked = "user_id IS NOT NULL"
       anon = "user_id IS NULL"
       auth = "user_id IS NOT NULL AND last_authenticated_at IS NOT NULL"
-      current = "#{numeric_build} >= #{min_build}"
-      legacy = "#{numeric_build} IS NULL OR #{numeric_build} < #{min_build}"
+      observed = "first_authenticated_request_at IS NOT NULL"
+      linked_by_signal = "#{observed} AND linked_at IS NOT NULL"
       missing_build = "app_build IS NULL OR btrim(app_build) = ''"
 
       {
@@ -130,16 +121,18 @@ module Analytics
         active_7d: bind("last_seen_at >= ?", active_7d_since),
         active_30d: bind("last_seen_at >= ?", active_30d_since),
         active_24h: bind("last_seen_at >= ?", 24.hours.ago),
+        new_24h: bind("first_seen_at >= ?", 24.hours.ago),
+        new_7d: bind("first_seen_at >= ?", active_7d_since),
         new_30d: bind("first_seen_at >= ?", active_30d_since),
-        current_total: current,
-        current_linked: "#{current} AND #{linked}",
-        current_anonymous: "#{current} AND #{anon}",
-        current_authenticated: "#{current} AND #{auth}",
-        legacy_total: legacy,
-        legacy_linked: "(#{legacy}) AND #{linked}",
-        legacy_anonymous: "(#{legacy}) AND #{anon}",
+        observed_authenticated: observed,
+        link_attempted: "first_link_attempt_at IS NOT NULL",
+        linked_by_signal: linked_by_signal,
+        observed_unlinked: "#{observed} AND linked_at IS NULL",
+        conflicts: bind("last_link_failure_code = ?", "user_conflict"),
         dq_linked_without_authenticated_at: "user_id IS NOT NULL AND last_authenticated_at IS NULL",
         dq_authenticated_at_without_user: "user_id IS NULL AND last_authenticated_at IS NOT NULL",
+        dq_linked_without_linked_at: "user_id IS NOT NULL AND linked_at IS NULL",
+        dq_linked_without_observed_request: "linked_at IS NOT NULL AND first_authenticated_request_at IS NULL",
         dq_missing_app_build: missing_build,
         dq_invalid_app_build: "NOT (#{missing_build}) AND #{numeric_build} IS NULL",
         dq_missing_app_version: "app_version IS NULL OR btrim(app_version) = ''",
@@ -168,33 +161,26 @@ module Analytics
         users_with_multiple_installations: users_with_multiple_installations,
         active_installations_7d: counters[:active_7d],
         active_installations_30d: counters[:active_30d],
+        new_installations_24h: counters[:new_24h],
+        new_installations_7d: counters[:new_7d],
         new_installations_30d: counters[:new_30d],
         link_rate: link_rate(counters[:linked], counters[:total], "android_link_rate_v1")
       }
     end
 
-    # Health of the CURRENT tracking flow only. Mixing legacy builds in here
-    # would permanently drag the rate down for a reason that is already known.
-    def current_tracking
+    def reconciliation
       {
-        min_build: min_build,
-        total_installations: counters[:current_total],
-        linked_installations: counters[:current_linked],
-        anonymous_installations: counters[:current_anonymous],
-        authenticated_installations: counters[:current_authenticated],
+        observed_authenticated_installations: counters[:observed_authenticated],
+        link_attempted_installations: counters[:link_attempted],
+        linked_installations: counters[:linked_by_signal],
+        authenticated_unlinked_installations: counters[:observed_unlinked],
+        conflicts: counters[:conflicts],
+        failures_by_code: failures_by_code,
         link_rate: link_rate(
-          counters[:current_linked], counters[:current_total],
-          "android_current_build_link_rate_v1"
+          counters[:linked_by_signal],
+          counters[:observed_authenticated],
+          "android_reconciliation_link_rate_v1"
         )
-      }
-    end
-
-    def legacy
-      {
-        max_build: min_build - 1,
-        total_installations: counters[:legacy_total],
-        linked_installations: counters[:legacy_linked],
-        anonymous_installations: counters[:legacy_anonymous]
       }
     end
 
@@ -202,6 +188,8 @@ module Analytics
       {
         linked_without_last_authenticated_at: counters[:dq_linked_without_authenticated_at],
         authenticated_at_without_user: counters[:dq_authenticated_at_without_user],
+        linked_without_linked_at: counters[:dq_linked_without_linked_at],
+        linked_without_observed_request: counters[:dq_linked_without_observed_request],
         missing_app_build: counters[:dq_missing_app_build],
         invalid_app_build: counters[:dq_invalid_app_build],
         missing_app_version: counters[:dq_missing_app_version],
@@ -259,6 +247,13 @@ module Analytics
       MetricResult.ratio(numerator: numerator, denominator: denominator, definition: definition)
     end
 
+    def failures_by_code
+      @failures_by_code ||= base.where.not(last_link_failure_code: [ nil, "" ])
+                                .group(:last_link_failure_code)
+                                .order(Arel.sql("COUNT(*) DESC"))
+                                .count
+    end
+
     # ------------------------------------------------------------- aggregations
 
     # One grouped query per breakdown — no per-row follow-up queries.
@@ -281,7 +276,6 @@ module Analytics
               app_version: version.presence,
               app_build: build.presence,
               build_number: numeric,
-              current_tracking: numeric.present? && numeric >= min_build,
               total_installations: total,
               linked_installations: linked,
               anonymous_installations: anonymous,
@@ -378,26 +372,25 @@ module Analytics
 
     # ---------------------------------------------------------------- timeline
 
-    # Daily link rate for new installations, so a tracking regression shows up
-    # as a drop instead of being diluted in the historical average. Days are cut
-    # in the reporting timezone, like every other daily metric in the panel.
+    # Daily reconciliation rate for installs observed in authenticated requests.
+    # Days are cut in the reporting timezone, like every other daily metric.
     def health_timeline
-      day = ReportingTime.local_date_sql("first_seen_at")
+      day = ReportingTime.local_date_sql("first_authenticated_request_at")
 
-      base.where(first_seen_at: TIMELINE_DAYS.days.ago..)
+      base.where(first_authenticated_request_at: TIMELINE_DAYS.days.ago..)
           .group(Arel.sql(day))
           .order(Arel.sql("#{day} DESC"))
           .pluck(
             Arel.sql(day),
             Arel.sql("COUNT(*)"),
-            Arel.sql("COUNT(*) FILTER (WHERE user_id IS NOT NULL)")
+            Arel.sql("COUNT(*) FILTER (WHERE linked_at IS NOT NULL)")
           )
           .map do |date, total, linked|
             {
               date: date.to_s,
-              new_installations: total,
+              observed_authenticated_installations: total,
               linked_installations: linked,
-              link_rate: link_rate(linked, total, "android_daily_link_rate_v1")
+              link_rate: link_rate(linked, total, "android_daily_reconciliation_rate_v1")
             }
           end
     end
@@ -440,13 +433,13 @@ module Analytics
     end
 
     def reconciliation_component
-      total = counters[:current_total]
-      linked = counters[:current_linked]
+      total = counters[:observed_authenticated]
+      linked = counters[:linked_by_signal]
       label = "Reconciliação"
 
       if total.zero?
         return component(:reconciliation, label, "unknown",
-                         "nenhuma instalação do build #{min_build}+ ainda")
+                         "nenhuma instalação observada em requisição autenticada")
       end
 
       rate = (linked.to_f / total * 100).round(1)
@@ -460,7 +453,7 @@ module Analytics
         end
 
       component(:reconciliation, label, status,
-                "#{linked} de #{total} instalações do build #{min_build}+ vinculadas")
+                "#{linked} de #{total} instalações observadas autenticadas vinculadas")
     end
 
     def push_component
@@ -493,8 +486,8 @@ module Analytics
     def webhooks_component
       label = "Webhooks (Make)"
       recent = UserEvent.where(created_at: 24.hours.ago..).group(:make_delivery_status).count
-      delivered = recent["delivered"].to_i
-      failed = recent["failed"].to_i
+      delivered = recent["accepted_by_make"].to_i + recent["delivered"].to_i
+      failed = recent["failed_to_reach_make"].to_i + recent["dead_letter"].to_i + recent["failed"].to_i
 
       if delivered.zero? && failed.zero?
         component(:webhooks, label, "unknown", "nenhuma entrega nas últimas 24h")

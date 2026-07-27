@@ -4,6 +4,9 @@
 class DispatchDuePushJob < ApplicationJob
   queue_as :default
 
+  # Driven by the cron sweep, so a run that stops happening is a real fault.
+  def self.observability_heartbeat_key = "push_dispatch"
+
   def perform(limit: 500)
     stats = PushDispatchService.dispatch_due(limit: limit)
     Rails.logger.info("[DispatchDuePushJob] #{stats.inspect}")

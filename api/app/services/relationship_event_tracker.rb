@@ -196,7 +196,9 @@ class RelationshipEventTracker
       metadata: @metadata,
       payload_json: build_payload,
       idempotency_key: @idempotency_key,
-      make_delivery_status: initial_make_delivery_status
+      make_delivery_status: initial_make_delivery_status,
+      make_delivery_channels: delivery_channels,
+      make_destination: delivery_destination
     }
   end
 
@@ -206,6 +208,22 @@ class RelationshipEventTracker
       event_name: @event_name,
       suppress_make_delivery: @suppress_make_delivery
     ) ? "pending" : "disabled"
+  end
+
+  def delivery_channels
+    CommunicationEvents.channels_for(@event_name)
+  rescue CommunicationEvents::ConfigError
+    []
+  end
+
+  def delivery_destination
+    channels = delivery_channels
+    communication_type = CommunicationEvents.communication_type_for(@event_name).presence
+    return communication_type if channels.empty?
+
+    ([ channels.sort.join("-"), communication_type ].compact.join("-")).presence
+  rescue CommunicationEvents::ConfigError
+    nil
   end
 
   def enqueue_make_delivery(user_event)

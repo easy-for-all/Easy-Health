@@ -18,6 +18,9 @@ POWERBI_USER="${POWERBI_USER:-powerbi_readonly}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/easyhealth/bi}"
 LOG_DIR="${LOG_DIR:-/var/log/easyhealth}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
+# Quantidade de views bi_observability_* esperada na replica apos o restore.
+# Ver api/db/views/ e docs/observability/BI_VIEWS.md.
+BI_EXPECTED_VIEW_COUNT="${BI_EXPECTED_VIEW_COUNT:-5}"
 
 TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
 DUMP_FILE="$BACKUP_DIR/easy_health_production_$TIMESTAMP.dump"
@@ -114,10 +117,64 @@ SQL
   fi
 }
 
+# --- Observabilidade -------------------------------------------------------
+# Registra o heartbeat "bi_replica_refresh" no banco da aplicacao, para que a
+# ausencia deste refresh seja detectavel pelo check replica_refresh_stale.
+#
+# Best-effort por design: se o docker nao responder, apenas avisamos. O refresh
+# da replica NUNCA pode falhar por causa da observabilidade. Nenhum valor de
+# variavel de ambiente e passado adiante, apenas o codigo de erro.
+OBSERVABILITY_HEARTBEAT_KEY="${OBSERVABILITY_HEARTBEAT_KEY:-bi_replica_refresh}"
+OBSERVABILITY_ENABLED_FOR_SCRIPT="${OBSERVABILITY_HEARTBEAT_ENABLED:-true}"
+EASYHEALTH_COMPOSE_FILE="${EASYHEALTH_COMPOSE_FILE:-/home/easy/Easy-Health/docker-compose.prod.yml}"
+EASYHEALTH_COMPOSE_DIR="${EASYHEALTH_COMPOSE_DIR:-$(dirname "$EASYHEALTH_COMPOSE_FILE")}"
+
+heartbeat() {
+  action="$1"
+  error_code="${2:-}"
+
+  [ "$OBSERVABILITY_ENABLED_FOR_SCRIPT" = "true" ] || return 0
+  command -v docker >/dev/null 2>&1 || return 0
+  [ -f "$EASYHEALTH_COMPOSE_FILE" ] || return 0
+
+  ruby_call="Observability::Heartbeat.${action}!('${OBSERVABILITY_HEARTBEAT_KEY}'"
+  if [ "$action" = "failed" ]; then
+    ruby_call="${ruby_call}, error_code: '${error_code}'"
+  fi
+  ruby_call="${ruby_call})"
+
+  if ! (cd "$EASYHEALTH_COMPOSE_DIR" && \
+        docker compose -f "$EASYHEALTH_COMPOSE_FILE" exec -T api \
+        bin/rails runner "$ruby_call") >>"$LOG_FILE" 2>&1; then
+    log "AVISO: heartbeat '$action' nao registrado (aplicacao indisponivel)"
+  fi
+
+  return 0
+}
+
+# Handler unico de saida. Instalado ANTES das validacoes de ambiente de
+# proposito: fail() faz exit 1 direto, entao falhas de env/comando/identificador
+# ocorrem antes do ponto onde o trap original era instalado e ficariam sem
+# nenhum registro. Preserva o exit code original.
+heartbeat_reported=0
+
+on_exit() {
+  status=$?
+  cleanup_tmp
+  if [ "$heartbeat_reported" = "0" ] && [ "$status" != "0" ]; then
+    heartbeat_reported=1
+    heartbeat failed "exit_${status}"
+  fi
+  return "$status"
+}
+
 mkdir -p "$BACKUP_DIR" "$LOG_DIR"
 chmod 700 "$BACKUP_DIR" "$LOG_DIR" 2>/dev/null || true
 touch "$LOG_FILE"
 chmod 600 "$LOG_FILE" 2>/dev/null || true
+
+trap on_exit EXIT
+heartbeat started
 
 log "Iniciando replica BI da EasyHealth"
 log "Dump: $DUMP_FILE"
@@ -158,7 +215,6 @@ BI_OLD_DB_NAME_SQL="$(sql_literal "$BI_OLD_DB_NAME")"
 POWERBI_USER_SQL="$(sql_literal "$POWERBI_USER")"
 
 created_tmp=0
-trap cleanup_tmp EXIT
 
 log "Banco BI final: $BI_DB_NAME"
 log "Banco temporario: $BI_TMP_DB_NAME"
@@ -256,6 +312,22 @@ SQL
 
 log "Limpando dumps antigos, mantendo ultimos $RETENTION_DAYS dias"
 find "$BACKUP_DIR" -type f -name "*.dump" -mtime +"$RETENTION_DAYS" -delete
+
+# As views bi_observability_* sao objetos reais do Postgres e viajam no
+# pg_dump/pg_restore. Se elas sumirem, o Power BI passa a ler uma replica
+# incompleta em silencio — entao conferimos apos a troca.
+log "Verificando views de observabilidade na replica"
+BI_VIEW_COUNT="$(psql_bi_final -tAc \
+  "SELECT count(*) FROM pg_views WHERE viewname LIKE 'bi\\_observability%'" 2>/dev/null | tr -d '[:space:]' || true)"
+
+if [ "$BI_VIEW_COUNT" = "$BI_EXPECTED_VIEW_COUNT" ]; then
+  log "Views de observabilidade presentes: $BI_VIEW_COUNT"
+else
+  fail "replica com $BI_VIEW_COUNT views bi_observability_*, esperado $BI_EXPECTED_VIEW_COUNT (rode 'rake observability:bi_views:apply' na producao)"
+fi
+
+heartbeat_reported=1
+heartbeat succeeded
 
 trap - EXIT
 log "Replica BI concluida com sucesso"

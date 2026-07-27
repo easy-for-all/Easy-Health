@@ -22,9 +22,10 @@ RSpec.describe MakeWebhookClient do
     }
   end
 
-  it "posts signed minimal payload and marks the event delivered" do
+  it "posts signed minimal payload and marks the event accepted by Make" do
     captured_request = nil
     response = Net::HTTPOK.new("1.1", "200", "OK")
+    allow(response).to receive(:body).and_return("ok")
     http = instance_double(Net::HTTP)
 
     with_env(make_env) do
@@ -41,7 +42,11 @@ RSpec.describe MakeWebhookClient do
       result = described_class.new.deliver(event)
 
       expect(result).to be_success
-      expect(event.reload.make_delivery_status).to eq("delivered")
+      expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+      expect(event.make_delivered_to_provider_at).to be_present
+      expect(event.make_last_http_status).to eq(200)
+      expect(event.make_delivery_channels).to eq(%w[push])
+      expect(event.make_destination).to eq("push-progress")
       expect(captured_request["X-EasyHealth-Event-Id"]).to eq(event.id.to_s)
       # Schema 2 is the canonical default now that no env override is set.
       expect(captured_request["X-EasyHealth-Schema-Version"]).to eq("2")
@@ -56,6 +61,7 @@ RSpec.describe MakeWebhookClient do
   it "includes schema_version, timezone and locale so Make can schedule a push" do
     captured_request = nil
     response = Net::HTTPOK.new("1.1", "200", "OK")
+    allow(response).to receive(:body).and_return("ok")
     http = instance_double(Net::HTTP)
     user.update!(time_zone: "America/Sao_Paulo")
 
@@ -85,6 +91,7 @@ RSpec.describe MakeWebhookClient do
   it "posts schema version 2 payload with delivery channels and context" do
     captured_request = nil
     response = Net::HTTPOK.new("1.1", "200", "OK")
+    allow(response).to receive(:body).and_return("ok")
     http = instance_double(Net::HTTP)
     plan = user.workout_plans.create!(active: true, created_at: 70.minutes.ago)
     user_event = UserEvent.create!(
@@ -119,6 +126,7 @@ RSpec.describe MakeWebhookClient do
       expect(body.dig("context", "plan_id")).to eq(plan.id)
       expect(body.dig("metadata", "trigger_source")).to eq("relationship_daily")
       expect(user_event.reload.payload_json["schema_version"]).to eq(2)
+      expect(user_event.make_delivery_status).to eq("accepted_by_make")
     end
   end
 
@@ -160,7 +168,7 @@ RSpec.describe MakeWebhookClient do
     end
   end
 
-  it "marks an incoherent schema version 2 event failed without posting" do
+  it "marks an incoherent schema version 2 event retrying without posting" do
     # A configured communication event whose required context is missing must
     # fail loudly (not post), distinct from an unconfigured event which skips.
     user_event = UserEvent.create!(
@@ -177,10 +185,11 @@ RSpec.describe MakeWebhookClient do
 
       result = described_class.new.deliver(user_event)
 
-      expect(result.status).to eq("failed")
-      expect(user_event.reload.make_delivery_status).to eq("failed")
-      expect(user_event.make_last_error).to include("missing_required_context")
+      expect(result.status).to eq("retrying")
+      expect(user_event.reload.make_delivery_status).to eq("retrying")
+      expect(user_event.make_last_error_message).to include("missing_required_context")
       expect(user_event.make_attempts_count).to eq(1)
+      expect(user_event.make_next_retry_at).to be_present
     end
   end
 
@@ -205,7 +214,7 @@ RSpec.describe MakeWebhookClient do
     end
   end
 
-  it "marks the event failed on HTTP errors" do
+  it "marks the event retrying on HTTP errors while attempts remain" do
     response = Net::HTTPInternalServerError.new("1.1", "500", "Error")
     allow(response).to receive(:body).and_return("broken")
     http = instance_double(Net::HTTP)
@@ -220,9 +229,155 @@ RSpec.describe MakeWebhookClient do
 
       result = described_class.new.deliver(event)
 
-      expect(result.status).to eq("failed")
-      expect(event.reload.make_delivery_status).to eq("failed")
-      expect(event.make_last_error).to include("HTTP 500")
+      expect(result.status).to eq("retrying")
+      expect(event.reload.make_delivery_status).to eq("retrying")
+      expect(event.make_last_http_status).to eq(500)
+      expect(event.make_last_response_body).to eq("broken")
+      expect(event.make_last_error_message).to eq("Make returned HTTP 500")
+      expect(event.make_next_retry_at).to be_present
+    end
+  end
+
+  it "marks the event accepted by Make on HTTP 202" do
+    response = Net::HTTPAccepted.new("1.1", "202", "Accepted")
+    allow(response).to receive(:body).and_return({ ok: true }.to_json)
+    http = instance_double(Net::HTTP)
+
+    with_env(make_env) do
+      event.update!(make_delivery_status: "pending")
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request).and_return(response)
+
+      result = described_class.new.deliver(event)
+
+      expect(result.status).to eq("accepted_by_make")
+      expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+      expect(event.make_last_http_status).to eq(202)
+    end
+  end
+
+  it "moves HTTP 400, 404, 422 and 500 to dead letter on the final attempt" do
+    [
+      [ Net::HTTPBadRequest, "400" ],
+      [ Net::HTTPNotFound, "404" ],
+      [ Net::HTTPUnprocessableEntity, "422" ],
+      [ Net::HTTPInternalServerError, "500" ]
+    ].each do |klass, code|
+      user_event = event.dup
+      user_event.idempotency_key = "final-http:#{klass.name.demodulize}"
+      user_event.make_delivery_status = "pending"
+      user_event.make_attempts_count = described_class::MAX_ATTEMPTS - 1
+      user_event.save!
+      response = klass.new("1.1", code, "Error")
+      allow(response).to receive(:body).and_return("http error")
+      http = instance_double(Net::HTTP)
+
+      with_env(make_env) do
+        allow(Net::HTTP).to receive(:new).and_return(http)
+        allow(http).to receive(:use_ssl=)
+        allow(http).to receive(:open_timeout=)
+        allow(http).to receive(:read_timeout=)
+        allow(http).to receive(:request).and_return(response)
+
+        result = described_class.new.deliver(user_event)
+
+        expect(result.status).to eq("dead_letter")
+        expect(user_event.reload.make_delivery_status).to eq("dead_letter")
+        expect(user_event.make_next_retry_at).to be_nil
+      end
+    end
+  end
+
+  it "records timeout class/message and keeps the event retryable" do
+    http = instance_double(Net::HTTP)
+
+    with_env(make_env) do
+      event.update!(make_delivery_status: "pending")
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request).and_raise(Net::ReadTimeout.new("execution expired"))
+
+      result = described_class.new.deliver(event)
+
+      expect(result.status).to eq("retrying")
+      expect(event.reload.make_delivery_status).to eq("retrying")
+      expect(event.make_last_error_class).to eq("Net::ReadTimeout")
+      expect(event.make_last_error_message).to include("execution expired")
+      expect(event.make_last_http_status).to be_nil
+    end
+  end
+
+  it "records network exceptions as failed_to_reach_make on the final attempt" do
+    http = instance_double(Net::HTTP)
+
+    with_env(make_env) do
+      event.update!(make_delivery_status: "pending", make_attempts_count: described_class::MAX_ATTEMPTS - 1)
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request).and_raise(Errno::ECONNREFUSED.new)
+
+      result = described_class.new.deliver(event)
+
+      expect(result.status).to eq("failed_to_reach_make")
+      expect(event.reload.make_delivery_status).to eq("failed_to_reach_make")
+      expect(event.make_attempts_count).to eq(described_class::MAX_ATTEMPTS)
+      expect(event.make_next_retry_at).to be_nil
+    end
+  end
+
+  it "truncates response bodies at 20 KB and redacts sensitive JSON keys" do
+    secret_body = {
+      token: "secret-token",
+      data: "a" * (described_class::MAX_RESPONSE_BODY_BYTES + 200)
+    }.to_json
+    response = Net::HTTPInternalServerError.new("1.1", "500", "Error")
+    allow(response).to receive(:body).and_return(secret_body)
+    http = instance_double(Net::HTTP)
+
+    with_env(make_env) do
+      event.update!(make_delivery_status: "pending")
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request).and_return(response)
+
+      described_class.new.deliver(event)
+
+      body = event.reload.make_last_response_body
+      expect(body.bytesize).to be <= described_class::MAX_RESPONSE_BODY_BYTES
+      expect(body).not_to include("secret-token")
+    end
+  end
+
+  it "does not log webhook secrets or signatures in the structured delivery log" do
+    response = Net::HTTPOK.new("1.1", "200", "OK")
+    allow(response).to receive(:body).and_return("ok")
+    http = instance_double(Net::HTTP)
+    logs = []
+
+    with_env(make_env.merge("MAKE_WEBHOOK_SECRET" => "super-secret")) do
+      event.update!(make_delivery_status: "pending")
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request).and_return(response)
+      allow(Rails.logger).to receive(:info) { |message| logs << message.to_s }
+
+      described_class.new.deliver(event)
+
+      joined = logs.join("\n")
+      expect(joined).to include("make_webhook_delivery")
+      expect(joined).not_to include("super-secret")
+      expect(joined).not_to include("X-EasyHealth-Signature")
     end
   end
 end

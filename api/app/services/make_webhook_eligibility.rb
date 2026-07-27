@@ -55,7 +55,7 @@ class MakeWebhookEligibility
 
   def self.deliverable?(user_event)
     return false unless user_event
-    return false if user_event.make_delivery_status == "delivered"
+    return false if %w[accepted_by_make delivered].include?(user_event.make_delivery_status)
 
     eligible_for_new_event?(
       user: user_event.user,

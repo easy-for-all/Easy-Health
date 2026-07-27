@@ -45,8 +45,8 @@ module Api
         active_last_7_days  = WorkoutSession.where("completed_at > ?", 7.days.ago).distinct.count(:user_id)
         active_last_30_days = WorkoutSession.where("completed_at > ?", 30.days.ago).distinct.count(:user_id)
         active_segment_counts = UserSegment.active.group(:segment_name).count
-        make_events_today = UserEvent.where(make_delivery_status: "delivered", created_at: Time.current.beginning_of_day..).count
-        make_events_failed = UserEvent.where(make_delivery_status: "failed").count
+        make_events_today = UserEvent.where(make_delivery_status: "accepted_by_make", created_at: Time.current.beginning_of_day..).count
+        make_events_failed = UserEvent.failed_make_delivery.count
         recent_relationship_events = UserEvent.order(created_at: :desc).limit(10).map do |event|
           {
             id: event.id,

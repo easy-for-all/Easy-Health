@@ -5,6 +5,7 @@ import { api, ApiError, TRIAL_EXPIRED_EVENT } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
 import { Capacitor } from "@capacitor/core";
 import { identifyUser, resetIdentity } from "@/shared/lib/analytics";
+import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
 
 interface AuthContextValue {
   user: User | null;
@@ -75,13 +76,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [user?.id]);
 
+  // Email sign-in/sign-up used to authenticate before the installation_id had
+  // resolved, so the very request that creates the session went out without
+  // X-Installation-Id — unlike native Google login, which already waited for it.
+  // Time-boxed and best-effort: tracking never blocks or breaks authentication.
   async function signIn(email: string, password: string) {
+    await ensureInstallationForAuth();
     const u = await api.post<User>("/api/v1/auth/sign_in", { email, password });
     setUser(u);
     justAuthenticatedRef.current = true;
   }
 
   async function signUp(name: string, email: string, password: string, marketingConsent?: boolean) {
+    await ensureInstallationForAuth();
     const u = await api.post<User>("/api/v1/auth/sign_up", {
       name,
       email,

@@ -1,4 +1,8 @@
 class ApplicationJob < ActiveJob::Base
+  # Correlation context, job_* structured events and (opt-in) heartbeats.
+  # See app/jobs/concerns/observability_instrumented.rb.
+  include ObservabilityInstrumented
+
   # Automatically retry jobs that encountered a deadlock
   # retry_on ActiveRecord::Deadlocked
 

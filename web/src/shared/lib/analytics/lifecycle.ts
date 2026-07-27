@@ -6,6 +6,7 @@ import {
   startAnalyticsSession,
 } from "./context";
 import { trackEvent, trackServerEvent } from "./index";
+import { ensureInstallationRegistered } from "./installation";
 import {
   backgroundDurationMs,
   clearBackground,
@@ -67,6 +68,11 @@ export async function initAnalyticsLifecycle(): Promise<void> {
         }
         trackEvent("app_resumed", { background_seconds: Math.round(bgMs / 1000) });
         clearBackground();
+        // Self-heal: a register that failed at boot gets another chance here.
+        // No-op once it has succeeded in this app cycle, and single-flight, so
+        // repeated resumes cannot turn into a request storm. Never awaited —
+        // the resume path must stay instant.
+        void ensureInstallationRegistered();
       } else if (!isActive && wasActive) {
         markBackgrounded();
         trackEvent("app_backgrounded");

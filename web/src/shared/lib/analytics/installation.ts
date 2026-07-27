@@ -1,5 +1,5 @@
-import { Capacitor } from "@capacitor/core";
-import { api } from "../api";
+import * as Sentry from "@sentry/nextjs";
+import { api, ApiError } from "../api";
 import {
   detectPlatform,
   getAnalyticsContext,
@@ -167,20 +167,151 @@ async function buildPayload(
 
 export const TRACKING_VERSION = 2;
 
-// Register (upsert) the installation. Non-blocking and best-effort: tracking must
-// never break the boot. Associates to the user automatically when the session
-// cookie is present (the backend reads current_user; never trusts a client id).
+export type InstallationFailureCode =
+  | "disabled"
+  | "unsupported"
+  | "id_unavailable"
+  | "transient"
+  | "client_error";
+
+export interface EnsureInstallationResult {
+  // Present whenever the local id could be resolved, even if the backend call
+  // failed — the caller can still send X-Installation-Id and let the backend
+  // reconcile on a later authenticated request.
+  installationId: string | null;
+  remoteRegistered: boolean;
+  failureCode?: InstallationFailureCode;
+}
+
+// A successful remote register is remembered for the app cycle so a resume or a
+// login does not re-POST. A FAILED one is not, so those are exactly the moments
+// that retry it.
+let remoteRegistered = false;
+// Shared in-flight operation: boot, login, push and resume can all call this at
+// once and must never produce concurrent registrations.
+let ensuring: Promise<EnsureInstallationResult> | null = null;
+
+// How long an auth flow is willing to wait for the remote register before going
+// ahead. The local id is always awaited (it is fast and local); only the network
+// leg is time-boxed, so a slow backend can never delay a login.
+const AUTH_REGISTER_BUDGET_MS = 2_000;
+
+// Posts the register upsert with one short retry for transient failures
+// (network / 5xx), mirroring the device-token sync. 4xx is never retried: the
+// payload itself is the problem and a repeat would fail identically.
+async function postRegister(
+  overrides: InstallationOverrides,
+  opts: RegisterOptions
+): Promise<{ ok: boolean; failureCode?: InstallationFailureCode }> {
+  const payload = await buildPayload(overrides, opts);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await api.post("/api/v1/app/installations/register", payload);
+      return { ok: true };
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : undefined;
+      const transient = status === undefined || status >= 500;
+      if (!transient) return { ok: false, failureCode: "client_error" };
+      if (attempt === 1) return { ok: false, failureCode: "transient" };
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+  }
+  return { ok: false, failureCode: "transient" };
+}
+
+// Guarantees the installation exists locally and, when possible, on the backend.
+//
+// Best-effort by contract: a failure here defers the link to the next
+// authenticated request (the backend reconciles continuously), so no caller may
+// treat it as fatal. Android-only — web/PWA does not carry an installation.
+export function ensureInstallationRegistered(
+  overrides: InstallationOverrides = {},
+  opts: RegisterOptions = {}
+): Promise<EnsureInstallationResult> {
+  if (typeof window === "undefined" || !MOBILE_ANALYTICS_ENABLED) {
+    return Promise.resolve({ installationId: null, remoteRegistered: false, failureCode: "disabled" });
+  }
+  if (!isNativeApp()) {
+    return Promise.resolve({ installationId: null, remoteRegistered: false, failureCode: "unsupported" });
+  }
+  // Already done for this app cycle: return the known id without a network call.
+  if (remoteRegistered) {
+    return Promise.resolve({ installationId: getCachedInstallationId() ?? null, remoteRegistered: true });
+  }
+  // The check and the assignment are synchronous (no await between them), so
+  // concurrent callers can never spawn two operations.
+  if (ensuring) return ensuring;
+
+  ensuring = runEnsure(overrides, opts).finally(() => {
+    ensuring = null;
+  });
+  return ensuring;
+}
+
+async function runEnsure(
+  overrides: InstallationOverrides,
+  opts: RegisterOptions
+): Promise<EnsureInstallationResult> {
+  let installationId: string | null = null;
+  try {
+    installationId = await getInstallationId();
+  } catch {
+    // Storage unavailable: nothing else can work, but the caller must continue.
+    return { installationId: null, remoteRegistered: false, failureCode: "id_unavailable" };
+  }
+
+  const result = await postRegister(overrides, opts);
+  if (result.ok) {
+    remoteRegistered = true;
+    return { installationId, remoteRegistered: true };
+  }
+
+  breadcrumb("installation_register_failed", { failure_code: result.failureCode });
+  return { installationId, remoteRegistered: false, failureCode: result.failureCode };
+}
+
+// For authentication flows. Awaits the local id (so X-Installation-Id is on the
+// sign-in request itself) but time-boxes the network leg: login must never wait
+// on tracking. The registration keeps running in the background either way.
+export async function ensureInstallationForAuth(): Promise<EnsureInstallationResult> {
+  const pending = ensureInstallationRegistered();
+
+  const budget = new Promise<EnsureInstallationResult>((resolve) => {
+    setTimeout(
+      () => resolve({
+        installationId: getCachedInstallationId() ?? null,
+        remoteRegistered: false,
+        failureCode: "transient",
+      }),
+      AUTH_REGISTER_BUDGET_MS
+    );
+  });
+
+  try {
+    return await Promise.race([ pending, budget ]);
+  } catch {
+    return { installationId: getCachedInstallationId() ?? null, remoteRegistered: false, failureCode: "transient" };
+  }
+}
+
+// Leaves a trail in Sentry so a systemic tracking outage is visible, without
+// turning a best-effort call into a reported error.
+function breadcrumb(message: string, data: Record<string, unknown>): void {
+  try {
+    Sentry.addBreadcrumb({ category: "installation", level: "warning", message, data });
+  } catch {
+    /* Sentry not initialized — ignore */
+  }
+}
+
+// @deprecated Use ensureInstallationRegistered — it is single-flight, retries a
+// transient failure and reports whether the backend actually has the install.
 export async function registerInstallation(
   overrides: InstallationOverrides = {},
   opts: RegisterOptions = {}
 ): Promise<void> {
-  if (typeof window === "undefined" || !MOBILE_ANALYTICS_ENABLED) return;
-  try {
-    const payload = await buildPayload(overrides, opts);
-    await api.post("/api/v1/app/installations/register", payload);
-  } catch {
-    /* swallow — endpoint is fire-and-forget, backend logs failures */
-  }
+  await ensureInstallationRegistered(overrides, opts);
 }
 
 // Refresh mutable fields (permission/consent/version) for an existing install.

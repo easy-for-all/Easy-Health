@@ -6,6 +6,11 @@ require "rails/all"
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
 
+# Middleware must be a real constant when the stack is assembled below, and
+# autoloaded constants cannot be referenced during initialization — so this one
+# directory is required explicitly and excluded from autoload_lib.
+require_relative "../lib/middleware/observability_request_context"
+
 module App
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
@@ -14,7 +19,7 @@ module App
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
-    config.autoload_lib(ignore: %w[assets tasks])
+    config.autoload_lib(ignore: %w[assets tasks middleware])
 
     # Configuration for the application, engines, and railties goes here.
     #
@@ -37,5 +42,11 @@ module App
       key: "_easy_health_session",
       same_site: :lax,
       secure: Rails.env.production?
+
+    # Inserted after RequestId so request.request_id is already populated, and
+    # after the Executor so CurrentAttributes are not reset out from under it.
+    # Rack::Cors sits before position 0 and Rack::Attack is appended by its own
+    # initializer, so a rack-attack 429 is still counted here.
+    config.middleware.insert_after ActionDispatch::RequestId, ObservabilityRequestContext
   end
 end

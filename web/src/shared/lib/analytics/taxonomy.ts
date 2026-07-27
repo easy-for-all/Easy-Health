@@ -100,6 +100,17 @@ export const EVENT_SINKS = {
   workout_load_failed: ["server","ga4"] as Sink[],
   workout_save_failed: ["server","ga4"] as Sink[],
   push_registration_failed: ["server","ga4"] as Sink[],
+  android_registration_started: ["server"] as Sink[],
+  android_registration_succeeded: ["server"] as Sink[],
+  android_registration_failed: ["server"] as Sink[],
+  google_auth_started: ["server"] as Sink[],
+  google_auth_succeeded: ["server"] as Sink[],
+  google_auth_failed: ["server"] as Sink[],
+  installation_link_attempted: ["server"] as Sink[],
+  installation_link_succeeded: ["server"] as Sink[],
+  installation_link_failed: ["server"] as Sink[],
+  integration_delivery_succeeded: ["server"] as Sink[],
+  integration_delivery_failed: ["server"] as Sink[],
 } as const;
 
 export type EventName = keyof typeof EVENT_SINKS;

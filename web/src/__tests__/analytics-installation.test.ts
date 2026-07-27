@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // installation_id lifecycle on the web/PWA path (jsdom is not a native shell, so
 // the @capacitor/preferences branch is skipped and the localStorage mirror is
@@ -7,6 +7,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 async function loadInstallation() {
   // Fresh module state per test so "reinstall" (cleared storage) is realistic.
   vi.resetModules();
+  vi.doMock("@capacitor/core", () => ({
+    Capacitor: { getPlatform: () => "web", isNativePlatform: () => false },
+  }));
   return await import("@/shared/lib/analytics/installation");
 }
 
@@ -14,6 +17,12 @@ describe("installation_id", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.doUnmock("@capacitor/core");
+    vi.resetModules();
+    vi.restoreAllMocks();
   });
 
   it("creates a UUID once and returns it stably across calls", async () => {
@@ -55,13 +64,16 @@ describe("installation_id", () => {
     expect(fresh).not.toBe(original);
   });
 
-  it("does not persist or call the backend when the feature flag is off", async () => {
+  it("does not call the backend off-native: web/PWA carries no installation", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("{}", { status: 200 })
     );
-    const { registerInstallation } = await loadInstallation();
-    await registerInstallation();
+    const { ensureInstallationRegistered } = await loadInstallation();
+
+    const result = await ensureInstallationRegistered();
+
+    expect(result.remoteRegistered).toBe(false);
+    expect(result.failureCode).toBe("unsupported");
     expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
   });
 });

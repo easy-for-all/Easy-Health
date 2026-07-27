@@ -24,6 +24,11 @@ module Api
 
           result = ::Analytics::Ingestion.new(user: current_user, events: events).call
 
+          # The ingestion pipeline is only alive if events are actually landing.
+          # Recorded on persisted (not merely accepted) so a pipeline that
+          # accepts and silently drops everything still reads as broken.
+          Observability::Heartbeat.succeeded!("android_analytics_ingestion") if result.persisted.to_i.positive?
+
           render json: {
             accepted: result.accepted,
             persisted: result.persisted,

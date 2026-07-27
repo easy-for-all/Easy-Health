@@ -40,7 +40,10 @@ RSpec.describe AppInstallations::Register do
   it "associates the current user and stamps last_authenticated_at" do
     user = create(:user)
     result = register(user: user, installation_id: "inst-auth")
+    expect(result.link_result.status).to eq(:linked)
     expect(result.installation.user_id).to eq(user.id)
+    expect(result.installation.first_authenticated_request_at).to be_present
+    expect(result.installation.linked_at).to be_present
     expect(result.installation.last_authenticated_at).to be_present
   end
 
@@ -49,8 +52,12 @@ RSpec.describe AppInstallations::Register do
     expect(AppInstallation.find_by(installation_id: "inst-x").user_id).to be_nil
 
     user = create(:user)
-    register(user: user, installation_id: "inst-x")
-    expect(AppInstallation.find_by(installation_id: "inst-x").user_id).to eq(user.id)
+    result = register(user: user, installation_id: "inst-x")
+    install = AppInstallation.find_by(installation_id: "inst-x")
+    expect(result.link_result.status).to eq(:linked)
+    expect(install.user_id).to eq(user.id)
+    expect(install.first_authenticated_request_at).to be_present
+    expect(install.linked_at).to be_present
   end
 
   it "never steals an installation already owned by another user" do
@@ -60,12 +67,34 @@ RSpec.describe AppInstallations::Register do
 
     other = create(:user)
     allow(Rails.logger).to receive(:warn)
-    travel_to(2.hours.from_now) { register(user: other, installation_id: "inst-owned") }
+    result = travel_to(2.hours.from_now) { register(user: other, installation_id: "inst-owned") }
 
     install = AppInstallation.find_by(installation_id: "inst-owned")
+    expect(result.link_result.status).to eq(:conflict)
     expect(install.user_id).to eq(owner.id)
     expect(install.last_authenticated_at).to be_within(1.second).of(previous)
-    expect(Rails.logger).to have_received(:warn).with(/association_conflict/)
+    expect(install.last_link_failure_code).to eq("user_conflict")
+    expect(Rails.logger).to have_received(:warn).with(/installation_link_conflict/)
+  end
+
+  it "keeps the saved installation when linking fails" do
+    user = create(:user)
+    failure = AppInstallations::LinkToUser::Result.new(
+      success: false,
+      status: :validation_failed,
+      installation: nil,
+      failure_code: "validation_failed"
+    )
+    allow(AppInstallations::LinkToUser).to receive(:call).and_return(failure)
+
+    result = register(user: user, installation_id: "inst-link-fail", attributes: { platform: "android" })
+    install = AppInstallation.find_by(installation_id: "inst-link-fail")
+
+    expect(result.ok).to be(true)
+    expect(result.link_result).to eq(failure)
+    expect(install).to be_present
+    expect(install.user_id).to be_nil
+    expect(install.first_authenticated_request_at).to be_present
   end
 
   it "ignores non-allowlisted attributes (e.g. a forged user_id / fcm_token)" do
