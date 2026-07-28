@@ -5,9 +5,12 @@
 // The panel keeps three views strictly apart so a number is never read as
 // something it is not:
 //   - histórico          : every Android installation ever registered.
-//   - reconciliação      : linked_at over first_authenticated_request_at.
+//   - reconciliação      : user_id over first_authenticated_request_at.
 //   - dimensões          : build, manufacturer and tokens as descriptive cuts.
 // Installations ≠ devices ≠ users ≠ sessions ≠ Google Play downloads.
+//
+// The link is user_id. linked_at only counts links made by the current flow, so
+// a legacy row (user_id, no linked_at) is rendered as linked — never as a fault.
 import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api";
 import {
@@ -21,6 +24,7 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
+  formatDuration,
   formatRate,
   formatRateWithSample,
   hasDataQualityIssues,
@@ -185,27 +189,54 @@ export function AndroidInstallationsSection() {
             />
           </Group>
 
+          {/* Secundária de propósito: considera TODO o inventário, inclusive quem
+              nunca autenticou, então é sempre menor que a operacional e não serve
+              como sinal de saúde. Fica em texto de apoio para não competir com a
+              taxa operacional logo abaixo. */}
           <p className="mb-4 text-[10px] text-[var(--text-dim)]">
-            Taxa de vínculo histórica: {formatRateWithSample(data.overview.link_rate)} ·{" "}
+            Referência secundária — taxa histórica de vínculo:{" "}
+            {formatRateWithSample(data.overview.link_rate)} sobre todo o inventário, incluindo instalações que
+            nunca autenticaram. Para saúde do vínculo, use a taxa operacional abaixo. ·{" "}
             {formatCount(data.overview.users_with_multiple_installations)} usuário(s) com mais de uma instalação ·{" "}
             {formatCount(data.overview.authenticated_installations)} com autenticação confirmada.
           </p>
 
-          {/* 2 — Reconciliação */}
-          <Block title="Reconciliação" hint={data.definitions.reconciliation_rate}>
+          {/* 2 — Reconciliação: a métrica principal de saúde do vínculo. */}
+          <Block title="Reconciliação · taxa operacional de vínculo" hint={data.definitions.reconciliation_rate}>
             <HealthHeadline metric={data.reconciliation.link_rate} noun="instalações observadas autenticadas" />
+            <p className="mt-1 text-[10px] leading-snug text-[var(--text-dim)]">
+              Métrica principal. Considera somente instalações que já apresentaram sinal autenticado — é ela que
+              indica se o vínculo está funcionando.
+            </p>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Mini
-                label="observadas"
+                label="autenticadas observadas"
                 value={formatCount(data.reconciliation.observed_authenticated_installations)}
               />
-              <Mini label="tentativas" value={formatCount(data.reconciliation.link_attempted_installations)} />
-              <Mini label="vinculadas" value={formatCount(data.reconciliation.linked_installations)} />
+              <Mini label="vinculadas atualmente" value={formatCount(data.reconciliation.linked_installations)} />
               <Mini
-                label="sem vínculo"
+                label="não vinculadas"
                 value={formatCount(data.reconciliation.authenticated_unlinked_installations)}
               />
+              <Mini label="tentativas" value={formatCount(data.reconciliation.link_attempted_installations)} />
+              <Mini
+                label="vinculadas pelo fluxo novo"
+                value={formatCount(data.reconciliation.new_flow_linked_installations)}
+              />
+              <Mini
+                label="vínculos legados observados"
+                value={formatCount(data.reconciliation.legacy_linked_observed_installations)}
+              />
+              <Mini
+                label="mediana até vincular"
+                value={formatDuration(data.reconciliation.new_flow_link_latency_seconds)}
+              />
+              <Mini label="conflitos" value={formatCount(data.reconciliation.conflicts)} />
             </div>
+            <p className="mt-2 text-[10px] leading-snug text-[var(--text-dim)]">
+              Vinculadas atualmente = instalações autenticadas com usuário presente. Não vinculadas = instalações
+              autenticadas sem usuário. {data.definitions.linked_at_note}
+            </p>
             {data.reconciliation.conflicts > 0 && (
               <p className="mt-2 text-[10px] leading-snug text-[var(--hot)]">
                 {formatCount(data.reconciliation.conflicts)} conflito(s) de vínculo detectado(s).
@@ -228,12 +259,16 @@ export function AndroidInstallationsSection() {
                   value={formatCount(data.data_quality.authenticated_at_without_user)}
                 />
                 <Mini
-                  label="vinculada sem linked_at"
-                  value={formatCount(data.data_quality.linked_without_linked_at)}
+                  label="linked_at sem usuário"
+                  value={formatCount(data.data_quality.linked_at_without_user)}
                 />
                 <Mini
-                  label="vinculada sem requisição observada"
-                  value={formatCount(data.data_quality.linked_without_observed_request)}
+                  label="autenticada sem usuário"
+                  value={formatCount(data.data_quality.authenticated_request_without_user)}
+                />
+                <Mini
+                  label="linked_at sem requisição observada"
+                  value={formatCount(data.data_quality.linked_at_without_observed_request)}
                 />
                 <Mini label="build ausente" value={formatCount(data.data_quality.missing_app_build)} />
                 <Mini label="build inválido" value={formatCount(data.data_quality.invalid_app_build)} />
@@ -264,12 +299,13 @@ export function AndroidInstallationsSection() {
             {data.health_timeline.length === 0 ? (
               <p className="text-xs text-[var(--text-dim)]">Nenhuma requisição autenticada observada no período.</p>
             ) : (
-              <Table headers={["Data", "Observadas", "Vinculadas", "Taxa"]}>
+              <Table headers={["Data", "Observadas", "Vinculadas", "Fluxo novo", "Taxa"]}>
                 {data.health_timeline.map((row) => (
                   <tr key={row.date} className="border-t border-[var(--border)]">
                     <Cell first>{formatDate(row.date)}</Cell>
                     <Cell>{formatCount(row.observed_authenticated_installations)}</Cell>
                     <Cell>{formatCount(row.linked_installations)}</Cell>
+                    <Cell muted>{formatCount(row.new_flow_linked_installations)}</Cell>
                     <Cell muted>{formatRate(row.link_rate)}</Cell>
                   </tr>
                 ))}

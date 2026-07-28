@@ -34,7 +34,8 @@ RSpec.describe Observability::Logger do
 
     expect(payload[:request_id]).to eq("req-1")
     expect(payload[:platform]).to eq("android")
-    expect(payload[:build_group]).to eq("current")
+    # No configured current-build floor, so a numeric build is merely "reported".
+    expect(payload[:build_group]).to eq("reported")
   end
 
   it "drops nil fields so lines stay small" do

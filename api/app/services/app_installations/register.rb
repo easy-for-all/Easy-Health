@@ -28,7 +28,18 @@ module AppInstallations
 
     MAX_STRING_BYTES = 256
 
-    Result = Struct.new(:installation, :created, :ok, :link_result, keyword_init: true)
+    # Explicit outcome vocabulary so the controller can answer with a truthful
+    # contract instead of collapsing "disabled", "invalid payload" and "we broke"
+    # into one opaque acceptance.
+    #
+    #   :registered        — the row exists and was persisted
+    #   :disabled          — kill-switch off; nothing was written, never retry
+    #   :invalid_input     — the request itself is unusable (blank installation_id)
+    #   :validation_failed — the payload reached the DB and was rejected
+    #   :unexpected_error  — transient/internal; a later retry may succeed
+    STATUSES = %i[registered disabled invalid_input validation_failed unexpected_error].freeze
+
+    Result = Struct.new(:installation, :created, :ok, :link_result, :status, keyword_init: true)
 
     # Default-ON kill-switch: tracking runs unless MOBILE_ANALYTICS_ENABLED is
     # explicitly set to a falsey value. An unset env keeps it enabled.
@@ -48,30 +59,86 @@ module AppInstallations
     end
 
     def call
-      return Result.new(installation: nil, created: false, ok: false) unless self.class.enabled?
-      return Result.new(installation: nil, created: false, ok: false) if @installation_id.blank?
+      return failed(:disabled) unless self.class.enabled?
+      return failed(:invalid_input) if @installation_id.blank?
 
-      install = AppInstallation.find_or_initialize_by(installation_id: @installation_id)
-      created = install.new_record?
-
-      apply_context!(install)
-      apply_referrer!(install)
-      stamp_timeline!(install, created)
-
-      install.save!
+      install, created = upsert!
       record_authenticated_request!(install)
       link_result = link_user!(install)
       Rails.logger.info(structured_log(install, created))
-      Result.new(installation: install, created: created, ok: true, link_result: link_result)
+      Result.new(installation: install, created: created, ok: true, status: :registered, link_result: link_result)
+    rescue ActiveRecord::RecordInvalid => e
+      # A real validation failure. Reported as such so the client learns its
+      # payload is the problem instead of retrying it forever.
+      Rails.logger.warn("[installations] register rejected: #{e.class}: #{e.message}")
+      failed(:validation_failed)
     rescue StandardError => e
       # Never break the caller (tracking is best-effort), but keep the failure
       # observable — a swallowed DB/schema/programming error must reach Sentry.
       Rails.logger.warn("[installations] register failed: #{e.class}: #{e.message}")
       Sentry.capture_exception(e) if defined?(Sentry) && Sentry.initialized?
-      Result.new(installation: nil, created: false, ok: false)
+      failed(:unexpected_error)
     end
 
     private
+
+    def failed(status)
+      Result.new(installation: nil, created: false, ok: false, status: status)
+    end
+
+    # find_or_initialize_by + save! is not atomic: two boots of the same fresh
+    # install can both see "no row" and both INSERT. The unique index makes the
+    # loser raise, and losing that request would leave the app with no row and
+    # nothing to link to.
+    #
+    # Exactly ONE recovery: reload by installation_id and continue as an update.
+    # If that fails too, the error propagates (no loop, no retry storm).
+    def upsert!
+      install = AppInstallation.find_or_initialize_by(installation_id: @installation_id)
+      created = install.new_record?
+
+      apply_attributes!(install, created)
+      install.save!
+      [ install, created ]
+    rescue ActiveRecord::RecordNotUnique
+      recover_from_create_race!
+    rescue ActiveRecord::RecordInvalid => e
+      # The same race, one step earlier: the uniqueness VALIDATOR saw the winner's
+      # row, so save! raises RecordInvalid instead of RecordNotUnique. This is the
+      # likelier shape (the validator SELECTs before inserting) and it must not be
+      # reported as a rejected payload — the row exists, the client is not at fault.
+      raise unless taken_installation_id?(e.record)
+
+      recover_from_create_race!
+    end
+
+    # Only the id-collision race recovers. Any other validation error is the
+    # payload's own problem and must keep reporting validation_failed.
+    def taken_installation_id?(record)
+      return false if record.nil?
+
+      record.errors.of_kind?(:installation_id, :taken)
+    end
+
+    def recover_from_create_race!
+      install = AppInstallation.find_by(installation_id: @installation_id)
+      # Not a race after all (some other unique constraint): let the caller
+      # classify it, rather than reporting a registration that never happened.
+      raise if install.nil?
+
+      Rails.logger.info("[installations] register race recovered by reload")
+      # The winner already created the row; this request is now an update. It
+      # brings only its own metadata — user_id belongs to LinkToUser alone.
+      apply_attributes!(install, false)
+      install.save! if install.changed?
+      [ install, false ]
+    end
+
+    def apply_attributes!(install, created)
+      apply_context!(install)
+      apply_referrer!(install)
+      stamp_timeline!(install, created)
+    end
 
     def apply_context!(install)
       allowed = @attributes.to_h.symbolize_keys.slice(*ALLOWED_ATTRS)

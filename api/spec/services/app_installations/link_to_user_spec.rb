@@ -177,6 +177,42 @@ RSpec.describe AppInstallations::LinkToUser do
       expect(JSON.parse(payload)["installation_id_hash"].length).to eq(12)
       expect(JSON.parse(payload)["user_id"]).to eq(user.id)
     end
+
+    # The caller emits Observability::Events under the SAME event names for the
+    # same link, and both reach the log sink. Without producer, counting
+    # installation_link_succeeded in the logs would double-count one link.
+    it "tags its own lines with a producer so they can be told apart" do
+      logged = []
+      allow(Rails.logger).to receive(:info) { |msg| logged << msg.to_s }
+
+      link(installation: installation, user: user)
+
+      payload = JSON.parse(logged.find { |line| line.include?("installation_link_succeeded") })
+      expect(payload["producer"]).to eq(described_class::PRODUCER)
+    end
+
+    it "keeps failure_code inside the closed vocabulary" do
+      logged = []
+      allow(Rails.logger).to receive(:warn) { |msg| logged << msg.to_s }
+      owner = create(:user)
+      owned = create(:app_installation, user: owner)
+
+      link(installation: owned, user: user)
+
+      payload = JSON.parse(logged.find { |line| line.include?("installation_link_conflict") })
+      expect(described_class::FAILURE_CODES).to include(payload["failure_code"])
+      expect(owned.reload.last_link_failure_code).to be_in(described_class::FAILURE_CODES)
+    end
+
+    it "never logs a success for an already-linked installation" do
+      linked_install = create(:app_installation, user: user, last_authenticated_at: 5.minutes.ago)
+      logged = []
+      allow(Rails.logger).to receive(:info) { |msg| logged << msg.to_s }
+      allow(Rails.logger).to receive(:warn) { |msg| logged << msg.to_s }
+
+      expect(link(installation: linked_install, user: user).status).to eq(:already_linked)
+      expect(logged.grep(/installation_link_succeeded/)).to be_empty
+    end
   end
 
   describe "build independence" do

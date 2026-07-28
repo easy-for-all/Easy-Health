@@ -20,6 +20,21 @@ module AppInstallations
       validation_failed not_found unexpected_error
     ].freeze
 
+    # Closed vocabulary. A failure_code reaches a log field and the
+    # last_link_failure_code column, so it must never carry an exception message
+    # or any other unbounded string.
+    FAILURE_CODES = %w[
+      user_conflict invalid_input validation_failed record_not_unique
+      stale_object statement_invalid unexpected_error installation_not_found
+    ].freeze
+
+    # These log lines share their event names with Observability::Events, which
+    # the callers emit for the same link. Both land in the log sink, so without a
+    # producer field a log-based count of installation_link_succeeded would count
+    # one link twice. The durable sink (Analytics::ServerEvents) is written only
+    # by the caller, once. Filter by producer to count service traces.
+    PRODUCER = "link_to_user".freeze
+
     # An already-linked installation only rewrites last_authenticated_at once an
     # hour: without this every authenticated app request would be an UPDATE.
     TOUCH_INTERVAL = 1.hour
@@ -201,16 +216,26 @@ module AppInstallations
         level,
         {
           event: event,
+          producer: PRODUCER,
           installation_database_id: @installation&.id,
           installation_id_hash: installation_id_hash,
           user_id: @user&.id,
           source: @source,
           runtime_context: @runtime_context,
           status: status,
-          failure_code: failure_code,
+          failure_code: normalized_failure_code(failure_code),
           build_number: @build_number
         }.compact.to_json
       )
+    end
+
+    # Anything outside the closed vocabulary is reported as unexpected_error
+    # rather than passed through, so an exception message can never become a
+    # log field or a column value.
+    def normalized_failure_code(code)
+      return nil if code.nil?
+
+      FAILURE_CODES.include?(code.to_s) ? code.to_s : "unexpected_error"
     end
 
     def installation_id_hash

@@ -46,7 +46,10 @@ RSpec.describe "Observability request context", type: :request do
     payload = emitted("http_request_completed").first
     expect(payload[:platform]).to eq("android")
     expect(payload[:app_version]).to eq("1.0.51")
-    expect(payload[:build_group]).to eq("current")
+    # "reported" — not "current" — because no OBSERVABILITY_CURRENT_BUILD_MIN is
+    # configured. There is no hardcoded release floor any more: the shell loads a
+    # remote web bundle, so a build number cannot classify capability on its own.
+    expect(payload[:build_group]).to eq("reported")
     expect(payload[:route]).to eq("/api/v1/auth/me")
     expect(payload[:status]).to eq(200)
     expect(payload[:duration_ms]).to be_a(Numeric)

@@ -21,6 +21,10 @@ RSpec.describe "Api::V1::App::Installations", type: :request do
     }.merge(overrides)
   end
 
+  def body
+    JSON.parse(response.body)
+  end
+
   describe "POST /api/v1/app/installations/register" do
     it "registers an anonymous installation" do
       post "/api/v1/app/installations/register", params: payload, as: :json
@@ -30,6 +34,94 @@ RSpec.describe "Api::V1::App::Installations", type: :request do
       expect(install).to be_present
       expect(install.user_id).to be_nil
       expect(install.platform).to eq("android")
+    end
+
+    # The client decides from the body whether the row exists. "2xx" alone is
+    # not an answer: a 202 is an acceptance that wrote nothing.
+    describe "response contract" do
+      it "claims registered=true only when the row was persisted" do
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(body).to include(
+          "status" => "registered",
+          "registered" => true,
+          "installation_id" => "inst-req-1",
+          "created" => true
+        )
+        expect(body["link_status"]).to be_nil
+      end
+
+      it "reports the link outcome on an authenticated register" do
+        sign_in create(:user)
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(body["registered"]).to be(true)
+        expect(body["link_status"]).to eq("linked")
+      end
+
+      it "reports an already-linked installation without re-linking" do
+        user = create(:user)
+        create(:app_installation, installation_id: "inst-req-1", user: user, linked_at: 1.day.ago)
+        sign_in user
+
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(body).to include("status" => "registered", "created" => false, "link_status" => "already_linked")
+      end
+
+      it "answers deferred (not registered) when the register could not persist" do
+        allow_any_instance_of(AppInstallations::Register).to receive(:call).and_return(
+          AppInstallations::Register::Result.new(
+            installation: nil, created: false, ok: false, status: :unexpected_error
+          )
+        )
+
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(response).to have_http_status(:accepted)
+        expect(body).to include("status" => "deferred", "registered" => false, "retryable" => true)
+      end
+
+      it "answers disabled — not registered and not retryable — when the flag is off" do
+        allow(AppInstallations::Register).to receive(:enabled?).and_return(false)
+
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(response).to have_http_status(:accepted)
+        expect(body).to include("status" => "disabled", "registered" => false, "retryable" => false)
+        expect(AppInstallation.count).to eq(0)
+      end
+
+      it "answers validation_failed without inviting a retry" do
+        post "/api/v1/app/installations/register", params: payload(platform: "iphone"), as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(body).to include(
+          "status" => "validation_failed", "registered" => false, "retryable" => false
+        )
+      end
+
+      it "surfaces a rejected payload from the service as 422, never as success" do
+        allow_any_instance_of(AppInstallations::Register).to receive(:call).and_return(
+          AppInstallations::Register::Result.new(
+            installation: nil, created: false, ok: false, status: :validation_failed
+          )
+        )
+
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(body).to include("status" => "validation_failed", "retryable" => false)
+      end
+
+      it "never leaks anything but the link outcome" do
+        sign_in create(:user)
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(body.keys).to match_array(%w[status registered installation_id created link_status])
+      end
     end
 
     it "associates the current user server-side, ignoring any client user_id" do
@@ -106,6 +198,7 @@ RSpec.describe "Api::V1::App::Installations", type: :request do
 
       # Never a 500 (must not break the app), never a false success.
       expect(response).to have_http_status(:accepted)
+      expect(body).to include("status" => "deferred", "registered" => false, "retryable" => true)
     end
   end
 

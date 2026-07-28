@@ -6,6 +6,7 @@ import {
   type Metric,
   displayLabel,
   formatCount,
+  formatDuration,
   formatRate,
   formatRateWithSample,
   hasDataQualityIssues,
@@ -39,7 +40,10 @@ const emptyMetrics: AndroidInstallationMetrics = {
     timeline_days: 14,
     healthy_link_rate: 95,
     attention_link_rate: 85,
-    reconciliation_rate: "linked_at / first_authenticated_request_at",
+    reconciliation_rate: "instalações com usuário vinculado ÷ instalações com requisição autenticada observada",
+    // Mirrors Analytics::AndroidInstallations::LINKED_AT_NOTE.
+    linked_at_note:
+      "A coluna linked_at registra apenas vínculos realizados pelo fluxo novo. Instalações vinculadas antes da instrumentação aparecem como vinculadas, mesmo sem linked_at — isso é esperado, não é falha.",
   },
   overview: {
     total_installations: 0,
@@ -60,6 +64,9 @@ const emptyMetrics: AndroidInstallationMetrics = {
     link_attempted_installations: 0,
     linked_installations: 0,
     authenticated_unlinked_installations: 0,
+    new_flow_linked_installations: 0,
+    legacy_linked_observed_installations: 0,
+    new_flow_link_latency_seconds: null,
     conflicts: 0,
     failures_by_code: {},
     link_rate: metric(0, 0),
@@ -67,8 +74,9 @@ const emptyMetrics: AndroidInstallationMetrics = {
   data_quality: {
     linked_without_last_authenticated_at: 0,
     authenticated_at_without_user: 0,
-    linked_without_linked_at: 0,
-    linked_without_observed_request: 0,
+    linked_at_without_user: 0,
+    authenticated_request_without_user: 0,
+    linked_at_without_observed_request: 0,
     missing_app_build: 0,
     invalid_app_build: 0,
     missing_app_version: 0,
@@ -86,7 +94,7 @@ const emptyMetrics: AndroidInstallationMetrics = {
   health_timeline: [],
   operational_health: [],
   installation_provenance: { registered_live: 0, backfilled: 0, coverage: metric(0, 0) },
-  push: { permission_granted: 0, push_enabled: 0, valid_fcm_tokens: 0 },
+  push: { permission_granted: 0, push_enabled: 0, installations_with_active_token: null },
   analytics_pipeline: {
     android_events_total: 0,
     android_events_7d: 0,
@@ -175,11 +183,86 @@ describe("AndroidInstallationsSection", () => {
       }),
     );
 
-    expect(await screen.findByText("Reconciliação")).toBeInTheDocument();
+    expect(await screen.findByText(/Reconciliação · taxa operacional/)).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByText("Saudável")).toBeInTheDocument();
     // A rate is never shown without its sample.
     expect(screen.getByText(/3 de 3 instalações observadas autenticadas/)).toBeInTheDocument();
+  });
+
+  // Production shape after the migration: one new-flow link, one legacy link.
+  // The old metric read this as 50%.
+  it("counts a legacy link as linked and never as a failure", async () => {
+    renderWith(
+      withData({
+        reconciliation: {
+          ...emptyMetrics.reconciliation,
+          observed_authenticated_installations: 2,
+          linked_installations: 2,
+          authenticated_unlinked_installations: 0,
+          new_flow_linked_installations: 1,
+          legacy_linked_observed_installations: 1,
+          link_rate: metric(2, 2),
+        },
+      }),
+    );
+
+    expect(await screen.findByText(/Reconciliação · taxa operacional/)).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("Saudável")).toBeInTheDocument();
+    // Every distinction the panel must draw, side by side.
+    expect(screen.getByText("autenticadas observadas")).toBeInTheDocument();
+    expect(screen.getByText("vinculadas atualmente")).toBeInTheDocument();
+    expect(screen.getByText("não vinculadas")).toBeInTheDocument();
+    expect(screen.getByText("vínculos legados observados")).toBeInTheDocument();
+    expect(screen.getByText("vinculadas pelo fluxo novo")).toBeInTheDocument();
+    // The legacy state is explained, not painted as a defect.
+    expect(screen.getByText(/isso é esperado, não é falha/)).toBeInTheDocument();
+    expect(screen.getByText("Nenhuma inconsistência detectada.")).toBeInTheDocument();
+  });
+
+  // Two percentages close together with no context is how the historical rate
+  // gets mistaken for a health signal. The operational one is the headline; the
+  // historical one is support text that says so.
+  it("presents the operational rate as primary and the historical one as secondary", async () => {
+    renderWith(
+      withData({
+        overview: { ...emptyMetrics.overview, total_installations: 10, linked_installations: 2, link_rate: metric(2, 10) },
+        reconciliation: {
+          ...emptyMetrics.reconciliation,
+          observed_authenticated_installations: 2,
+          linked_installations: 2,
+          link_rate: metric(2, 2),
+        },
+      }),
+    );
+
+    expect(await screen.findByText(/Reconciliação · taxa operacional/)).toBeInTheDocument();
+    expect(screen.getByText(/Métrica principal/)).toBeInTheDocument();
+    expect(screen.getByText(/Referência secundária — taxa histórica/)).toBeInTheDocument();
+    // The historical rate must never be the one carrying the health verdict.
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("Saudável")).toBeInTheDocument();
+    expect(screen.getByText(/incluindo instalações que\s+nunca autenticaram/)).toBeInTheDocument();
+  });
+
+  it("shows the new-flow latency only when the new flow produced a link", async () => {
+    renderWith(
+      withData({
+        reconciliation: {
+          ...emptyMetrics.reconciliation,
+          observed_authenticated_installations: 1,
+          linked_installations: 1,
+          new_flow_linked_installations: 0,
+          legacy_linked_observed_installations: 1,
+          new_flow_link_latency_seconds: null,
+          link_rate: metric(1, 1),
+        },
+      }),
+    );
+
+    expect(await screen.findByText("mediana até vincular")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
   it("flags an attention link rate", async () => {
@@ -296,12 +379,14 @@ describe("AndroidInstallationsSection", () => {
             date: "2026-07-26",
             observed_authenticated_installations: 2,
             linked_installations: 2,
+            new_flow_linked_installations: 1,
             link_rate: metric(2, 2),
           },
           {
             date: "2026-07-25",
             observed_authenticated_installations: 4,
             linked_installations: 2,
+            new_flow_linked_installations: 2,
             link_rate: metric(2, 4),
           },
         ],
@@ -385,5 +470,12 @@ describe("android installation metric helpers", () => {
   it("detects data quality issues only when a counter is positive", () => {
     expect(hasDataQualityIssues(emptyMetrics.data_quality)).toBe(false);
     expect(hasDataQualityIssues({ ...emptyMetrics.data_quality, missing_app_build: 1 })).toBe(true);
+  });
+
+  it("formats a link latency, and an em dash when the new flow produced none", () => {
+    expect(formatDuration(null)).toBe("—");
+    expect(formatDuration(12)).toBe("12s");
+    expect(formatDuration(120)).toBe("2min");
+    expect(formatDuration(7200)).toBe("2.0h");
   });
 });

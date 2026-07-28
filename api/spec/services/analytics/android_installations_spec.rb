@@ -113,7 +113,86 @@ RSpec.describe Analytics::AndroidInstallations do
       expect(reconciliation[:observed_authenticated_installations]).to eq(3)
       expect(reconciliation[:linked_installations]).to eq(2)
       expect(reconciliation[:link_rate].value).to eq(66.7)
-      expect(result[:data_quality][:linked_without_observed_request]).to eq(1)
+      expect(result[:data_quality][:linked_at_without_observed_request]).to eq(1)
+    end
+
+    it "counts a linked installation by user_id, whichever flow created it" do
+      # New flow: user_id AND linked_at.
+      android(user: create(:user), first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+      # Legacy: linked before linked_at existed. Still linked.
+      android(user: create(:user), first_authenticated_request_at: 1.hour.ago, linked_at: nil)
+
+      reconciliation = result[:reconciliation]
+      expect(reconciliation[:observed_authenticated_installations]).to eq(2)
+      expect(reconciliation[:linked_installations]).to eq(2)
+      expect(reconciliation[:authenticated_unlinked_installations]).to eq(0)
+      expect(reconciliation[:new_flow_linked_installations]).to eq(1)
+      expect(reconciliation[:legacy_linked_observed_installations]).to eq(1)
+      expect(reconciliation[:link_rate].value).to eq(100.0)
+    end
+
+    it "does not report a legacy link as a data-quality failure" do
+      android(user: create(:user), first_authenticated_request_at: 1.hour.ago, linked_at: nil,
+              last_authenticated_at: Time.current)
+
+      expect(result[:data_quality].values.sum).to eq(0)
+    end
+
+    it "counts an authenticated installation without user_id as unlinked" do
+      android(user: nil, first_authenticated_request_at: 1.hour.ago, linked_at: nil)
+
+      reconciliation = result[:reconciliation]
+      expect(reconciliation[:linked_installations]).to eq(0)
+      expect(reconciliation[:authenticated_unlinked_installations]).to eq(1)
+      expect(reconciliation[:link_rate].value).to eq(0.0)
+      expect(result[:data_quality][:authenticated_request_without_user]).to eq(1)
+    end
+
+    it "flags linked_at without a user_id as an inconsistency" do
+      android(user: nil, first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+
+      expect(result[:data_quality][:linked_at_without_user]).to eq(1)
+    end
+
+    it "keeps an installation without an authenticated signal out of the denominator" do
+      android(user: create(:user), first_authenticated_request_at: nil)
+      android(user: nil, first_authenticated_request_at: nil)
+
+      reconciliation = result[:reconciliation]
+      expect(reconciliation[:observed_authenticated_installations]).to eq(0)
+      expect(reconciliation[:link_rate].denominator).to eq(0)
+    end
+
+    it "measures link latency only where linked_at exists" do
+      android(user: create(:user), first_authenticated_request_at: 1.hour.ago,
+              linked_at: 1.hour.ago + 20.seconds)
+      android(user: create(:user), first_authenticated_request_at: 1.hour.ago, linked_at: nil)
+
+      expect(result[:reconciliation][:new_flow_link_latency_seconds]).to eq(20.0)
+    end
+
+    it "reports no latency when no link was made by the new flow" do
+      android(user: create(:user), first_authenticated_request_at: 1.hour.ago, linked_at: nil)
+
+      expect(result[:reconciliation][:new_flow_link_latency_seconds]).to be_nil
+    end
+
+    # The exact shape observed in production after the migration: one new-flow
+    # link and one legacy link. The old metric called this 50%.
+    it "reports 100% for the production sample of one new and one legacy link" do
+      android(user: create(:user), first_authenticated_request_at: 2.hours.ago, linked_at: 2.hours.ago)
+      android(user: create(:user), first_authenticated_request_at: 2.hours.ago, linked_at: nil)
+
+      reconciliation = result[:reconciliation]
+      expect(reconciliation[:observed_authenticated_installations]).to eq(2)
+      expect(reconciliation[:linked_installations]).to eq(2)
+      expect(reconciliation[:authenticated_unlinked_installations]).to eq(0)
+      expect(reconciliation[:new_flow_linked_installations]).to eq(1)
+      expect(reconciliation[:legacy_linked_observed_installations]).to eq(1)
+      expect(reconciliation[:link_rate].value).to eq(100.0)
+
+      component = result[:operational_health].find { |c| c[:key] == :reconciliation }
+      expect(component[:status]).to eq("ok")
     end
 
     it "reports link attempts, conflicts and failures by code" do
@@ -273,10 +352,10 @@ RSpec.describe Analytics::AndroidInstallations do
 
   describe "health timeline" do
     it "reports one row per day with that day's link rate, newest first" do
-      android(first_authenticated_request_at: 1.day.ago, linked_at: 1.day.ago)
-      android(first_authenticated_request_at: 1.day.ago, linked_at: nil)
-      android(first_authenticated_request_at: 2.days.ago, linked_at: 2.days.ago)
-      android(first_authenticated_request_at: 40.days.ago, linked_at: nil) # outside the window
+      android(user: create(:user), first_authenticated_request_at: 1.day.ago, linked_at: 1.day.ago)
+      android(user: nil, first_authenticated_request_at: 1.day.ago, linked_at: nil)
+      android(user: create(:user), first_authenticated_request_at: 2.days.ago, linked_at: 2.days.ago)
+      android(user: nil, first_authenticated_request_at: 40.days.ago, linked_at: nil) # outside the window
 
       timeline = result[:health_timeline]
       expect(timeline.size).to eq(2)
@@ -285,6 +364,16 @@ RSpec.describe Analytics::AndroidInstallations do
       expect(timeline.first[:link_rate].value).to eq(50.0)
       expect(timeline.last[:link_rate].value).to eq(100.0)
       expect(timeline.first[:date] > timeline.last[:date]).to be(true)
+    end
+
+    it "counts a legacy link in the daily rate and shows the new flow beside it" do
+      android(user: create(:user), first_authenticated_request_at: 1.day.ago, linked_at: 1.day.ago)
+      android(user: create(:user), first_authenticated_request_at: 1.day.ago, linked_at: nil)
+
+      row = result[:health_timeline].first
+      expect(row[:linked_installations]).to eq(2)
+      expect(row[:new_flow_linked_installations]).to eq(1)
+      expect(row[:link_rate].value).to eq(100.0)
     end
   end
 
@@ -383,7 +472,8 @@ RSpec.describe Analytics::AndroidInstallations do
 
     it "declares the definitions the UI renders" do
       expect(result[:definitions]).to include(
-        reconciliation_rate: "linked_at / first_authenticated_request_at",
+        reconciliation_rate: described_class::RECONCILIATION_RATE_DEFINITION,
+        linked_at_note: described_class::LINKED_AT_NOTE,
         timeline_days: described_class::TIMELINE_DAYS
       )
       expect(result[:source]).to eq("app_installations")
