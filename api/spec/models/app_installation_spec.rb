@@ -53,24 +53,10 @@ RSpec.describe AppInstallation, type: :model do
     end
   end
 
-  describe "#associate_user!" do
-    it "associates and stamps last_authenticated_at, idempotently" do
-      user = create(:user)
-      install = create(:app_installation, :anonymous)
-
-      result = install.associate_user!(user)
-      install.reload
-      expect(result.status).to eq(:linked)
-      expect(install.user_id).to eq(user.id)
-      expect(install.last_authenticated_at).to be_present
-      expect(install.linked_at).to be_present
-
-      previous = install.last_authenticated_at
-      second = install.associate_user!(user) # no-op for same user
-      install.reload
-      expect(second.status).to eq(:already_linked)
-      expect(install.last_authenticated_at).to eq(previous)
-    end
+  # Linking behaviour lives in spec/services/app_installations/link_to_user_spec.rb.
+  # The model must not grow a second way to do it.
+  it "exposes no model-level way to write the link" do
+    expect(AppInstallation.new).not_to respond_to(:associate_user!)
   end
 
   describe "linkage scopes" do

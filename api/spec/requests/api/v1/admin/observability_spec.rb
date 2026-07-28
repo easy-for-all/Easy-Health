@@ -217,7 +217,9 @@ RSpec.describe "Admin observability", type: :request do
 
       expect(payload["subject"]["installation_found"]).to be(true)
       expect(payload["subject"]["installation_linked"]).to be(true)
-      expect(payload["subject"]["build_group"]).to eq("current")
+      # Descriptive cohort only. Without OBSERVABILITY_CURRENT_BUILD_MIN set,
+      # every numeric build reports as "reported" rather than being ranked.
+      expect(payload["subject"]["build_group"]).to eq("reported")
     end
 
     it "never returns the email or name, even when an event property carries one" do

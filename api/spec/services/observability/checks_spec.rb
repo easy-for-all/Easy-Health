@@ -87,6 +87,41 @@ RSpec.describe "Observability checks" do
       expect(result.status).to eq("critical")
       expect(result.sample_size).to eq(20)
     end
+
+    # A link created before linked_at existed has a user_id and no linked_at.
+    # It is linked, and alerting on it forever would be a permanent false alarm.
+    it "never treats a legacy link (user_id without linked_at) as an orphan" do
+      install(build: "51", linked: true, first_authenticated_request_at: 2.hours.ago, linked_at: nil)
+
+      result = described_class.run.find { |r| r.check_key == "authenticated_without_installation_link" }
+      expect(result.status).to eq("healthy")
+      expect(result.current_value).to eq(0)
+    end
+
+    it "counts a legacy link in the numerator of the link rate" do
+      10.times { install(build: "51", linked: true, first_authenticated_request_at: 1.hour.ago, linked_at: nil) }
+      10.times do
+        install(build: "51", linked: true, first_authenticated_request_at: 1.hour.ago, linked_at: 1.hour.ago)
+      end
+
+      result = described_class.run.find { |r| r.check_key == "android_installation_link_rate" }
+      expect(result.status).to eq("healthy")
+      expect(result.current_value).to eq(1.0)
+      expect(result.sample_size).to eq(20)
+    end
+
+    it "still alerts on linked_at without a user_id" do
+      install(build: "51", linked: false, first_authenticated_request_at: 2.hours.ago, linked_at: 2.hours.ago)
+
+      result = described_class.run.find { |r| r.check_key == "authenticated_without_installation_link" }
+      expect(result.status).to eq("critical")
+      expect(result.current_value).to eq(1)
+    end
+
+    it "defines the orphan by user_id, not by linked_at" do
+      result = described_class.run.find { |r| r.check_key == "authenticated_without_installation_link" }
+      expect(result.definition).to include("user_id nulo")
+    end
   end
 
   describe Observability::Checks::GoogleAuthHealthCheck do

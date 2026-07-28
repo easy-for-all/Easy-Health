@@ -221,12 +221,142 @@ RSpec.describe AppInstallations::Register do
     allow(described_class).to receive(:enabled?).and_return(false)
     result = register
     expect(result.ok).to be(false)
+    expect(result.status).to eq(:disabled)
     expect(AppInstallation.count).to eq(0)
   end
 
   it "returns not-ok for a blank installation_id without raising" do
     result = register(installation_id: "  ")
     expect(result.ok).to be(false)
+    expect(result.status).to eq(:invalid_input)
     expect(AppInstallation.count).to eq(0)
+  end
+
+  # find_or_initialize_by + save! is not atomic. Two boots of the same fresh
+  # install can both decide to INSERT; the unique index makes one of them lose.
+  describe "concurrent creation of the same installation_id" do
+    # The row the winning request already committed.
+    def simulate_lost_race(installation_id)
+      loser = AppInstallation.new(installation_id: installation_id)
+      allow(AppInstallation).to receive(:find_or_initialize_by)
+        .with(installation_id: installation_id).and_return(loser)
+      allow(loser).to receive(:save!).and_raise(
+        ActiveRecord::RecordNotUnique.new("duplicate key value violates unique constraint")
+      )
+      loser
+    end
+
+    it "recovers by reloading the row the winner created, and keeps registering" do
+      winner = create(:app_installation, installation_id: "inst-race", app_version: "1.0.0")
+      simulate_lost_race("inst-race")
+
+      result = register(installation_id: "inst-race", attributes: { app_version: "2.0.0" })
+
+      expect(result.ok).to be(true)
+      expect(result.status).to eq(:registered)
+      expect(result.created).to be(false) # the winner created it, not this request
+      expect(result.installation.id).to eq(winner.id)
+      expect(winner.reload.app_version).to eq("2.0.0") # this request's metadata still landed
+      expect(AppInstallation.where(installation_id: "inst-race").count).to eq(1)
+    end
+
+    it "still links the user after recovering from the race" do
+      create(:app_installation, installation_id: "inst-race-link")
+      simulate_lost_race("inst-race-link")
+      user = create(:user)
+
+      result = register(user: user, installation_id: "inst-race-link")
+
+      expect(result.link_result.status).to eq(:linked)
+      install = AppInstallation.find_by(installation_id: "inst-race-link")
+      expect(install.user_id).to eq(user.id)
+      expect(install.first_authenticated_request_at).to be_present
+    end
+
+    it "never lets the loser overwrite a user_id the winner already linked" do
+      owner = create(:user)
+      create(:app_installation, installation_id: "inst-race-owned", user: owner, linked_at: 1.hour.ago)
+      simulate_lost_race("inst-race-owned")
+      other = create(:user)
+      allow(Rails.logger).to receive(:warn)
+
+      result = register(user: other, installation_id: "inst-race-owned")
+
+      expect(result.link_result.status).to eq(:conflict)
+      expect(AppInstallation.find_by(installation_id: "inst-race-owned").user_id).to eq(owner.id)
+    end
+
+    # The likelier shape of the same race: the uniqueness VALIDATOR sees the
+    # winner's row first, so save! raises RecordInvalid rather than
+    # RecordNotUnique. Reporting that as validation_failed would tell the client
+    # its payload is permanently bad about a row that exists.
+    it "recovers when the uniqueness validator loses the race, not just the index" do
+      winner = create(:app_installation, installation_id: "inst-race-validated", app_version: "1.0.0")
+      loser = AppInstallation.new(installation_id: "inst-race-validated")
+      allow(AppInstallation).to receive(:find_or_initialize_by)
+        .with(installation_id: "inst-race-validated").and_return(loser)
+      allow(loser).to receive(:save!) do
+        loser.errors.add(:installation_id, :taken)
+        raise ActiveRecord::RecordInvalid, loser
+      end
+
+      result = register(installation_id: "inst-race-validated", attributes: { app_version: "2.0.0" })
+
+      expect(result.ok).to be(true)
+      expect(result.status).to eq(:registered)
+      expect(result.created).to be(false)
+      expect(winner.reload.app_version).to eq("2.0.0")
+    end
+
+    it "still reports a genuine validation error instead of treating it as a race" do
+      loser = AppInstallation.new(installation_id: "inst-invalid")
+      allow(AppInstallation).to receive(:find_or_initialize_by)
+        .with(installation_id: "inst-invalid").and_return(loser)
+      allow(loser).to receive(:save!) do
+        loser.errors.add(:platform, :inclusion)
+        raise ActiveRecord::RecordInvalid, loser
+      end
+
+      result = register(installation_id: "inst-invalid")
+
+      expect(result.ok).to be(false)
+      expect(result.status).to eq(:validation_failed)
+    end
+
+    it "recovers at most once — a reload that finds nothing is reported, not retried" do
+      simulate_lost_race("inst-race-gone")
+      allow(AppInstallation).to receive(:find_by).and_return(nil)
+      allow(Sentry).to receive(:initialized?).and_return(true)
+      allow(Sentry).to receive(:capture_exception)
+
+      result = register(installation_id: "inst-race-gone")
+
+      expect(result.ok).to be(false)
+      expect(result.status).to eq(:unexpected_error)
+      expect(AppInstallation).to have_received(:find_by).once
+    end
+  end
+
+  it "reports a real validation failure instead of disguising it as success" do
+    invalid = AppInstallation.new(installation_id: "inst-invalid")
+    allow(AppInstallation).to receive(:find_or_initialize_by).and_return(invalid)
+    allow(invalid).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(invalid))
+
+    result = register(installation_id: "inst-invalid")
+
+    expect(result.ok).to be(false)
+    expect(result.status).to eq(:validation_failed)
+    expect(result.installation).to be_nil
+  end
+
+  it "reports an unexpected internal failure as such, and sends it to Sentry" do
+    allow(AppInstallation).to receive(:find_or_initialize_by).and_raise(StandardError, "boom")
+    allow(Sentry).to receive(:initialized?).and_return(true)
+    expect(Sentry).to receive(:capture_exception)
+
+    result = register(installation_id: "inst-boom")
+
+    expect(result.ok).to be(false)
+    expect(result.status).to eq(:unexpected_error)
   end
 end

@@ -62,6 +62,7 @@ docs/
 # =========================
 .vscode
 .idea
+.local-audits
 
 external/free-exercise-db/
 data/exercises_selected/

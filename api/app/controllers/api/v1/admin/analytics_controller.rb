@@ -21,9 +21,11 @@ module Api
 
         # GET /api/v1/admin/analytics/android_installations
         # "APP ANDROID" — the real installed base from app_installations,
-        # separating installations / devices / users / sessions, and splitting
-        # historical / current tracking (build >= reconciliation threshold) /
-        # legacy so the tracking health rate is never diluted by old builds.
+        # separating installations / devices / users / sessions. Link health is
+        # measured from observed signals (first_authenticated_request_at as the
+        # denominator, user_id as the link), never from app_build: the Android
+        # shell loads the remote web bundle, so the build says nothing about
+        # whether the installation could be linked.
         def android_installations
           render json: ::Analytics::AndroidInstallations.new.call
         rescue StandardError => e

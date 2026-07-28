@@ -57,6 +57,7 @@ export interface TimelineRow {
   date: string;
   observed_authenticated_installations: number;
   linked_installations: number;
+  new_flow_linked_installations: number;
   link_rate: Metric;
 }
 
@@ -85,6 +86,7 @@ export interface AndroidInstallationMetrics {
     healthy_link_rate: number;
     attention_link_rate: number;
     reconciliation_rate: string;
+    linked_at_note: string;
   };
   overview: {
     total_installations: number;
@@ -100,11 +102,16 @@ export interface AndroidInstallationMetrics {
     new_installations_30d: number;
     link_rate: Metric;
   };
+  // linked_installations is user_id, the current link. The linked_at figures
+  // (new_flow_*, legacy_*) describe the LinkToUser flow, never the link itself.
   reconciliation: {
     observed_authenticated_installations: number;
     link_attempted_installations: number;
     linked_installations: number;
     authenticated_unlinked_installations: number;
+    new_flow_linked_installations: number;
+    legacy_linked_observed_installations: number;
+    new_flow_link_latency_seconds: number | null;
     conflicts: number;
     failures_by_code: Record<string, number>;
     link_rate: Metric;
@@ -112,8 +119,9 @@ export interface AndroidInstallationMetrics {
   data_quality: {
     linked_without_last_authenticated_at: number;
     authenticated_at_without_user: number;
-    linked_without_linked_at: number;
-    linked_without_observed_request: number;
+    linked_at_without_user: number;
+    authenticated_request_without_user: number;
+    linked_at_without_observed_request: number;
     missing_app_build: number;
     invalid_app_build: number;
     missing_app_version: number;
@@ -131,7 +139,14 @@ export interface AndroidInstallationMetrics {
   health_timeline: TimelineRow[];
   operational_health: OperationalComponent[];
   installation_provenance: { registered_live: number; backfilled: number; coverage: Metric };
-  push: { permission_granted: number; push_enabled: number; valid_fcm_tokens: number };
+  // installations_with_active_token is null when the installation<->token join
+  // is not instrumented (nothing writes device_token_id today). Render it as
+  // "não instrumentado", never as 0.
+  push: {
+    permission_granted: number;
+    push_enabled: number;
+    installations_with_active_token: number | null;
+  };
   analytics_pipeline: {
     android_events_total: number;
     android_events_7d: number;
@@ -182,6 +197,17 @@ export function formatRate(metric: Metric | undefined): string {
 export function formatRateWithSample(metric: Metric | undefined, noun = "instalações"): string {
   if (!metric || metric.denominator === 0) return `sem ${noun} nesta faixa ainda`;
   return `${metric.value}% — ${formatCount(metric.numerator)} de ${formatCount(metric.denominator)} ${noun}`;
+}
+
+/**
+ * Seconds as a short duration. Only the new flow produces this number; a base
+ * with legacy links only has no measurable latency and renders as an em dash.
+ */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (typeof seconds !== "number" || Number.isNaN(seconds)) return "—";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}min`;
+  return `${(seconds / 3600).toFixed(1)}h`;
 }
 
 export function formatCount(value: number | null | undefined): string {

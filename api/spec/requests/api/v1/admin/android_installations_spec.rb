@@ -12,10 +12,39 @@ RSpec.describe "Api::V1::Admin::Analytics#android_installations", type: :request
     expect(body["source"]).to eq("app_installations")
     expect(body["overview"]["total_installations"]).to eq(1)
     expect(body["reconciliation"]["link_rate"]).to include("value", "numerator", "denominator")
-    expect(body["definitions"]["reconciliation_rate"]).to eq("linked_at / first_authenticated_request_at")
+    expect(body["definitions"]["reconciliation_rate"])
+      .to eq(::Analytics::AndroidInstallations::RECONCILIATION_RATE_DEFINITION)
+    expect(body["definitions"]["linked_at_note"]).to include("fluxo novo")
     expect(body["data_quality"]).to include("missing_app_build")
     expect(body["operational_health"]).to be_an(Array)
     expect(body["google_play"]["configured"]).to be(false)
+  end
+
+  # End-to-end contract for the panel: the payload the admin UI renders must
+  # carry the operational rate computed from user_id, and must keep the new-flow
+  # figures beside it rather than as the definition of "linked". This is the
+  # production sample that used to render as 50%.
+  it "serves the operational reconciliation block for one new and one legacy link" do
+    sign_in create(:user, :admin)
+    create(:app_installation, platform: "android", user: create(:user),
+                              first_authenticated_request_at: 2.hours.ago, linked_at: 2.hours.ago)
+    create(:app_installation, platform: "android", user: create(:user),
+                              first_authenticated_request_at: 2.hours.ago, linked_at: nil)
+
+    get "/api/v1/admin/analytics/android_installations"
+
+    reconciliation = response.parsed_body["reconciliation"]
+    expect(reconciliation).to include(
+      "observed_authenticated_installations" => 2,
+      "linked_installations" => 2,
+      "authenticated_unlinked_installations" => 0,
+      "new_flow_linked_installations" => 1,
+      "legacy_linked_observed_installations" => 1
+    )
+    expect(reconciliation["link_rate"]["value"]).to eq(100.0)
+
+    health = response.parsed_body["operational_health"].find { |c| c["key"] == "reconciliation" }
+    expect(health["status"]).to eq("ok")
   end
 
   it "works on an empty database" do

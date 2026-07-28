@@ -16,9 +16,20 @@ RSpec.describe Observability::Headers do
 
     it "truncates before validating so an over-long value cannot reach a dimension" do
       long = "a" * 200
-      value = described_class.identifier(headers("X-Installation-Id" => long), described_class::INSTALLATION)
+      value = described_class.identifier(headers("X-Session-Id" => long), described_class::SESSION)
 
       expect(value.length).to eq(described_class::IDENTIFIER_MAX)
+    end
+
+    # The installation header is bounded by what the register endpoint accepts,
+    # not by the generic dimension limit: an id the backend stored has to stay
+    # findable here, or reconciliation would create rows it can never link.
+    it "allows the installation id the full length the register endpoint accepts" do
+      long = "a" * 200
+      value = described_class.identifier(headers("X-Installation-Id" => long), described_class::INSTALLATION)
+
+      expect(value.length).to eq(AppInstallation::INSTALLATION_ID_MAX_BYTES)
+      expect(AppInstallation::INSTALLATION_ID_MAX_BYTES).to be > described_class::IDENTIFIER_MAX
     end
 
     it "rejects rather than sanitizes a hostile value" do

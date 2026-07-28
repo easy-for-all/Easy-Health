@@ -59,15 +59,11 @@ class AppInstallation < ApplicationRecord
   #   confirmed authentication. Kept so existing callers keep working.
   scope :authenticated, -> { linked }
 
-  # @deprecated Use AppInstallations::LinkToUser directly. Kept temporarily for
-  # compatibility, but all write semantics live in the service.
-  def associate_user!(target_user)
-    AppInstallations::LinkToUser.call(
-      installation: self,
-      user: target_user,
-      source: "model_deprecated"
-    )
-  end
+  # There is deliberately NO associate_user! here. Linking is a transactional,
+  # locked, conflict-aware operation with attempt bookkeeping — see
+  # AppInstallations::LinkToUser, the only writer of user_id on this table.
+  # A convenience method on the model is how a second, weaker semantics gets
+  # reintroduced (the removed one overwrote another user's link without checking).
 
   # Guard against accidentally exposing sensitive linkage in JSON.
   def as_json(options = {})

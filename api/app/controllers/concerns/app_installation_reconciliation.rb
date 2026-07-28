@@ -33,6 +33,7 @@ module AppInstallationReconciliation
       Rails.logger.info(
         {
           event: "installation_link_deferred",
+          producer: "reconciliation",
           installation_id_hash: context.installation_id_hash,
           user_id: current_user.id,
           source: "reconciliation",

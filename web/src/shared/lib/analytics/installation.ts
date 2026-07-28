@@ -37,16 +37,33 @@ function uuid(): string {
   return `eh-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// The local id is awaited before authentication, so a native plugin that never
+// answers must not hold the login forever. Slow is fine (the real stored id is
+// worth waiting for); hung falls back to the localStorage mirror.
+const LOCAL_STORE_BUDGET_MS = 3_000;
+
+function withBudget<T>(work: Promise<T>, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), LOCAL_STORE_BUDGET_MS);
+    work.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      () => { clearTimeout(timer); resolve(fallback); }
+    );
+  });
+}
+
 async function readPersisted(): Promise<string | null> {
   // Prefer the durable native store; fall back to the localStorage mirror.
   if (isNativeApp()) {
-    try {
-      const { Preferences } = await import("@capacitor/preferences");
-      const { value } = await Preferences.get({ key: PREF_KEY });
-      if (value) return value;
-    } catch {
-      /* plugin unavailable — fall back to mirror */
-    }
+    const stored = await withBudget<string | null>(
+      (async () => {
+        const { Preferences } = await import("@capacitor/preferences");
+        const { value } = await Preferences.get({ key: PREF_KEY });
+        return value ?? null;
+      })(),
+      null // plugin unavailable or hung — fall back to mirror
+    );
+    if (stored) return stored;
   }
   return getCachedInstallationId() ?? null;
 }
@@ -54,12 +71,13 @@ async function readPersisted(): Promise<string | null> {
 async function writePersisted(id: string): Promise<void> {
   setCachedInstallationId(id); // localStorage mirror + in-memory cache
   if (isNativeApp()) {
-    try {
-      const { Preferences } = await import("@capacitor/preferences");
-      await Preferences.set({ key: PREF_KEY, value: id });
-    } catch {
-      /* plugin unavailable — mirror is best-effort persistence */
-    }
+    await withBudget<void>(
+      (async () => {
+        const { Preferences } = await import("@capacitor/preferences");
+        await Preferences.set({ key: PREF_KEY, value: id });
+      })(),
+      undefined // mirror is best-effort persistence on its own
+    );
   }
 }
 
@@ -172,7 +190,12 @@ export type InstallationFailureCode =
   | "unsupported"
   | "id_unavailable"
   | "transient"
-  | "client_error";
+  | "client_error"
+  | "deferred";
+
+// What the backend actually did with the installation, straight from the
+// response contract. "registered" is the ONLY value that means the row exists.
+export type InstallationRemoteStatus = "registered" | "deferred" | "disabled" | "failed";
 
 export interface EnsureInstallationResult {
   // Present whenever the local id could be resolved, even if the backend call
@@ -180,13 +203,42 @@ export interface EnsureInstallationResult {
   // reconcile on a later authenticated request.
   installationId: string | null;
   remoteRegistered: boolean;
+  remoteStatus: InstallationRemoteStatus;
   failureCode?: InstallationFailureCode;
+}
+
+// The register response contract (see Api::V1::App::InstallationsController).
+interface RegisterResponse {
+  status?: string;
+  registered?: boolean;
+  retryable?: boolean;
+  installation_id?: string;
+  created?: boolean;
+  link_status?: string | null;
+}
+
+// A registration is claimed only when the backend says the row exists. A 202
+// (deferred/disabled) is a 2xx that wrote nothing — treating it as success is
+// what silently suppressed retries for the rest of the app cycle.
+function isRegistered(body: RegisterResponse | null | undefined): boolean {
+  if (!body) return false;
+  if (body.registered === true || body.status === "registered") return true;
+  // Compatibility with a backend that predates the contract: its success body
+  // echoed the installation_id and its 202 had no body at all.
+  return body.status === undefined && typeof body.installation_id === "string";
 }
 
 // A successful remote register is remembered for the app cycle so a resume or a
 // login does not re-POST. A FAILED one is not, so those are exactly the moments
 // that retry it.
 let remoteRegistered = false;
+// The backend answered "disabled": the flag is off server-side, so re-POSTing
+// on every resume only burns requests. Not a success — remoteRegistered stays
+// false and nothing is ever reported as registered.
+let remoteDisabled = false;
+// Payload the backend rejected with a 4xx. Retried only if the metadata itself
+// changes; an identical body would be rejected identically.
+let rejectedPayloadKey: string | null = null;
 // Shared in-flight operation: boot, login, push and resume can all call this at
 // once and must never produce concurrent registrations.
 let ensuring: Promise<EnsureInstallationResult> | null = null;
@@ -196,28 +248,61 @@ let ensuring: Promise<EnsureInstallationResult> | null = null;
 // leg is time-boxed, so a slow backend can never delay a login.
 const AUTH_REGISTER_BUDGET_MS = 2_000;
 
+const REGISTER_PATH = "/api/v1/app/installations/register";
+
+// 4xx means "this payload is wrong" and is never retried — except for the codes
+// that describe the moment rather than the request.
+function isTransientStatus(status: number | undefined): boolean {
+  if (status === undefined) return true; // network/abort
+  if (status === 408 || status === 425 || status === 429) return true;
+  return status >= 500;
+}
+
 // Posts the register upsert with one short retry for transient failures
-// (network / 5xx), mirroring the device-token sync. 4xx is never retried: the
-// payload itself is the problem and a repeat would fail identically.
+// (network / 5xx), mirroring the device-token sync.
+//
+// The reply is read from the BODY, not from the status class: the endpoint
+// answers 202 with `status: "deferred"` when it wrote nothing, so a 2xx alone
+// proves nothing about the installation existing.
 async function postRegister(
   overrides: InstallationOverrides,
   opts: RegisterOptions
-): Promise<{ ok: boolean; failureCode?: InstallationFailureCode }> {
+): Promise<{ status: InstallationRemoteStatus; failureCode?: InstallationFailureCode }> {
   const payload = await buildPayload(overrides, opts);
+  const payloadKey = JSON.stringify(payload);
+
+  // The backend already rejected exactly this metadata. Retry only once it
+  // changes, instead of re-sending a body known to be invalid.
+  if (rejectedPayloadKey === payloadKey) {
+    return { status: "failed", failureCode: "client_error" };
+  }
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      await api.post("/api/v1/app/installations/register", payload);
-      return { ok: true };
+      const body = await api.post<RegisterResponse>(REGISTER_PATH, payload);
+
+      if (isRegistered(body)) return { status: "registered" };
+
+      if (body?.status === "disabled") {
+        remoteDisabled = true;
+        return { status: "disabled", failureCode: "disabled" };
+      }
+
+      // Accepted but not stored. An immediate repeat would meet the same
+      // backend state, so the retry belongs to the next cycle (resume or the
+      // next authentication), never to this loop.
+      return { status: "deferred", failureCode: "deferred" };
     } catch (err) {
       const status = err instanceof ApiError ? err.status : undefined;
-      const transient = status === undefined || status >= 500;
-      if (!transient) return { ok: false, failureCode: "client_error" };
-      if (attempt === 1) return { ok: false, failureCode: "transient" };
+      if (!isTransientStatus(status)) {
+        rejectedPayloadKey = payloadKey;
+        return { status: "failed", failureCode: "client_error" };
+      }
+      if (attempt === 1) return { status: "failed", failureCode: "transient" };
       await new Promise((resolve) => setTimeout(resolve, 800));
     }
   }
-  return { ok: false, failureCode: "transient" };
+  return { status: "failed", failureCode: "transient" };
 }
 
 // Guarantees the installation exists locally and, when possible, on the backend.
@@ -230,14 +315,28 @@ export function ensureInstallationRegistered(
   opts: RegisterOptions = {}
 ): Promise<EnsureInstallationResult> {
   if (typeof window === "undefined" || !MOBILE_ANALYTICS_ENABLED) {
-    return Promise.resolve({ installationId: null, remoteRegistered: false, failureCode: "disabled" });
+    return Promise.resolve(inactiveResult("disabled"));
   }
   if (!isNativeApp()) {
-    return Promise.resolve({ installationId: null, remoteRegistered: false, failureCode: "unsupported" });
+    return Promise.resolve(inactiveResult("unsupported"));
   }
   // Already done for this app cycle: return the known id without a network call.
   if (remoteRegistered) {
-    return Promise.resolve({ installationId: getCachedInstallationId() ?? null, remoteRegistered: true });
+    return Promise.resolve({
+      installationId: getCachedInstallationId() ?? null,
+      remoteRegistered: true,
+      remoteStatus: "registered",
+    });
+  }
+  // The backend said the feature is off. Keep the local id, keep reporting it as
+  // NOT registered, and stop paying for a POST that answers "disabled" forever.
+  if (remoteDisabled) {
+    return Promise.resolve({
+      installationId: getCachedInstallationId() ?? null,
+      remoteRegistered: false,
+      remoteStatus: "disabled",
+      failureCode: "disabled",
+    });
   }
   // The check and the assignment are synchronous (no await between them), so
   // concurrent callers can never spawn two operations.
@@ -249,6 +348,12 @@ export function ensureInstallationRegistered(
   return ensuring;
 }
 
+// Nothing to register (SSR, flag off, or a browser): there is no installation
+// at all, so there is no id and nothing to retry.
+function inactiveResult(failureCode: InstallationFailureCode): EnsureInstallationResult {
+  return { installationId: null, remoteRegistered: false, remoteStatus: "disabled", failureCode };
+}
+
 async function runEnsure(
   overrides: InstallationOverrides,
   opts: RegisterOptions
@@ -258,30 +363,69 @@ async function runEnsure(
     installationId = await getInstallationId();
   } catch {
     // Storage unavailable: nothing else can work, but the caller must continue.
-    return { installationId: null, remoteRegistered: false, failureCode: "id_unavailable" };
+    return {
+      installationId: null,
+      remoteRegistered: false,
+      remoteStatus: "failed",
+      failureCode: "id_unavailable",
+    };
   }
 
   const result = await postRegister(overrides, opts);
-  if (result.ok) {
+  if (result.status === "registered") {
     remoteRegistered = true;
-    return { installationId, remoteRegistered: true };
+    return { installationId, remoteRegistered: true, remoteStatus: "registered" };
   }
 
-  breadcrumb("installation_register_failed", { failure_code: result.failureCode });
-  return { installationId, remoteRegistered: false, failureCode: result.failureCode };
+  // Not registered — including a 202 the old code counted as success.
+  breadcrumb("installation_register_unconfirmed", {
+    remote_status: result.status,
+    failure_code: result.failureCode,
+  });
+  return {
+    installationId,
+    remoteRegistered: false,
+    remoteStatus: result.status,
+    failureCode: result.failureCode,
+  };
 }
 
-// For authentication flows. Awaits the local id (so X-Installation-Id is on the
-// sign-in request itself) but time-boxes the network leg: login must never wait
-// on tracking. The registration keeps running in the background either way.
+// For authentication flows. Two legs with different rules:
+//
+//   1. the LOCAL id is always awaited — it is storage-only, it is what puts
+//      X-Installation-Id on the sign-in request itself, and it is NOT inside
+//      the network budget (a slow Preferences read used to eat the whole 2s and
+//      send the first login with no header);
+//   2. the REMOTE register is time-boxed — login must never wait on tracking.
+//
+// The register keeps running in the background when the budget expires, and its
+// outcome is reported separately from the id: remoteRegistered/remoteStatus.
 export async function ensureInstallationForAuth(): Promise<EnsureInstallationResult> {
+  if (typeof window === "undefined" || !MOBILE_ANALYTICS_ENABLED) return inactiveResult("disabled");
+  if (!isNativeApp()) return inactiveResult("unsupported");
+
+  let installationId: string | null;
+  try {
+    installationId = await getInstallationId();
+  } catch {
+    // No local id: auth still proceeds, the backend links on a later request.
+    return {
+      installationId: null,
+      remoteRegistered: false,
+      remoteStatus: "failed",
+      failureCode: "id_unavailable",
+    };
+  }
+
   const pending = ensureInstallationRegistered();
 
   const budget = new Promise<EnsureInstallationResult>((resolve) => {
     setTimeout(
       () => resolve({
-        installationId: getCachedInstallationId() ?? null,
+        installationId,
         remoteRegistered: false,
+        // Still in flight, not failed: the next cycle retries it if it loses.
+        remoteStatus: "deferred",
         failureCode: "transient",
       }),
       AUTH_REGISTER_BUDGET_MS
@@ -289,9 +433,16 @@ export async function ensureInstallationForAuth(): Promise<EnsureInstallationRes
   });
 
   try {
-    return await Promise.race([ pending, budget ]);
+    const result = await Promise.race([ pending, budget ]);
+    // The id is known here even when the remote leg returned nothing.
+    return { ...result, installationId: result.installationId ?? installationId };
   } catch {
-    return { installationId: getCachedInstallationId() ?? null, remoteRegistered: false, failureCode: "transient" };
+    return {
+      installationId,
+      remoteRegistered: false,
+      remoteStatus: "failed",
+      failureCode: "transient",
+    };
   }
 }
 

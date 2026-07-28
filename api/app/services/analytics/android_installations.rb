@@ -12,8 +12,23 @@ module Analytics
   # This panel never reports Google Play downloads: an installation record is
   # created when the app first talks to the API, which is a different (smaller)
   # number than the store's official install count.
+  #
+  # THE LINK IS user_id. linked_at only records links created by the current
+  # LinkToUser flow, so an installation linked before that column existed has a
+  # user_id and no linked_at. Reading linked_at as proof of the current link
+  # would report those legacy rows as unlinked — they are not. linked_at stays
+  # for "how is the new mechanism performing", never for "is this linked".
   class AndroidInstallations
     PLATFORM = "android".freeze
+
+    # Wording avoids the raw column name on purpose: the payload is asserted to
+    # carry no "user_id" substring, so a leak of the real column is detectable.
+    LINKED_AT_NOTE = "A coluna linked_at registra apenas vínculos realizados pelo fluxo novo. " \
+                     "Instalações vinculadas antes da instrumentação aparecem como vinculadas, " \
+                     "mesmo sem linked_at — isso é esperado, não é falha.".freeze
+
+    RECONCILIATION_RATE_DEFINITION =
+      "instalações com usuário vinculado ÷ instalações com requisição autenticada observada".freeze
 
     VERSIONS_LIMIT = 20
     MANUFACTURERS_LIMIT = 10
@@ -84,7 +99,8 @@ module Analytics
         timeline_days: TIMELINE_DAYS,
         healthy_link_rate: HEALTHY_LINK_RATE,
         attention_link_rate: ATTENTION_LINK_RATE,
-        reconciliation_rate: "linked_at / first_authenticated_request_at"
+        reconciliation_rate: RECONCILIATION_RATE_DEFINITION,
+        linked_at_note: LINKED_AT_NOTE
       }
     end
 
@@ -110,7 +126,6 @@ module Analytics
       anon = "user_id IS NULL"
       auth = "user_id IS NOT NULL AND last_authenticated_at IS NOT NULL"
       observed = "first_authenticated_request_at IS NOT NULL"
-      linked_by_signal = "#{observed} AND linked_at IS NOT NULL"
       missing_build = "app_build IS NULL OR btrim(app_build) = ''"
 
       {
@@ -124,15 +139,22 @@ module Analytics
         new_24h: bind("first_seen_at >= ?", 24.hours.ago),
         new_7d: bind("first_seen_at >= ?", active_7d_since),
         new_30d: bind("first_seen_at >= ?", active_30d_since),
+        # Denominator: the installation was seen in an authenticated request.
         observed_authenticated: observed,
         link_attempted: "first_link_attempt_at IS NOT NULL",
-        linked_by_signal: linked_by_signal,
-        observed_unlinked: "#{observed} AND linked_at IS NULL",
+        # Numerator: user_id is the link. NOT linked_at.
+        authenticated_linked: "#{observed} AND #{linked}",
+        authenticated_unlinked: "#{observed} AND #{anon}",
+        # linked_at only measures the current LinkToUser flow.
+        new_flow_linked: "linked_at IS NOT NULL",
+        legacy_linked_observed: "#{observed} AND #{linked} AND linked_at IS NULL",
         conflicts: bind("last_link_failure_code = ?", "user_conflict"),
         dq_linked_without_authenticated_at: "user_id IS NOT NULL AND last_authenticated_at IS NULL",
         dq_authenticated_at_without_user: "user_id IS NULL AND last_authenticated_at IS NOT NULL",
-        dq_linked_without_linked_at: "user_id IS NOT NULL AND linked_at IS NULL",
-        dq_linked_without_observed_request: "linked_at IS NOT NULL AND first_authenticated_request_at IS NULL",
+        # A link timestamp with no owner is a real contradiction.
+        dq_linked_at_without_user: "linked_at IS NOT NULL AND #{anon}",
+        dq_authenticated_request_without_user: "#{observed} AND #{anon}",
+        dq_linked_at_without_observed_request: "linked_at IS NOT NULL AND first_authenticated_request_at IS NULL",
         dq_missing_app_build: missing_build,
         dq_invalid_app_build: "NOT (#{missing_build}) AND #{numeric_build} IS NULL",
         dq_missing_app_version: "app_version IS NULL OR btrim(app_version) = ''",
@@ -168,33 +190,58 @@ module Analytics
       }
     end
 
+    # The operational rate is user_id over observed authenticated requests. The
+    # linked_at figures ride alongside as new-flow instrumentation, never as the
+    # definition of "linked".
     def reconciliation
       {
         observed_authenticated_installations: counters[:observed_authenticated],
         link_attempted_installations: counters[:link_attempted],
-        linked_installations: counters[:linked_by_signal],
-        authenticated_unlinked_installations: counters[:observed_unlinked],
+        linked_installations: counters[:authenticated_linked],
+        authenticated_unlinked_installations: counters[:authenticated_unlinked],
+        new_flow_linked_installations: counters[:new_flow_linked],
+        legacy_linked_observed_installations: counters[:legacy_linked_observed],
+        new_flow_link_latency_seconds: new_flow_link_latency_seconds,
         conflicts: counters[:conflicts],
         failures_by_code: failures_by_code,
         link_rate: link_rate(
-          counters[:linked_by_signal],
+          counters[:authenticated_linked],
           counters[:observed_authenticated],
-          "android_reconciliation_link_rate_v1"
+          "android_operational_link_rate_v1"
         )
       }
     end
 
+    # Real contradictions only. A legacy link (user_id present, linked_at null)
+    # is an expected post-migration state and is reported in `reconciliation`,
+    # never here — counting it as a defect is what produced the false 50%.
     def data_quality
       {
         linked_without_last_authenticated_at: counters[:dq_linked_without_authenticated_at],
         authenticated_at_without_user: counters[:dq_authenticated_at_without_user],
-        linked_without_linked_at: counters[:dq_linked_without_linked_at],
-        linked_without_observed_request: counters[:dq_linked_without_observed_request],
+        linked_at_without_user: counters[:dq_linked_at_without_user],
+        authenticated_request_without_user: counters[:dq_authenticated_request_without_user],
+        linked_at_without_observed_request: counters[:dq_linked_at_without_observed_request],
         missing_app_build: counters[:dq_missing_app_build],
         invalid_app_build: counters[:dq_invalid_app_build],
         missing_app_version: counters[:dq_missing_app_version],
         missing_last_seen_at: counters[:dq_missing_last_seen_at]
       }
+    end
+
+    # Efficiency of the new flow, in seconds between the observed authenticated
+    # request and the link it produced. Only rows that actually have linked_at
+    # take part — a legacy row has no measurable duration and must not be
+    # imputed one.
+    def new_flow_link_latency_seconds
+      median = base.where.not(linked_at: nil)
+                   .where.not(first_authenticated_request_at: nil)
+                   .pick(Arel.sql(
+                     "PERCENTILE_CONT(0.5) WITHIN GROUP (" \
+                     "ORDER BY EXTRACT(EPOCH FROM (linked_at - first_authenticated_request_at)))"
+                   ))
+
+      median&.to_f&.round(1)
     end
 
     # Where the record came from — NOT a measure of tracking health. Kept apart
@@ -214,7 +261,7 @@ module Analytics
       {
         permission_granted: counters[:permission_granted],
         push_enabled: counters[:push_enabled],
-        valid_fcm_tokens: valid_fcm_tokens
+        installations_with_active_token: installations_with_active_token
       }
     end
 
@@ -237,10 +284,24 @@ module Analytics
       base.linked.group(:user_id).having(Arel.sql("COUNT(*) > 1")).count.size
     end
 
-    def valid_fcm_tokens
-      base.where.not(device_token_id: nil)
-          .where(device_token_id: DeviceToken.active.select(:id))
-          .count
+    # Installations joined to an ACTIVE DeviceToken row.
+    #
+    # This measures the installation↔token linkage, NOT how many devices can
+    # receive a push. Nothing in the live code writes app_installations.
+    # device_token_id: DeviceTokensController registers the token without ever
+    # touching the installation, so the column is only ever populated by the
+    # historical backfill. Where it is empty the linkage is simply not
+    # instrumented, and answering 0 would read as "no device can receive push"
+    # — a push outage — instead of "this join does not exist yet".
+    #
+    # nil therefore means NOT INSTRUMENTED and must be rendered as such. Real
+    # push reach lives in the device_tokens component, which counts DeviceToken
+    # directly and does not depend on this join.
+    def installations_with_active_token
+      linked_to_any_token = base.where.not(device_token_id: nil)
+      return nil unless linked_to_any_token.exists?
+
+      linked_to_any_token.where(device_token_id: DeviceToken.active.select(:id)).count
     end
 
     def link_rate(numerator, denominator, definition)
@@ -373,6 +434,8 @@ module Analytics
     # ---------------------------------------------------------------- timeline
 
     # Daily reconciliation rate for installs observed in authenticated requests.
+    # Linked means user_id; the linked_at column is reported beside it so the new
+    # flow's share of those links stays visible without defining the rate.
     # Days are cut in the reporting timezone, like every other daily metric.
     def health_timeline
       day = ReportingTime.local_date_sql("first_authenticated_request_at")
@@ -383,14 +446,16 @@ module Analytics
           .pluck(
             Arel.sql(day),
             Arel.sql("COUNT(*)"),
+            Arel.sql("COUNT(*) FILTER (WHERE user_id IS NOT NULL)"),
             Arel.sql("COUNT(*) FILTER (WHERE linked_at IS NOT NULL)")
           )
-          .map do |date, total, linked|
+          .map do |date, total, linked, new_flow_linked|
             {
               date: date.to_s,
               observed_authenticated_installations: total,
               linked_installations: linked,
-              link_rate: link_rate(linked, total, "android_daily_reconciliation_rate_v1")
+              new_flow_linked_installations: new_flow_linked,
+              link_rate: link_rate(linked, total, "android_daily_operational_link_rate_v1")
             }
           end
     end
@@ -434,7 +499,7 @@ module Analytics
 
     def reconciliation_component
       total = counters[:observed_authenticated]
-      linked = counters[:linked_by_signal]
+      linked = counters[:authenticated_linked]
       label = "Reconciliação"
 
       if total.zero?

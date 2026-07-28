@@ -16,7 +16,6 @@ namespace :mobile_tracking do
        "Writes nothing and prints no installation_id, e-mail or user id."
   task installation_metrics: :environment do
     m = Analytics::AndroidInstallations.new.call
-    min_build = m[:definitions][:reconciliation_min_build]
 
     pct = ->(metric) { metric.denominator.zero? ? "—" : "#{metric.value}% (#{metric.numerator}/#{metric.denominator})" }
 
@@ -33,16 +32,25 @@ namespace :mobile_tracking do
     puts "  ativas 7d / 30d:              #{o[:active_installations_7d]} / #{o[:active_installations_30d]}"
     puts "  taxa de vínculo:              #{pct.call(o[:link_rate])}"
     puts ""
-    puts "TRACKING ATUAL (build #{min_build}+)"
-    c = m[:current_tracking]
-    puts "  instalações:                  #{c[:total_installations]}"
-    puts "  vinculadas / anônimas:        #{c[:linked_installations]} / #{c[:anonymous_installations]}"
-    puts "  taxa de vínculo:              #{pct.call(c[:link_rate])}"
-    puts ""
-    puts "LEGADO (antes do build #{min_build})"
-    l = m[:legacy]
-    puts "  instalações:                  #{l[:total_installations]}"
-    puts "  vinculadas / anônimas:        #{l[:linked_installations]} / #{l[:anonymous_installations]}"
+    # Sinais observados, nunca app_build: o shell Android carrega o bundle web
+    # remoto, então o build não diz se o vínculo podia acontecer.
+    puts "RECONCILIAÇÃO (sinais observados)"
+    r = m[:reconciliation]
+    puts "  sinal autenticado:            #{r[:observed_authenticated_installations]}"
+    puts "  vinculadas atualmente:        #{r[:linked_installations]}"
+    puts "  não vinculadas:               #{r[:authenticated_unlinked_installations]}"
+    puts "  vínculos do fluxo novo:       #{r[:new_flow_linked_installations]}"
+    puts "  vínculos legados observados:  #{r[:legacy_linked_observed_installations]}"
+    puts "  tentativas de vínculo:        #{r[:link_attempted_installations]}"
+    puts "  conflitos:                    #{r[:conflicts]}"
+    puts "  taxa operacional (user_id):   #{pct.call(r[:link_rate])}"
+    if r[:failures_by_code].any?
+      puts "  falhas por código:"
+      r[:failures_by_code].each { |code, count| puts "    #{code.to_s.ljust(28)}#{count}" }
+    else
+      puts "  falhas por código:            nenhuma"
+    end
+    puts "  nota: #{m[:definitions][:linked_at_note]}"
     puts ""
     puts "QUALIDADE DOS DADOS"
     if m[:data_quality].values.all?(&:zero?)

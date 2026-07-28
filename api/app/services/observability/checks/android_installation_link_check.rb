@@ -10,12 +10,16 @@ module Observability
     # The denominator is first_authenticated_request_at. It is stamped before
     # the link attempt, so a failed or conflicted link remains visible instead
     # of disappearing from the measurement.
+    #
+    # The numerator is user_id, never linked_at: linked_at exists only for links
+    # created by the current LinkToUser flow, so an installation linked before
+    # that column existed would otherwise be alerted on as an orphan forever.
     class AndroidInstallationLinkCheck < BaseCheck
       CHECK_KEY = "android_installation_link_rate".freeze
       ORPHAN_KEY = "authenticated_without_installation_link".freeze
 
-      DEFINITION = "instalações Android com linked_at ÷ instalações Android observadas em requisição autenticada, últimas 24h".freeze
-      ORPHAN_DEFINITION = "instalações com first_authenticated_request_at preenchido e linked_at nulo após a tolerância".freeze
+      DEFINITION = "instalações Android com user_id ÷ instalações Android observadas em requisição autenticada, últimas 24h".freeze
+      ORPHAN_DEFINITION = "instalações com first_authenticated_request_at preenchido e user_id nulo após a tolerância".freeze
 
       def self.check_key = CHECK_KEY
 
@@ -35,7 +39,7 @@ module Observability
         total = scope.count
         return [ no_traffic_result ] if total.zero?
 
-        [ evaluate(total, scope.where.not(linked_at: nil).count) ]
+        [ evaluate(total, scope.where.not(user_id: nil).count) ]
       end
 
       def evaluate(total, linked)
@@ -86,8 +90,10 @@ module Observability
         tolerance = config.link_tolerance_seconds
         cutoff = now - tolerance.seconds
 
+        # user_id alone. A row with linked_at and no user_id is a data-quality
+        # contradiction that must also surface here, not be filtered out.
         count = AppInstallation
-                .where(platform: "android", user_id: nil, linked_at: nil)
+                .where(platform: "android", user_id: nil)
                 .where(first_authenticated_request_at: ..cutoff)
                 .count
 
