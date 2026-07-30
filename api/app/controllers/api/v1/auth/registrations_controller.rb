@@ -3,6 +3,7 @@ module Api
     module Auth
       class RegistrationsController < ApplicationController
         include AppInstallationReconciliation
+        include SignupSourceContext
 
         before_action :authenticate_user!, only: [:destroy]
 
@@ -12,7 +13,11 @@ module Api
             return
           end
 
-          user = User.new(registration_params.merge(User.consent_attributes(consent_params)))
+          user = User.new(
+            registration_params
+              .merge(User.consent_attributes(consent_params))
+              .merge(signup_source: signup_source_from_request)
+          )
 
           if user.save
             sign_in(user)

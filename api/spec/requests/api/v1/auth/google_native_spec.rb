@@ -37,6 +37,40 @@ RSpec.describe "Api::V1::Auth::GoogleNative", type: :request do
       expect(response).to have_http_status(:ok)
     end
 
+    describe "signup_source" do
+      let(:consent) { { terms_accepted: true, privacy_accepted: true } }
+
+      before { allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims) }
+
+      it "records android from the X-Platform header" do
+        post "/api/v1/auth/google/native",
+             params: { id_token: "valid.jwt" }.merge(consent),
+             headers: { "X-Platform" => "android" },
+             as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(User.find_by(email: "native@example.com").signup_source).to eq("android")
+      end
+
+      it "falls back to the client-declared platform param when no header arrives" do
+        post "/api/v1/auth/google/native",
+             params: { id_token: "valid.jwt", platform: "android" }.merge(consent),
+             as: :json
+
+        expect(User.find_by(email: "native@example.com").signup_source).to eq("android")
+      end
+
+      # Unlike consent_source (which defaults to "android" on this endpoint),
+      # signup_source is never fabricated: an unattributable signup is worth more
+      # as "unknown" than as an invented platform.
+      it "stays unknown when neither the header nor the param says anything" do
+        post "/api/v1/auth/google/native", params: { id_token: "valid.jwt" }.merge(consent), as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(User.find_by(email: "native@example.com").signup_source).to eq("unknown")
+      end
+    end
+
     it "refuses to create a new user without consent" do
       allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
 

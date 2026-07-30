@@ -7,6 +7,7 @@ module Api
       # provisioning as the web OmniAuth flow (User.from_omniauth).
       class GoogleNativeController < ApplicationController
         include AppInstallationReconciliation
+        include SignupSourceContext
 
         skip_before_action :authenticate_user!, raise: false
         skip_before_action :verify_authenticity_token, raise: false
@@ -25,7 +26,11 @@ module Api
           # Never log the full address: the caller is still unauthenticated here.
           Rails.logger.info("[GoogleNative] verified aud=#{claims['aud']} sub=#{claims['sub']} email_domain=#{email_domain(claims['email'])}")
 
-          user = User.from_omniauth(build_auth_hash(claims), consent: consent_params)
+          user = User.from_omniauth(
+            build_auth_hash(claims),
+            consent: consent_params,
+            signup_source: native_signup_source
+          )
 
           if user.anonymized_at.present?
             auth_failed("account_deleted")
@@ -107,6 +112,18 @@ module Api
 
         def platform
           params[:platform].presence || "android"
+        end
+
+        # Header first (observed by the server), params[:platform] as the
+        # client-declared fallback. Deliberately does NOT fall back to "android"
+        # the way `platform` above does for consent_source: fabricating "android"
+        # would produce exactly the invented data signup_source exists to
+        # eliminate. An unattributable signup is worth more as "unknown".
+        def native_signup_source
+          header = Observability::Headers.platform(request.headers)
+          return header if header.present? && header != "unknown"
+
+          signup_source_from_value(params[:platform])
         end
 
         def consent_present?

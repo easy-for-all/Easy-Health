@@ -1,4 +1,5 @@
 import { api } from "@/shared/lib/api";
+import { detectPlatform } from "@/shared/lib/analytics/context";
 import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
 import type { User } from "@/shared/types/user";
 
@@ -26,14 +27,19 @@ export interface GoogleConsent {
 /**
  * Builds the server-side OmniAuth URL, forwarding consent as query params so it
  * survives the OAuth redirect round-trip (read back from `omniauth.params`).
+ *
+ * `platform` is always sent, consent or not: the OAuth callback is a browser
+ * navigation coming back from Google and therefore carries no X-Platform header,
+ * so this query param is the ONLY channel by which the signup origin reaches the
+ * server on this flow. Same robust detection used for every X-Platform header.
  */
 export function googleAuthWebUrl(consent?: GoogleConsent): string {
-  if (!consent) return GOOGLE_AUTH_WEB_URL;
-  const params = new URLSearchParams({
-    terms_accepted: consent.termsAccepted ? "1" : "0",
-    privacy_accepted: consent.privacyAccepted ? "1" : "0",
-    marketing_consent: consent.marketingConsent ? "1" : "0",
-  });
+  const params = new URLSearchParams({ platform: detectPlatform() });
+  if (consent) {
+    params.set("terms_accepted", consent.termsAccepted ? "1" : "0");
+    params.set("privacy_accepted", consent.privacyAccepted ? "1" : "0");
+    params.set("marketing_consent", consent.marketingConsent ? "1" : "0");
+  }
   return `${GOOGLE_AUTH_WEB_URL}?${params.toString()}`;
 }
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_27_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_30_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -1014,6 +1014,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_130000) do
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.string "reset_password_token_digest"
+    t.string "signup_source", default: "unknown", null: false
     t.datetime "terms_accepted_at"
     t.string "terms_version"
     t.boolean "test_account", default: false, null: false
@@ -1025,6 +1026,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_130000) do
     t.datetime "updated_at", null: false
     t.index ["account_type"], name: "index_users_on_account_type"
     t.index ["activation_platform"], name: "index_users_on_activation_platform"
+    t.index ["created_at", "signup_source"], name: "index_users_on_created_at_and_signup_source"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["email_bounced_at"], name: "index_users_on_email_bounced_at"
     t.index ["marketing_consent"], name: "index_users_on_marketing_consent"

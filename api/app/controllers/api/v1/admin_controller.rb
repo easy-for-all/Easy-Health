@@ -201,22 +201,45 @@ module Api
         page    = [ params[:page].to_i, 1 ].max
         per     = 25
 
+        # Fully qualified ::Analytics:: — inside Api::V1:: a bare Analytics::
+        # resolves to Api::V1::Analytics and raises NameError.
+        cohort = ::Analytics::SignupCohort.new(period: params[:period], source: params[:source])
+
         # Evitar expor PII na listagem administrativa para reduzir risco em prints e compartilhamento de tela.
         scope = User.all
                     .left_joins(:subscription)
                     .includes(:subscription, :workout_plans, :workout_sessions, :user_events, :user_segments, :fitness_profile)
 
+        # Cohort filters go on BEFORE apply_filter: the window and the origin
+        # define who is in the cohort, the behavioural filter narrows within it.
+        scope = scope.where(created_at: cohort.window) if cohort.window
+        scope = scope.where(signup_source: cohort.source) if cohort.source
         scope = apply_filter(scope, filter)
-        total = scope.count("users.id")
-        users = scope.order("users.created_at DESC")
+
+        # Guard, not a workaround: no filter groups the listing relation anymore
+        # (see users_with_session_count), but .count on a grouped relation returns
+        # a Hash of id => n, and the frontend turns that into
+        # Math.ceil(Hash / per) = NaN and drops pagination entirely. If a future
+        # filter reintroduces a GROUP BY, the count stays an Integer.
+        raw_total = scope.count("users.id")
+        total = raw_total.is_a?(Hash) ? raw_total.size : raw_total
+
+        # users.id DESC as a tie-break: without it two accounts created in the
+        # same instant can swap places between pages and one is never shown.
+        users = scope.order("users.created_at DESC", "users.id DESC")
                      .limit(per)
                      .offset((page - 1) * per)
+                     .to_a
+        installations = android_installations_for(users)
 
         render json: {
-          users: users.map { |u| user_row(u) },
+          users: users.map { |u| user_row(u, installations[u.id]) },
           total: total,
           page: page,
-          per: per
+          per: per,
+          summary: cohort.summary,
+          android_funnel: cohort.android_funnel,
+          definitions: cohort.definitions
         }
       end
 
@@ -377,9 +400,9 @@ module Api
                .where(workout_sessions: { id: nil })
                .distinct
         when "1_session"
-          scope.joins(:workout_sessions).group("users.id").having("COUNT(workout_sessions.id) = 1")
+          scope.where(id: users_with_session_count("= 1"))
         when "3plus_sessions"
-          scope.joins(:workout_sessions).group("users.id").having("COUNT(workout_sessions.id) >= 3")
+          scope.where(id: users_with_session_count(">= 3"))
         when "active_7d"
           scope.joins(:workout_sessions).where("workout_sessions.completed_at > ?", 7.days.ago).distinct
         when "inactive_7d"
@@ -387,9 +410,9 @@ module Api
                .where("workout_sessions.id IS NULL OR workout_sessions.completed_at <= ?", 7.days.ago)
                .distinct
         when "engagement_high"
-          scope.joins(:workout_sessions).group("users.id").having("COUNT(workout_sessions.id) >= 3")
+          scope.where(id: users_with_session_count(">= 3"))
         when "engagement_medium"
-          scope.joins(:workout_sessions).group("users.id").having("COUNT(workout_sessions.id) BETWEEN 1 AND 2")
+          scope.where(id: users_with_session_count("BETWEEN 1 AND 2"))
         when "engagement_low"
           scope.left_joins(:workout_plans, :workout_sessions)
                .where(workout_plans: { id: nil }, workout_sessions: { id: nil })
@@ -401,7 +424,64 @@ module Api
         end
       end
 
-      def user_row(user)
+      # Session-count filters as a SUBQUERY of ids, not as GROUP BY on the listing
+      # relation.
+      #
+      # They used to be `joins(:workout_sessions).group("users.id").having(...)`,
+      # which broke twice over: the outer relation also left_joins/eager-loads
+      # subscription, so Postgres rejected the SELECT with "subscriptions_users.id
+      # must appear in the GROUP BY clause" (a 500 whenever the filter matched),
+      # and `.count` on a grouped relation returned a Hash of id => n, which the
+      # frontend turned into Math.ceil(Hash / per) = NaN and lost pagination.
+      # Keeping the aggregate inside a subquery leaves the outer query ungrouped,
+      # so both go away.
+      #
+      # `comparison` is a code-supplied SQL fragment from the whitelist in
+      # apply_filter — never user input.
+      def users_with_session_count(comparison)
+        WorkoutSession.group(:user_id).having("COUNT(*) #{comparison}").select(:user_id)
+      end
+
+      # One query for the 25 users on the page, never one per row.
+      #
+      # There is deliberately no `has_many :app_installations` on User: the FK
+      # app_installations -> users carries no on_delete, so declaring the
+      # association would invite a `dependent:` that either deletes installation
+      # rows on account deletion or nullifies the very link that
+      # AppInstallations::LinkToUser is the only authorized writer of.
+      def android_installations_for(users)
+        ids = users.map(&:id)
+        return {} if ids.empty?
+
+        AppInstallation.for_platform("android")
+                       .where(user_id: ids)
+                       .order(Arel.sql("user_id, last_seen_at DESC NULLS LAST, id DESC"))
+                       .select(:id, :user_id, :installation_id, :app_version, :app_build, :last_seen_at)
+                       .group_by(&:user_id)
+                       .transform_values(&:first)
+      end
+
+      # installation_id NEVER leaves whole: it is a stable device identifier.
+      # The abbreviation is what the admin recognizes from the device, and the
+      # SHA256 prefix is the same fingerprint AppInstallations::Register and
+      # LinkToUser already write to the logs, so a row can be correlated with a
+      # log line without the full id crossing the panel boundary.
+      def installation_id_short(install)
+        raw = install&.installation_id.to_s
+        return nil if raw.blank?
+        return raw if raw.length <= 8
+
+        "#{raw[0, 4]}...#{raw[-3, 3]}"
+      end
+
+      def installation_fingerprint(install)
+        raw = install&.installation_id.to_s
+        return nil if raw.blank?
+
+        Digest::SHA256.hexdigest(raw)[0, 12]
+      end
+
+      def user_row(user, install = nil)
         sub            = user.subscription
         sessions_count = user.workout_sessions.size
         plans_count    = user.workout_plans.size
@@ -414,6 +494,11 @@ module Api
           admin_display_id: admin_display_id(user),
           display_name: display_name(user),
           created_at: user.created_at.iso8601,
+          signup_source: user.signup_source,
+          installation_id_short: installation_id_short(install),
+          installation_fingerprint: installation_fingerprint(install),
+          app_version: install&.app_version.presence,
+          app_build: install&.app_build.presence,
           trial_status: trial_status,
           trial_days_remaining: user.trial_days_remaining,
           workouts_created: plans_count,

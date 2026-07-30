@@ -1,3 +1,4 @@
+import { PillGroup } from "../pill-group";
 import type { FlowFilter, PeriodFilter, StatusFilter } from "./types";
 
 const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
@@ -21,32 +22,6 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "trial_expired", label: "Trial expirado" },
   { value: "premium", label: "Premium" },
 ];
-
-function PillGroup<T extends string>({
-  value, options, onChange,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-            value === opt.value
-              ? "bg-primary-500 text-white"
-              : "border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)]"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export function FiltersBar({
   period, flow, status, onPeriodChange, onFlowChange, onStatusChange,
