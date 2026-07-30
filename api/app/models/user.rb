@@ -7,6 +7,10 @@ class User < ApplicationRecord
   PROFILE_VISIBILITIES = %w[private public_limited public].freeze
   TRIAL_DURATION_DAYS = 7
 
+  # Platform observed at account creation. Reuses the canonical platform
+  # allow-list so this never becomes a second, drifting vocabulary.
+  SIGNUP_SOURCES = Analytics::EventCatalog::PLATFORMS
+
   # Current legal document versions. The backend is the source of truth for
   # these — the client only sends acceptance booleans, and we stamp the version
   # here so the two can never drift.
@@ -90,6 +94,16 @@ class User < ApplicationRecord
   validates :profile_visibility, inclusion: { in: PROFILE_VISIBILITIES }
   validate :email_not_blocked, on: :create
 
+  # Fail-open by construction: signup_source is a diagnostic dimension and must
+  # NEVER be able to stop an account from being created. An unknown, blank or
+  # explicitly nil value (which would violate null: false and turn a signup into
+  # a 500) becomes "unknown". That makes the inclusion validation below
+  # unreachable on the normal path — it exists as a net for a direct console
+  # write. Do not replace this with a strict validation: a malformed client
+  # header would then turn into a 422 on sign-up.
+  before_validation :normalize_signup_source, on: :create
+  validates :signup_source, inclusion: { in: SIGNUP_SOURCES }
+
   def active_for_authentication?
     super && anonymized_at.nil?
   end
@@ -110,7 +124,10 @@ class User < ApplicationRecord
   #
   # `consent` is a hash with (optional) keys: :terms_accepted, :privacy_accepted,
   # :marketing_consent, :source. Only consulted on the create path.
-  def self.from_omniauth(auth, consent: {})
+  #
+  # `signup_source` is likewise create-only: an existing user signing in again
+  # must never have the origin of their ORIGINAL signup reclassified.
+  def self.from_omniauth(auth, consent: {}, signup_source: nil)
     user = find_by(provider: auth.provider, uid: auth.uid)
     user ||= find_by(email: auth.info.email)
 
@@ -128,6 +145,8 @@ class User < ApplicationRecord
           name: auth.info.name.presence || auth.info.email.split("@").first,
           password: Devise.friendly_token[0, 20]
         }.merge(consent_attributes(consent))
+         # .compact so a nil never overwrites the column default with NULL.
+         .merge({ signup_source: signup_source }.compact)
       )
     end
 
@@ -251,6 +270,10 @@ class User < ApplicationRecord
 
   def email_not_blocked
     errors.add(:email, "não pode mais ser usado para criar uma conta") if BlockedEmail.blocked?(email)
+  end
+
+  def normalize_signup_source
+    self.signup_source = "unknown" unless SIGNUP_SOURCES.include?(signup_source)
   end
 
   def start_app_trial

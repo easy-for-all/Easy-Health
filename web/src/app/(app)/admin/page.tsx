@@ -11,6 +11,10 @@ import { PlatformComparisonSection } from "./platform-comparison-section";
 import { AndroidInstallationsSection } from "./android-installations-section";
 import { PushActivationSection } from "./push/push-activation-section";
 import { PushDiagnosticsSection } from "./push/push-diagnostics-section";
+import { PillGroup } from "./pill-group";
+import { StatCard } from "./stat-card";
+import { SignupCohortSummary } from "./signup-cohort-summary";
+import type { AndroidFunnel, CohortDefinitions, CohortSummary, SignupSource } from "./signup-cohort-summary";
 import type { OnboardingAnalytics } from "./onboarding-analytics/types";
 
 type AdminStats = {
@@ -80,6 +84,14 @@ type AdminUser = {
   admin_display_id: string;
   display_name: string;
   created_at: string;
+  signup_source: SignupSource;
+  // Android only, and only once the installation is linked. The full
+  // installation_id never leaves the backend: the short form is what the admin
+  // recognizes, the fingerprint is what correlates with the server logs.
+  installation_id_short: string | null;
+  installation_fingerprint: string | null;
+  app_version: string | null;
+  app_build: string | null;
   trial_status: "trial_active" | "trial_expired" | "premium" | "stripe_trial" | "no_trial";
   trial_days_remaining: number;
   workouts_created: number;
@@ -102,7 +114,28 @@ type UsersResponse = {
   total: number;
   page: number;
   per: number;
+  summary: CohortSummary;
+  android_funnel: AndroidFunnel;
+  definitions: CohortDefinitions;
 };
+
+// Account-creation window. "Desde segunda" is computed server-side from
+// America/Sao_Paulo (never hardcoded to a date, never cut in UTC).
+const PERIOD_OPTIONS = [
+  { value: "since_monday", label: "Desde segunda" },
+  { value: "today", label: "Hoje" },
+  { value: "7d", label: "Últimos 7 dias" },
+  { value: "30d", label: "Últimos 30 dias" },
+  { value: "all", label: "Desde sempre" },
+];
+
+const SOURCE_OPTIONS = [
+  { value: "", label: "Todos" },
+  { value: "android", label: "Android" },
+  { value: "web", label: "Web" },
+  { value: "pwa", label: "PWA" },
+  { value: "unknown", label: "Desconhecido" },
+];
 
 const FILTERS = [
   { value: "", label: "Todos" },
@@ -130,6 +163,13 @@ const STATUS_LABELS: Record<AdminUser["trial_status"], { label: string; cls: str
   premium: { label: "Premium", cls: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" },
   stripe_trial: { label: "Trial Stripe", cls: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" },
   no_trial: { label: "Sem trial", cls: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400" },
+};
+
+const SOURCE_LABELS: Record<SignupSource, { label: string; cls: string }> = {
+  android: { label: "Android", cls: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" },
+  web: { label: "Web", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" },
+  pwa: { label: "PWA", cls: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" },
+  unknown: { label: "Desconhecido", cls: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400" },
 };
 
 const ENGAGEMENT_LABELS: Record<AdminUser["engagement_level"], { label: string; cls: string }> = {
@@ -172,15 +212,13 @@ const EVENT_LABELS: Record<string, string> = {
   trial_expired_without_subscription: "Trial expirado sem assinatura",
 };
 
-function StatCard({ label, value, description, pct }: { label: string; value: number | undefined; description: string; pct?: boolean }) {
-  const display = value === undefined ? "—" : pct ? `${value}%` : value.toLocaleString("pt-BR");
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-      <p className="text-3xl font-bold text-primary-600">{display}</p>
-      <p className="mt-1 text-sm font-semibold text-[var(--text)]">{label}</p>
-      <p className="mt-0.5 text-xs text-[var(--text-dim)]">{description}</p>
-    </div>
-  );
+// "29/07 18:32" in the admin's own locale/zone. created_at arrives as UTC ISO, so
+// this is the one place a boundary is intentionally localized for reading — the
+// cohort cut itself is done server-side in America/Sao_Paulo, never here.
+function formatCreatedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -202,6 +240,10 @@ export default function AdminPage() {
   const [usersData, setUsersData] = useState<UsersResponse | null>(null);
   const [usersLoading, setUsersLoading] = useState(false);
   const [filter, setFilter] = useState("");
+  // Opens on the cohort the investigation is about. The resolved window is always
+  // rendered above the table so this can never be misread as an all-time total.
+  const [period, setPeriod] = useState("since_monday");
+  const [source, setSource] = useState("");
   const [page, setPage] = useState(1);
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -223,13 +265,14 @@ export default function AdminPage() {
   useEffect(() => {
     if (!user?.admin) return;
     setUsersLoading(true);
-    const params = new URLSearchParams({ page: String(page) });
+    const params = new URLSearchParams({ page: String(page), period });
     if (filter) params.set("filter", filter);
+    if (source) params.set("source", source);
     api.get<UsersResponse>(`/api/v1/admin/users?${params}`)
       .then(setUsersData)
       .catch(() => {})
       .finally(() => setUsersLoading(false));
-  }, [user, filter, page]);
+  }, [user, filter, period, source, page]);
 
   function openUserDetail(id: number) {
     setSelectedUserId(id);
@@ -352,21 +395,38 @@ export default function AdminPage() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">Usuários</h2>
 
           {/* Filters */}
-          <div className="mb-3 flex flex-wrap gap-2">
-            {FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => { setFilter(f.value); setPage(1); }}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  filter === f.value
-                    ? "bg-primary-500 text-white"
-                    : "bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="mb-3 space-y-2">
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-dim)]">Período de criação</p>
+              <PillGroup
+                value={period}
+                options={PERIOD_OPTIONS}
+                onChange={(v) => { setPeriod(v); setPage(1); }}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-dim)]">Origem do cadastro</p>
+              <PillGroup
+                value={source}
+                options={SOURCE_OPTIONS}
+                onChange={(v) => { setSource(v); setPage(1); }}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-dim)]">Comportamento</p>
+              <PillGroup
+                value={filter}
+                options={FILTERS}
+                onChange={(v) => { setFilter(v); setPage(1); }}
+              />
+            </div>
           </div>
+
+          <SignupCohortSummary
+            summary={usersData?.summary}
+            funnel={usersData?.android_funnel}
+            definitions={usersData?.definitions}
+          />
 
           {usersLoading ? (
             <div className="py-8 text-center text-sm text-[var(--text-muted)]">Carregando...</div>
@@ -375,7 +435,11 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--text-muted)]">
+                    <th className="px-4 py-3 font-medium">Criado em</th>
                     <th className="px-4 py-3 font-medium">Usuário</th>
+                    <th className="px-4 py-3 font-medium">Origem</th>
+                    <th className="px-4 py-3 font-medium">Installation</th>
+                    <th className="px-4 py-3 font-medium">Versão / Build</th>
                     <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium text-center">Dias</th>
                     <th className="px-4 py-3 font-medium text-center">Treinos</th>
@@ -389,11 +453,35 @@ export default function AdminPage() {
                   {usersData?.users.map((u) => {
                     const status = STATUS_LABELS[u.trial_status];
                     const engaj = ENGAGEMENT_LABELS[u.engagement_level];
+                    const origin = SOURCE_LABELS[u.signup_source] ?? SOURCE_LABELS.unknown;
                     return (
                       <tr key={u.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-hover)]">
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--text-muted)]">
+                          {formatCreatedAt(u.created_at)}
+                        </td>
                         <td className="px-4 py-3">
                           <p className="font-medium text-[var(--text)]">{u.display_name}</p>
                           <p className="text-xs text-[var(--text-dim)]">{u.admin_display_id}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${origin.cls}`}>
+                            {origin.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {u.installation_id_short ? (
+                            <span
+                              className="font-mono text-[10px] text-[var(--text-muted)]"
+                              title={u.installation_fingerprint ? `fingerprint de log: ${u.installation_fingerprint}` : undefined}
+                            >
+                              {u.installation_id_short}
+                            </span>
+                          ) : (
+                            <span className="text-[var(--text-dim)]">—</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--text-muted)]">
+                          {u.app_version ? `${u.app_version}${u.app_build ? ` / ${u.app_build}` : ""}` : "—"}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.cls}`}>
@@ -431,8 +519,8 @@ export default function AdminPage() {
                   })}
                   {usersData?.users.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-[var(--text-muted)]">
-                        Nenhum usuário encontrado
+                      <td colSpan={12} className="px-4 py-8 text-center text-[var(--text-muted)]">
+                        Nenhum usuário encontrado neste período
                       </td>
                     </tr>
                   )}

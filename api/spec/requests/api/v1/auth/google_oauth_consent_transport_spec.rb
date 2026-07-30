@@ -49,6 +49,21 @@ RSpec.describe "Google web consent transport", type: :request do
     expect(response).to redirect_to("https://easyhealth.art/onboarding")
   end
 
+  # Same transport as consent, for the same reason: the callback has no
+  # X-Platform header. This is the path an Android user takes whenever the client
+  # routes them through the browser Google flow instead of the native picker.
+  it "carries the platform across the round-trip into signup_source" do
+    complete_google_web_flow(terms_accepted: "1", privacy_accepted: "1", platform: "android")
+
+    expect(User.find_by(email: "transport@example.com").signup_source).to eq("android")
+  end
+
+  it "records unknown when no platform made the trip" do
+    complete_google_web_flow(terms_accepted: "1", privacy_accepted: "1")
+
+    expect(User.find_by(email: "transport@example.com").signup_source).to eq("unknown")
+  end
+
   it "stores marketing_consent as false when the box was left unchecked" do
     complete_google_web_flow(terms_accepted: "1", privacy_accepted: "1", marketing_consent: "0")
 

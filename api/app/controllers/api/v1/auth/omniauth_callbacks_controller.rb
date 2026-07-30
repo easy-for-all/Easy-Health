@@ -2,6 +2,8 @@ module Api
   module V1
     module Auth
       class OmniauthCallbacksController < ApplicationController
+        include SignupSourceContext
+
         skip_before_action :authenticate_user!, raise: false
         skip_before_action :verify_authenticity_token, raise: false
 
@@ -28,11 +30,15 @@ module Api
 
         private
 
-        # Consent flags travel as query params on the /auth/google/web request
-        # phase and are handed back to us on the callback phase via
-        # `omniauth.params`. Only consulted when creating a brand-new account.
+        # Consent flags and the client platform travel as query params on the
+        # /auth/google/web request phase and are handed back to us on the callback
+        # phase via `omniauth.params` (see GoogleOauthController#web).
+        def oauth_params
+          request.env["omniauth.params"] || {}
+        end
+
+        # Only consulted when creating a brand-new account.
         def oauth_consent_params
-          oauth_params = request.env["omniauth.params"] || {}
           {
             terms_accepted: oauth_params["terms_accepted"],
             privacy_accepted: oauth_params["privacy_accepted"],
@@ -51,7 +57,15 @@ module Api
             flow: @auth_flow, intent: auth_intent, terms_accepted: @consent_given
           )
 
-          user = User.from_omniauth(request.env["omniauth.auth"], consent: consent)
+          # This request is a browser navigation coming back from Google, so it
+          # carries no X-Platform header. The platform rides the same channel as
+          # the consent flags: request-phase query -> Rack session ->
+          # omniauth.params (see GoogleOauthController#web).
+          user = User.from_omniauth(
+            request.env["omniauth.auth"],
+            consent: consent,
+            signup_source: signup_source_from_value(oauth_params["platform"])
+          )
 
           if user.anonymized_at.present?
             oauth_failed("account_deleted")

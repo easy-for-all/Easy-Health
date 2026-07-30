@@ -54,6 +54,43 @@ RSpec.describe "GET /auth/google/web", type: :request do
     expect(location_params["privacy_accepted"]).to eq("false")
   end
 
+  # The OAuth callback is a browser navigation coming back from Google and
+  # carries no X-Platform header, so this query param is the only channel by
+  # which the signup origin reaches the server on the web flow.
+  describe "platform forwarding" do
+    it "forwards a canonical platform through the request phase" do
+      get "/auth/google/web", params: { terms_accepted: "1", privacy_accepted: "1", platform: "android" }
+
+      expect(location_params["platform"]).to eq("android")
+    end
+
+    it "omits platform entirely when the client did not send one" do
+      get "/auth/google/web", params: { terms_accepted: "1", privacy_accepted: "1" }
+
+      expect(location_params).not_to have_key("platform")
+    end
+
+    it "drops a value outside the allow-list instead of forwarding it" do
+      get "/auth/google/web", params: { platform: "android'; DROP--" }
+
+      expect(location_params).not_to have_key("platform")
+    end
+
+    it "normalizes an unrecognized-but-well-formed platform to unknown" do
+      get "/auth/google/web", params: { platform: "windowsphone" }
+
+      expect(location_params["platform"]).to eq("unknown")
+    end
+
+    # platform cannot ride ALLOWED_CONSENT_PARAMS: that hash runs every key
+    # through explicit_true?, which would turn "android" into "false".
+    it "does not coerce platform into a boolean" do
+      get "/auth/google/web", params: { platform: "web" }
+
+      expect(location_params["platform"]).to eq("web")
+    end
+  end
+
   it "drops unknown params" do
     get "/auth/google/web", params: { terms_accepted: "1", privacy_accepted: "1", utm_source: "campaign", admin: "1" }
 

@@ -61,6 +61,40 @@ RSpec.describe User do
       expect(user.consent_source).to eq("web")
     end
 
+    it "stamps signup_source on the create path" do
+      user = described_class.from_omniauth(
+        auth_double(uid: "uid-src-1", email: "src@example.com"),
+        consent: full_consent,
+        signup_source: "android"
+      )
+
+      expect(user.signup_source).to eq("android")
+    end
+
+    it "defaults to unknown when no signup_source is passed" do
+      user = described_class.from_omniauth(
+        auth_double(uid: "uid-src-2", email: "src2@example.com"),
+        consent: full_consent
+      )
+
+      expect(user.signup_source).to eq("unknown")
+    end
+
+    # An existing user signing in again must never have the origin of their
+    # ORIGINAL signup rewritten — otherwise "created from Android" would decay
+    # into "last logged in from Android".
+    it "never reclassifies an existing user's signup_source" do
+      existing = create(:user, email: "existing@example.com", signup_source: "web")
+
+      described_class.from_omniauth(
+        auth_double(uid: "uid-src-3", email: "existing@example.com"),
+        consent: full_consent,
+        signup_source: "android"
+      )
+
+      expect(existing.reload.signup_source).to eq("web")
+    end
+
     it "raises ConsentRequiredError when creating a new user without consent" do
       expect {
         described_class.from_omniauth(auth_double(uid: "uid-9", email: "noconsent@example.com"))

@@ -65,6 +65,20 @@ describe("startGoogleAuth — web branch", () => {
   it("sends no consent at all when the caller has none (login screen)", () => {
     expect(googleAuthWebUrl()).not.toContain("terms_accepted");
   });
+
+  // The OAuth callback is a browser navigation coming back from Google and
+  // carries no X-Platform header, so this query param is the only channel by
+  // which the signup origin reaches the server on the web flow.
+  it("always carries the platform, even with no consent", () => {
+    expect(new URL(googleAuthWebUrl()).searchParams.get("platform")).toBe("web");
+  });
+
+  it("carries the platform alongside consent", () => {
+    const url = new URL(googleAuthWebUrl({ termsAccepted: true, privacyAccepted: true }));
+
+    expect(url.searchParams.get("platform")).toBe("web");
+    expect(url.searchParams.get("terms_accepted")).toBe("1");
+  });
 });
 
 describe("postGoogleNative payload", () => {

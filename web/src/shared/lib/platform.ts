@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { Capacitor } from "@capacitor/core";
+import { isNativeApp } from "@/shared/lib/analytics/context";
 
 // Direct link to the Android app on the Play Store. The default covers
 // production; override with NEXT_PUBLIC_PLAY_STORE_URL if the listing moves.
@@ -13,11 +13,11 @@ export const PLAY_STORE_URL =
 // - "desktop-qr":      desktop browser → QR code to scan with an Android phone.
 export type AppPromoTarget = "hidden" | "android-button" | "desktop-qr";
 
-// Source of truth for "is this the native app?" is Capacitor.isNativePlatform();
+// Source of truth for "is this the native app?" is isNativeApp() (see below);
 // userAgent is only used as a visual tie-breaker (Android vs desktop).
 export function getAppPromoTarget(): AppPromoTarget {
   if (typeof window === "undefined") return "hidden";
-  if (Capacitor.isNativePlatform()) return "hidden"; // already using the app
+  if (isNativeApp()) return "hidden"; // already using the app
   const ua = navigator.userAgent || "";
   if (/Android/i.test(ua)) return "android-button";
   if (/iPhone|iPad|iPod/i.test(ua)) return "hidden"; // app is Android-only
@@ -42,12 +42,16 @@ export function useIsHydrated(): boolean {
   return useSyncExternalStore(noopSubscribe, () => true, () => false);
 }
 
-// Same SSR-safe read for "is this the native app?". Capacitor decides purely on
-// the presence of window.androidBridge, which does not exist on the server.
+// Same SSR-safe read for "is this the native app?".
+//
+// Uses isNativeApp() from analytics/context.ts, NOT Capacitor.isNativePlatform()
+// alone. The app is a Capacitor shell that loads the REMOTE site in a WebView,
+// where isNativePlatform() can return false (see docs/android-tracking-audit.md)
+// — that single point of failure was routing Android users into the browser
+// Google flow (Custom Tab) instead of the native account picker, and it is the
+// same bug that made Android traffic count as web. isNativeApp() corroborates
+// with getPlatform() and never falls through to "web" when either signal says
+// native.
 export function useIsNativePlatform(): boolean {
-  return useSyncExternalStore(
-    noopSubscribe,
-    () => Capacitor.isNativePlatform(),
-    () => false,
-  );
+  return useSyncExternalStore(noopSubscribe, isNativeApp, () => false);
 }
