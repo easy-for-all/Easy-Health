@@ -22,6 +22,7 @@ export const EVENT_SINKS = {
   deep_link_opened: ["server","ga4"] as Sink[],
   landing_page_viewed: ["server","ga4","clarity"] as Sink[],
   auth_screen_viewed: ["server","ga4"] as Sink[],
+  auth_provider_clicked: ["server","ga4"] as Sink[],
   signup_selected: ["server","ga4"] as Sink[],
   login_selected: ["server","ga4"] as Sink[],
   auth_client_error: ["server","ga4"] as Sink[],

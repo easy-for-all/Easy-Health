@@ -2,7 +2,9 @@ require "rails_helper"
 
 RSpec.describe Analytics::EventCatalog do
   it "loads the canonical taxonomy" do
-    expect(described_class.names).to include("workout_completed", "app_first_open", "signup_completed")
+    expect(described_class.names).to include(
+      "workout_completed", "app_first_open", "signup_completed", "auth_provider_clicked"
+    )
     expect(described_class.taxonomy_version).to be_a(Integer)
   end
 

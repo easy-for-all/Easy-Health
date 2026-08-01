@@ -11,6 +11,7 @@ const {
   mockStartGoogleAuth,
   mockClassify,
   mockAuthLog,
+  mockTrackEvent,
   mockSignIn,
   mockPush,
 } = vi.hoisted(() => ({
@@ -19,6 +20,7 @@ const {
   mockStartGoogleAuth: vi.fn(),
   mockClassify: vi.fn(() => "unknown"),
   mockAuthLog: vi.fn(),
+  mockTrackEvent: vi.fn(),
   mockSignIn: vi.fn(),
   mockPush: vi.fn(),
 }));
@@ -68,7 +70,7 @@ vi.mock("@/features/billing/checkout-intent", () => ({
 }));
 vi.mock("@/shared/lib/analytics", () => ({
   trackCheckoutStarted: vi.fn(),
-  trackEvent: vi.fn(),
+  trackEvent: mockTrackEvent,
   trackOnce: vi.fn(),
 }));
 
@@ -124,6 +126,14 @@ describe("Login screen — Google flows", () => {
     await user.click(googleButton());
 
     await waitFor(() => expect(mockStartGoogleAuth).toHaveBeenCalledTimes(1));
+    expect(mockTrackEvent).toHaveBeenCalledWith("auth_provider_clicked", {
+      provider: "google",
+      auth_screen: "login",
+      intent: "login",
+      source: "auth_screen",
+    });
+    const [, payload] = mockTrackEvent.mock.calls.find(([name]) => name === "auth_provider_clicked") ?? [];
+    expect(payload).not.toHaveProperty("terms_accepted");
     expect(mockStartGoogleAuth).toHaveBeenCalledWith({ native: true });
     await waitFor(() => expect(window.location.replace).toHaveBeenCalledWith("/dashboard"));
   });
@@ -152,6 +162,28 @@ describe("Login screen — Google flows", () => {
     await user.click(button);
 
     expect(mockStartGoogleAuth).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent.mock.calls.filter(([name]) => name === "auth_provider_clicked")).toHaveLength(1);
+  });
+});
+
+describe("Login screen — email flow", () => {
+  it("tracks the email submit without terms_accepted", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText(messages.auth.email), "marcus@test.com");
+    await user.type(screen.getByLabelText(messages.auth.password), "supersecret");
+    await user.click(screen.getByRole("button", { name: messages.auth.signIn }));
+
+    await waitFor(() => expect(mockSignIn).toHaveBeenCalledWith("marcus@test.com", "supersecret"));
+    expect(mockTrackEvent).toHaveBeenCalledWith("auth_provider_clicked", {
+      provider: "email",
+      auth_screen: "login",
+      intent: "login",
+      source: "auth_screen",
+    });
+    const [, payload] = mockTrackEvent.mock.calls.find(([name]) => name === "auth_provider_clicked") ?? [];
+    expect(payload).not.toHaveProperty("terms_accepted");
   });
 });
 

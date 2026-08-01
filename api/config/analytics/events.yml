@@ -43,6 +43,7 @@ events:
   # an install that opened and left looked identical to one that tried to sign
   # in and failed on the device.
   auth_screen_viewed:       { version: 1, sinks: [server, ga4] }
+  auth_provider_clicked:    { version: 1, sinks: [server, ga4] }
   signup_selected:          { version: 1, sinks: [server, ga4] }
   login_selected:           { version: 1, sinks: [server, ga4] }
   auth_client_error:        { version: 1, sinks: [server, ga4] }

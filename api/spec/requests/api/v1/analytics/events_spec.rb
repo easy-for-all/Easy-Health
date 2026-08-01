@@ -25,6 +25,40 @@ RSpec.describe "Api::V1::Analytics::Events", type: :request do
     expect(row.anonymous_id).to eq("anon-req-1")
   end
 
+  it "accepts auth_provider_clicked from an anonymous client" do
+    post "/api/v1/analytics/events",
+         params: {
+           events: [
+             valid_event(
+               event_name: "auth_provider_clicked",
+               platform: "android",
+               app_surface: "native_shell",
+               properties: {
+                 provider: "google",
+                 auth_screen: "sign_up",
+                 intent: "sign_up",
+                 terms_accepted: true,
+                 source: "auth_screen",
+                 installation_id: "install-req-1"
+               }
+             )
+           ]
+         },
+         as: :json
+
+    expect(response).to have_http_status(:accepted)
+    row = ProductAnalyticsEvent.last
+    expect(row.event_name).to eq("auth_provider_clicked")
+    expect(row.properties).to include(
+      "provider" => "google",
+      "auth_screen" => "sign_up",
+      "intent" => "sign_up",
+      "terms_accepted" => true,
+      "source" => "auth_screen",
+      "installation_id" => "install-req-1"
+    )
+  end
+
   it "associates the current user server-side, ignoring any client user_id" do
     user = create(:user)
     other = create(:user)

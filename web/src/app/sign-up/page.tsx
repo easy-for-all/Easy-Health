@@ -12,6 +12,7 @@ import {
   reportAuthError,
   trackAuthApiError,
   trackAuthClientError,
+  trackAuthProviderClicked,
   trackLoginSelected,
   useAuthScreenView,
 } from "@/features/auth/auth-analytics";
@@ -104,6 +105,14 @@ export default function SignUpPage() {
     e.preventDefault();
     e.stopPropagation();
 
+    if (googleRef.current) return;
+    trackAuthProviderClicked({
+      provider: "google",
+      authScreen: "sign_up",
+      intent: "sign_up",
+      termsAccepted: acceptedTerms,
+    });
+
     // Defense in depth: block the social flow before ANY side effect when the
     // required consent is missing — same gate as the email/password submit.
     if (!acceptedTerms) {
@@ -119,7 +128,6 @@ export default function SignUpPage() {
       return;
     }
 
-    if (googleRef.current) return;
     googleRef.current = true;
 
     setError("");
@@ -189,6 +197,12 @@ export default function SignUpPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submittingRef.current) return;
+    trackAuthProviderClicked({
+      provider: "email",
+      authScreen: "sign_up",
+      intent: "sign_up",
+      termsAccepted: acceptedTerms,
+    });
     const formData = new FormData(e.currentTarget);
     const submittedName = String(formData.get("name") ?? "").trim();
     const submittedEmail = String(formData.get("email") ?? "").trim();

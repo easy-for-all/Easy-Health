@@ -37,6 +37,34 @@ module Api
                  status: :service_unavailable
         end
 
+        # GET /api/v1/admin/analytics/android_funnel
+        # "FUNIL ANDROID EXTERNO" — where external Android installations stop
+        # before an account exists. Counted by distinct installation_id, over
+        # instrumented builds only: older builds carry no installation_id on
+        # their events and never emitted the pre-auth steps, so including them
+        # would report abandonment of a step that could not be reached.
+        def android_funnel
+          render json: android_funnel_service.call
+        rescue StandardError => e
+          Rails.logger.error("[Admin::Analytics#android_funnel] #{e.class}: #{e.message}")
+          render json: { error: "Funil Android indisponível no momento." },
+                 status: :service_unavailable
+        end
+
+        # GET /api/v1/admin/analytics/android_funnel/installations?stage=...
+        # Investigation list for one step of the funnel. Operational fields only.
+        def android_funnel_installations
+          render json: android_funnel_service.installations(
+            stage: params[:stage],
+            page: params[:page],
+            per: params[:per]
+          )
+        rescue StandardError => e
+          Rails.logger.error("[Admin::Analytics#android_funnel_installations] #{e.class}: #{e.message}")
+          render json: { error: "Funil Android indisponível no momento." },
+                 status: :service_unavailable
+        end
+
         # GET /api/v1/admin/analytics/event_deliveries
         def event_deliveries
           page = [ params[:page].to_i, 1 ].max
@@ -60,6 +88,18 @@ module Api
         end
 
         private
+
+        # Params are allow-listed inside the service (PERIODS / AUDIENCES / build
+        # shape), so the controller never does date math nor trusts a raw value.
+        # ::Analytics:: is mandatory here — a bare Analytics:: resolves to
+        # Api::V1::Analytics and raises NameError.
+        def android_funnel_service
+          ::Analytics::AndroidFunnel.new(
+            period: params[:period],
+            build: params[:build],
+            audience: params[:audience]
+          )
+        end
 
         def filtered_event_delivery_scope
           scope = UserEvent.includes(:user).where(created_at: event_delivery_period_range)

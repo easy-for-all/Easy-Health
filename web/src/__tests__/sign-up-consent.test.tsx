@@ -9,6 +9,7 @@ const {
   mockStartGoogleAuth,
   mockClassify,
   mockAuthLog,
+  mockTrackEvent,
   mockSignUp,
   mockPush,
   mockSearchParams,
@@ -18,6 +19,7 @@ const {
   mockStartGoogleAuth: vi.fn(),
   mockClassify: vi.fn(() => "unknown"),
   mockAuthLog: vi.fn(),
+  mockTrackEvent: vi.fn(),
   mockSignUp: vi.fn(),
   mockPush: vi.fn(),
   mockSearchParams: vi.fn(() => new URLSearchParams()),
@@ -45,7 +47,7 @@ vi.mock("@/features/auth/auth-context", () => ({
 }));
 
 vi.mock("@/shared/lib/analytics", () => ({
-  trackEvent: vi.fn(),
+  trackEvent: mockTrackEvent,
   trackOnce: vi.fn(),
   trackConversion: vi.fn(),
   trackCheckoutStarted: vi.fn(),
@@ -94,6 +96,17 @@ describe("SignUp consent gate for Google sign-in", () => {
     await user.click(googleButton());
 
     expect(mockStartGoogleAuth).not.toHaveBeenCalled();
+    expect(mockTrackEvent).toHaveBeenCalledWith("auth_provider_clicked", {
+      provider: "google",
+      auth_screen: "sign_up",
+      intent: "sign_up",
+      terms_accepted: false,
+      source: "auth_screen",
+    });
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "social_login_started",
+      expect.objectContaining({ provider: "google" }),
+    );
     expect(screen.getByText("Aceite os termos para continuar")).toBeInTheDocument();
     expect(mockAuthLog).toHaveBeenCalledWith(
       "auth_blocked_missing_consent",
@@ -146,6 +159,16 @@ describe("SignUp consent gate for Google sign-in", () => {
     await user.click(googleButton());
 
     await waitFor(() => expect(mockStartGoogleAuth).toHaveBeenCalledTimes(1));
+    expect(mockTrackEvent).toHaveBeenCalledWith("auth_provider_clicked", {
+      provider: "google",
+      auth_screen: "sign_up",
+      intent: "sign_up",
+      terms_accepted: true,
+      source: "auth_screen",
+    });
+    const clickedIndex = mockTrackEvent.mock.calls.findIndex(([name]) => name === "auth_provider_clicked");
+    const startedIndex = mockTrackEvent.mock.calls.findIndex(([name]) => name === "social_login_started");
+    expect(startedIndex).toBeGreaterThan(clickedIndex);
     expect(mockStartGoogleAuth).toHaveBeenCalledWith({
       native: true,
       consent: expect.objectContaining({ termsAccepted: true, privacyAccepted: true }),
@@ -197,6 +220,7 @@ describe("SignUp consent gate for Google sign-in", () => {
     await user.click(button);
 
     expect(mockStartGoogleAuth).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent.mock.calls.filter(([name]) => name === "auth_provider_clicked")).toHaveLength(1);
   });
 
   it("keeps the email/password flow working (calls signUp) once consent is accepted", async () => {
@@ -210,6 +234,13 @@ describe("SignUp consent gate for Google sign-in", () => {
     await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
+    expect(mockTrackEvent).toHaveBeenCalledWith("auth_provider_clicked", {
+      provider: "email",
+      auth_screen: "sign_up",
+      intent: "sign_up",
+      terms_accepted: true,
+      source: "auth_screen",
+    });
     expect(mockSignUp).toHaveBeenCalledWith("Marcus", "marcus@test.com", "supersecret", false);
     expect(mockStartGoogleAuth).not.toHaveBeenCalled();
   });
