@@ -24,6 +24,9 @@ module AppInstallationReconciliation
     return if current_user.nil?
 
     @app_installation_reconciled = true
+    # Kept so the rescue below can still key its event when the failure happened
+    # after the context was read.
+    @app_installation_context = context
     Observability::Events.installation_link_attempted(user: current_user)
 
     install = AppInstallation.find_by(installation_id: context.installation_id)
@@ -43,7 +46,7 @@ module AppInstallationReconciliation
           build_number: context.build_number
         }.compact.to_json
       )
-      Observability::Events.installation_link_failed(user: current_user, result: "not_found")
+      emit_link_failure("not_found")
       @app_installation_link_result = AppInstallations::LinkToUser.not_found
       return @app_installation_link_result
     end
@@ -60,7 +63,7 @@ module AppInstallationReconciliation
     @app_installation_link_result
   rescue StandardError => e
     Rails.logger.warn("[AppInstallation] reconciliation_failed error=#{e.class}: #{e.message}")
-    Observability::Events.installation_link_failed(user: current_user, result: "error")
+    emit_link_failure("error")
     @app_installation_link_result = AppInstallations::LinkToUser::Result.new(
       success: false,
       status: :unexpected_error,
@@ -79,13 +82,49 @@ module AppInstallationReconciliation
   def record_link_event(result)
     case result.status
     when :linked
+      # Only fires on the transition to linked; the steady state is
+      # :already_linked, which emits nothing. No throttling needed.
       Observability::Events.installation_link_succeeded(user: current_user, result: "linked")
     when :conflict
-      Observability::Events.installation_link_failed(user: current_user, result: "conflict")
+      emit_link_failure("conflict")
     when :not_found
-      Observability::Events.installation_link_failed(user: current_user, result: "not_found")
+      emit_link_failure("not_found")
     when :validation_failed, :unexpected_error, :invalid_input
-      Observability::Events.installation_link_failed(user: current_user, result: "error")
+      emit_link_failure("error")
     end
+  end
+
+  def emit_link_failure(label)
+    Observability::Events.installation_link_failed(
+      user: current_user,
+      result: label,
+      idempotency_key: link_failure_idempotency_key(label)
+    )
+  end
+
+  # One representative row per (installation, user, failure kind) per reporting
+  # day. This runs on every authenticated request, so an unresolvable failure —
+  # a conflict that will never link, or a client believing in an installation
+  # the server never saw — used to write one row per API call the app made.
+  #
+  # Deduplication is the database's job: the partial unique index on
+  # idempotency_key plus the RecordNotUnique rescue in Analytics::ServerEvents.
+  # That survives restarts and works across processes, unlike a cache.
+  #
+  # A DAY (not "ever") so a problem that is still happening stays visible in the
+  # 24h/7d windows of the panel instead of disappearing after its first sighting.
+  # The date comes from the analytics reporting zone (America/Sao_Paulo), so the
+  # bucket matches how every other daily figure is cut — a conflict at 22h local
+  # belongs to that evening, not to the next UTC day.
+  #
+  # installation_id_hash, never the raw installation_id: this key reaches error
+  # messages and technical logs, and the raw value is a stable device identifier.
+  # A blank key means "could not deduplicate safely" and falls back to emitting,
+  # because losing a failure silently is worse than recording it twice.
+  def link_failure_idempotency_key(label)
+    hash = @app_installation_context&.installation_id_hash
+    return nil if hash.blank? || current_user.nil?
+
+    "install_link_failed:#{hash}:#{label}:u#{current_user.id}:#{Analytics::ReportingTime.today}"
   end
 end

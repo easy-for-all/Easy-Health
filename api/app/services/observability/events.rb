@@ -157,7 +157,15 @@ module Observability
       )
     end
 
-    def installation_link_failed(user: nil, result: "error")
+    # `idempotency_key` collapses repeats at the database level (partial unique
+    # index + the RecordNotUnique rescue in Analytics::ServerEvents). It exists
+    # because reconciliation is an after_action on EVERY authenticated request —
+    # the same reasoning already applied to installation_link_attempted above,
+    # which was made log-only for it. Without a key, one unresolvable conflict
+    # writes one row per API call the app makes.
+    #
+    # The caller owns the key: only it knows the installation and the window.
+    def installation_link_failed(user: nil, result: "error", idempotency_key: nil)
       normalized = normalize_link_result(result)
 
       emit(
@@ -166,6 +174,7 @@ module Observability
         user: user,
         result: normalized,
         error_code: normalized,
+        idempotency_key: idempotency_key,
         properties: {
           installation_linked: false,
           link_result: normalized
@@ -224,7 +233,7 @@ module Observability
 
     # Both sinks, in order. Neither may raise: an event is a diagnostic, not a
     # business rule.
-    def emit(event_name, level:, properties: {}, user: nil, **log_fields)
+    def emit(event_name, level:, properties: {}, user: nil, idempotency_key: nil, **log_fields)
       safe_properties = properties.compact
 
       Observability::Logger.emit(
@@ -237,6 +246,7 @@ module Observability
       Analytics::ServerEvents.record(
         event_name: event_name,
         user: user,
+        idempotency_key: idempotency_key,
         properties: safe_properties.merge(Observability::Context.to_event_properties)
       )
       nil
