@@ -69,6 +69,7 @@ module Analytics
         manufacturers: manufacturers,
         device_models: device_models,
         operating_system_versions: operating_system_versions,
+        acquisition_split: acquisition_split,
         user_funnel: user_funnel
       }
     end
@@ -586,18 +587,40 @@ module Analytics
 
     # ------------------------------------------------------------- user funnel
 
+    # Every account linked to an Android install, split by who it actually is.
+    # Reported beside the funnel (never merged into it) so "Todos" stays
+    # inspectable: the point is to see the robots, not to pretend they never ran.
+    def acquisition_split
+      linked_users = User.where(id: base.linked.select(:user_id))
+
+      {
+        total: linked_users.count,
+        external: AccountClassification.exclude_non_external(linked_users).count,
+        internal: AccountClassification.internal_scope(linked_users).count,
+        automated_test: AccountClassification.automated_test_scope(linked_users).count
+      }
+    end
+
     # Keyed on USERS (not installations) end to end, so counts and denominator
     # always describe the same population.
+    #
+    # EXTERNAL users only. Google Play's pre-launch report drives a real device
+    # through the entire sign-up on a @cloudtestlabaccounts.com account, so
+    # counting it here is what made a release with zero real acquisition read as
+    # "2 linked users, 100% converted". The unfiltered totals are in
+    # acquisition_split above.
     def user_funnel
-      linked_users = User.where(id: base.linked.select(:user_id))
-      total = unique_linked_users
+      linked_users = AccountClassification.exclude_non_external(
+        User.where(id: base.linked.select(:user_id))
+      )
+      total = linked_users.count
       created = linked_users.where(id: WorkoutPlan.select(:user_id)).count
       completed = linked_users
                   .where(id: WorkoutSession.where(completion_status: "completed").select(:user_id))
                   .count
 
       [
-        funnel_step("Usuários Android vinculados", total, total),
+        funnel_step("Usuários Android vinculados (externos)", total, total),
         funnel_step("Criou treino", created, total),
         funnel_step("Concluiu treino", completed, total)
       ]

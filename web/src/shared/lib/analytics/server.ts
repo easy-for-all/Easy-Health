@@ -80,7 +80,14 @@ function buildEvent(
     locale: ctx.locale,
     timezone: ctx.timezone,
     source: "web_client",
-    properties: properties ?? {},
+    // installation_id rides inside properties on purpose: no column, no
+    // migration, and it is the ONLY way an anonymous pre-auth event can be
+    // joined back to an app_installations row. The X-Installation-Id header is
+    // not enough — sendBeacon (the background/close flush) carries no headers.
+    // It never replaces anonymous_id and is never a user identifier.
+    properties: ctx.installation_id
+      ? { ...(properties ?? {}), installation_id: ctx.installation_id }
+      : (properties ?? {}),
     idempotency_key:
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()

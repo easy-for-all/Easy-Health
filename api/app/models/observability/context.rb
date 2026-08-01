@@ -89,13 +89,22 @@ module Observability
 
       # Safe properties for ProductAnalyticsEvent. No refs that could be joined
       # back to a person outside this system, no free text.
+      #
+      # installation_id is raw here, and only here. product_analytics_events is
+      # our own table in our own database, and the raw id is what lets a server
+      # event (google_auth_started, installation_link_succeeded) sit on the same
+      # timeline as the client events that carry it — the hashed ref cannot be
+      # joined to app_installations. It identifies an installation, never a
+      # person. Everything that LEAVES the process (logs, Sentry) keeps using
+      # installation_ref.
       def to_event_properties
         {
           request_id: request_id,
           platform: platform,
           app_version: app_version,
           app_build: app_build,
-          build_group: build_group
+          build_group: build_group,
+          installation_id: installation_id
         }.compact_blank
       end
 

@@ -7,7 +7,14 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/features/auth/auth-context";
 import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
-import { trackCheckoutStarted } from "@/shared/lib/analytics";
+import { trackCheckoutStarted, trackEvent } from "@/shared/lib/analytics";
+import {
+  reportAuthError,
+  trackAuthApiError,
+  trackAuthClientError,
+  trackSignupSelected,
+  useAuthScreenView,
+} from "@/features/auth/auth-analytics";
 import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
 import {
   GoogleAuthError,
@@ -43,6 +50,8 @@ export default function LoginPage() {
   const hydrated = useIsHydrated();
   const isNative = useIsNativePlatform();
 
+  useAuthScreenView("login");
+
   async function handleGoogleAuth(e: React.MouseEvent<HTMLButtonElement>) {
     // preventDefault/stopPropagation first, unconditionally: no platform check
     // may run before them, or a click could escape into a default navigation.
@@ -54,6 +63,9 @@ export default function LoginPage() {
     setError("");
     setGoogleSignUpNeeded(false);
     setGoogleLoading(true);
+    // The TAP itself. google_auth_started is emitted by the API when the request
+    // lands, so without this a picker the user cancels leaves no trace at all.
+    trackEvent("social_login_started", { provider: "google", intent: "login" });
     try {
       // No consent from this screen: signing in is not consenting. A brand-new
       // account is refused by the backend and routed to /sign-up below.
@@ -71,6 +83,21 @@ export default function LoginPage() {
         name: (err as Error)?.name,
         message: (err as Error)?.message,
       });
+      // "exchange_failed" and the classified backend codes mean the request did
+      // reach the API; anything else broke on the device, before the network.
+      const reachedApi = failure === "network" || code === "exchange_failed" ||
+        ["consent_required", "account_deleted", "invalid_token"].includes(code);
+      if (reachedApi) {
+        trackAuthApiError("google_exchange", err, "google");
+      } else {
+        trackEvent("social_login_failed", { provider: "google", error_code: failure });
+        trackAuthClientError("google_plugin", code, "google");
+      }
+      // A cancelled picker is a user decision, not a defect — it is counted
+      // above but must not page anyone through Sentry.
+      if (failure !== "cancelled" && failure !== "consent_required") {
+        reportAuthError("google_plugin", err, { failure, code });
+      }
 
       switch (failure) {
         case "consent_required":
@@ -96,6 +123,9 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     submittingRef.current = true;
+    // The submit itself, before the request leaves. Paired with login_completed
+    // this is what shows an email login that never got an answer.
+    trackEvent("login_started", { method: "email" });
     try {
       await signIn(email, password);
       const pending = getPendingPlan();
@@ -111,9 +141,19 @@ export default function LoginPage() {
         router.push("/dashboard");
       }
     } catch (err) {
-      if (err instanceof ApiError)       setError(err.message);
-      else if (err instanceof TypeError) setError("Não foi possível conectar ao servidor. Tente novamente.");
-      else                               setError(t("loginError"));
+      trackEvent("login_failed", { method: "email" });
+      if (err instanceof ApiError) {
+        trackAuthApiError("email_login", err);
+        setError(err.message);
+      } else if (err instanceof TypeError) {
+        // fetch itself rejected: the request never got an answer.
+        trackAuthClientError("email_login", "network");
+        setError("Não foi possível conectar ao servidor. Tente novamente.");
+      } else {
+        trackAuthClientError("email_login", "unknown");
+        reportAuthError("email_login", err);
+        setError(t("loginError"));
+      }
     } finally {
       submittingRef.current = false;
       setLoading(false);
@@ -196,6 +236,7 @@ export default function LoginPage() {
             </p>
             <Link
               href="/sign-up?provider=google"
+              onClick={() => trackSignupSelected("login")}
               style={{
                 display: "block", textAlign: "center", padding: "12px 16px",
                 borderRadius: "var(--r-pill)", fontSize: 15, fontWeight: 700,
@@ -294,7 +335,11 @@ export default function LoginPage() {
 
         <p style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
           {t("noAccount")}{" "}
-          <Link href="/sign-up" style={{ color: "var(--primary)", fontWeight: 700, textDecoration: "none" }}>
+          <Link
+            href="/sign-up"
+            onClick={() => trackSignupSelected("login")}
+            style={{ color: "var(--primary)", fontWeight: 700, textDecoration: "none" }}
+          >
             {t("signUp")}
           </Link>
         </p>

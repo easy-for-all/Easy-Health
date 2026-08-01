@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { trackLoginSelected, trackSignupSelected } from "@/features/auth/auth-analytics";
 
 export function LandingHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header style={{ position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", background: "oklch(0.155 0.022 262 / .82)", borderBottom: "1px solid var(--border)" }}>
+    // paddingTop carries the safe-area inset: the Android shell runs edge-to-edge
+    // (MainActivity calls EdgeToEdge.enable), and a sticky top:0 header without it
+    // renders UNDER the status bar — on the very first screen of the app.
+    <header style={{ position: "sticky", top: 0, zIndex: 50, paddingTop: "var(--safe-area-top)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", background: "oklch(0.155 0.022 262 / .82)", borderBottom: "1px solid var(--border)" }}>
       <div style={{ margin: "0 auto", maxWidth: 1180, display: "flex", alignItems: "center", justifyContent: "space-between", height: 72, padding: "0 clamp(16px, 4vw, 32px)" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 21, letterSpacing: "-0.01em", color: "var(--text)", textDecoration: "none" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -21,15 +25,15 @@ export function LandingHeader() {
               {l.label}
             </a>
           ))}
-          <Link href="/login" className="hidden sm:block" style={{ fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", padding: "8px 12px", fontSize: 15 }}>
+          <Link href="/login" onClick={() => trackLoginSelected("landing")} className="hidden sm:block" style={{ fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", padding: "8px 12px", fontSize: 15 }}>
             Entrar
           </Link>
-          <Link href="/sign-up" className="hidden sm:block" style={{ background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontWeight: 700, fontSize: 15, padding: "10px 20px", borderRadius: "var(--r-pill)", boxShadow: "var(--glow)", textDecoration: "none" }}>
+          <Link href="/sign-up" onClick={() => trackSignupSelected("landing")} className="hidden sm:block" style={{ background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontWeight: 700, fontSize: 15, padding: "10px 20px", borderRadius: "var(--r-pill)", boxShadow: "var(--glow)", textDecoration: "none" }}>
             Criar conta
           </Link>
 
           {/* Mobile: CTA + hamburger */}
-          <Link href="/sign-up" className="sm:hidden" style={{ background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontWeight: 700, fontSize: 14, padding: "8px 16px", borderRadius: "var(--r-pill)", boxShadow: "var(--glow)", textDecoration: "none" }}>
+          <Link href="/sign-up" onClick={() => trackSignupSelected("landing")} className="sm:hidden" style={{ background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontWeight: 700, fontSize: 14, padding: "8px 16px", borderRadius: "var(--r-pill)", boxShadow: "var(--glow)", textDecoration: "none" }}>
             Criar conta
           </Link>
           <button
@@ -73,7 +77,7 @@ export function LandingHeader() {
           </a>
           <Link
             href="/login"
-            onClick={() => setMenuOpen(false)}
+            onClick={() => { setMenuOpen(false); trackLoginSelected("landing"); }}
             style={{ display: "block", padding: "12px 16px", fontSize: 15, fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", borderRadius: 12 }}
           >
             Entrar

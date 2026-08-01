@@ -1,9 +1,9 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { Footer } from "@/shared/components/footer";
 import { HeroCta } from "@/shared/components/hero-cta";
 import { AnalyticsTracker } from "@/shared/components/analytics-tracker";
 import { LandingHeader } from "@/shared/components/landing-header";
+import { SignupLink } from "@/shared/components/signup-link";
 import { CONVERSIONS } from "@/shared/lib/analytics";
 import { AppPromoCard } from "@/features/app-promo/app-promo-card";
 
@@ -229,7 +229,15 @@ function SecHead({ eyebrow, title, center = false }: { eyebrow: string; title: s
 export default function LandingPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100svh", background: "var(--bg)", color: "var(--text)" }}>
-      <AnalyticsTracker eventName="landing_view" conversionLabel={CONVERSIONS.PAGE_VIEW} />
+      {/* "landing_view" is the historical GA4 name and stays; landing_page_viewed
+          is the taxonomy name and is what persists. On Android this page is the
+          FIRST screen of the app (the shell loads the site root), so without the
+          server sink the native funnel has no top step at all. */}
+      <AnalyticsTracker
+        eventName="landing_view"
+        conversionLabel={CONVERSIONS.PAGE_VIEW}
+        serverEvent="landing_page_viewed"
+      />
       <AnalyticsTracker eventName="screen_view" params={{ screen_name: "home" }} />
 
       {/* ── NAV ── */}
@@ -368,9 +376,9 @@ export default function LandingPage() {
                 </div>
                 <div style={{ fontSize: 13.5, color: "var(--text-dim)", marginTop: 4, marginBottom: 20 }}>Depois de 7 dias grátis</div>
                 <PriceFeatures items={["Acesso completo a todos os recursos", "Treinos personalizados por IA", "Coach EasyHealth (IA)", "Histórico ilimitado"]} />
-                <Link href="/sign-up" style={{ display: "flex", justifyContent: "center", borderRadius: "var(--r-pill)", border: "1.5px solid var(--border-strong)", color: "var(--text)", fontSize: 16, fontWeight: 700, padding: "16px 24px", textDecoration: "none", marginTop: "auto", transition: "border-color .15s" }}>
+                <SignupLink style={{ display: "flex", justifyContent: "center", borderRadius: "var(--r-pill)", border: "1.5px solid var(--border-strong)", color: "var(--text)", fontSize: 16, fontWeight: 700, padding: "16px 24px", textDecoration: "none", marginTop: "auto", transition: "border-color .15s" }}>
                   Começar 7 dias grátis
-                </Link>
+                </SignupLink>
               </div>
 
               {/* Pro Anual */}
@@ -386,9 +394,9 @@ export default function LandingPage() {
                 <div style={{ fontSize: 14, color: "var(--primary)", fontWeight: 700, marginTop: 2 }}>R$ 118,80/ano · economize ~50%</div>
                 <div style={{ height: 20 }} />
                 <PriceFeatures items={["Tudo do Pro Mensal", "Metade do preço por mês", "7 dias grátis pra testar"]} highlight />
-                <Link href="/sign-up" style={{ display: "flex", justifyContent: "center", borderRadius: "var(--r-pill)", background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontSize: 16, fontWeight: 700, padding: "16px 24px", textDecoration: "none", marginTop: "auto", boxShadow: "var(--glow)" }}>
+                <SignupLink style={{ display: "flex", justifyContent: "center", borderRadius: "var(--r-pill)", background: "linear-gradient(180deg, var(--primary), var(--primary-2))", color: "var(--on-primary)", fontSize: 16, fontWeight: 700, padding: "16px 24px", textDecoration: "none", marginTop: "auto", boxShadow: "var(--glow)" }}>
                   Começar 7 dias grátis
-                </Link>
+                </SignupLink>
               </div>
             </div>
           </div>
@@ -411,9 +419,9 @@ export default function LandingPage() {
               <p style={{ fontSize: 18, opacity: .9, margin: "0 0 30px" }}>
                 Sem cartão de crédito pra começar. Cancele quando quiser.
               </p>
-              <Link href="/sign-up" style={{ display: "inline-flex", alignItems: "center", borderRadius: "var(--r-pill)", background: "var(--bg)", color: "var(--text)", fontSize: 17.5, fontWeight: 700, padding: "19px 34px", textDecoration: "none", transition: "transform .18s" }}>
+              <SignupLink style={{ display: "inline-flex", alignItems: "center", borderRadius: "var(--r-pill)", background: "var(--bg)", color: "var(--text)", fontSize: 17.5, fontWeight: 700, padding: "19px 34px", textDecoration: "none", transition: "transform .18s" }}>
                 Criar conta grátis →
-              </Link>
+              </SignupLink>
             </div>
           </div>
         </section>

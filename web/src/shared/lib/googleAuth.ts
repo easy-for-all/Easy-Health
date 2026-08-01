@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { api } from "@/shared/lib/api";
 import { detectPlatform } from "@/shared/lib/analytics/context";
 import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
@@ -61,6 +62,19 @@ export class GoogleAuthError extends Error {
 export function authLog(step: string, data?: Record<string, unknown>) {
   const payload = { t: new Date().toISOString(), ...data };
   console.log(`[GoogleAuth] ${step}`, payload);
+  // A console line only exists while a debugger is attached, which is never the
+  // case on a real user's phone. The breadcrumb is what turns a captured auth
+  // failure into a readable trail of the steps that led to it.
+  try {
+    Sentry.addBreadcrumb({
+      category: "google_auth",
+      level: step.includes("error") || step.includes("failed") ? "warning" : "info",
+      message: step,
+      data: payload,
+    });
+  } catch {
+    /* Sentry not initialized — diagnostics must never throw */
+  }
 }
 
 /**

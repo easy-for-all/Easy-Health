@@ -1,7 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+// "Public" here means only "this middleware does not redirect it". Each page is
+// still responsible for its own access rules.
+//
+// /onboarding is the destination of every successful sign-up, and it is reached
+// by a client navigation that happens the instant the API answers. The auth
+// cookie is set by api.easyhealth.art on a cross-site response, so there is a
+// window where this middleware runs on easyhealth.art and does not see
+// _eh_auth yet — and it was bouncing the brand-new account straight back to
+// /login. The page itself requires a session via AuthProvider, so letting the
+// request through costs nothing and closes that race.
 const PUBLIC_PATHS = [
-  "/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password",
+  "/", "/login", "/sign-up", "/onboarding", "/terms", "/privacy", "/forgot-password",
   "/reset-password", "/billing/success", "/billing/cancel", "/pricing",
   "/ia-para-treino", "/treino-personalizado", "/emagrecimento",
   "/treino-em-casa", "/analise-de-exames", "/exercicios", "/sobre", "/precos",

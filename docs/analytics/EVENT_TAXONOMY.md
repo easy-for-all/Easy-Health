@@ -50,6 +50,45 @@ Grupos definidos na YAML: **Aquisição & lifecycle** (`app_first_open`, `app_op
 Para a lista canônica e os sinks de cada evento, **consulte sempre a YAML** — ela é
 a fonte, este documento é o guia.
 
+## Funil pré-auth Android — quem dispara o quê
+
+No Android o app é um shell Capacitor que carrega o site na raiz, então a
+**primeira tela é a landing page**, não uma tela de acesso. Entre o boot e a
+chegada da requisição no Rails não havia nenhum sinal: uma instalação que abriu e
+saiu era idêntica a uma que tocou no Google e falhou no aparelho.
+
+| Evento | Significado exato | Quem emite |
+|---|---|---|
+| `app_first_open` / `app_opened` / `session_started` | boot nativo | frontend (`analytics/lifecycle.ts`) |
+| `landing_page_viewed` | landing renderizada (1ª tela no Android) | frontend (`app/page.tsx`) |
+| `auth_screen_viewed` | `/login` ou `/sign-up` renderizada e utilizável | frontend (`useAuthScreenView`) |
+| `signup_selected` / `login_selected` | escolha explícita de cadastro/entrada | frontend (CTAs) |
+| `signup_started` / `login_started` | formulário **enviado**, após validação client | frontend (submit) |
+| `social_login_started` | **toque** no botão do provedor | frontend (telas de auth) |
+| `social_login_failed` | falhou **no aparelho**, sem chegar na API | frontend |
+| `auth_client_error` | erro client-side real (plugin, rede) | frontend |
+| `auth_api_error` | a API **respondeu** erro (traz `http_status`) | frontend |
+| `google_auth_started` | a **requisição chegou** em `POST /auth/google/native` | backend |
+| `android_registration_started` | a mesma requisição, com `terms_accepted` | backend |
+| `installation_link_succeeded` | instalação vinculada ao usuário | backend |
+
+⚠️ `android_registration_started` **não é** abertura de tela nem clique: é o
+recebimento da requisição no servidor, já com o `id_token` do Google em mãos.
+Quem toca no botão e cancela o seletor de contas produz `social_login_started`
+sem nunca produzir `google_auth_started` — é assim que essa perda vira número.
+
+## Correlação por `installation_id`
+
+Todo evento nativo carrega `properties.installation_id` (sem coluna nova). No
+frontend ele entra em `analytics/server.ts`; no backend, `Analytics::Ingestion`
+preenche a partir de `Observability::Context` quando o corpo não trouxe (o flush
+por `sendBeacon` não carrega headers). É correlação operacional apenas: nunca
+substitui `anonymous_id` e nunca é identificador de pessoa.
+
+```ruby
+ProductAnalyticsEvent.where("properties->>'installation_id' = ?", id).order(:occurred_at)
+```
+
 ## As 4 ações de treino NÃO são a mesma coisa
 
 | Evento | Significado | Sinal técnico |

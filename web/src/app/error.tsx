@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
+
 export default function ErrorPage({
   error,
   reset,
@@ -7,7 +10,12 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  void error;
+  // This used to be `void error`: a render crash showed "Algo deu errado" and
+  // was never reported anywhere. On Android that made a broken landing or auth
+  // screen indistinguishable from a user who simply left.
+  useEffect(() => {
+    Sentry.captureException(error, { tags: { boundary: "route" } });
+  }, [error]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">

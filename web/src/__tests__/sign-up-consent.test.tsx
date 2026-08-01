@@ -46,6 +46,7 @@ vi.mock("@/features/auth/auth-context", () => ({
 
 vi.mock("@/shared/lib/analytics", () => ({
   trackEvent: vi.fn(),
+  trackOnce: vi.fn(),
   trackConversion: vi.fn(),
   trackCheckoutStarted: vi.fn(),
   EVENTS: { SIGNUP_STARTED: "signup_started", SIGNUP_COMPLETED: "signup_completed" },

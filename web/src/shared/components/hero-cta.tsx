@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
+import { trackSignupSelected } from "@/features/auth/auth-analytics";
 
 export function HeroCta() {
   return (
     <Link
       href="/sign-up"
-      onClick={() => trackEvent(EVENTS.CTA_CLICK, { location: "hero" })}
+      onClick={() => {
+        trackEvent(EVENTS.CTA_CLICK, { location: "hero" });
+        trackSignupSelected("landing");
+      }}
       className="w-full rounded-xl bg-primary-500 px-8 py-4 text-base font-semibold text-white hover:bg-primary-600 sm:w-auto"
     >
       Começar grátis — sem cartão
