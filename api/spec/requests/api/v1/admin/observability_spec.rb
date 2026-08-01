@@ -263,7 +263,10 @@ RSpec.describe "Admin observability", type: :request do
         anonymous_event("app_first_open", 30.minutes.ago)
         anonymous_event("landing_page_viewed", 29.minutes.ago)
         anonymous_event("auth_screen_viewed", 28.minutes.ago, "auth_screen" => "sign_up")
-        anonymous_event("auth_client_error", 27.minutes.ago,
+        anonymous_event("auth_provider_clicked", 27.minutes.ago,
+                        "provider" => "google", "auth_screen" => "login",
+                        "intent" => "login", "source" => "auth_screen")
+        anonymous_event("auth_client_error", 26.minutes.ago,
                         "stage" => "google_plugin", "error_code" => "plugin_init_failed")
       end
 
@@ -274,7 +277,8 @@ RSpec.describe "Admin observability", type: :request do
         expect(response).to have_http_status(:ok)
         names = payload["events"].map { |e| e["event_name"] }
         expect(names).to contain_exactly(
-          "app_first_open", "landing_page_viewed", "auth_screen_viewed", "auth_client_error"
+          "app_first_open", "landing_page_viewed", "auth_screen_viewed",
+          "auth_provider_clicked", "auth_client_error"
         )
       end
 
@@ -288,6 +292,14 @@ RSpec.describe "Admin observability", type: :request do
 
         screen = payload["events"].find { |e| e["event_name"] == "auth_screen_viewed" }
         expect(screen["auth_screen"]).to eq("sign_up")
+
+        provider_click = payload["events"].find { |e| e["event_name"] == "auth_provider_clicked" }
+        expect(provider_click).to include(
+          "provider" => "google",
+          "auth_screen" => "login",
+          "intent" => "login"
+        )
+        expect(provider_click).not_to have_key("terms_accepted")
       end
 
       it "does not pull in another installation's events" do

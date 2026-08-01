@@ -43,6 +43,66 @@ RSpec.describe Analytics::Ingestion do
     expect(props["reps"]).to eq(10)
   end
 
+  it "allowlists auth_provider_clicked properties and preserves installation_id" do
+    described_class.new(
+      user: user,
+      events: [
+        event(
+          event_name: "auth_provider_clicked",
+          properties: {
+            provider: "google",
+            auth_screen: "sign_up",
+            intent: "sign_up",
+            terms_accepted: false,
+            source: "auth_screen",
+            installation_id: "install-123",
+            email: "private@example.com",
+            token: "secret",
+            extra: "drop-me"
+          }
+        )
+      ]
+    ).call
+
+    props = ProductAnalyticsEvent.where(event_name: "auth_provider_clicked").last.properties
+    expect(props).to include(
+      "provider" => "google",
+      "auth_screen" => "sign_up",
+      "intent" => "sign_up",
+      "terms_accepted" => false,
+      "source" => "auth_screen",
+      "installation_id" => "install-123"
+    )
+    expect(props.keys).not_to include("email", "token", "extra")
+  end
+
+  it "drops terms_accepted from login auth_provider_clicked payloads" do
+    described_class.new(
+      user: user,
+      events: [
+        event(
+          event_name: "auth_provider_clicked",
+          properties: {
+            provider: "email",
+            auth_screen: "login",
+            intent: "login",
+            terms_accepted: false,
+            source: "auth_screen"
+          }
+        )
+      ]
+    ).call
+
+    props = ProductAnalyticsEvent.where(event_name: "auth_provider_clicked").last.properties
+    expect(props).to include(
+      "provider" => "email",
+      "auth_screen" => "login",
+      "intent" => "login",
+      "source" => "auth_screen"
+    )
+    expect(props).not_to have_key("terms_accepted")
+  end
+
   it "is idempotent on idempotency_key (no duplicate)" do
     key = "idem-123"
     described_class.new(user: user, events: [ event(idempotency_key: key) ]).call

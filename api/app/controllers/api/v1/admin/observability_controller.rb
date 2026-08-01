@@ -146,6 +146,7 @@ module Api
         TIMELINE_EVENTS = %w[
           app_first_open app_opened session_started web_session_started
           landing_page_viewed auth_screen_viewed signup_selected login_selected
+          auth_provider_clicked
           signup_started login_started login_failed
           social_login_started social_login_failed
           auth_client_error auth_api_error
@@ -200,6 +201,8 @@ module Api
               auth_flow: safe_property(event, "auth_flow"),
               link_result: safe_property(event, "link_result"),
               auth_screen: safe_property(event, "auth_screen"),
+              intent: safe_property(event, "intent"),
+              terms_accepted: safe_property(event, "terms_accepted"),
               stage: safe_property(event, "stage"),
               http_status: safe_property(event, "http_status"),
               provider: safe_property(event, "provider")

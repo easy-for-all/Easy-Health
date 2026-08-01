@@ -12,6 +12,7 @@ import {
   reportAuthError,
   trackAuthApiError,
   trackAuthClientError,
+  trackAuthProviderClicked,
   trackSignupSelected,
   useAuthScreenView,
 } from "@/features/auth/auth-analytics";
@@ -58,6 +59,7 @@ export default function LoginPage() {
     e.preventDefault();
     e.stopPropagation();
     if (googleRef.current) return;
+    trackAuthProviderClicked({ provider: "google", authScreen: "login", intent: "login" });
     googleRef.current = true;
 
     setError("");
@@ -120,6 +122,7 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submittingRef.current) return;
+    trackAuthProviderClicked({ provider: "email", authScreen: "login", intent: "login" });
     setError("");
     setLoading(true);
     submittingRef.current = true;

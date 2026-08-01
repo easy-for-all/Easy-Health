@@ -45,6 +45,13 @@ describe("pre-auth funnel payload", () => {
     trackEvent("auth_screen_viewed", { auth_screen: "sign_up" });
     trackEvent("signup_selected", { from: "landing" });
     trackEvent("login_selected", { from: "landing" });
+    trackEvent("auth_provider_clicked", {
+      provider: "google",
+      auth_screen: "sign_up",
+      intent: "sign_up",
+      terms_accepted: true,
+      source: "auth_screen",
+    });
     trackEvent("social_login_started", { provider: "google", intent: "sign_up" });
     trackEvent("signup_started", { method: "email" });
     trackEvent("login_started", { method: "email" });
@@ -62,6 +69,7 @@ describe("pre-auth funnel payload", () => {
         "auth_screen_viewed",
         "signup_selected",
         "login_selected",
+        "auth_provider_clicked",
         "social_login_started",
         "signup_started",
         "login_started",
@@ -74,13 +82,25 @@ describe("pre-auth funnel payload", () => {
   it("keeps the event properties that make the funnel readable", async () => {
     const { trackEvent } = await import("@/shared/lib/analytics");
     trackEvent("auth_screen_viewed", { auth_screen: "login" });
+    trackEvent("auth_provider_clicked", {
+      provider: "email",
+      auth_screen: "login",
+      intent: "login",
+      source: "auth_screen",
+    });
     trackEvent("auth_api_error", { stage: "email_login", http_status: 401 });
 
     const sent = await drain();
     const screen = sent.find((e) => e.event_name === "auth_screen_viewed");
+    const providerClick = sent.find((e) => e.event_name === "auth_provider_clicked");
     const apiError = sent.find((e) => e.event_name === "auth_api_error");
 
     expect(screen?.properties.auth_screen).toBe("login");
+    expect(providerClick?.properties.provider).toBe("email");
+    expect(providerClick?.properties.auth_screen).toBe("login");
+    expect(providerClick?.properties.intent).toBe("login");
+    expect(providerClick?.properties.source).toBe("auth_screen");
+    expect(providerClick?.properties).not.toHaveProperty("terms_accepted");
     expect(apiError?.properties.stage).toBe("email_login");
     expect(apiError?.properties.http_status).toBe(401);
   });

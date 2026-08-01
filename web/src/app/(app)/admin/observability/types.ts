@@ -137,6 +137,12 @@ export interface TimelineEvent {
   error_code?: string;
   auth_flow?: string;
   link_result?: string;
+  auth_screen?: string;
+  intent?: string;
+  terms_accepted?: string;
+  stage?: string;
+  http_status?: string;
+  provider?: string;
 }
 
 export interface TimelineResponse {

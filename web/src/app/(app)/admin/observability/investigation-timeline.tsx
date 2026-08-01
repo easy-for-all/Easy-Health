@@ -21,6 +21,7 @@ const EVENT_LABEL: Record<string, string> = {
   // the steps between "opened the app" and "the API heard about it".
   landing_page_viewed: "Landing exibida",
   auth_screen_viewed: "Tela de acesso exibida",
+  auth_provider_clicked: "Tentou autenticar",
   signup_selected: "Escolheu criar conta",
   login_selected: "Escolheu entrar",
   signup_started: "Cadastro por email enviado",
@@ -159,6 +160,24 @@ export function InvestigationTimeline() {
                     ) : null}
                     {event.auth_flow ? (
                       <span className="ml-2 text-xs text-[var(--text-dim)]">{event.auth_flow}</span>
+                    ) : null}
+                    {event.provider ? (
+                      <span className="ml-2 text-xs text-[var(--text-dim)]">{event.provider}</span>
+                    ) : null}
+                    {event.auth_screen ? (
+                      <span className="ml-2 text-xs text-[var(--text-dim)]">{event.auth_screen}</span>
+                    ) : null}
+                    {event.intent ? (
+                      <span className="ml-2 text-xs text-[var(--text-dim)]">{event.intent}</span>
+                    ) : null}
+                    {event.terms_accepted !== undefined ? (
+                      <span className="ml-2 text-xs text-[var(--text-dim)]">terms={event.terms_accepted}</span>
+                    ) : null}
+                    {event.stage ? (
+                      <span className="ml-2 text-xs text-[var(--text-dim)]">{event.stage}</span>
+                    ) : null}
+                    {event.http_status ? (
+                      <span className="ml-2 text-xs text-[var(--text-dim)]">HTTP {event.http_status}</span>
                     ) : null}
                   </span>
                   <span className="text-xs text-[var(--text-dim)]">{formatDateTime(event.occurred_at)}</span>

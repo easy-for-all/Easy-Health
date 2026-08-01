@@ -15,6 +15,20 @@ import { getAnalyticsContext } from "@/shared/lib/analytics/context";
 
 export type AuthScreen = "login" | "sign_up";
 export type AuthOrigin = "landing" | "login" | "sign_up";
+export type AuthProvider = "google" | "email";
+
+type AuthProviderClick =
+  | {
+      provider: AuthProvider;
+      authScreen: "sign_up";
+      intent: "sign_up";
+      termsAccepted: boolean;
+    }
+  | {
+      provider: AuthProvider;
+      authScreen: "login";
+      intent: "login";
+    };
 
 // Where in the flow it broke. Closed vocabulary so a stray string can never
 // become a new dimension value.
@@ -53,6 +67,17 @@ export function trackSignupSelected(from: AuthOrigin): void {
 /** The user explicitly chose to sign in to an existing account. */
 export function trackLoginSelected(from: AuthOrigin): void {
   trackEvent("login_selected", { from });
+}
+
+/** The user clicked an auth provider/submit before any auth side effect begins. */
+export function trackAuthProviderClicked(click: AuthProviderClick): void {
+  trackEvent("auth_provider_clicked", {
+    provider: click.provider,
+    auth_screen: click.authScreen,
+    intent: click.intent,
+    source: "auth_screen",
+    ...(click.authScreen === "sign_up" ? { terms_accepted: click.termsAccepted } : {}),
+  });
 }
 
 /**

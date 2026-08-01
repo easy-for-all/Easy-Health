@@ -15,6 +15,12 @@ module Analytics
   class Ingestion
     MAX_BATCH_SIZE = 50
     MAX_PROPERTIES_BYTES = 8_192
+    AUTH_PROVIDER_CLICKED_ENUMS = {
+      "provider" => %w[google email],
+      "auth_screen" => %w[sign_up login],
+      "intent" => %w[sign_up login],
+      "source" => %w[auth_screen]
+    }.freeze
 
     Result = Struct.new(:accepted, :persisted, :skipped, :rejected, :rejections, keyword_init: true)
 
@@ -89,7 +95,7 @@ module Analytics
         locale: presence(h[:locale]),
         timezone: presence(h[:timezone]),
         source: presence(h[:source]),
-        properties: with_installation_id(sanitized_properties(h[:properties])),
+        properties: with_installation_id(filtered_properties(name, h[:properties])),
         idempotency_key: presence(h[:idempotency_key])
       }
     end
@@ -111,6 +117,34 @@ module Analytics
       properties.merge("installation_id" => from_context)
     rescue StandardError
       properties
+    end
+
+    def filtered_properties(event_name, value)
+      clean = sanitized_properties(value)
+      return auth_provider_clicked_properties(clean) if event_name == "auth_provider_clicked"
+
+      clean
+    end
+
+    def auth_provider_clicked_properties(properties)
+      out = {}
+
+      AUTH_PROVIDER_CLICKED_ENUMS.each do |key, allowed|
+        value = properties[key].to_s
+        out[key] = value if allowed.include?(value)
+      end
+
+      if out["auth_screen"] == "sign_up" && boolean_property?(properties["terms_accepted"])
+        out["terms_accepted"] = properties["terms_accepted"]
+      end
+
+      installation_id = properties["installation_id"].to_s.presence
+      out["installation_id"] = installation_id if installation_id
+      out
+    end
+
+    def boolean_property?(value)
+      value == true || value == false
     end
 
     def sanitized_properties(value)

@@ -163,6 +163,10 @@ Rails.application.routes.draw do
         get "analytics/platform_comparison", to: "analytics#platform_comparison"
         # APP ANDROID panel — real installed base (source: app_installations)
         get "analytics/android_installations", to: "analytics#android_installations"
+        # FUNIL ANDROID EXTERNO — pre-auth drop-off by installation_id, restricted
+        # to instrumented builds (source: app_installations + product_analytics_events)
+        get "analytics/android_funnel", to: "analytics#android_funnel"
+        get "analytics/android_funnel/installations", to: "analytics#android_funnel_installations"
         get "analytics/event_deliveries", to: "analytics#event_deliveries"
         get "analytics/event_deliveries/:id", to: "analytics#event_delivery"
         # Admin-only diagnostic: sends a test push to the CURRENT admin's own
