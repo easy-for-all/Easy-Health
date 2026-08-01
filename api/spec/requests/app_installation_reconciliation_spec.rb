@@ -3,6 +3,8 @@ require "rails_helper"
 # Marco 1/3: every authenticated request carrying X-Installation-Id records the
 # request signal first, then delegates the user link to AppInstallations::LinkToUser.
 RSpec.describe "AppInstallation reconciliation", type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:user) { create(:user) }
   let(:header) { { "X-Installation-Id" => installation.installation_id } }
 
@@ -118,6 +120,71 @@ RSpec.describe "AppInstallation reconciliation", type: :request do
       expect(installation.last_link_failure_code).to eq("user_conflict")
       expect(Rails.logger).to have_received(:warn).with(/installation_link_conflict/)
     end
+
+    # The bug this suite exists to prevent: reconciliation is an after_action on
+    # every authenticated request, so an unresolvable conflict wrote one
+    # ProductAnalyticsEvent per API call the app made — dozens per session.
+    describe "repeated requests on the same unresolvable conflict" do
+      def link_failures
+        ProductAnalyticsEvent.where(event_name: "installation_link_failed")
+      end
+
+      # The session does not survive from one request to the next in this suite,
+      # and an unauthenticated request skips reconciliation entirely — which
+      # would make every "no new write / no new event" assertion below a false
+      # green. So each call signs in again and the status is asserted, proving
+      # the reconciliation really ran N times.
+      def authenticated_requests(count, as: user, headers: header)
+        count.times do
+          sign_in as
+          authenticated_request(headers)
+          expect(response).to have_http_status(:ok)
+        end
+      end
+
+      it "records exactly ONE representative event for the whole day" do
+        expect { authenticated_requests(8) }.to change { link_failures.count }.by(1)
+
+        expect(link_failures.last.properties["link_result"]).to eq("conflict")
+      end
+
+      it "stops writing to the installation after the first conflict" do
+        authenticated_requests(1)
+        before_attrs = installation.reload.attributes
+
+        authenticated_requests(5)
+
+        expect(installation.reload.attributes).to eq(before_attrs)
+      end
+
+      it "records the conflict again the next day, so it stays visible" do
+        authenticated_requests(4)
+
+        travel_to(1.day.from_now) do
+          expect { authenticated_requests(1) }.to change { link_failures.count }.by(1)
+        end
+      end
+
+      # The dedup window is a day in the REPORTING zone (America/Sao_Paulo), the
+      # same cut every other daily figure uses. Keyed on UTC by accident, a
+      # conflict at 22h local would open a new bucket mid-evening.
+      it "keeps one bucket across the UTC midnight of the same local evening" do
+        travel_to(Time.utc(2026, 8, 1, 23, 30)) do # 20:30 in São Paulo
+          expect { authenticated_requests(1) }.to change { link_failures.count }.by(1)
+        end
+
+        travel_to(Time.utc(2026, 8, 2, 1, 30)) do # still 22:30 the SAME local day
+          expect { authenticated_requests(1) }.not_to change { link_failures.count }
+        end
+      end
+
+      it "gives a different user its own representative event" do
+        authenticated_requests(4)
+
+        expect { authenticated_requests(1, as: create(:user)) }
+          .to change { link_failures.count }.by(1)
+      end
+    end
   end
 
   describe "when the installation_id is unknown" do
@@ -129,6 +196,24 @@ RSpec.describe "AppInstallation reconciliation", type: :request do
       end.not_to change(AppInstallation, :count)
 
       expect(response).to have_http_status(:ok)
+    end
+
+    # not_found stays RETRYABLE — a later register really can create the row —
+    # but it repeats on every request exactly like a conflict does, so the event
+    # is throttled even though the attempt is not.
+    it "records one representative not_found event per day, and keeps trying" do
+      unknown = { "X-Installation-Id" => "never-registered-#{SecureRandom.uuid}" }
+      failures = ProductAnalyticsEvent.where(event_name: "installation_link_failed")
+
+      expect do
+        6.times do
+          sign_in user # see the note on authenticated_requests above
+          authenticated_request(unknown)
+          expect(response).to have_http_status(:ok)
+        end
+      end.to change { failures.count }.by(1)
+
+      expect(failures.last.properties["link_result"]).to eq("not_found")
     end
   end
 end

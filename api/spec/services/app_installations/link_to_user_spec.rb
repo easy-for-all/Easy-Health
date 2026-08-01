@@ -108,6 +108,123 @@ RSpec.describe AppInstallations::LinkToUser do
       expect(installation.first_link_attempt_at).to be_present
       expect(installation.linked_at).to be_nil
     end
+
+    # Reconciliation is an after_action on every authenticated request, so
+    # without a stop the same unresolvable conflict cost a row lock, an UPDATE
+    # and a warn line per API call, forever.
+    describe "a conflict already decided" do
+      before { link(installation: installation, user: user) } # first, full path
+
+      it "stops attempting: no counter, no timestamps, no write at all" do
+        installation.reload
+        before_attrs = installation.attributes
+
+        3.times { link(installation: installation, user: user) }
+
+        expect(installation.reload.attributes).to eq(before_attrs)
+      end
+
+      it "still returns the same protective answer" do
+        result = link(installation: installation, user: user)
+
+        expect(result.success).to be(false)
+        expect(result.status).to eq(:conflict)
+        expect(result.failure_code).to eq("user_conflict")
+        expect(installation.reload.user_id).to eq(owner.id)
+      end
+
+      it "does not take a row lock" do
+        expect(installation).not_to receive(:with_lock)
+
+        link(installation: installation, user: user)
+      end
+
+      it "drops the repeat to debug instead of warning on every request" do
+        warned = []
+        allow(Rails.logger).to receive(:warn) { |msg| warned << msg.to_s }
+
+        link(installation: installation, user: user)
+
+        expect(warned.grep(/installation_link_conflict/)).to be_empty
+      end
+
+      it "never blocks the legitimate owner coming back to the device" do
+        result = link(installation: installation, user: owner)
+
+        expect(result.success).to be(true)
+        expect(result.status).to eq(:already_linked)
+      end
+
+      it "still conflicts for a third user, and records that first attempt" do
+        other = create(:user)
+
+        result = link(installation: installation, user: other)
+
+        expect(result.status).to eq(:conflict)
+        expect(installation.reload.user_id).to eq(owner.id)
+      end
+
+      it "resumes full bookkeeping once the installation is free again" do
+        # The guard reads last_link_failure_code, which a successful link clears,
+        # so it can never outlive the condition it describes.
+        installation.update_columns(user_id: nil, last_link_failure_code: nil)
+
+        expect(link(installation: installation, user: user).status).to eq(:linked)
+        expect(installation.reload.last_link_failure_code).to be_nil
+      end
+
+      it "keeps two simultaneous repeats from writing or double-counting" do
+        installation.reload
+        before_attrs = installation.attributes
+
+        threads = 2.times.map do
+          Thread.new do
+            ActiveRecord::Base.connection_pool.with_connection do
+              described_class.call(installation: AppInstallation.find(installation.id), user: user)
+            end
+          end
+        end
+        results = threads.map(&:value)
+
+        expect(results.map(&:status)).to eq([ :conflict, :conflict ])
+        expect(installation.reload.attributes).to eq(before_attrs)
+      end
+    end
+  end
+
+  describe "permanence classification" do
+    it "marks a conflict permanent: repeating it cannot change the answer" do
+      owner = create(:user)
+      installation = create(:app_installation, user: owner)
+
+      result = link(installation: installation, user: user)
+
+      expect(result.permanent?).to be(true)
+      expect(result.retryable?).to be(false)
+    end
+
+    it "marks invalid input permanent" do
+      result = link(installation: nil, user: user)
+
+      expect(result.status).to eq(:invalid_input)
+      expect(result.permanent?).to be(true)
+    end
+
+    it "marks not_found retryable — a later register still creates the row" do
+      result = described_class.not_found
+
+      expect(result.permanent?).to be(false)
+      expect(result.retryable?).to be(true)
+    end
+
+    it "never marks a success as either" do
+      installation = create(:app_installation, :anonymous)
+
+      result = link(installation: installation, user: user)
+
+      expect(result.permanent?).to be(false)
+      expect(result.retryable?).to be(false)
+    end
   end
 
   describe "invalid input" do

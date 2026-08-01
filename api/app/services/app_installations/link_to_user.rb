@@ -39,9 +39,25 @@ module AppInstallations
     # hour: without this every authenticated app request would be an UPDATE.
     TOUCH_INTERVAL = 1.hour
 
+    # A permanent outcome is deterministic: repeating the same attempt with the
+    # same inputs cannot produce a different answer, so retrying it only costs a
+    # row lock, an UPDATE and an analytics row per request. Everything else is
+    # legitimately recoverable — not_found is fixed by a later register,
+    # validation/statement/unexpected failures by the next attempt — and keeps
+    # being retried.
+    PERMANENT_STATUSES = %i[conflict invalid_input].freeze
+
     Result = Struct.new(:success, :status, :installation, :failure_code, keyword_init: true) do
       def linked?
         status == :linked
+      end
+
+      def permanent?
+        !success && PERMANENT_STATUSES.include?(status)
+      end
+
+      def retryable?
+        !success && !permanent?
       end
     end
 
@@ -71,6 +87,14 @@ module AppInstallations
       # must not touch linked_at and must not log at info level.
       return already_linked if @installation.user_id == @user.id
 
+      # Second fast path: a conflict we have already decided and persisted.
+      # Reconciliation is an after_action on every authenticated request, so
+      # without this an installation owned by someone else costs a row lock, an
+      # UPDATE and a warn line on EVERY request the app makes, forever. The
+      # protection is unchanged — the installation still belongs to its owner;
+      # we simply stop re-deciding a question whose answer cannot change.
+      return repeat_conflict if known_conflict?
+
       log(:installation_link_started)
       attempt_link
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::StaleObjectError => e
@@ -87,6 +111,27 @@ module AppInstallations
 
     def linkable_input?
       !@installation.nil? && !@user.nil? && @installation.persisted?
+    end
+
+    # Already owned by someone else AND already recorded as such. Deliberately
+    # reuses last_link_failure_code instead of adding a "gave up" column: that
+    # column is already cleared when a link finally succeeds, so the legitimate
+    # owner returning to the device is never blocked by this guard.
+    #
+    # The first conflict does NOT match (the code is still nil), so it goes the
+    # full path: it takes the lock, counts the attempt and logs at warn.
+    def known_conflict?
+      @installation.user_id.present? &&
+        @installation.user_id != @user.id &&
+        @installation.last_link_failure_code == "user_conflict"
+    end
+
+    # No lock, no UPDATE, no counter, no warn — only the answer. Kept at debug so
+    # a per-request trace is still available when someone goes looking.
+    def repeat_conflict
+      log(:installation_link_conflict, level: :debug, status: :conflict,
+                                       failure_code: "user_conflict", repeat: true)
+      failure(:conflict, "user_conflict")
     end
 
     def attempt_link
@@ -208,9 +253,19 @@ module AppInstallations
     end
 
     # Never logs the raw installation_id: it is a stable device identifier.
-    def log(event, status: nil, failure_code: nil)
-      level = event == :installation_link_started ? :debug : :info
-      level = :warn if event == :installation_link_failed || event == :installation_link_conflict
+    #
+    # `level:` overrides the default only for a repeat of an already-reported
+    # outcome: the first conflict must stay at warn (it is news), every later one
+    # would be the same warn on every request the app makes.
+    def log(event, status: nil, failure_code: nil, level: nil, repeat: nil)
+      level ||= begin
+        default = event == :installation_link_started ? :debug : :info
+        if event == :installation_link_failed || event == :installation_link_conflict
+          :warn
+        else
+          default
+        end
+      end
 
       Rails.logger.public_send(
         level,
@@ -224,6 +279,7 @@ module AppInstallations
           runtime_context: @runtime_context,
           status: status,
           failure_code: normalized_failure_code(failure_code),
+          repeat: repeat,
           build_number: @build_number
         }.compact.to_json
       )
