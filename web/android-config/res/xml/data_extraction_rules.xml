@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (API 31+) backup rules — android:dataExtractionRules.
+     targetSdk is 36, so THIS is the file that actually governs the shipped app;
+     backup_rules.xml only covers devices on API 23-30.
+
+     Both transports are covered on purpose: cloud-backup alone would still let
+     a device-to-device transfer clone the installation id onto a second phone.
+     See backup_rules.xml for the full rationale. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="sharedpref" path="CapacitorStorage" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="sharedpref" path="CapacitorStorage" />
+    </device-transfer>
+</data-extraction-rules>

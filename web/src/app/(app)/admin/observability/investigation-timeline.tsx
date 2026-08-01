@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api";
 import { TimelineResponse } from "./types";
 import { formatDateTime } from "./metric-cell";
@@ -17,9 +17,10 @@ const EVENT_LABEL: Record<string, string> = {
   app_opened: "App aberto",
   session_started: "Sessão iniciada",
   web_session_started: "Sessão web iniciada",
-  // Pre-auth steps: on Android the app opens on the landing page, so these are
-  // the steps between "opened the app" and "the API heard about it".
+  // Pre-auth steps: Android builds may start from the native entry screen or
+  // from the historical landing page, then continue into auth.
   landing_page_viewed: "Landing exibida",
+  native_entry_viewed: "Entrada nativa exibida",
   auth_screen_viewed: "Tela de acesso exibida",
   auth_provider_clicked: "Tentou autenticar",
   signup_selected: "Escolheu criar conta",
@@ -46,12 +47,50 @@ const EVENT_LABEL: Record<string, string> = {
   workout_completed: "Treino concluído",
 };
 
+function timelinePath(user: string, installation: string): string {
+  const params = new URLSearchParams();
+  if (user) params.set("user_id", user);
+  if (installation) params.set("installation_id", installation);
+  return `/api/v1/admin/observability/timeline?${params.toString()}`;
+}
+
+// Entry point for the "Funil Android Externo" block, which links each
+// installation of an abandonment bucket straight to its timeline.
+//
+// Read from window.location instead of useSearchParams: this page is statically
+// prerendered, and useSearchParams would force a Suspense boundary around the
+// whole panel (Next fails the production build otherwise). The panel never
+// reaches the server anyway — the page renders a loading screen until the admin
+// gate resolves on the client.
+function deepLinkedInstallationId(): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("installation_id")?.trim() ?? "";
+}
+
 export function InvestigationTimeline() {
   const [userId, setUserId] = useState("");
-  const [installationId, setInstallationId] = useState("");
+  const [installationId, setInstallationId] = useState(deepLinkedInstallationId);
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deepLinked] = useState(() => deepLinkedInstallationId() !== "");
+
+  // Only the resolved request writes state: a setState in the body of an effect
+  // triggers a cascading render (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    const fromUrl = deepLinkedInstallationId();
+    if (!fromUrl) return;
+
+    let active = true;
+    api
+      .get<TimelineResponse>(timelinePath("", fromUrl))
+      .then((result) => active && setData(result))
+      .catch(() => active && setError("Não foi possível carregar a linha do tempo."));
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function search(event: React.FormEvent) {
     event.preventDefault();
@@ -63,10 +102,7 @@ export function InvestigationTimeline() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      if (userId.trim()) params.set("user_id", userId.trim());
-      if (installationId.trim()) params.set("installation_id", installationId.trim());
-      setData(await api.get<TimelineResponse>(`/api/v1/admin/observability/timeline?${params.toString()}`));
+      setData(await api.get<TimelineResponse>(timelinePath(userId.trim(), installationId.trim())));
     } catch {
       setError("Não foi possível carregar a linha do tempo.");
       setData(null);
@@ -76,7 +112,10 @@ export function InvestigationTimeline() {
   }
 
   return (
-    <details className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+    <details
+      open={deepLinked}
+      className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
+    >
       <summary className="cursor-pointer text-sm font-semibold text-[var(--text)]">
         Investigação por usuário ou instalação
       </summary>

@@ -53,6 +53,12 @@ Regra de roteamento (anti-duplicidade, `index.ts`):
 
 ## Identidade
 - `installation_id`: UUID por instalação, sobrevive a logout, recriado só em reinstalação.
+  Fonte de verdade **exclusiva** no nativo: `@capacitor/preferences`
+  (SharedPreferences `CapacitorStorage`), que está **fora do Android Auto Backup**
+  (`android-config/res/xml/{backup_rules,data_extraction_rules}.xml`). O localStorage é
+  espelho **write-only** no nativo — o diretório da WebView É restaurado pelo backup, então
+  um id que só existe lá pertence à instalação anterior. Ver "Identidade de instalação e
+  Android Auto Backup" abaixo.
 - `anonymous_id`: visitante/thread anônimo (localStorage).
 - `session_id`: sessão (regenerado por timeout de 30 min no nativo / tab na web).
 - `user_id`: setado no login; associa a instalação (`last_authenticated_at`). Firebase usa
@@ -62,6 +68,72 @@ Regra de roteamento (anti-duplicidade, `index.ts`):
 1. Boot nativo → `registerInstallation()` (anônimo) → `app_installations` (source `register`).
 2. Login → `identifyUser()` re-registra com cookie de sessão → associa `user_id`.
 3. Painel "App Android" conta a base real; backfill recupera o histórico de `device_tokens`.
+
+## Identidade de instalação e Android Auto Backup
+
+**Problema (jul/2026):** o app subia com `android:allowBackup="true"` e sem regras. O Auto
+Backup restaurava o data dir inteiro — inclusive `shared_prefs/CapacitorStorage.xml` — então
+uma reinstalação voltava reivindicando o `installation_id` da instalação anterior. Um usuário
+novo (501) logou num aparelho onde o id pertencia ao usuário 13: o backend recusou transferir
+a posse (`link_result=conflict`, correto) e a conta nova ficou com zero `AppInstallation`.
+
+**Regras hoje:**
+
+| Evento | `installation_id` |
+|---|---|
+| Update do app (mesmo data dir) | **mantido** |
+| Logout / login | **mantido** |
+| Desinstalar + reinstalar, ou limpar dados | **novo** |
+| Restore de backup / transferência entre aparelhos | **novo** |
+
+O que sustenta isso:
+
+1. **Backup rules** excluem só `CapacitorStorage` (cloud-backup **e** device-transfer). Nada
+   mais é excluído: sessão e dados do usuário na WebView continuam restaurando.
+2. Com o store fora do backup, "existe `eh_installation_id` no Preferences" passa a
+   significar "criado por ESTA instalação". `installation.ts` nunca adota o espelho do
+   localStorage no nativo.
+3. Store sem resposta (plugin ausente/bridge travada) **não** é store vazio: nesse caso o id
+   não é regerado, senão cada boot lento criaria uma instalação nova.
+4. Ao detectar instalação nova, `anonymous_id`, `eh_installed` e os marcadores de versão
+   também são descartados — senão o aparelho restaurado segue reportando como o anterior.
+
+**Recuperação de conflito (`link_status=conflict`)** — só com evidência, nunca automática:
+o cliente grava `eh_installation_linked` no Preferences quando o backend confirma o vínculo.
+Conflito **com** esse marcador = troca de conta legítima no mesmo aparelho → não mexe em
+nada (a posse continua com o dono original). Conflito **sem** o marcador = id restaurado →
+gera um id novo **uma única vez** (`eh_installation_regenerated`), registra a nova
+instalação e emite `installation_id_regenerated`. O backend não afrouxa nada: quem cria a
+`AppInstallation` nova é o cliente, com um id novo.
+
+**Validar em aparelho** (build debug):
+
+```bash
+# id atual no store durável
+adb shell run-as com.EasyHealth.myapp cat shared_prefs/CapacitorStorage.xml
+
+# update mantém o id
+adb install -r app-debug.apk        # → mesmo eh_installation_id
+
+# reinstalação gera id novo
+adb uninstall com.EasyHealth.myapp && adb install app-debug.apk
+
+# simular restore de backup (é o cenário que quebrou em produção)
+adb shell bmgr enable true
+adb shell bmgr backupnow com.EasyHealth.myapp
+adb uninstall com.EasyHealth.myapp
+adb install app-debug.apk           # → id novo, mesmo com o backup restaurado
+```
+
+**Usuários já criados sem vínculo:** nada de cirurgia no banco. Listar os afetados e deixar
+o próprio app se recuperar no próximo boot (o fix de cliente é web, chega sem AAB novo):
+
+```ruby
+# User não tem has_many :app_installations (só AppInstallations::LinkToUser escreve user_id).
+User.where(signup_source: "android")
+    .where.not(id: AppInstallation.linked.select(:user_id))
+    .pluck(:id, :email)
+```
 
 ## Feature flags e constantes
 

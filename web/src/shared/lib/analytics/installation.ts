@@ -5,19 +5,33 @@ import {
   getAnalyticsContext,
   getCachedInstallationId,
   isNativeApp,
+  readInstallationMirror,
+  resetIdentityForNewInstallation,
   setCachedInstallationId,
 } from "./context";
+import type { EventName } from "./taxonomy";
 
 // installation_id — a stable, random UUID identifying ONE app installation.
 //
-// - Created once, persisted in @capacitor/preferences on native (survives
-//   localStorage/WebView data clears) with a localStorage mirror on web.
-// - Survives logout; only a reinstall (storage wiped) creates a new one.
+// - Created once and persisted in @capacitor/preferences on native. That store
+//   (SharedPreferences "CapacitorStorage") is EXCLUDED from Android Auto Backup
+//   by android-config/res/xml/{backup_rules,data_extraction_rules}.xml, which is
+//   what makes "this key exists" mean "created by THIS installation".
+// - The localStorage copy is a write-only mirror on native: the WebView data dir
+//   IS backed up, so a restored mirror describes the PREVIOUS installation. It
+//   is only a read source on web/PWA, where there is no native store.
+// - Survives logout and app updates; a reinstall/data wipe creates a new one.
 // - NEVER derived from Advertising ID, Android ID, the FCM token, email or user_id.
 //
 // Backed by the app_installations backend (POST /api/v1/app/installations/register).
 
 const PREF_KEY = "eh_installation_id";
+// Written once the backend confirms this installation is linked to a user. Proof
+// that the id is genuinely ours, used to tell a legitimate account switch (link
+// on record) from a restored id that never belonged here (no link on record).
+const PREF_LINKED_KEY = "eh_installation_linked";
+// One-shot marker: an installation may recover from a conflict exactly once.
+const PREF_REGENERATED_KEY = "eh_installation_regenerated";
 // Default-ON kill-switch: tracking runs unless explicitly disabled. Only "false"
 // turns it off — an unset/empty env keeps it enabled (a build-time env that was
 // silently never set is exactly what kept this dark in production).
@@ -52,33 +66,70 @@ function withBudget<T>(work: Promise<T>, fallback: T): Promise<T> {
   });
 }
 
-async function readPersisted(): Promise<string | null> {
-  // Prefer the durable native store; fall back to the localStorage mirror.
-  if (isNativeApp()) {
-    const stored = await withBudget<string | null>(
-      (async () => {
-        const { Preferences } = await import("@capacitor/preferences");
-        const { value } = await Preferences.get({ key: PREF_KEY });
-        return value ?? null;
-      })(),
-      null // plugin unavailable or hung — fall back to mirror
-    );
-    if (stored) return stored;
-  }
-  return getCachedInstallationId() ?? null;
+// A store read is three-valued, and collapsing it to two is what makes an
+// installation churn: "the store answered and it is empty" proves a fresh
+// installation, while "the store did not answer" (plugin missing, bridge hung)
+// proves nothing at all and must never trigger a new id.
+type StoreRead = { ok: true; value: string | null } | { ok: false };
+
+async function readStore(key: string): Promise<StoreRead> {
+  return withBudget<StoreRead>(
+    (async () => {
+      const { Preferences } = await import("@capacitor/preferences");
+      const { value } = await Preferences.get({ key });
+      return { ok: true as const, value: value ?? null };
+    })(),
+    { ok: false } // plugin unavailable or hung — NOT an empty store
+  );
 }
 
-async function writePersisted(id: string): Promise<void> {
-  setCachedInstallationId(id); // localStorage mirror + in-memory cache
-  if (isNativeApp()) {
-    await withBudget<void>(
-      (async () => {
-        const { Preferences } = await import("@capacitor/preferences");
-        await Preferences.set({ key: PREF_KEY, value: id });
-      })(),
-      undefined // mirror is best-effort persistence on its own
-    );
+async function writeStore(key: string, value: string): Promise<void> {
+  await withBudget<void>(
+    (async () => {
+      const { Preferences } = await import("@capacitor/preferences");
+      await Preferences.set({ key, value });
+    })(),
+    undefined
+  );
+}
+
+// Persists a new id in the native store and refreshes the in-memory value and
+// the mirror, so an id restored from a previous installation is overwritten.
+async function persistInstallationId(id: string): Promise<void> {
+  setCachedInstallationId(id); // in-memory + localStorage mirror
+  if (isNativeApp()) await writeStore(PREF_KEY, id);
+}
+
+async function resolveNativeId(): Promise<string> {
+  const stored = await readStore(PREF_KEY);
+
+  if (!stored.ok) {
+    // The store never answered. Minting here would hand out a brand new
+    // installation on every boot that meets a slow bridge, so prefer the mirror
+    // and let the next boot resolve it properly.
+    const mirrored = readInstallationMirror();
+    if (mirrored) return mirrored;
+    const created = uuid();
+    await persistInstallationId(created);
+    return created;
   }
+
+  if (stored.value) return stored.value;
+
+  // The store answered and it is empty: nothing here was created by this
+  // installation. Any mirror still present was restored from the previous one
+  // (Android Auto Backup covers the WebView data dir) and adopting it is exactly
+  // how one installation_id came to be shared by two users. Mint a new id and
+  // drop the rest of the restored analytics identity with it.
+  resetIdentityForNewInstallation();
+  const created = uuid();
+  await persistInstallationId(created);
+  return created;
+}
+
+function resolveWebId(): string {
+  // Web/PWA has no native store, so the localStorage copy IS the source.
+  return readInstallationMirror() ?? uuid();
 }
 
 // Returns the installation_id, creating and persisting it on first call.
@@ -88,14 +139,9 @@ export async function getInstallationId(): Promise<string> {
   if (resolving) return resolving;
 
   resolving = (async () => {
-    const existing = await readPersisted();
-    if (existing) {
-      setCachedInstallationId(existing);
-      return existing;
-    }
-    const created = uuid();
-    await writePersisted(created);
-    return created;
+    const id = isNativeApp() ? await resolveNativeId() : resolveWebId();
+    setCachedInstallationId(id);
+    return id;
   })();
 
   try {
@@ -258,6 +304,14 @@ function isTransientStatus(status: number | undefined): boolean {
   return status >= 500;
 }
 
+interface RegisterOutcome {
+  status: InstallationRemoteStatus;
+  failureCode?: InstallationFailureCode;
+  // Diagnostic echo of what the backend did with the link (linked /
+  // already_linked / conflict). Only meaningful when status is "registered".
+  linkStatus?: string | null;
+}
+
 // Posts the register upsert with one short retry for transient failures
 // (network / 5xx), mirroring the device-token sync.
 //
@@ -267,7 +321,7 @@ function isTransientStatus(status: number | undefined): boolean {
 async function postRegister(
   overrides: InstallationOverrides,
   opts: RegisterOptions
-): Promise<{ status: InstallationRemoteStatus; failureCode?: InstallationFailureCode }> {
+): Promise<RegisterOutcome> {
   const payload = await buildPayload(overrides, opts);
   const payloadKey = JSON.stringify(payload);
 
@@ -281,7 +335,9 @@ async function postRegister(
     try {
       const body = await api.post<RegisterResponse>(REGISTER_PATH, payload);
 
-      if (isRegistered(body)) return { status: "registered" };
+      if (isRegistered(body)) {
+        return { status: "registered", linkStatus: body?.link_status ?? null };
+      }
 
       if (body?.status === "disabled") {
         remoteDisabled = true;
@@ -371,8 +427,24 @@ async function runEnsure(
     };
   }
 
-  const result = await postRegister(overrides, opts);
+  let result = await postRegister(overrides, opts);
+
+  // The backend refused to move the installation to this user because it belongs
+  // to another one. When the evidence says this installation never owned the id
+  // (a restore), recover by minting a fresh one instead of staying orphaned.
+  if (result.status === "registered" && result.linkStatus === "conflict") {
+    const recovered = await regenerateAfterConflict(overrides, opts);
+    if (recovered) {
+      installationId = recovered.installationId;
+      result = recovered.result;
+    }
+  }
+
   if (result.status === "registered") {
+    // Awaited, not fired and forgotten: this marker is the evidence that keeps a
+    // later account switch from being mistaken for a restored id. It is a local,
+    // time-boxed write.
+    await rememberLinkOutcome(result.linkStatus);
     remoteRegistered = true;
     return { installationId, remoteRegistered: true, remoteStatus: "registered" };
   }
@@ -388,6 +460,67 @@ async function runEnsure(
     remoteStatus: result.status,
     failureCode: result.failureCode,
   };
+}
+
+// At most one recovery per app cycle, on top of the persisted one-shot marker.
+let regenerationAttempted = false;
+let linkOutcomeRecorded = false;
+
+// Records that this installation completed a link. It is the signal that tells
+// the two conflict causes apart on the NEXT conflict: an installation with a
+// link on record is a device where someone else is now signing in (legitimate —
+// the backend must keep the original owner), one without is a restored id.
+async function rememberLinkOutcome(linkStatus?: string | null): Promise<void> {
+  if (!isNativeApp() || linkOutcomeRecorded) return;
+  if (linkStatus !== "linked" && linkStatus !== "already_linked") return;
+  linkOutcomeRecorded = true;
+  await writeStore(PREF_LINKED_KEY, new Date().toISOString());
+}
+
+// Mints a replacement installation_id after a conflict, but ONLY with evidence
+// that the current id was never created here. Regenerating on every conflict
+// would silently hand a second installation to anyone switching accounts on a
+// shared device, and would let a client walk away from an ownership rule that
+// the backend is right to enforce.
+async function regenerateAfterConflict(
+  overrides: InstallationOverrides,
+  opts: RegisterOptions
+): Promise<{ installationId: string; result: RegisterOutcome } | null> {
+  if (!isNativeApp() || regenerationAttempted) return null;
+  regenerationAttempted = true;
+
+  const linked = await readStore(PREF_LINKED_KEY);
+  const regenerated = await readStore(PREF_REGENERATED_KEY);
+  // No answer from the store means no evidence either way — do nothing.
+  if (!linked.ok || !regenerated.ok) return null;
+  if (linked.value) return null; // this installation did own the id: account switch
+  if (regenerated.value) return null; // already recovered once
+
+  const previous = getCachedInstallationId() ?? null;
+  const created = uuid();
+  await writeStore(PREF_REGENERATED_KEY, new Date().toISOString());
+  await persistInstallationId(created);
+  // The previous body was accepted, but a new id makes it a different payload.
+  rejectedPayloadKey = null;
+
+  breadcrumb("installation_id_regenerated", { reason: "restore_conflict" });
+  trackServerEventSafe("installation_id_regenerated", {
+    reason: "restore_conflict",
+    previous_installation_id: previous,
+  });
+
+  const result = await postRegister(overrides, opts);
+  return { installationId: created, result };
+}
+
+// Dynamic import: index.ts imports this module, so a static import would close
+// a cycle. Analytics is best-effort here and must never break the recovery.
+function trackServerEventSafe(name: string, properties: Record<string, unknown>): void {
+  void import("./index")
+    .then(({ trackServerEvent }) => trackServerEvent(name as EventName, properties))
+    .catch(() => {
+      /* analytics unavailable — the recovery itself already happened */
+    });
 }
 
 // For authentication flows. Two legs with different rules:

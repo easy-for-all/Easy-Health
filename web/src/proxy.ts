@@ -11,7 +11,7 @@ import { type NextRequest, NextResponse } from "next/server";
 // /login. The page itself requires a session via AuthProvider, so letting the
 // request through costs nothing and closes that race.
 const PUBLIC_PATHS = [
-  "/", "/login", "/sign-up", "/onboarding", "/terms", "/privacy", "/forgot-password",
+  "/", "/native-entry", "/login", "/sign-up", "/onboarding", "/terms", "/privacy", "/forgot-password",
   "/reset-password", "/billing/success", "/billing/cancel", "/pricing",
   "/ia-para-treino", "/treino-personalizado", "/emagrecimento",
   "/treino-em-casa", "/analise-de-exames", "/exercicios", "/sobre", "/precos",
@@ -20,6 +20,13 @@ const PUBLIC_PATHS = [
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const requestId = crypto.randomUUID();
+
+  if (pathname === "/" && request.nextUrl.searchParams.get("native_entry") === "1") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/native-entry";
+    url.searchParams.delete("native_entry");
+    return withCorrelationHeaders(NextResponse.rewrite(url), requestId);
+  }
 
   const isPublic = PUBLIC_PATHS.some((p) =>
     p === "/" ? pathname === "/" : pathname.startsWith(p)

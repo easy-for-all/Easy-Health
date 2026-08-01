@@ -145,7 +145,7 @@ module Api
 
         TIMELINE_EVENTS = %w[
           app_first_open app_opened session_started web_session_started
-          landing_page_viewed auth_screen_viewed signup_selected login_selected
+          landing_page_viewed native_entry_viewed auth_screen_viewed signup_selected login_selected
           auth_provider_clicked
           signup_started login_started login_failed
           social_login_started social_login_failed

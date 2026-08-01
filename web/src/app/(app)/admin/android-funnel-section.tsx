@@ -10,7 +10,7 @@
 // them would report abandonment of a step that could not be reached.
 //
 // The block describes WHERE people stop. It never claims to know why.
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api";
 import { PillGroup } from "./pill-group";
 import { formatCount, formatDateTime } from "./android-installations-metrics";
@@ -160,18 +160,25 @@ export function AndroidFunnelSection() {
 
   const query = funnelQuery({ period, build, audience });
 
-  const load = useCallback(async () => {
-    setError(false);
-    try {
-      setData(await api.get<AndroidFunnelPayload>(`/api/v1/admin/analytics/android_funnel?${query}`));
-    } catch {
-      setError(true);
-    }
-  }, [query]);
-
+  // Only the resolved request writes state: a setState in the body of an effect
+  // triggers a cascading render (react-hooks/set-state-in-effect). The `active`
+  // guard drops the response of a filter the operator already moved away from.
   useEffect(() => {
-    load();
-  }, [load]);
+    let active = true;
+
+    api
+      .get<AndroidFunnelPayload>(`/api/v1/admin/analytics/android_funnel?${query}`)
+      .then((next) => {
+        if (!active) return;
+        setData(next);
+        setError(false);
+      })
+      .catch(() => active && setError(true));
+
+    return () => {
+      active = false;
+    };
+  }, [query]);
 
   if (error) {
     return (

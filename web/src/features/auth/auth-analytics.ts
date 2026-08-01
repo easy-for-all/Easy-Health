@@ -14,7 +14,7 @@ import { getAnalyticsContext } from "@/shared/lib/analytics/context";
 // password, a token, an e-mail or a raw error message.
 
 export type AuthScreen = "login" | "sign_up";
-export type AuthOrigin = "landing" | "login" | "sign_up";
+export type AuthOrigin = "landing" | "login" | "sign_up" | "native_entry";
 export type AuthProvider = "google" | "email";
 
 type AuthProviderClick =

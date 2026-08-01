@@ -33,8 +33,8 @@ RSpec.describe "Api::V1::Admin::Analytics android funnel", type: :request do
       keys = body["steps"].map { |step| step["key"] }
 
       expect(keys).to eq(
-        %w[installations first_open session_started landing auth_screen auth_choice
-           auth_client auth_api auth_done android_users linked]
+        %w[installations first_open session_started entry_viewed auth_screen auth_choice
+           auth_provider auth_client auth_api auth_done android_users linked]
       )
       expect(body["cohort"]["installations"]).to eq(1)
       expect(body["definitions"]["min_instrumented_build"]).to eq(51)
@@ -71,7 +71,7 @@ RSpec.describe "Api::V1::Admin::Analytics android funnel", type: :request do
   describe "GET /api/v1/admin/analytics/android_funnel/installations" do
     it "forbids non-admins" do
       sign_in create(:user)
-      get "/api/v1/admin/analytics/android_funnel/installations", params: { stage: "stopped_landing" }
+      get "/api/v1/admin/analytics/android_funnel/installations", params: { stage: "stopped_entry_viewed" }
 
       expect(response).to have_http_status(:forbidden)
     end
