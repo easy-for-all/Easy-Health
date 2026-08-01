@@ -131,6 +131,14 @@ function writeLocalStorage(key: string, value: string): void {
   }
 }
 
+function removeLocalStorage(key: string): void {
+  try {
+    if (hasWindow()) window.localStorage.removeItem(key);
+  } catch {
+    /* storage may be unavailable (private mode) — ignore */
+  }
+}
+
 function uuid(): string {
   try {
     if (hasWindow() && typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -240,13 +248,43 @@ function getTimezone(): string | undefined {
 // Synchronous accessors for the installation_id mirror. The async source of
 // truth lives in installation.ts (@capacitor/preferences on native); it calls
 // setCachedInstallationId once resolved so events can carry the id.
+//
+// On NATIVE the localStorage mirror is deliberately NOT a read source. The
+// WebView data dir is part of Android Auto Backup, so a reinstall/device
+// transfer can hand the app a mirror belonging to the PREVIOUS installation —
+// which is how one installation_id ended up shared by two users in production.
+// Native reads only the in-memory value, populated from @capacitor/preferences
+// (excluded from backup, see android-config/res/xml/data_extraction_rules.xml).
+// Web/PWA has no native store, so the mirror stays authoritative there.
 export function getCachedInstallationId(): string | undefined {
+  if (isNativeApp()) return cachedInstallationId;
   return cachedInstallationId ?? readLocalStorage(LS_INSTALLATION_ID) ?? undefined;
+}
+
+// Raw mirror read, used ONLY as the last-resort fallback when the native store
+// is unreachable (see installation.ts). Never a substitute for the store.
+export function readInstallationMirror(): string | undefined {
+  return readLocalStorage(LS_INSTALLATION_ID) ?? undefined;
 }
 
 export function setCachedInstallationId(id: string): void {
   cachedInstallationId = id;
   writeLocalStorage(LS_INSTALLATION_ID, id);
+}
+
+// Called when the native store proves this is a brand-new installation (a real
+// reinstall, or a restore that carried over WebView data). Everything that
+// identifies the PREVIOUS installation has to go with the old installation_id,
+// otherwise the restored device keeps reporting as the old one: it would inherit
+// its anonymous_id and never emit app_first_open. Deliberately does NOT touch
+// user preferences or session cookies — only the analytics identity markers.
+export function resetIdentityForNewInstallation(): void {
+  removeLocalStorage(ANON_KEY);
+  removeLocalStorage(INSTALL_FLAG);
+  removeLocalStorage(LS_APP_VERSION);
+  removeLocalStorage(LS_BUILD_NUMBER);
+  cachedAppVersion = undefined;
+  cachedBuildNumber = undefined;
 }
 
 export function getAnalyticsContext(): AnalyticsContext {

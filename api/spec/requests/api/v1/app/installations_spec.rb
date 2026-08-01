@@ -71,6 +71,50 @@ RSpec.describe "Api::V1::App::Installations", type: :request do
         expect(body).to include("status" => "registered", "created" => false, "link_status" => "already_linked")
       end
 
+      # The only signal the client gets that its installation_id belongs to
+      # somebody else. Without it the app cannot tell a restored id from a
+      # healthy one, which is how a new Android user ended up with no
+      # AppInstallation at all: the register answered 200/registered and the
+      # conflict was invisible.
+      it "reports a conflict without transferring ownership" do
+        owner = create(:user)
+        create(:app_installation, installation_id: "inst-req-1", user: owner, linked_at: 1.day.ago)
+        newcomer = create(:user)
+        sign_in newcomer
+
+        post "/api/v1/app/installations/register", params: payload, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(body).to include(
+          "status" => "registered", "registered" => true, "link_status" => "conflict"
+        )
+        # The row still belongs to the original owner — the client regenerating
+        # its id is the recovery, never the backend giving the row away.
+        install = AppInstallation.find_by(installation_id: "inst-req-1")
+        expect(install.user_id).to eq(owner.id)
+        expect(install.last_link_failure_code).to eq("user_conflict")
+      end
+
+      it "links a regenerated installation_id to the user the conflict blocked" do
+        owner = create(:user)
+        create(:app_installation, installation_id: "inst-req-1", user: owner, linked_at: 1.day.ago)
+        newcomer = create(:user)
+        sign_in newcomer
+
+        post "/api/v1/app/installations/register", params: payload, as: :json
+        # What the client does next: a brand new id, registered once. (sign_in is
+        # per-request in this harness, hence the repeat.)
+        sign_in newcomer
+        post "/api/v1/app/installations/register",
+             params: payload(installation_id: "inst-req-1-regenerated"), as: :json
+
+        expect(body["link_status"]).to eq("linked")
+        expect(AppInstallation.find_by(installation_id: "inst-req-1-regenerated").user_id)
+          .to eq(newcomer.id)
+        # …and the original installation is untouched.
+        expect(AppInstallation.find_by(installation_id: "inst-req-1").user_id).to eq(owner.id)
+      end
+
       it "answers deferred (not registered) when the register could not persist" do
         allow_any_instance_of(AppInstallations::Register).to receive(:call).and_return(
           AppInstallations::Register::Result.new(

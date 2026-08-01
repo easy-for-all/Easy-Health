@@ -35,11 +35,11 @@ RSpec.describe Analytics::AndroidFunnel do
                          "not in config/analytics/events.yml: #{unknown.join(", ")}"
     end
 
-    it "places session_started between first open and landing" do
+    it "places session_started between first open and entry view" do
       keys = described_class::STAGES.map { |stage| stage[:key] }
 
       expect(keys.index("session_started")).to eq(keys.index("first_open") + 1)
-      expect(keys.index("landing")).to eq(keys.index("session_started") + 1)
+      expect(keys.index("entry_viewed")).to eq(keys.index("session_started") + 1)
     end
 
     it "places auth_provider_clicked between auth choice and auth started" do
@@ -123,7 +123,7 @@ RSpec.describe Analytics::AndroidFunnel do
       expect(bucket_count(described_class.new.call, "stopped_first_open")).to eq(1)
     end
 
-    it "classifies an installation that started a session and never saw the landing" do
+    it "classifies an installation that started a session and never saw the entry screen" do
       record = install
       emit(record, "app_first_open")
       emit(record, "session_started")
@@ -134,11 +134,21 @@ RSpec.describe Analytics::AndroidFunnel do
       expect(bucket_count(payload, "stopped_first_open")).to eq(0)
     end
 
-    it "classifies an installation that stopped after the landing" do
+    it "classifies an installation that stopped after the historical landing" do
       record = install
       %w[app_first_open session_started landing_page_viewed].each { |name| emit(record, name) }
 
-      expect(bucket_count(described_class.new.call, "stopped_landing")).to eq(1)
+      expect(bucket_count(described_class.new.call, "stopped_entry_viewed")).to eq(1)
+    end
+
+    it "classifies an installation that stopped after the native entry screen" do
+      record = install
+      %w[app_first_open session_started native_entry_viewed].each { |name| emit(record, name) }
+
+      payload = described_class.new.call
+
+      expect(bucket_count(payload, "stopped_entry_viewed")).to eq(1)
+      expect(steps_by_key(payload)["entry_viewed"][:count]).to eq(1)
     end
 
     it "classifies an installation that saw auth and chose nothing" do
@@ -324,7 +334,7 @@ RSpec.describe Analytics::AndroidFunnel do
 
       drop = described_class.new.call[:biggest_drop]
 
-      expect(drop[:from_key]).to eq("landing")
+      expect(drop[:from_key]).to eq("entry_viewed")
       expect(drop[:to_key]).to eq("auth_screen")
       expect(drop[:lost]).to eq(7)
       expect(drop[:drop_rate][:value]).to eq(77.8)

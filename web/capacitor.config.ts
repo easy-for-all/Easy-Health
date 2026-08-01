@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Easy Health',
   webDir: 'public',
   server: {
-    url: 'https://easyhealth.art',
+    url: 'https://easyhealth.art/?native_entry=1',
     cleartext: false,
   },
   plugins: {

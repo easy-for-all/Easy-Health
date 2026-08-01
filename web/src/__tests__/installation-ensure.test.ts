@@ -128,13 +128,38 @@ describe("ensureInstallationRegistered", () => {
   });
 
   it("reuses an id already persisted instead of creating a second one", async () => {
-    window.localStorage.setItem("eh_installation_id", "existing-id");
     vi.stubGlobal("fetch", fetchOk());
-    const { ensureInstallationRegistered } = await loadNative();
+    // The durable native store is the source of truth, not the mirror.
+    const { ensureInstallationRegistered } = await loadNativeWithSlowStore(0, "existing-id");
 
     const result = await ensureInstallationRegistered();
 
     expect(result.installationId).toBe("existing-id");
+  });
+
+  // A restored Android backup brings the WebView data dir back (localStorage
+  // included) but NOT the Capacitor store, which is excluded from backup. An id
+  // that exists only in the mirror therefore belongs to the PREVIOUS
+  // installation and adopting it is what produced link_result=conflict.
+  it("does not adopt a mirror-only id on native (restored backup)", async () => {
+    window.localStorage.setItem("eh_installation_id", "restored-id");
+    vi.stubGlobal("fetch", fetchOk());
+    const { ensureInstallationRegistered } = await loadNativeWithSlowStore(0, null);
+
+    const result = await ensureInstallationRegistered();
+
+    expect(result.installationId).not.toBe("restored-id");
+    expect(result.installationId).toBeTruthy();
+    // The stale mirror is overwritten, so nothing reads it back later.
+    expect(window.localStorage.getItem("eh_installation_id")).toBe(result.installationId);
+  });
+
+  it("keeps using the localStorage id on web, where there is no native store", async () => {
+    window.localStorage.setItem("eh_installation_id", "web-id");
+    vi.stubGlobal("fetch", fetchOk());
+    const { getInstallationId } = await loadWeb();
+
+    expect(await getInstallationId()).toBe("web-id");
   });
 
   it("shares one operation between concurrent callers (boot, login, push, resume)", async () => {
@@ -348,10 +373,13 @@ describe("ensureInstallationForAuth", () => {
   });
 
   it("returns instead of blocking login when the backend never answers", async () => {
+    // The store is mocked so this test isolates ONE variable: the network. With
+    // the real plugin the dynamic import itself is pending work that fake timers
+    // never drive, which has nothing to do with what is being asserted here.
+    const { ensureInstallationForAuth } = await loadNativeWithSlowStore(0, "stored-id");
     vi.useFakeTimers();
     // A register that hangs forever: login must not wait on it.
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
-    const { ensureInstallationForAuth } = await loadNative();
 
     const pending = ensureInstallationForAuth();
     await vi.advanceTimersByTimeAsync(2_500);

@@ -40,6 +40,11 @@ cp android-config/res/values/colors.xml android/app/src/main/res/values/colors.x
 cp android-config/res/values/styles.xml android/app/src/main/res/values/styles.xml
 cp android-config/res/values/notification.xml android/app/src/main/res/values/notification.xml
 cp android-config/res/drawable/ic_stat_notification.xml android/app/src/main/res/drawable/ic_stat_notification.xml
+# Auto Backup rules: keep the Capacitor preferences store (installation_id) out
+# of cloud backup and device transfer. Referenced by AndroidManifest.xml.
+mkdir -p android/app/src/main/res/xml
+cp android-config/res/xml/backup_rules.xml android/app/src/main/res/xml/backup_rules.xml
+cp android-config/res/xml/data_extraction_rules.xml android/app/src/main/res/xml/data_extraction_rules.xml
 mkdir -p android/gradle/wrapper
 cp android-config/gradle/wrapper/gradle-wrapper.properties \
    android/gradle/wrapper/gradle-wrapper.properties

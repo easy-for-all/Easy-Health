@@ -23,8 +23,15 @@
         android:name="android.permission.ACCESS_ADSERVICES_TOPICS"
         tools:node="remove" />
 
+    <!-- Backup stays ON so users keep their app state across devices, but the
+         Capacitor SharedPreferences store is excluded: it holds
+         eh_installation_id, and restoring it made a reinstalled app claim the
+         previous installation's identity. fullBackupContent covers API 23-30,
+         dataExtractionRules covers API 31+ (targetSdk is 36). -->
     <application
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

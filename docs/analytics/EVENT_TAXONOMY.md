@@ -37,8 +37,9 @@ usar dimensões agregadas apenas quando seguro.
 ## Eventos (v1)
 
 Grupos definidos na YAML: **Aquisição & lifecycle** (`app_first_open`, `app_opened`,
-`app_resumed`, `app_backgrounded`, `app_updated`, `web_session_started`, `pwa_installed`,
-`deep_link_opened`, `landing_page_viewed`, …), **Autenticação** (`signup_*`, `login_*`,
+`app_resumed`, `app_backgrounded`, `app_updated`, `installation_id_regenerated`,
+`web_session_started`, `pwa_installed`,
+`deep_link_opened`, `landing_page_viewed`, `native_entry_viewed`, …), **Autenticação** (`signup_*`, `login_*`,
 `social_login_*`), **Onboarding** (`onboarding_*`), **Treinos** (`workout_created`,
 `workout_viewed`, `workout_start_clicked`, `workout_started`, `workout_first_exercise_started`,
 `workout_abandoned`, `workout_completed`, …), **Engajamento**, **Push** (`push_*`,
@@ -52,15 +53,17 @@ a fonte, este documento é o guia.
 
 ## Funil pré-auth Android — quem dispara o quê
 
-No Android o app é um shell Capacitor que carrega o site na raiz, então a
-**primeira tela é a landing page**, não uma tela de acesso. Entre o boot e a
+No Android o app é um shell Capacitor que carrega o site, então a
+**primeira tela pré-auth é a entrada nativa nos builds novos ou a landing em
+builds antigos**, não uma tela de acesso. Entre o boot e a
 chegada da requisição no Rails não havia nenhum sinal: uma instalação que abriu e
 saiu era idêntica a uma que tocou no Google e falhou no aparelho.
 
 | Evento | Significado exato | Quem emite |
 |---|---|---|
 | `app_first_open` / `app_opened` / `session_started` | boot nativo | frontend (`analytics/lifecycle.ts`) |
-| `landing_page_viewed` | landing renderizada (1ª tela no Android) | frontend (`app/page.tsx`) |
+| `landing_page_viewed` | landing comercial renderizada na web ou em builds Android antigos | frontend (`app/page.tsx`) |
+| `native_entry_viewed` | tela curta de entrada nativa renderizada no Android | frontend (`NativeEntryScreen`) |
 | `auth_screen_viewed` | `/login` ou `/sign-up` renderizada e utilizável | frontend (`useAuthScreenView`) |
 | `signup_selected` / `login_selected` | escolha explícita de cadastro/entrada | frontend (CTAs) |
 | `signup_started` / `login_started` | formulário **enviado**, após validação client | frontend (submit) |

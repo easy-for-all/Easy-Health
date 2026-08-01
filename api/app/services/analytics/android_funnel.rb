@@ -52,7 +52,7 @@ module Analytics
     STAGES = [
       { key: "first_open",      label: "First open",                events: %w[app_first_open] },
       { key: "session_started", label: "Session started",           events: %w[session_started] },
-      { key: "landing",         label: "Landing visualizada",       events: %w[landing_page_viewed] },
+      { key: "entry_viewed",    label: "Entrada visualizada",       events: %w[native_entry_viewed landing_page_viewed] },
       { key: "auth_screen",     label: "Tela de autenticação",      events: %w[auth_screen_viewed] },
       { key: "auth_choice",     label: "Escolheu login/cadastro",   events: %w[signup_selected login_selected] },
       { key: "auth_provider",   label: "Tentou autenticar",         events: %w[auth_provider_clicked] },
@@ -80,7 +80,7 @@ module Analytics
       "no_events" => "Sem evento do funil",
       "stopped_first_open" => "Parou após first open",
       "stopped_session_started" => "Parou após iniciar sessão",
-      "stopped_landing" => "Parou após a landing",
+      "stopped_entry_viewed" => "Parou após a entrada",
       "stopped_auth_screen" => "Viu auth e não escolheu",
       "stopped_auth_choice" => "Escolheu e não clicou no auth",
       "stopped_auth_provider" => "Clicou e não iniciou auth",

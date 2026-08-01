@@ -230,15 +230,15 @@ export default function LandingPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100svh", background: "var(--bg)", color: "var(--text)" }}>
       {/* "landing_view" is the historical GA4 name and stays; landing_page_viewed
-          is the taxonomy name and is what persists. On Android this page is the
-          FIRST screen of the app (the shell loads the site root), so without the
-          server sink the native funnel has no top step at all. */}
+          is the taxonomy name and is what persists for web and historical
+          Android builds that reached the commercial landing. */}
       <AnalyticsTracker
         eventName="landing_view"
         conversionLabel={CONVERSIONS.PAGE_VIEW}
         serverEvent="landing_page_viewed"
+        skipWhenNative
       />
-      <AnalyticsTracker eventName="screen_view" params={{ screen_name: "home" }} />
+      <AnalyticsTracker eventName="screen_view" params={{ screen_name: "home" }} skipWhenNative />
 
       {/* ── NAV ── */}
       <LandingHeader />

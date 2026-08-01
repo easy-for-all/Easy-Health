@@ -26,6 +26,11 @@ events:
   app_backgrounded:         { version: 1, sinks: [ga4] }
   app_resumed:              { version: 1, sinks: [ga4] }
   app_updated:              { version: 1, sinks: [server, ga4] }
+  # Client-emitted: the app replaced an installation_id the backend reported as
+  # belonging to another user, after proving the id was never created by this
+  # installation (restored by Android Auto Backup). Server sink only — it is a
+  # diagnostic for the install-identity funnel, not a behavioural event.
+  installation_id_regenerated: { version: 1, sinks: [server] }
   session_started:          { version: 1, sinks: [server, ga4] }
   session_ended:            { version: 1, sinks: [ga4] }
   screen_view:              { version: 1, sinks: [ga4] }
@@ -33,9 +38,12 @@ events:
   pwa_installed:            { version: 1, sinks: [server, ga4] }
   pwa_opened:               { version: 1, sinks: [ga4] }
   deep_link_opened:         { version: 1, sinks: [server, ga4] }
-  # server sink: on Android this is the FIRST screen of the app (the shell loads
-  # the site root), so without it the native funnel has no top.
+  # server sink: remains the web/public landing view and the entry step for
+  # historical Android builds that opened the site root.
   landing_page_viewed:      { version: 1, sinks: [server, ga4, clarity] }
+  # First screen of current Android builds before auth; replaces the commercial
+  # landing as the native entry while keeping the auth flow unchanged.
+  native_entry_viewed:      { version: 1, sinks: [server, ga4] }
 
   # ── Authentication ─────────────────────────────────────────────────────────
   # The pre-auth steps are server-sink because the whole stretch between

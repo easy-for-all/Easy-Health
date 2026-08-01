@@ -42,6 +42,7 @@ describe("pre-auth funnel payload", () => {
     const { trackEvent } = await import("@/shared/lib/analytics");
 
     trackEvent("landing_page_viewed");
+    trackEvent("native_entry_viewed", { source: "native_app", platform: "android" });
     trackEvent("auth_screen_viewed", { auth_screen: "sign_up" });
     trackEvent("signup_selected", { from: "landing" });
     trackEvent("login_selected", { from: "landing" });
@@ -66,6 +67,7 @@ describe("pre-auth funnel payload", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "landing_page_viewed",
+        "native_entry_viewed",
         "auth_screen_viewed",
         "signup_selected",
         "login_selected",

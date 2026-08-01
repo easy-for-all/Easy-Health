@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Auto Backup rules for API 23-30 (android:fullBackupContent).
+     API 31+ reads data_extraction_rules.xml instead; both must stay in sync.
+
+     "CapacitorStorage" is the SharedPreferences file used by
+     @capacitor/preferences (PreferencesConfiguration.DEFAULTS.group). It holds
+     eh_installation_id, which identifies ONE app installation. With the default
+     rules it was restored on reinstall and on device-to-device transfer, so a
+     freshly installed app came up claiming the previous installation's id — and
+     the backend, correctly, refused to move that installation to the new user
+     (link_result=conflict), leaving the new account with no AppInstallation.
+
+     Excluding it makes "this key exists" mean "created by THIS installation",
+     which is the signal installation.ts relies on. Nothing else is excluded:
+     user-facing state (session, app data in the WebView) still restores. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    <!-- Path matching for the sharedpref domain has been documented both with
+         and without the .xml suffix across AOSP versions. Both are listed so the
+         exclusion cannot silently miss on some Android release. -->
+    <exclude domain="sharedpref" path="CapacitorStorage" />
+</full-backup-content>
