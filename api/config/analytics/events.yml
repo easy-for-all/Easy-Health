@@ -33,18 +33,32 @@ events:
   pwa_installed:            { version: 1, sinks: [server, ga4] }
   pwa_opened:               { version: 1, sinks: [ga4] }
   deep_link_opened:         { version: 1, sinks: [server, ga4] }
-  landing_page_viewed:      { version: 1, sinks: [ga4, clarity] }
+  # server sink: on Android this is the FIRST screen of the app (the shell loads
+  # the site root), so without it the native funnel has no top.
+  landing_page_viewed:      { version: 1, sinks: [server, ga4, clarity] }
 
   # ── Authentication ─────────────────────────────────────────────────────────
-  signup_started:           { version: 1, sinks: [ga4] }
+  # The pre-auth steps are server-sink because the whole stretch between
+  # session_started and the auth request reaching the API used to be invisible:
+  # an install that opened and left looked identical to one that tried to sign
+  # in and failed on the device.
+  auth_screen_viewed:       { version: 1, sinks: [server, ga4] }
+  signup_selected:          { version: 1, sinks: [server, ga4] }
+  login_selected:           { version: 1, sinks: [server, ga4] }
+  auth_client_error:        { version: 1, sinks: [server, ga4] }
+  auth_api_error:           { version: 1, sinks: [server, ga4] }
+  signup_started:           { version: 1, sinks: [server, ga4] }
   signup_completed:         { version: 1, sinks: [server, ga4] }
-  login_started:            { version: 1, sinks: [ga4] }
+  login_started:            { version: 1, sinks: [server, ga4] }
   login_completed:          { version: 1, sinks: [server, ga4] }
-  login_failed:             { version: 1, sinks: [ga4] }
+  login_failed:             { version: 1, sinks: [server, ga4] }
   logout_completed:         { version: 1, sinks: [ga4] }
-  social_login_started:     { version: 1, sinks: [ga4] }
+  # social_login_* = the TAP on the provider button and a client-side failure.
+  # google_auth_* (below) stays what it has always been: the request arriving at
+  # the API. Keeping both means a picker cancellation is finally countable.
+  social_login_started:     { version: 1, sinks: [server, ga4] }
   social_login_completed:   { version: 1, sinks: [server, ga4] }
-  social_login_failed:      { version: 1, sinks: [ga4] }
+  social_login_failed:      { version: 1, sinks: [server, ga4] }
 
   # ── Onboarding ─────────────────────────────────────────────────────────────
   onboarding_started:       { version: 1, sinks: [server, ga4] }

@@ -8,6 +8,13 @@ import { api, ApiError } from "@/shared/lib/api";
 import { checkoutErrorCode, checkoutErrorMessage, reportCheckoutException } from "@/features/billing/checkout-errors";
 import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
 import { checkoutEventParams, trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
+import {
+  reportAuthError,
+  trackAuthApiError,
+  trackAuthClientError,
+  trackLoginSelected,
+  useAuthScreenView,
+} from "@/features/auth/auth-analytics";
 import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
 import {
   GoogleAuthError,
@@ -70,13 +77,20 @@ export default function SignUpPage() {
   const consentCheckboxRef = useRef<HTMLInputElement>(null);
   const hydrated = useIsHydrated();
   const isNative = useIsNativePlatform();
+
+  useAuthScreenView("sign_up");
   // Arriving from the login screen's "create account with Google" CTA. Only
   // highlights the Google option — it never pre-accepts anything nor starts OAuth.
   const fromGoogle = searchParams.get("provider") === "google";
   const consentRefused = searchParams.get("error") === "consent_required";
   // Derived rather than stored: a refused social sign-in must surface the same
   // warning as a blocked submit, without a setState-in-effect round trip.
-  const showTermsWarning = (termsWarning || consentRefused) && !acceptedTerms;
+  //
+  // Suppressed while the banner above is on screen: that banner already says to
+  // accept the terms, in the same words and in the same place, and showing both
+  // stacks two identical alerts on top of each other.
+  const consentBannerShown = fromGoogle || consentRefused;
+  const showTermsWarning = (termsWarning || consentRefused) && !acceptedTerms && !consentBannerShown;
 
   const passwordValid = password.length >= 8;
   // Single checkbox covers both Terms of Use and Privacy Policy.
@@ -110,6 +124,7 @@ export default function SignUpPage() {
 
     setError("");
     setGoogleLoading(true);
+    trackEvent("social_login_started", { provider: "google", intent: "sign_up" });
     try {
       const outcome = await startGoogleAuth({ native: isNative, consent });
       if (outcome.navigated) return; // leaving the page; keep the loading state
@@ -125,6 +140,19 @@ export default function SignUpPage() {
         name: (err as Error)?.name,
         message: (err as Error)?.message,
       });
+      // Same split as the login screen: did it die on the device, or did the API
+      // answer? That is the distinction the funnel could not make at all.
+      const reachedApi = failure === "network" || code === "exchange_failed" ||
+        ["consent_required", "account_deleted", "invalid_token"].includes(code);
+      if (reachedApi) {
+        trackAuthApiError("google_exchange", err, "google");
+      } else {
+        trackEvent("social_login_failed", { provider: "google", error_code: failure });
+        trackAuthClientError("google_plugin", code, "google");
+      }
+      if (failure !== "cancelled" && failure !== "consent_required") {
+        reportAuthError("google_plugin", err, { failure, code });
+      }
 
       switch (failure) {
         case "consent_required":
@@ -146,9 +174,10 @@ export default function SignUpPage() {
     }
   }
 
-  useEffect(() => {
-    trackEvent(EVENTS.SIGNUP_STARTED);
-  }, []);
+  // signup_started used to fire here, on mount, which made it a screen view
+  // wearing an intent name. auth_screen_viewed (useAuthScreenView above) is the
+  // screen view now, and signup_started moved to the actual submit so it is
+  // symmetric with login_started and countable against signup_completed.
 
   // A social sign-in that was refused for missing consent lands here; the
   // warning is derived above, so this effect only moves focus (a real DOM side
@@ -183,6 +212,8 @@ export default function SignUpPage() {
     setError("");
     setLoading(true);
     submittingRef.current = true;
+    // Past every client-side gate, before the request leaves.
+    trackEvent(EVENTS.SIGNUP_STARTED, { method: "email" });
     try {
       await signUp(submittedName, submittedEmail, submittedPassword, marketingConsent);
       trackEvent(EVENTS.SIGNUP_COMPLETED);
@@ -215,10 +246,15 @@ export default function SignUpPage() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
+        trackAuthApiError("email_signup", err);
         setError(err.message);
       } else if (err instanceof TypeError) {
+        // fetch itself rejected: the request never got an answer.
+        trackAuthClientError("email_signup", "network");
         setError("Não foi possível conectar ao servidor. Tente novamente.");
       } else {
+        trackAuthClientError("email_signup", "unknown");
+        reportAuthError("email_signup", err);
         setError("Erro ao criar conta");
       }
     } finally {
@@ -272,6 +308,19 @@ export default function SignUpPage() {
             {consentRefused
               ? "Para criar sua conta com o Google, aceite os Termos de Uso e a Política de Privacidade abaixo e tente novamente."
               : "Esta conta Google ainda não está cadastrada. Aceite os Termos de Uso e a Política de Privacidade abaixo para criar sua conta."}
+          </p>
+        )}
+
+        {/* The consent warning has to sit HERE, immediately above the button that
+            triggered it. It used to render only at the bottom of the form, ~400px
+            down and off-screen on a phone, so tapping the greyed-out Google
+            button looked like it simply did nothing. */}
+        {showTermsWarning && (
+          <p
+            role="alert"
+            className="mb-3 rounded-xl border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-300"
+          >
+            Aceite os Termos de Uso e a Política de Privacidade abaixo para continuar.
           </p>
         )}
 
@@ -416,7 +465,11 @@ export default function SignUpPage() {
 
         <p className="mt-6 text-center text-sm text-slate-500">
           Já tem conta?{" "}
-          <Link href="/login" className="font-medium text-primary-400 hover:underline">
+          <Link
+            href="/login"
+            onClick={() => trackLoginSelected("sign_up")}
+            className="font-medium text-primary-400 hover:underline"
+          >
             Entrar
           </Link>
         </p>

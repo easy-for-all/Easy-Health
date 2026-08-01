@@ -236,5 +236,91 @@ RSpec.describe "Admin observability", type: :request do
       expect(payload["subject"]["installation_found"]).to be(false)
       expect(payload["events"]).to be_empty
     end
+
+    # This branch used to match session_id against an installation_id — two
+    # unrelated uuids — so it silently returned nothing and every pre-signup
+    # investigation had to be done by hand, by timestamp.
+    context "anonymous installation, before any account exists" do
+      let!(:anonymous_installation) do
+        AppInstallation.create!(
+          installation_id: "install-still-anonymous", platform: "android",
+          app_build: "50", app_version: "1.0.50"
+        )
+      end
+
+      def anonymous_event(name, occurred_at, properties = {})
+        ProductAnalyticsEvent.create!(
+          event_name: name, event_version: 1,
+          occurred_at: occurred_at, received_at: Time.current,
+          user_id: nil, platform: "android", app_surface: "native_shell",
+          environment: "test", source: "web_client",
+          anonymous_id: "anon-x", session_id: "session-not-the-installation-id",
+          properties: properties.merge("installation_id" => "install-still-anonymous")
+        )
+      end
+
+      before do
+        anonymous_event("app_first_open", 30.minutes.ago)
+        anonymous_event("landing_page_viewed", 29.minutes.ago)
+        anonymous_event("auth_screen_viewed", 28.minutes.ago, "auth_screen" => "sign_up")
+        anonymous_event("auth_client_error", 27.minutes.ago,
+                        "stage" => "google_plugin", "error_code" => "plugin_init_failed")
+      end
+
+      it "finds the pre-auth journey by installation_id" do
+        get "/api/v1/admin/observability/timeline",
+            params: { installation_id: "install-still-anonymous" }
+
+        expect(response).to have_http_status(:ok)
+        names = payload["events"].map { |e| e["event_name"] }
+        expect(names).to contain_exactly(
+          "app_first_open", "landing_page_viewed", "auth_screen_viewed", "auth_client_error"
+        )
+      end
+
+      it "answers where the user stopped and why" do
+        get "/api/v1/admin/observability/timeline",
+            params: { installation_id: "install-still-anonymous" }
+
+        failure = payload["events"].find { |e| e["event_name"] == "auth_client_error" }
+        expect(failure["stage"]).to eq("google_plugin")
+        expect(failure["error_code"]).to eq("plugin_init_failed")
+
+        screen = payload["events"].find { |e| e["event_name"] == "auth_screen_viewed" }
+        expect(screen["auth_screen"]).to eq("sign_up")
+      end
+
+      it "does not pull in another installation's events" do
+        anonymous_installation # referenced so the let! is not the only anchor
+        ProductAnalyticsEvent.create!(
+          event_name: "app_first_open", event_version: 1,
+          occurred_at: 20.minutes.ago, received_at: Time.current,
+          platform: "android", app_surface: "native_shell", environment: "test",
+          properties: { "installation_id" => "some-other-install" }
+        )
+
+        get "/api/v1/admin/observability/timeline",
+            params: { installation_id: "install-still-anonymous" }
+
+        expect(payload["events"].count { |e| e["event_name"] == "app_first_open" }).to eq(1)
+      end
+    end
+
+    it "joins the anonymous events to the account once the installation is linked" do
+      ProductAnalyticsEvent.create!(
+        event_name: "app_first_open", event_version: 1,
+        occurred_at: 2.hours.ago, received_at: Time.current,
+        user_id: nil, platform: "android", app_surface: "native_shell",
+        environment: "test", source: "web_client",
+        properties: { "installation_id" => "install-under-investigation" }
+      )
+
+      get "/api/v1/admin/observability/timeline",
+          params: { installation_id: "install-under-investigation" }
+
+      names = payload["events"].map { |e| e["event_name"] }
+      expect(names).to include("app_first_open")      # anonymous, pre-account
+      expect(names).to include("google_auth_succeeded") # after the account existed
+    end
   end
 end

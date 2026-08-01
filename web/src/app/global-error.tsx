@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
+
 export default function GlobalError({
   error,
   reset,
@@ -7,7 +10,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  void error;
+  // Same reason as app/error.tsx: a swallowed crash is invisible in production.
+  useEffect(() => {
+    Sentry.captureException(error, { tags: { boundary: "global" } });
+  }, [error]);
 
   return (
     <html lang="pt-BR">

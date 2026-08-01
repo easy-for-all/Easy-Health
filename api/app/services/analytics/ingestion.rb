@@ -89,9 +89,28 @@ module Analytics
         locale: presence(h[:locale]),
         timezone: presence(h[:timezone]),
         source: presence(h[:source]),
-        properties: sanitized_properties(h[:properties]),
+        properties: with_installation_id(sanitized_properties(h[:properties])),
         idempotency_key: presence(h[:idempotency_key])
       }
+    end
+
+    # Without this, an anonymous pre-auth event can never be joined to the
+    # app_installations row that produced it — the gap that made an Android
+    # install a black box until it authenticated.
+    #
+    # The client already puts it in the body (analytics/server.ts). The header is
+    # the fallback for the path the body cannot cover reliably, and it never
+    # overwrites a value the client sent: the two agree, and a batch flushed by
+    # sendBeacon carries the body but no headers at all.
+    def with_installation_id(properties)
+      return properties if properties["installation_id"].present?
+
+      from_context = Observability::Context.installation_id.presence
+      return properties if from_context.blank?
+
+      properties.merge("installation_id" => from_context)
+    rescue StandardError
+      properties
     end
 
     def sanitized_properties(value)

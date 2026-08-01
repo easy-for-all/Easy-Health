@@ -445,10 +445,37 @@ RSpec.describe Analytics::AndroidInstallations do
       user.workout_plans.create!(active: true)
 
       funnel = result[:user_funnel]
-      expect(funnel.first[:label]).to eq("Usuários Android vinculados")
+      expect(funnel.first[:label]).to eq("Usuários Android vinculados (externos)")
       expect(funnel.first[:count]).to eq(1)
       expect(funnel.find { |s| s[:label] == "Criou treino" }[:count]).to eq(1)
       expect(funnel.map { |s| s[:conversion].denominator }.uniq).to eq([ 1 ])
+    end
+
+    # Google Play's pre-launch report drives a real device through the entire
+    # sign-up on a @cloudtestlabaccounts.com account. Counted here, two robot
+    # runs read as "this release converted 2/2" — which is exactly the number
+    # that hid the fact that no external user was converting at all.
+    it "excludes Test Lab and internal accounts from the funnel" do
+      real  = create(:user, email: "person@gmail.com")
+      robot = create(:user, email: "abc-00@cloudtestlabaccounts.com")
+      staff = create(:user, email: "hello@easyhealth.art")
+      [ real, robot, staff ].each { |u| android(user: u) }
+
+      funnel = result[:user_funnel]
+      expect(funnel.first[:count]).to eq(1)
+    end
+  end
+
+  describe "acquisition split" do
+    it "reports the buckets side by side instead of hiding the robots" do
+      real  = create(:user, email: "person@gmail.com")
+      robot = create(:user, email: "abc-00@cloudtestlabaccounts.com")
+      staff = create(:user, email: "hello@easyhealth.art")
+      [ real, robot, staff ].each { |u| android(user: u) }
+
+      expect(result[:acquisition_split]).to eq(
+        total: 3, external: 1, internal: 1, automated_test: 1
+      )
     end
   end
 

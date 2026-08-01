@@ -145,6 +145,10 @@ module Api
 
         TIMELINE_EVENTS = %w[
           app_first_open app_opened session_started web_session_started
+          landing_page_viewed auth_screen_viewed signup_selected login_selected
+          signup_started login_started login_failed
+          social_login_started social_login_failed
+          auth_client_error auth_api_error
           google_auth_started google_auth_succeeded google_auth_failed
           android_registration_started android_registration_succeeded android_registration_failed
           installation_link_succeeded installation_link_failed
@@ -153,6 +157,13 @@ module Api
         ].freeze
 
         TIMELINE_LIMIT = 200
+
+        # The anonymous half of the journey is keyed on properties->>'installation_id'
+        # (written by analytics/server.ts and by Observability::Context), NOT on
+        # session_id. Matching session_id against an installation_id compared two
+        # unrelated uuids, so this branch silently returned nothing and every
+        # pre-signup investigation had to be done by hand, by timestamp.
+        INSTALLATION_PROPERTY_SQL = "product_analytics_events.properties->>'installation_id' = ?".freeze
 
         def timeline_events(user_id, installation)
           # Nothing to search on: an installation id we have never seen, with no
@@ -166,12 +177,13 @@ module Api
               # An installation can precede the account, so both keys are needed
               # to see the pre-signup part of the journey.
               scope.where(user_id: user_id).or(
-                ProductAnalyticsEvent.where(event_name: TIMELINE_EVENTS, session_id: installation.installation_id)
+                ProductAnalyticsEvent.where(event_name: TIMELINE_EVENTS)
+                                     .where(INSTALLATION_PROPERTY_SQL, installation.installation_id)
               )
             elsif user_id
               scope.where(user_id: user_id)
             else
-              scope.where(session_id: installation.installation_id)
+              scope.where(INSTALLATION_PROPERTY_SQL, installation.installation_id)
             end
 
           scope.order(occurred_at: :desc).limit(TIMELINE_LIMIT).map do |event|
@@ -186,7 +198,11 @@ module Api
               result: safe_property(event, "result"),
               error_code: safe_property(event, "error_code"),
               auth_flow: safe_property(event, "auth_flow"),
-              link_result: safe_property(event, "link_result")
+              link_result: safe_property(event, "link_result"),
+              auth_screen: safe_property(event, "auth_screen"),
+              stage: safe_property(event, "stage"),
+              http_status: safe_property(event, "http_status"),
+              provider: safe_property(event, "provider")
             }.compact
           end
         end

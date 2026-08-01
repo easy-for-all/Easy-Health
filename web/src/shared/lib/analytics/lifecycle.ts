@@ -31,6 +31,15 @@ export async function initAnalyticsLifecycle(): Promise<void> {
   try {
     const { App } = await import("@capacitor/app");
 
+    // A cold start opens a fresh session, and it must be opened BEFORE the first
+    // event is emitted. getSessionId() mints an id on read, so emitting
+    // app_first_open/app_opened first made them carry an id that
+    // startAnalyticsSession() then discarded — the two different session_ids
+    // observed in a single cold start in production. buildEvent snapshots the
+    // context at enqueue time (server.ts), so those events stayed frozen on the
+    // dead id instead of picking up the real one at flush.
+    startAnalyticsSession();
+
     // Version/build + first_open / app_updated detection.
     try {
       const info = await App.getInfo();
@@ -51,8 +60,7 @@ export async function initAnalyticsLifecycle(): Promise<void> {
       trackEvent("app_opened");
     }
 
-    // Cold start always opens a fresh session.
-    startAnalyticsSession();
+    // The session itself was opened above, before the first event.
     trackEvent("session_started", { reason: "cold_start" });
 
     // Foreground/background transitions. Guard against duplicate resume events.

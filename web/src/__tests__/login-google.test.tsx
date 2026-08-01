@@ -66,7 +66,11 @@ vi.mock("@/features/billing/checkout-intent", () => ({
   getPendingPlan: () => null,
   clearPendingPlan: vi.fn(),
 }));
-vi.mock("@/shared/lib/analytics", () => ({ trackCheckoutStarted: vi.fn() }));
+vi.mock("@/shared/lib/analytics", () => ({
+  trackCheckoutStarted: vi.fn(),
+  trackEvent: vi.fn(),
+  trackOnce: vi.fn(),
+}));
 
 function googleButton() {
   // The label swaps to "Carregando..." while the page is not hydrated yet.
