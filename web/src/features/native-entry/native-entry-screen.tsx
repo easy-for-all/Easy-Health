@@ -5,7 +5,10 @@ import { useEffect } from "react";
 import { trackLoginSelected, trackSignupSelected } from "@/features/auth/auth-analytics";
 import { trackOnce } from "@/shared/lib/analytics";
 
-const SIGNUP_HREF = "/sign-up?intent=sign_up&from=native_entry";
+// A ação principal leva ao onboarding, não ao cadastro: no app o usuário chega
+// sem a landing longa da Web, então pedir a conta aqui é pedir antes de qualquer
+// valor percebido. A conta é pedida no fim, depois do resumo do plano.
+const SIGNUP_HREF = "/onboarding?intent=sign_up&from=native_entry";
 const LOGIN_HREF = "/login?intent=login&from=native_entry";
 
 export function NativeEntryScreen() {

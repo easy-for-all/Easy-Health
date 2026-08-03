@@ -29,6 +29,8 @@ export type StepId =
   | "quick-goal" | "quick-profile" | "quick-place" | "quick-time" | "quick-when" | "quick-limits"
   | "complete-goal" | "complete-profile" | "complete-method" | "complete-place"
   | "complete-focus" | "complete-schedule" | "complete-when" | "complete-care"
+  // Resumo do plano exibido antes de pedir a conta (onboarding pré-auth).
+  | "plan-preview"
   | "generating" | "error";
 
 export interface WizardFormState {

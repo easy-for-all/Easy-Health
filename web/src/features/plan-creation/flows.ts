@@ -32,12 +32,20 @@ const PROFILE_STEP: Record<CreationMode, StepId> = {
   complete: "complete-profile",
 };
 
-export function stepsForMode(mode: CreationMode, { hasExistingProfile }: { hasExistingProfile: boolean }): StepId[] {
-  const steps = BASE_FLOWS[mode].steps;
-  if (!hasExistingProfile) return steps;
-  return steps.filter((step) => step !== PROFILE_STEP[mode]);
+export interface FlowOptions {
+  hasExistingProfile: boolean;
+  // Acrescenta o resumo do plano ao final. Usado quando o onboarding roda antes
+  // da conta existir: é a tela que entrega valor percebido antes de pedir o
+  // cadastro, e por isso conta como uma etapa de verdade do fluxo.
+  withPreview?: boolean;
 }
 
-export function firstStepForMode(mode: CreationMode, opts: { hasExistingProfile: boolean }): StepId {
+export function stepsForMode(mode: CreationMode, { hasExistingProfile, withPreview }: FlowOptions): StepId[] {
+  const base = BASE_FLOWS[mode].steps;
+  const steps = hasExistingProfile ? base.filter((step) => step !== PROFILE_STEP[mode]) : base;
+  return withPreview ? [...steps, "plan-preview"] : steps;
+}
+
+export function firstStepForMode(mode: CreationMode, opts: FlowOptions): StepId {
   return stepsForMode(mode, opts)[0];
 }

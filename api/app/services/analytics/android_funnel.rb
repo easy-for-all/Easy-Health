@@ -53,6 +53,15 @@ module Analytics
       { key: "first_open",      label: "First open",                events: %w[app_first_open] },
       { key: "session_started", label: "Session started",           events: %w[session_started] },
       { key: "entry_viewed",    label: "Entrada visualizada",       events: %w[native_entry_viewed landing_page_viewed] },
+      # O onboarding passou a acontecer ANTES da conta existir, então estas duas
+      # etapas ficam entre a entrada e a autenticação. Elas não existiam nos
+      # builds anteriores: uma instalação antiga nunca as emitiu e apareceria
+      # aqui com zero, quebrando todas as conversões seguintes. É por isso que
+      # ligá-las exige subir o corte de build (ANDROID_FUNNEL_MIN_BUILD) para o
+      # primeiro build que as emite — o mesmo mecanismo já usado quando a
+      # instrumentação pré-auth entrou no build 51.
+      { key: "onboarding",      label: "Onboarding iniciado",       events: %w[onboarding_started] },
+      { key: "plan_preview",    label: "Resumo do plano",           events: %w[plan_preview_viewed] },
       { key: "auth_screen",     label: "Tela de autenticação",      events: %w[auth_screen_viewed] },
       { key: "auth_choice",     label: "Escolheu login/cadastro",   events: %w[signup_selected login_selected] },
       { key: "auth_provider",   label: "Tentou autenticar",         events: %w[auth_provider_clicked] },
@@ -81,6 +90,8 @@ module Analytics
       "stopped_first_open" => "Parou após first open",
       "stopped_session_started" => "Parou após iniciar sessão",
       "stopped_entry_viewed" => "Parou após a entrada",
+      "stopped_onboarding" => "Abandonou o onboarding",
+      "stopped_plan_preview" => "Viu o plano e não criou conta",
       "stopped_auth_screen" => "Viu auth e não escolheu",
       "stopped_auth_choice" => "Escolheu e não clicou no auth",
       "stopped_auth_provider" => "Clicou e não iniciou auth",

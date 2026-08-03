@@ -24,7 +24,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const justAuthenticatedRef = useRef(false);
 
   useEffect(() => {
-    const publicPaths = ["/", "/login", "/sign-up", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];
+    // Mantida alinhada com PUBLIC_PATHS em proxy.ts. /native-entry e /onboarding
+    // faltavam aqui: a borda já os liberava, mas este guard mandava o visitante
+    // para /login mesmo assim — e o onboarding do Android começa sem sessão.
+    // Quem protege /onboarding na Web é a própria página, que redireciona quando
+    // não é nativo e não há usuário.
+    const publicPaths = ["/", "/login", "/sign-up", "/native-entry", "/onboarding", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];
 
     api.get<User>("/api/v1/auth/me")
       .then((u) => {
