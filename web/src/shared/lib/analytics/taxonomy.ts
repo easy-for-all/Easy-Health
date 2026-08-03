@@ -40,6 +40,8 @@ export const EVENT_SINKS = {
   social_login_completed: ["server","ga4"] as Sink[],
   social_login_failed: ["server","ga4"] as Sink[],
   onboarding_started: ["server","ga4"] as Sink[],
+  plan_preview_viewed: ["server","ga4"] as Sink[],
+  onboarding_draft_resumed: ["server","ga4"] as Sink[],
   onboarding_flow_selected: ["server","ga4"] as Sink[],
   onboarding_step_viewed: ["ga4"] as Sink[],
   onboarding_step_completed: ["server","ga4"] as Sink[],

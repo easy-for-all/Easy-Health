@@ -115,7 +115,11 @@ describe("NativeEntryScreen", () => {
     const signup = screen.getByRole("link", { name: "Criar meu treino grátis" });
     const login = screen.getByRole("link", { name: "Já tenho uma conta" });
 
-    expect(signup).toHaveAttribute("href", "/sign-up?intent=sign_up&from=native_entry");
+    // A ação principal entra no onboarding, não no cadastro: no app não existe a
+    // landing longa da Web, então a conta é pedida depois do resumo do plano.
+    expect(signup).toHaveAttribute("href", "/onboarding?intent=sign_up&from=native_entry");
+    // "Já tenho uma conta" continua indo direto para o login — quem já é usuário
+    // não pode ser obrigado a atravessar o onboarding para entrar.
     expect(login).toHaveAttribute("href", "/login?intent=login&from=native_entry");
 
     await user.click(signup);

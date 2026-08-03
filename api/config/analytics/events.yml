@@ -75,7 +75,17 @@ events:
   social_login_failed:      { version: 1, sinks: [server, ga4] }
 
   # ── Onboarding ─────────────────────────────────────────────────────────────
+  # No Android o onboarding acontece ANTES da conta existir, então estes eventos
+  # chegam sem user_id. A ligação com o usuário final é feita por installation_id
+  # dentro de properties, do mesmo jeito que AndroidFunnel já faz — não existe
+  # stitching por anonymous_id e nenhum foi inventado para isto.
   onboarding_started:       { version: 1, sinks: [server, ga4] }
+  # Resumo do plano mostrado antes de pedir a conta. É o ponto onde se mede se a
+  # promessa de valor foi suficiente para o usuário aceitar se cadastrar.
+  plan_preview_viewed:      { version: 1, sinks: [server, ga4] }
+  # Rascunho local retomado. Alto aqui significa gente atravessando o cadastro em
+  # mais de uma sessão, o que muda como as quedas do funil devem ser lidas.
+  onboarding_draft_resumed: { version: 1, sinks: [server, ga4] }
   onboarding_flow_selected: { version: 1, sinks: [server, ga4] }
   onboarding_step_viewed:   { version: 1, sinks: [ga4] }
   onboarding_step_completed: { version: 1, sinks: [server, ga4] }

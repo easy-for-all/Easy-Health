@@ -267,6 +267,41 @@
 .wizard-cta:hover { filter: brightness(1.05); }
 .wizard-cta:active { transform: scale(.985); }
 .wizard-cta:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+/* Resumo do plano mostrado antes de pedir a conta (onboarding pré-auth). */
+.preview-card {
+  margin: 0;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  padding: 4px 17px;
+}
+.preview-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+.preview-row:last-child { border-bottom: 0; }
+.preview-row dt {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.preview-row dd {
+  margin: 0;
+  font-weight: 650;
+  font-size: 15px;
+  text-align: right;
+}
+.preview-note {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .wizard-select {
   width: 100%;
   border-radius: var(--r-md);

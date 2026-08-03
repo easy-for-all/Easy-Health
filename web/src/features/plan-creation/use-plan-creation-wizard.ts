@@ -37,7 +37,17 @@ function stepFieldsSnapshot(stepId: StepId, form: WizardFormState): Record<strin
   return Object.fromEntries(fields.map((key) => [key, form[key]]));
 }
 
-export function usePlanCreationWizard(entryMode: EntryMode, initialProfile: HealthProfile | null) {
+export interface WizardOptions {
+  // Acrescenta a etapa de resumo ao final do fluxo. Quem liga isto é responsável
+  // por decidir o que acontece no fim — ver onRequireAuth em PlanCreationFlow.
+  withPreview?: boolean;
+}
+
+export function usePlanCreationWizard(
+  entryMode: EntryMode,
+  initialProfile: HealthProfile | null,
+  { withPreview = false }: WizardOptions = {},
+) {
   const hasExistingProfile = !!initialProfile;
 
   // O rascunho é do onboarding, não do replan: quem já tem plano abre o wizard
@@ -60,9 +70,15 @@ export function usePlanCreationWizard(entryMode: EntryMode, initialProfile: Heal
   const [error, setError] = useState("");
   const lastFormRef = useRef<WizardFormState | null>(null);
 
-  const steps = useMemo(() => stepsForMode(mode, { hasExistingProfile }), [mode, hasExistingProfile]);
+  const steps = useMemo(
+    () => stepsForMode(mode, { hasExistingProfile, withPreview }),
+    [mode, hasExistingProfile, withPreview],
+  );
   const stepIndex = steps.indexOf(stepId);
   const progress = { current: Math.max(stepIndex, 0), total: steps.length };
+  // Quem chama onFinish está dizendo "terminei minha etapa", não "gere o plano":
+  // com o resumo ativo ainda há uma tela pela frente.
+  const isLastStep = stepIndex === steps.length - 1;
 
   useEffect(() => {
     if (phase !== "form") return;
@@ -85,7 +101,7 @@ export function usePlanCreationWizard(entryMode: EntryMode, initialProfile: Heal
 
   function start(selected: CreationMode) {
     setMode(selected);
-    setStepId(stepsForMode(selected, { hasExistingProfile })[0]);
+    setStepId(stepsForMode(selected, { hasExistingProfile, withPreview })[0]);
     setError("");
     setPhase("form");
   }
@@ -156,7 +172,7 @@ export function usePlanCreationWizard(entryMode: EntryMode, initialProfile: Heal
   }
 
   return {
-    mode, phase, stepId, form, error, steps, progress,
+    mode, phase, stepId, form, error, steps, progress, isLastStep,
     set, start, goNext, goBack, runGeneration, retry,
   };
 }
