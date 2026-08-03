@@ -68,6 +68,9 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsWarning, setTermsWarning] = useState(false);
+  // Google is the primary action on this screen; the email form is opt-in so the
+  // consent checkbox and the Google button fit on one phone screen without scroll.
+  const [showEmailForm, setShowEmailForm] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -118,6 +121,9 @@ export default function SignUpPage() {
     if (!acceptedTerms) {
       setTermsWarning(true);
       consentCheckboxRef.current?.focus();
+      // Countable in the funnel, not just in the console: this is the event that
+      // separates "the consent gate stopped them" from "they never tapped".
+      trackEvent("auth_consent_blocked", { provider: "google", auth_screen: "sign_up" });
       authLog("auth_blocked_missing_consent", {
         provider: "google",
         surface: "signup",
@@ -210,6 +216,8 @@ export default function SignUpPage() {
 
     if (!acceptedTerms) {
       setTermsWarning(true);
+      consentCheckboxRef.current?.focus();
+      trackEvent("auth_consent_blocked", { provider: "email", auth_screen: "sign_up" });
       return;
     }
 
@@ -338,6 +346,52 @@ export default function SignUpPage() {
           </p>
         )}
 
+        {/* Outside the form: with the email fields collapsed a Google failure had
+            nowhere to render, and the user would retry a button that kept failing
+            silently. */}
+        {error && (
+          <p className="mb-3 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
+        )}
+
+        {/* Consent lives ABOVE the Google button, and outside the form, because it
+            gates BOTH paths. Below the password field it was ~400px under the
+            primary action: the tap was blocked by a checkbox the user had never
+            scrolled to. Both boxes are read from React state, never from FormData,
+            so being outside the <form> changes nothing about the submit. */}
+        <div className="mb-4 space-y-3">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              ref={consentCheckboxRef}
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => { setAcceptedTerms(e.target.checked); if (e.target.checked) setTermsWarning(false); }}
+              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-slate-600 text-primary-500 focus:ring-primary-500"
+            />
+            <span className="text-sm text-slate-400">
+              Li e concordo com os{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-400 hover:underline">
+                Termos de Uso
+              </a>{" "}
+              e a{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-400 hover:underline">
+                Política de Privacidade
+              </a>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={marketingConsent}
+              onChange={(e) => setMarketingConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-slate-600 text-primary-500 focus:ring-primary-500"
+            />
+            <span className="text-sm text-slate-400">
+              Aceito receber dicas personalizadas, lembretes de treino e novidades da EasyHealth por e-mail
+            </span>
+          </label>
+        </div>
+
         {/* Google OAuth — a <button>, never an <a href>: the server-rendered
             markup must not carry a working OAuth link, and the consent params
             now travel through an explicit navigation instead of an attribute. */}
@@ -362,17 +416,25 @@ export default function SignUpPage() {
           {!hydrated ? "Carregando..." : googleLoading ? "Entrando com Google..." : "Continuar com Google"}
         </button>
 
-        <div className="flex items-center gap-3">
+        {!showEmailForm && (
+          <button
+            type="button"
+            onClick={() => setShowEmailForm(true)}
+            className="mt-4 w-full text-center text-sm font-medium text-slate-400 underline-offset-4 hover:text-slate-200 hover:underline"
+          >
+            ou criar com e-mail
+          </button>
+        )}
+
+        {showEmailForm && (
+        <>
+        <div className="my-4 flex items-center gap-3">
           <div className="h-px flex-1 bg-slate-800" />
           <span className="text-xs text-slate-600">ou</span>
           <div className="h-px flex-1 bg-slate-800" />
         </div>
 
         <form noValidate onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <p className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
-          )}
-
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-400">Nome</label>
             <input
@@ -431,38 +493,6 @@ export default function SignUpPage() {
             )}
           </div>
 
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              ref={consentCheckboxRef}
-              type="checkbox"
-              checked={acceptedTerms}
-              onChange={(e) => { setAcceptedTerms(e.target.checked); if (e.target.checked) setTermsWarning(false); }}
-              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-slate-600 text-primary-500 focus:ring-primary-500"
-            />
-            <span className="text-sm text-slate-400">
-              Li e concordo com os{" "}
-              <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-400 hover:underline">
-                Termos de Uso
-              </a>{" "}
-              e a{" "}
-              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-400 hover:underline">
-                Política de Privacidade
-              </a>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={marketingConsent}
-              onChange={(e) => setMarketingConsent(e.target.checked)}
-              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-slate-600 text-primary-500 focus:ring-primary-500"
-            />
-            <span className="text-sm text-slate-400">
-              Aceito receber dicas personalizadas, lembretes de treino e novidades da EasyHealth por e-mail
-            </span>
-          </label>
-
           <button
             type="submit"
             disabled={loading}
@@ -473,9 +503,11 @@ export default function SignUpPage() {
             {loading ? "Criando conta..." : "Criar conta"}
           </button>
           {showTermsWarning && (
-            <p className="text-center text-xs text-amber-400">Aceite os termos para continuar</p>
+            <p className="text-center text-xs text-amber-400">Aceite os termos acima para continuar</p>
           )}
         </form>
+        </>
+        )}
 
         <p className="mt-6 text-center text-sm text-slate-500">
           Já tem conta?{" "}

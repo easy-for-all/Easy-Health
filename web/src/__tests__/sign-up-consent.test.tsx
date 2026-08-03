@@ -75,6 +75,17 @@ function consentCheckbox() {
   return screen.getByRole("checkbox", { name: /Termos de Uso/i });
 }
 
+// O aviso que importa é o que fica acima do botão do Google: com o formulário de
+// e-mail recolhido por padrão, ele é o único visível quando o toque é bloqueado.
+function consentWarning() {
+  return screen.getByRole("alert");
+}
+
+// O e-mail é a rota secundária desta tela e só monta sob demanda.
+async function openEmailForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /criar com e-mail/i }));
+}
+
 describe("SignUp consent gate for Google sign-in", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,11 +118,56 @@ describe("SignUp consent gate for Google sign-in", () => {
       "social_login_started",
       expect.objectContaining({ provider: "google" }),
     );
-    expect(screen.getByText("Aceite os termos para continuar")).toBeInTheDocument();
+    expect(consentWarning()).toBeInTheDocument();
     expect(mockAuthLog).toHaveBeenCalledWith(
       "auth_blocked_missing_consent",
       expect.objectContaining({ provider: "google", surface: "signup" }),
     );
+    // O bloqueio precisa ser contável no funil, não só no console: sem este evento
+    // um toque barrado e um toque que nunca aconteceu ficam idênticos nos dados.
+    expect(mockTrackEvent).toHaveBeenCalledWith("auth_consent_blocked", {
+      provider: "google",
+      auth_screen: "sign_up",
+    });
+  });
+
+  // O motivo desta tela existir assim: o aceite ficava ~400px abaixo do botão do
+  // Google, então o toque na ação principal era barrado por uma caixa que a pessoa
+  // nunca tinha rolado até ver, e o botão parecia simplesmente morto.
+  it("puts the consent checkbox before the Google button in the document", () => {
+    render(<SignUpPage />);
+
+    const position = consentCheckbox().compareDocumentPosition(googleButton());
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("collapses the email form so consent and Google fit one phone screen", async () => {
+    const user = userEvent.setup();
+    render(<SignUpPage />);
+
+    expect(screen.queryByPlaceholderText("Seu nome")).not.toBeInTheDocument();
+
+    await openEmailForm(user);
+
+    expect(screen.getByPlaceholderText("Seu nome")).toBeInTheDocument();
+    expect(consentCheckbox()).toBeInTheDocument();
+  });
+
+  it("counts a blocked email submit too, not only the Google one", async () => {
+    const user = userEvent.setup();
+    render(<SignUpPage />);
+
+    await openEmailForm(user);
+    await user.type(screen.getByPlaceholderText("Seu nome"), "Marcus");
+    await user.type(screen.getByPlaceholderText("seu@email.com"), "marcus@test.com");
+    await user.type(screen.getByPlaceholderText("Mínimo 8 caracteres"), "supersecret");
+    await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+    expect(mockSignUp).not.toHaveBeenCalled();
+    expect(mockTrackEvent).toHaveBeenCalledWith("auth_consent_blocked", {
+      provider: "email",
+      auth_screen: "sign_up",
+    });
   });
 
   it("exposes no OAuth link at all — the CTA is a button, never an <a href>", () => {
@@ -137,7 +193,7 @@ describe("SignUp consent gate for Google sign-in", () => {
     await user.click(googleButton());
 
     expect(mockStartGoogleAuth).not.toHaveBeenCalled();
-    expect(screen.getByText("Aceite os termos para continuar")).toBeInTheDocument();
+    expect(consentWarning()).toBeInTheDocument();
   });
 
   it("does not enter the Google loading state without consent", async () => {
@@ -227,6 +283,7 @@ describe("SignUp consent gate for Google sign-in", () => {
     const user = userEvent.setup();
     render(<SignUpPage />);
 
+    await openEmailForm(user);
     await user.type(screen.getByPlaceholderText("Seu nome"), "Marcus");
     await user.type(screen.getByPlaceholderText("seu@email.com"), "marcus@test.com");
     await user.type(screen.getByPlaceholderText("Mínimo 8 caracteres"), "supersecret");

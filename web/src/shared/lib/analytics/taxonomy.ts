@@ -25,6 +25,7 @@ export const EVENT_SINKS = {
   native_entry_viewed: ["server","ga4"] as Sink[],
   auth_screen_viewed: ["server","ga4"] as Sink[],
   auth_provider_clicked: ["server","ga4"] as Sink[],
+  auth_consent_blocked: ["server","ga4"] as Sink[],
   signup_selected: ["server","ga4"] as Sink[],
   login_selected: ["server","ga4"] as Sink[],
   auth_client_error: ["server","ga4"] as Sink[],

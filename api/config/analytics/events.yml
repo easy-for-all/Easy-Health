@@ -52,6 +52,11 @@ events:
   # in and failed on the device.
   auth_screen_viewed:       { version: 1, sinks: [server, ga4] }
   auth_provider_clicked:    { version: 1, sinks: [server, ga4] }
+  # The consent gate refusing to start auth. It used to be a console log only,
+  # which made the checkbox indistinguishable from a dead button in the funnel:
+  # auth_provider_clicked fires BEFORE the gate, so a blocked tap and a
+  # successful one looked the same until social_login_started failed to appear.
+  auth_consent_blocked:     { version: 1, sinks: [server, ga4] }
   signup_selected:          { version: 1, sinks: [server, ga4] }
   login_selected:           { version: 1, sinks: [server, ga4] }
   auth_client_error:        { version: 1, sinks: [server, ga4] }
