@@ -21,6 +21,11 @@ const EVENT_LABEL: Record<string, string> = {
   // from the historical landing page, then continue into auth.
   landing_page_viewed: "Landing exibida",
   native_entry_viewed: "Entrada nativa exibida",
+  // No Android estas duas acontecem ANTES da autenticação.
+  onboarding_started: "Onboarding iniciado",
+  plan_preview_viewed: "Resumo do plano exibido",
+  onboarding_draft_resumed: "Rascunho retomado",
+  auth_consent_blocked: "Bloqueado por falta de aceite",
   auth_screen_viewed: "Tela de acesso exibida",
   auth_provider_clicked: "Tentou autenticar",
   signup_selected: "Escolheu criar conta",

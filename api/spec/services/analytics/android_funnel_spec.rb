@@ -151,6 +151,32 @@ RSpec.describe Analytics::AndroidFunnel do
       expect(steps_by_key(payload)["entry_viewed"][:count]).to eq(1)
     end
 
+    # As duas etapas do onboarding pré-auth. Elas separam "não quis responder" de
+    # "respondeu tudo e recuou na hora de criar a conta" — que era exatamente a
+    # distinção que o funil não conseguia fazer enquanto a conta vinha primeiro.
+    it "classifies an installation that abandoned the onboarding" do
+      record = install
+      %w[app_first_open session_started native_entry_viewed onboarding_started]
+        .each { |name| emit(record, name) }
+
+      payload = described_class.new.call
+
+      expect(bucket_count(payload, "stopped_onboarding")).to eq(1)
+      expect(steps_by_key(payload)["onboarding"][:count]).to eq(1)
+    end
+
+    it "classifies an installation that saw the plan and did not create the account" do
+      record = install
+      %w[app_first_open session_started native_entry_viewed onboarding_started plan_preview_viewed]
+        .each { |name| emit(record, name) }
+
+      payload = described_class.new.call
+
+      expect(bucket_count(payload, "stopped_plan_preview")).to eq(1)
+      expect(bucket_count(payload, "stopped_onboarding")).to eq(0)
+      expect(steps_by_key(payload)["plan_preview"][:count]).to eq(1)
+    end
+
     it "classifies an installation that saw auth and chose nothing" do
       record = install
       %w[app_first_open session_started landing_page_viewed auth_screen_viewed]
@@ -329,12 +355,17 @@ RSpec.describe Analytics::AndroidFunnel do
       AppInstallation.limit(9).each do |record|
         emit(record, "session_started")
         emit(record, "landing_page_viewed")
+        # O onboarding roda antes da autenticação, então uma instalação que chega
+        # à tela de auth atravessou estas duas etapas primeiro. Pular aqui não
+        # testaria "a maior queda": inventaria uma queda de 9 na etapa seguinte.
+        emit(record, "onboarding_started")
+        emit(record, "plan_preview_viewed")
       end
       AppInstallation.limit(2).each { |record| emit(record, "auth_screen_viewed") }
 
       drop = described_class.new.call[:biggest_drop]
 
-      expect(drop[:from_key]).to eq("entry_viewed")
+      expect(drop[:from_key]).to eq("plan_preview")
       expect(drop[:to_key]).to eq("auth_screen")
       expect(drop[:lost]).to eq(7)
       expect(drop[:drop_rate][:value]).to eq(77.8)
