@@ -189,6 +189,12 @@ Rails.application.routes.draw do
         post "events", to: "events#create"
       end
 
+      # Experiment assignments (auth optional; the pre-auth Android experiment is
+      # decided before an account exists and is keyed by installation_id)
+      namespace :experiments do
+        post "assignments", to: "assignments#create"
+      end
+
       # App installation register/refresh (auth optional; associates user post-login)
       namespace :app do
         post  "installations/register",           to: "installations#register"

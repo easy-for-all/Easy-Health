@@ -8,18 +8,22 @@ import { loadDraft } from "@/features/plan-creation/draft";
 import { trackEvent, EVENTS } from "@/shared/lib/analytics";
 import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
 import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
+import { useAndroidPostOnboardingVariant } from "@/features/experiments/use-android-post-onboarding-variant";
+import { exposeOnce, trackDestinationSelected } from "@/features/experiments/android-post-onboarding-gate";
 
 // Único ponto de controle do onboarding. No Android o wizard roda ANTES da conta
-// existir, então esta página precisa responder quatro perguntas antes de montar
-// qualquer coisa: existe rascunho, existe sessão, é nativo, e o que fazer no fim.
+// existir, então esta página precisa responder cinco perguntas antes de montar
+// qualquer coisa: existe rascunho, existe sessão, é nativo, qual a variante do
+// experimento, e o que fazer no fim.
 //
-//  rascunho | sessão | nativo | ação
-//  ---------|--------|--------|----------------------------------------------
-//    sim    |  sim   |   —    | retoma e gera direto (volta do cadastro)
-//    sim    |  não   |  sim   | continua o wizard onde parou
-//    não    |  não   |  sim   | wizard do zero, cadastro no fim
-//    não    |  não   |  não   | Web segue protegida: vai para /login
-//    não    |  sim   |   —    | comportamento de sempre
+//  rascunho | sessão | nativo | variante     | ação
+//  ---------|--------|--------|--------------|-----------------------------------
+//    sim    |  sim   |   —    |      —       | retoma e gera direto (volta do cadastro)
+//    sim    |  não   |  sim   |      —       | continua o wizard onde parou
+//    não    |  não   |  sim   | account_gate | wizard do zero, cadastro no fim
+//    não    |  não   |  sim   | open_app     | wizard do zero, gera sem conta
+//    não    |  não   |  não   |      —       | Web segue protegida: vai para /login
+//    não    |  sim   |   —    |      —       | comportamento de sempre
 export default function OnboardingPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -34,11 +38,18 @@ export default function OnboardingPage() {
   // manda a pessoa para um fluxo e depois a trata como se fosse do outro.
   const isNative = useIsNativePlatform();
 
-  const ready = hydrated && !loading;
+  const baseReady = hydrated && !loading;
   // Só existe onboarding pré-auth no app nativo. Na Web o fluxo continua sendo
   // landing → cadastro → onboarting autenticado, e o guard abaixo garante isso.
-  const preAuth = ready && !user && isNative;
-  const blocked = ready && !user && !isNative;
+  const preAuth = baseReady && !user && isNative;
+  const blocked = baseReady && !user && !isNative;
+
+  // O experimento decide o que acontece no FIM do wizard, mas a decisão precisa
+  // estar pronta antes do COMEÇO: montar com a variante default e trocar depois
+  // mostraria o gate de conta a quem foi sorteado para abrir o app.
+  const variant = useAndroidPostOnboardingVariant({ authenticated: !!user, enabled: preAuth });
+  const ready = baseReady && (!preAuth || variant.ready);
+  const openApp = preAuth && variant.eligible && variant.variant === "open_app";
 
   useEffect(() => {
     if (!blocked) return;
@@ -70,12 +81,25 @@ export default function OnboardingPage() {
     <PlanCreationFlow
       entryMode="onboarding"
       initialProfile={null}
-      onRequireAuth={preAuth ? () => router.push("/sign-up?from=onboarding") : undefined}
+      // open_app não pede a conta aqui: a geração segue pelo modo anônimo e o
+      // cadastro continua disponível no perfil, no 4º plano e no CTA de salvar.
+      onRequireAuth={preAuth && !openApp ? () => router.push("/sign-up?from=onboarding") : undefined}
+      // O resumo é o degrau comum: as duas variantes o veem, e é ele que separa
+      // "desistiu das perguntas" de "viu o plano e recusou o que veio depois".
+      withPreview={preAuth}
       autoGenerate={!!user && hadDraft}
+      onBeforeFinish={(mode) => {
+        if (!preAuth || !variant.eligible) return;
+        // Aqui, e não na montagem da página nem no resumo: é neste ponto que a
+        // variante muda o que acontece. Exposição sem bifurcação real infla o
+        // denominador de todas as taxas do painel.
+        exposeOnce(variant.variant);
+        trackDestinationSelected(variant.variant, { onboarding_flow: mode });
+      }}
       onDone={(_plan, mode) => {
         trackEvent(EVENTS.ONBOARDING_COMPLETED);
         trackOnboardingEvent("onboarding_completed", { onboardingFlow: mode });
-        router.push("/workouts/ready");
+        router.push(openApp ? "/plano/pronto" : "/workouts/ready");
       }}
     />
   );

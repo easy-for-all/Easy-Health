@@ -106,6 +106,7 @@ export const EVENT_SINKS = {
   experiment_assigned: ["server"] as Sink[],
   experiment_exposed: ["server","ga4"] as Sink[],
   experiment_converted: ["server","ga4"] as Sink[],
+  post_onboarding_destination_selected: ["server","ga4"] as Sink[],
   analytics_event_rejected: ["server"] as Sink[],
   deep_link_failed: ["server","ga4"] as Sink[],
   workout_load_failed: ["server","ga4"] as Sink[],

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_30_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -126,10 +126,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_120000) do
     t.datetime "created_at", null: false
     t.string "experiment_key", null: false
     t.datetime "exposed_at"
+    t.string "installation_id"
     t.datetime "updated_at", null: false
     t.bigint "user_id"
     t.string "variant", null: false
     t.index ["experiment_key", "anonymous_id"], name: "index_analytics_experiments_unique_anon", unique: true, where: "((user_id IS NULL) AND (anonymous_id IS NOT NULL))"
+    t.index ["experiment_key", "installation_id"], name: "index_analytics_experiments_unique_installation", unique: true, where: "((user_id IS NULL) AND (installation_id IS NOT NULL))"
     t.index ["experiment_key", "user_id"], name: "index_analytics_experiments_unique_user", unique: true, where: "(user_id IS NOT NULL)"
     t.index ["experiment_key", "variant"], name: "idx_on_experiment_key_variant_60f2dbba2f"
     t.index ["user_id"], name: "index_analytics_experiment_assignments_on_user_id"

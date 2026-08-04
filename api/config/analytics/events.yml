@@ -157,9 +157,17 @@ events:
   trial_expired:            { version: 1, sinks: [server, ga4] }
 
   # ── Experiments ────────────────────────────────────────────────────────────
+  # Assignment is not exposure. experiment_assigned fires when a variant is
+  # decided; experiment_exposed only when that variant actually changed what the
+  # person saw. The denominator of every rate in the admin panel is exposure —
+  # dividing by assignment would count people who never reached the decision.
   experiment_assigned:      { version: 1, sinks: [server] }
   experiment_exposed:       { version: 1, sinks: [server, ga4] }
   experiment_converted:     { version: 1, sinks: [server, ga4] }
+  # The branch itself, recorded where it is taken. Redundant with the variant on
+  # the exposure event by design: it is what lets a mismatch between "assigned
+  # open_app" and "actually sent to the account gate" be seen instead of assumed.
+  post_onboarding_destination_selected: { version: 1, sinks: [server, ga4] }
 
   # ── Functional errors ──────────────────────────────────────────────────────
   analytics_event_rejected: { version: 1, sinks: [server] }
