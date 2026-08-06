@@ -4,11 +4,17 @@ module Api
       class RegistrationsController < ApplicationController
         include AppInstallationReconciliation
         include SignupSourceContext
+        include EmailAuthTelemetry
 
         before_action :authenticate_user!, only: [:destroy]
 
         def create
+          # Emitted before any gate: "the sign-up request reached the API" is a
+          # fact about the request, not about whether it was accepted.
+          emit_email_auth_started("sign_up")
+
           unless User.required_consent_given?(consent_params)
+            emit_email_auth_failed("sign_up", "validation_error")
             render json: { error: "Aceite os termos para continuar", error_code: "consent_required" }, status: :unprocessable_entity
             return
           end
@@ -23,8 +29,12 @@ module Api
             sign_in(user)
             set_auth_indicator_cookie
             user.reload
+            emit_email_auth_succeeded("sign_up", user: user)
             render json: user_json(user), status: :created
           else
+            # The messages go to the client and to the logs; the event carries
+            # only the category, never a field name or a value the user typed.
+            emit_email_auth_failed("sign_up", "validation_error")
             render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
           end
         end

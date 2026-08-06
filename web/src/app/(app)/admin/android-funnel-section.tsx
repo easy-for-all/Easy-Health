@@ -20,6 +20,7 @@ import {
   type FunnelInstallationsPayload,
   type FunnelPeriod,
   type FunnelStepRow,
+  type StageBucket,
   AUDIENCE_OPTIONS,
   PERIOD_OPTIONS,
   formatConversion,
@@ -59,6 +60,22 @@ function StepRow({ step, isFirst }: { step: FunnelStepRow; isFirst: boolean }) {
         {isFirst || isUsers ? "—" : formatConversion(step.conversion_from_cohort)}
       </td>
     </tr>
+  );
+}
+
+// O desfecho de quem parou no cliente, separado por natureza. Sem isto o painel
+// contava um cancelamento voluntário como erro — e o erro real ficava diluído.
+function AuthClientOutcomes({ outcomes }: { outcomes: StageBucket[] }) {
+  if (!outcomes || outcomes.length === 0) return null;
+
+  return (
+    <ul className="ml-3 flex flex-wrap gap-x-4 gap-y-1 border-l border-[var(--border)] pl-3 text-[11px] text-[var(--text-muted)]">
+      {outcomes.map((outcome) => (
+        <li key={outcome.key}>
+          {outcome.label}: <span className="font-semibold text-[var(--text)]">{formatCount(outcome.count)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -270,7 +287,15 @@ export function AndroidFunnelSection() {
         </p>
         <div className="space-y-1.5">
           {data.stage_buckets.map((bucket) => (
-            <BucketDetails key={bucket.key} bucket={bucket} query={query} />
+            <div key={bucket.key} className="space-y-1">
+              <BucketDetails bucket={bucket} query={query} />
+              {/* Só neste bucket: "não chegou à API" juntava uma decisão do
+                  usuário, um defeito no aparelho e um sumiço sem desfecho.
+                  Rótulos vêm do servidor, como todo o resto do bloco. */}
+              {bucket.key === "stopped_auth_client" && (
+                <AuthClientOutcomes outcomes={data.stopped_auth_client_breakdown} />
+              )}
+            </div>
           ))}
         </div>
         <p className="mt-2 text-[10px] leading-snug text-[var(--text-dim)]">

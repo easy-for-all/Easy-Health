@@ -5,6 +5,54 @@ RSpec.describe "Api::V1::Auth::Registrations", type: :request do
     { name: "New User", email: "signup@example.com", password: "supersecret", password_confirmation: "supersecret" }
   end
 
+  # Same gap the login flow had: signup_started is emitted by the DEVICE, so a
+  # request that never left the phone and one the server refused produced the
+  # same (empty) server-side trail.
+  describe "POST /api/v1/auth/sign_up telemetry" do
+    let(:consent) { { terms_accepted: true, privacy_accepted: true } }
+
+    def events(name)
+      ProductAnalyticsEvent.where(event_name: name)
+    end
+
+    it "records the arrival and the success" do
+      post "/api/v1/auth/sign_up", params: base_params.merge(consent), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(events("email_auth_started").count).to eq(1)
+      expect(events("email_auth_started").last.properties).to include("auth_intent" => "sign_up")
+      expect(events("email_auth_succeeded").count).to eq(1)
+    end
+
+    it "records the consent gate as a validation failure, and no success" do
+      post "/api/v1/auth/sign_up", params: base_params, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(events("email_auth_started").count).to eq(1)
+      expect(events("email_auth_failed").last.properties["failure_category"]).to eq("validation_error")
+      expect(events("email_auth_succeeded").count).to eq(0)
+    end
+
+    it "records a rejected registration without echoing what was typed" do
+      create(:user, email: "signup@example.com")
+
+      post "/api/v1/auth/sign_up", params: base_params.merge(consent), as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(events("email_auth_failed").last.properties["failure_category"]).to eq("validation_error")
+      payload = events("email_auth_failed").last.properties.to_json
+      expect(payload).not_to include("signup@example.com")
+      expect(payload).not_to include("supersecret")
+    end
+
+    it "carries the attempt id when the client sends one" do
+      post "/api/v1/auth/sign_up", params: base_params.merge(consent),
+           headers: { "X-Auth-Attempt-Id" => "attempt-abc-123" }, as: :json
+
+      expect(events("email_auth_succeeded").last.properties["auth_attempt_id"]).to eq("attempt-abc-123")
+    end
+  end
+
   describe "POST /api/v1/auth/sign_up" do
     it "creates a user and stamps consent when terms are accepted" do
       expect do

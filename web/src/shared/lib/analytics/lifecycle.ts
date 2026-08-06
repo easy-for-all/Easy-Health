@@ -7,6 +7,7 @@ import {
 } from "./context";
 import { trackEvent, trackServerEvent } from "./index";
 import { ensureInstallationRegistered } from "./installation";
+import { flushOnBackground } from "./server";
 import {
   backgroundDurationMs,
   clearBackground,
@@ -84,6 +85,16 @@ export async function initAnalyticsLifecycle(): Promise<void> {
       } else if (!isActive && wasActive) {
         markBackgrounded();
         trackEvent("app_backgrounded");
+        // The queue is debounced by 3s, so leaving the app used to be able to
+        // take the last events of a session with it — including the auth failure
+        // that made the person leave. This is the same beacon-based flush the web
+        // build already runs on visibilitychange/pagehide; it is not a second
+        // queue and it is never awaited, so it cannot delay the transition.
+        try {
+          flushOnBackground();
+        } catch {
+          /* best effort: a failed flush must not break the lifecycle listener */
+        }
       }
       wasActive = isActive;
     });

@@ -201,6 +201,13 @@ events:
   google_auth_started:            { version: 1, sinks: [server] }
   google_auth_succeeded:          { version: 1, sinks: [server] }
   google_auth_failed:             { version: 1, sinks: [server] }
+  # The e-mail counterparts of google_auth_*. Without them the e-mail flow was
+  # invisible past the client: signup_started/login_started are emitted by the
+  # device and the next observable fact was a user row appearing. These say the
+  # request actually entered the controller, and how it ended.
+  email_auth_started:             { version: 1, sinks: [server] }
+  email_auth_succeeded:           { version: 1, sinks: [server] }
+  email_auth_failed:              { version: 1, sinks: [server] }
   installation_link_attempted:    { version: 1, sinks: [server] }
   installation_link_succeeded:    { version: 1, sinks: [server] }
   installation_link_failed:       { version: 1, sinks: [server] }

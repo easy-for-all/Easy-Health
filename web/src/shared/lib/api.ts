@@ -1,4 +1,5 @@
 import { getAnalyticsContext, getCachedInstallationId } from "./analytics/context";
+import { currentAuthAttemptId } from "./auth-attempt";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -35,8 +36,17 @@ function correlationHeaders(): Record<string, string> {
   }
 }
 
+// Only set while an authentication attempt is in flight, which is exactly the
+// window in which it means something: it lets the server-side email_auth_* events
+// be joined to the client events of the same attempt. Opaque and random — never
+// an identifier of a person.
+function authAttemptHeader(): Record<string, string> {
+  const attemptId = currentAuthAttemptId();
+  return attemptId ? { "X-Auth-Attempt-Id": attemptId } : {};
+}
+
 function contextHeaders(): Record<string, string> {
-  return { ...installationHeader(), ...correlationHeaders() };
+  return { ...installationHeader(), ...correlationHeaders(), ...authAttemptHeader() };
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;

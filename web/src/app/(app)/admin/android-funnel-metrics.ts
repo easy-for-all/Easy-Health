@@ -68,6 +68,9 @@ export interface AndroidFunnelPayload {
   steps: FunnelStepRow[];
   biggest_drop: BiggestDrop | null;
   stage_buckets: StageBucket[];
+  // Dentro de "iniciou no cliente e não chegou à API": quem cancelou, quem
+  // quebrou e quem sumiu. Cancelamento nunca é somado com erro.
+  stopped_auth_client_breakdown: StageBucket[];
   link_failures: Record<string, number>;
 }
 

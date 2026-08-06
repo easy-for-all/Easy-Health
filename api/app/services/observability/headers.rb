@@ -19,6 +19,10 @@ module Observability
     PLATFORM    = "X-Platform".freeze
     APP_VERSION = "X-App-Version".freeze
     APP_BUILD   = "X-App-Build".freeze
+    # One authentication attempt, minted by the client at the tap. Optional by
+    # design: a request without it is answered exactly the same way, it simply
+    # cannot be joined to the client-side events of that attempt.
+    AUTH_ATTEMPT = "X-Auth-Attempt-Id".freeze
 
     # Opaque identifiers: uuid, ulid, nanoid and Rails' own request ids all fit.
     IDENTIFIER_PATTERN = /\A[A-Za-z0-9._:-]+\z/

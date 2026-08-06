@@ -438,4 +438,104 @@ RSpec.describe Analytics::AndroidFunnel do
       expect(service.audience).to eq("external")
     end
   end
+
+  # O fluxo por e-mail parava em "iniciou no cliente" para sempre: signup_started
+  # e login_started saem do aparelho, e nenhum evento do servidor dizia que a
+  # requisição chegou. O Google tinha google_auth_started; o e-mail, nada.
+  describe "e-mail flow reaching the API" do
+    it "advances to auth_api on email_auth_started and to auth_done on email_auth_succeeded" do
+      record = install
+      %w[auth_screen_viewed login_selected auth_provider_clicked login_started
+         email_auth_started email_auth_succeeded].each { |name| emit(record, name) }
+
+      payload = described_class.new.call
+      steps = steps_by_key(payload)
+
+      expect(steps["auth_api"][:count]).to eq(1)
+      expect(steps["auth_done"][:count]).to eq(1)
+      expect(bucket_count(payload, "stopped_auth_client")).to eq(0)
+    end
+
+    it "leaves an e-mail attempt that never reached the API in the client bucket" do
+      record = install
+      %w[auth_screen_viewed login_selected auth_provider_clicked login_started].each { |name| emit(record, name) }
+
+      expect(steps_by_key(described_class.new.call)["auth_api"][:count]).to eq(0)
+      expect(bucket_count(described_class.new.call, "stopped_auth_client")).to eq(1)
+    end
+  end
+
+  # "Não chegou à API" juntava uma decisão do usuário, um defeito no aparelho e
+  # um sumiço sem desfecho. Somados, o cancelamento inflava o que parecia bug.
+  describe "stopped_auth_client breakdown" do
+    def emit_with(record, event_name, properties)
+      create(
+        :product_analytics_event,
+        event_name: event_name,
+        occurred_at: 1.hour.ago,
+        installation_id: record.installation_id,
+        properties: properties
+      )
+    end
+
+    def stalled_installation
+      record = install
+      %w[auth_screen_viewed login_selected auth_provider_clicked social_login_started]
+        .each { |name| emit(record, name) }
+      record
+    end
+
+    def outcome_count(payload, key)
+      payload[:stopped_auth_client_breakdown].find { |row| row[:key] == key }[:count]
+    end
+
+    it "counts a deliberate cancellation apart from a technical failure" do
+      cancelled = stalled_installation
+      emit_with(cancelled, "social_login_failed", { "failure_category" => "user_cancelled" })
+
+      broken = stalled_installation
+      emit_with(broken, "auth_client_error", { "failure_category" => "provider_error" })
+
+      stalled_installation # no outcome at all
+
+      payload = described_class.new.call
+
+      expect(bucket_count(payload, "stopped_auth_client")).to eq(3)
+      expect(outcome_count(payload, "cancelled_auth")).to eq(1)
+      expect(outcome_count(payload, "technical_failure")).to eq(1)
+      expect(outcome_count(payload, "no_outcome")).to eq(1)
+    end
+
+    it "counts installations, not events: three cancellations are one person" do
+      record = stalled_installation
+      3.times { emit_with(record, "social_login_failed", { "failure_category" => "user_cancelled" }) }
+
+      payload = described_class.new.call
+
+      expect(outcome_count(payload, "cancelled_auth")).to eq(1)
+    end
+
+    # Se houve falha técnica, é isso que precisa ser consertado — mesmo que a
+    # pessoa também tenha desistido em alguma das tentativas.
+    it "gives the technical failure precedence when both happened" do
+      record = stalled_installation
+      emit_with(record, "social_login_failed", { "failure_category" => "user_cancelled" })
+      emit_with(record, "social_login_failed", { "failure_category" => "provider_error" })
+
+      payload = described_class.new.call
+
+      expect(outcome_count(payload, "technical_failure")).to eq(1)
+      expect(outcome_count(payload, "cancelled_auth")).to eq(0)
+    end
+
+    it "is empty when nobody stopped at that step" do
+      install
+
+      payload = described_class.new.call
+
+      expect(payload[:stopped_auth_client_breakdown].sum { |row| row[:count] }).to eq(0)
+      expect(payload[:stopped_auth_client_breakdown].map { |row| row[:key] })
+        .to eq(%w[cancelled_auth technical_failure no_outcome])
+    end
+  end
 end

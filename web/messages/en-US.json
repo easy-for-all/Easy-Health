@@ -164,7 +164,8 @@
     "signingInWithGoogle": "Signing in with Google...",
     "loadingButton": "Loading...",
     "googleAccountNotRegistered": "This Google account is not registered yet. To create your account, accept the Terms of Use and the Privacy Policy.",
-    "createAccountWithGoogle": "Create account with Google"
+    "createAccountWithGoogle": "Create account with Google",
+    "googleLoginCancelled": "Sign-in cancelled. Tap \"Continue with Google\" to try again."
   },
   "dashboard": {
     "hello": "Hello,",

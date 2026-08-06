@@ -150,9 +150,18 @@ describe("classifyGoogleAuthError", () => {
     expect(classifyGoogleAuthError(new GoogleAuthError("boom", code))).toBe(expected);
   });
 
-  it("recognises a dismissed account picker so it is not reported as a failure", () => {
-    expect(classifyGoogleAuthError(new GoogleAuthError("boom", "12501"))).toBe("cancelled");
-    expect(classifyGoogleAuthError(new GoogleAuthError("The user canceled the sign-in flow", "x")))
-      .toBe("cancelled");
+  // The plugin's contract is a CODE (GoogleProvider.java rejects
+  // GetCredentialCancellationException with USER_CANCELLED). Reading the message
+  // too meant any failure whose text mentioned "cancel" was filed as a user
+  // decision and dropped from the failure counters — see
+  // google-auth-classification.test.ts for the full matrix.
+  it("recognises a dismissed account picker by its documented code", () => {
+    expect(classifyGoogleAuthError(new GoogleAuthError("boom", "USER_CANCELLED"))).toBe("cancelled");
+    expect(classifyGoogleAuthError(new GoogleAuthError("popup closed", "cancelled"))).toBe("cancelled");
+  });
+
+  it("does not call a plugin failure a cancellation because of its message", () => {
+    expect(classifyGoogleAuthError(new GoogleAuthError("The user canceled the sign-in flow", "plugin_login_failed")))
+      .toBe("unknown");
   });
 });

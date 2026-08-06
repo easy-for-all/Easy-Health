@@ -135,6 +135,8 @@ export interface TimelineEvent {
   app_build: string | null;
   result?: string;
   error_code?: string;
+  failure_category?: string;
+  auth_attempt_id?: string;
   auth_flow?: string;
   link_result?: string;
   auth_screen?: string;

@@ -30,6 +30,18 @@ module Observability
     AUTH_FLOWS   = %w[native web web_mobile].freeze
     AUTH_INTENTS = %w[login sign_up unknown].freeze
 
+    # Why the e-mail flow ended, as a dimension. Deliberately coarse: the reason
+    # a password was refused is not something this event may describe, and the
+    # exact validation message belongs to the response and to the logs, never to
+    # a column someone will group by.
+    EMAIL_AUTH_FAILURES = %w[
+      invalid_credentials
+      validation_error
+      rate_limited
+      server_error
+      unknown
+    ].freeze
+
     LINK_RESULTS = %w[linked already_linked conflict not_found error].freeze
 
     module_function
@@ -86,6 +98,62 @@ module Observability
           terms_accepted: boolean_or_nil(terms_accepted),
           error_code: code,
           installation_present: Observability::Context.installation_id.present?
+        }
+      )
+    end
+
+    # ── E-mail authentication ────────────────────────────────────────────────
+    #
+    # The counterpart of google_auth_* for the e-mail flow, which was completely
+    # dark on the server: signup_started/login_started are emitted by the DEVICE,
+    # and the next observable fact was a user row appearing. A request that never
+    # arrived and a request that arrived and was refused looked identical.
+    #
+    # PRIVACY: no e-mail, no password, no request body, no raw message, no stack
+    # trace. `auth_attempt_id` is an opaque random id minted by the client.
+
+    def email_auth_started(intent:, auth_attempt_id: nil)
+      emit(
+        "email_auth_started",
+        level: :info,
+        result: "started",
+        properties: {
+          auth_provider: "email",
+          auth_intent: normalize_intent(intent),
+          auth_attempt_id: attempt_id(auth_attempt_id)
+        }
+      )
+    end
+
+    def email_auth_succeeded(intent:, user: nil, auth_attempt_id: nil)
+      emit(
+        "email_auth_succeeded",
+        level: :info,
+        user: user,
+        result: "success",
+        properties: {
+          auth_provider: "email",
+          auth_intent: normalize_intent(intent),
+          auth_attempt_id: attempt_id(auth_attempt_id),
+          installation_present: Observability::Context.installation_id.present?
+        }
+      )
+    end
+
+    def email_auth_failed(intent:, failure_category:, auth_attempt_id: nil)
+      category = normalize_email_failure(failure_category)
+
+      emit(
+        "email_auth_failed",
+        level: :warn,
+        result: "failure",
+        error_code: category,
+        properties: {
+          auth_provider: "email",
+          auth_intent: normalize_intent(intent),
+          auth_attempt_id: attempt_id(auth_attempt_id),
+          failure_category: category,
+          error_code: category
         }
       )
     end
@@ -276,6 +344,19 @@ module Observability
     def normalize_error_code(code)
       value = code.to_s
       AUTH_ERROR_CODES.include?(value) ? value : "internal_error"
+    end
+
+    def normalize_email_failure(category)
+      value = category.to_s
+      EMAIL_AUTH_FAILURES.include?(value) ? value : "unknown"
+    end
+
+    # nil stays nil: an attempt id was never promised, and inventing "unknown"
+    # here would make an absent header indistinguishable from a rejected one.
+    def attempt_id(value)
+      return nil if value.blank?
+
+      safe_code(value)
     end
 
     def normalize_link_result(result)

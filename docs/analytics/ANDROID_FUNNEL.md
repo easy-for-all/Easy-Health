@@ -34,8 +34,8 @@ um filtro que alguém precisa lembrar de escrever.
 | Escolheu login/cadastro | `signup_selected`, `login_selected` |
 | Tentou autenticar | `auth_provider_clicked` |
 | Auth iniciada no cliente | `social_login_started`, `signup_started`, `login_started` |
-| Auth chegou à API | `google_auth_started`, `android_registration_started` |
-| Auth concluída | `google_auth_succeeded`, `android_registration_succeeded`, `signup_completed` |
+| Auth chegou à API | `google_auth_started`, `android_registration_started`, `email_auth_started` |
+| Auth concluída | `google_auth_succeeded`, `android_registration_succeeded`, `signup_completed`, `email_auth_succeeded` |
 | **Usuários Android criados** | `users.signup_source = 'android'` — **métrica de usuários** |
 | Instalação vinculada | `installation_link_succeeded` **ou** `app_installations.user_id` |
 
@@ -45,12 +45,31 @@ Observações que evitam leituras erradas:
   `web_session_started` e não entra: este funil é Android nativo.
 - **Não existe** `email_signup_started` nem `email_login_started` no produto. O
   fluxo de e-mail emite `signup_started` / `login_started` com `method: "email"`,
-  já cobertos por "Auth iniciada no cliente".
+  já cobertos por "Auth iniciada no cliente". Do lado do servidor, quem responde
+  por ele é `email_auth_started` / `email_auth_succeeded` — o equivalente exato
+  de `google_auth_*`. Antes disso o e-mail parava em "iniciou no cliente" para
+  sempre, porque nenhum evento do servidor dizia que a requisição tinha chegado.
 - "Usuários Android criados" é medida em **usuários**. Nunca é dividida por, nem
   comparada com, uma contagem de instalações — a UI a marca com um selo.
 - As etapas **não são forçadas a ser monotônicas**. Se uma etapa superar a
   anterior (instrumentação faltando em algum ponto), o `MetricResult` devolve
   `status: "inconsistent"` em vez de mascarar o problema.
+
+### Dentro de "iniciou no cliente e não chegou à API"
+
+Esse balde juntava três coisas diferentes, e somar cancelamento com erro fazia
+uma decisão do usuário parecer defeito — além de esconder o tamanho real do
+defeito. O payload traz `stopped_auth_client_breakdown`, também em instalações
+distintas:
+
+| Chave | Significado |
+|---|---|
+| `cancelled_auth` | tem `social_login_failed` com `failure_category: "user_cancelled"` |
+| `technical_failure` | tem `auth_client_error`, `login_failed`, ou `social_login_failed` de outra categoria |
+| `no_outcome` | iniciou e não produziu desfecho nenhum |
+
+A precedência é deliberada: havendo falha técnica, é isso que precisa ser
+consertado, mesmo que a pessoa também tenha cancelado em alguma tentativa.
 
 ---
 

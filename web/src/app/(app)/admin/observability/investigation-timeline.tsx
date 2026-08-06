@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api";
-import { TimelineResponse } from "./types";
+import { TimelineEvent, TimelineResponse } from "./types";
 import { formatDateTime } from "./metric-cell";
 
 // Collapsible investigation panel. Not a card — it lives below the tables so
@@ -35,11 +35,15 @@ const EVENT_LABEL: Record<string, string> = {
   login_failed: "Login por email falhou",
   social_login_started: "Tocou em entrar com Google",
   social_login_failed: "Google falhou no dispositivo",
+  social_login_completed: "Google concluído no dispositivo",
   auth_client_error: "Erro no dispositivo",
   auth_api_error: "Erro retornado pela API",
   google_auth_started: "Autenticação iniciada",
   google_auth_succeeded: "Autenticação concluída",
   google_auth_failed: "Autenticação falhou",
+  email_auth_started: "Auth por e-mail chegou à API",
+  email_auth_succeeded: "Auth por e-mail concluída",
+  email_auth_failed: "Auth por e-mail falhou",
   android_registration_started: "Cadastro iniciado",
   android_registration_succeeded: "Cadastro concluído",
   android_registration_failed: "Cadastro falhou",
@@ -51,6 +55,12 @@ const EVENT_LABEL: Record<string, string> = {
   workout_started: "Treino iniciado",
   workout_completed: "Treino concluído",
 };
+
+// The user dismissed the account picker. Read from failure_category, never from
+// the error code text: the category is a closed vocabulary the backend validates.
+function isUserCancelled(event: TimelineEvent): boolean {
+  return event.failure_category === "user_cancelled";
+}
 
 function timelinePath(user: string, installation: string): string {
   const params = new URLSearchParams();
@@ -199,7 +209,15 @@ export function InvestigationTimeline() {
                 >
                   <span className="text-sm text-[var(--text)]">
                     {EVENT_LABEL[event.event_name] ?? event.event_name}
-                    {event.error_code ? (
+                    {/* A cancellation is a deliberate exit, not a defect. Painting
+                        it red made every investigation start by ruling out a bug
+                        that was never there — so it reads as an outcome, in the
+                        same neutral tone as the other dimensions. */}
+                    {isUserCancelled(event) ? (
+                      <span className="ml-2 text-xs text-[var(--text-dim)]">
+                        Login Google cancelado pelo usuário
+                      </span>
+                    ) : event.error_code ? (
                       <span className="ml-2 text-xs text-red-600 dark:text-red-400">{event.error_code}</span>
                     ) : null}
                     {event.auth_flow ? (

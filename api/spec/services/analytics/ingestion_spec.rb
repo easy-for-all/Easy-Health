@@ -103,6 +103,68 @@ RSpec.describe Analytics::Ingestion do
     expect(props).not_to have_key("terms_accepted")
   end
 
+  # auth_provider_clicked builds a NEW hash from an allow-list, so anything not
+  # named there is dropped — including the attempt id, which is the only thing
+  # tying this click to the failure or the success that followed it.
+  it "keeps auth_attempt_id on auth_provider_clicked" do
+    described_class.new(
+      user: user,
+      events: [
+        event(
+          event_name: "auth_provider_clicked",
+          properties: {
+            provider: "google", auth_screen: "login", intent: "login", source: "auth_screen",
+            auth_attempt_id: "3f6c1d2e-9b0a-4c5d-8e7f-1a2b3c4d5e6f"
+          }
+        )
+      ]
+    ).call
+
+    props = ProductAnalyticsEvent.where(event_name: "auth_provider_clicked").last.properties
+    expect(props["auth_attempt_id"]).to eq("3f6c1d2e-9b0a-4c5d-8e7f-1a2b3c4d5e6f")
+  end
+
+  it "drops an attempt id that is not a bounded opaque identifier" do
+    described_class.new(
+      user: user,
+      events: [
+        event(
+          event_name: "social_login_failed",
+          properties: { failure_category: "user_cancelled", auth_attempt_id: "<script>alert(1)</script>" }
+        )
+      ]
+    ).call
+
+    props = ProductAnalyticsEvent.where(event_name: "social_login_failed").last.properties
+    expect(props).not_to have_key("auth_attempt_id")
+    expect(props["failure_category"]).to eq("user_cancelled")
+  end
+
+  # failure_category is a dimension the Admin groups and colours by. One stray
+  # plugin string becoming a value is how a panel starts growing rows nobody
+  # can group by, so anything outside the vocabulary is dropped.
+  it "drops a failure_category outside the closed vocabulary" do
+    described_class.new(
+      user: user,
+      events: [
+        event(event_name: "auth_client_error", properties: { failure_category: "java.lang.Exception: boom" })
+      ]
+    ).call
+
+    props = ProductAnalyticsEvent.where(event_name: "auth_client_error").last.properties
+    expect(props).not_to have_key("failure_category")
+  end
+
+  it "does not let failure_category ride on an event that has no such contract" do
+    described_class.new(
+      user: user,
+      events: [ event(event_name: "workout_completed", properties: { failure_category: "user_cancelled" }) ]
+    ).call
+
+    props = ProductAnalyticsEvent.where(event_name: "workout_completed").last.properties
+    expect(props).not_to have_key("failure_category")
+  end
+
   it "is idempotent on idempotency_key (no duplicate)" do
     key = "idem-123"
     described_class.new(user: user, events: [ event(idempotency_key: key) ]).call
