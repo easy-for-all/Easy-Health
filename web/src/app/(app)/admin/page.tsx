@@ -10,6 +10,7 @@ import { OnboardingAnalyticsSection } from "./onboarding-analytics";
 import { PlatformComparisonSection } from "./platform-comparison-section";
 import { AndroidInstallationsSection } from "./android-installations-section";
 import { AndroidFunnelSection } from "./android-funnel-section";
+import { PostOnboardingExperimentSection } from "./post-onboarding-experiment-section";
 import { PushActivationSection } from "./push/push-activation-section";
 import { PushDiagnosticsSection } from "./push/push-diagnostics-section";
 import { PillGroup } from "./pill-group";
@@ -386,6 +387,10 @@ export default function AdminPage() {
         <AndroidInstallationsSection />
 
         <AndroidFunnelSection />
+
+        {/* Logo abaixo do funil: o experimento mede exatamente a etapa onde o
+            funil mostra a maior queda. */}
+        <PostOnboardingExperimentSection />
 
         <PlatformComparisonSection />
 
