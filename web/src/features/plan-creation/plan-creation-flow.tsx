@@ -19,10 +19,11 @@ import { CompleteSchedule } from "./screens/complete/complete-schedule";
 import { CompleteCare } from "./screens/complete/complete-care";
 import { WhenStep } from "./screens/shared/when-step";
 import { PlanPreview } from "./screens/plan-preview";
+import type { SubmitMode } from "./submit";
 import type { CreationMode, EntryMode } from "./types";
 
 export function PlanCreationFlow({
-  entryMode, initialProfile, onDone, onCancel, onRequireAuth, autoGenerate,
+  entryMode, initialProfile, onDone, onCancel, onRequireAuth, autoGenerate, withPreview, onBeforeFinish, submitMode,
 }: {
   entryMode: EntryMode;
   initialProfile: HealthProfile | null;
@@ -30,15 +31,29 @@ export function PlanCreationFlow({
   onCancel?: () => void;
   // Presente apenas quando o onboarding roda antes de a conta existir. Quem
   // decide isso é a página, que é quem conhece a sessão — o wizard permanece
-  // ignorante sobre autenticação. Sua presença também liga a tela de resumo,
-  // porque as duas coisas descrevem o mesmo fluxo.
+  // ignorante sobre autenticação.
   onRequireAuth?: () => void;
   // Volta do cadastro com o wizard já preenchido pelo rascunho. A pessoa tocou
   // "Ver meu treino" antes de criar a conta; obrigá-la a tocar de novo no mesmo
   // botão trata o cadastro como se tivesse cancelado o pedido.
   autoGenerate?: boolean;
+  // A tela de resumo era acoplada a onRequireAuth porque as duas descreviam o
+  // mesmo fluxo. Deixaram de descrever: no fim do onboarding pré-auth o resumo
+  // aparece nas duas variantes do experimento, e só uma delas pede a conta.
+  // Continua caindo no comportamento antigo quando não é informado.
+  withPreview?: boolean;
+  // Onde o plano será criado. A página é quem sabe se existe conta; o wizard
+  // apenas repassa.
+  submitMode?: SubmitMode;
+  // Chamado no fim do wizard, ANTES de decidir para onde ir. É onde a página
+  // registra que a bifurcação aconteceu de fato — o componente segue ignorante
+  // sobre experimento, do mesmo jeito que é sobre autenticação.
+  onBeforeFinish?: (mode: CreationMode) => void;
 }) {
-  const wizard = usePlanCreationWizard(entryMode, initialProfile, { withPreview: !!onRequireAuth });
+  const wizard = usePlanCreationWizard(entryMode, initialProfile, {
+    withPreview: withPreview ?? !!onRequireAuth,
+    submitMode,
+  });
 
   async function handleFinish() {
     // A última tela de conteúdo diz "terminei", não "gere agora": com o resumo
@@ -47,6 +62,7 @@ export function PlanCreationFlow({
       wizard.goNext();
       return;
     }
+    onBeforeFinish?.(wizard.mode);
     if (onRequireAuth) {
       onRequireAuth();
       return;

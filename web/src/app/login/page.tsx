@@ -9,20 +9,23 @@ import { api, ApiError } from "@/shared/lib/api";
 import { getPendingPlan, clearPendingPlan } from "@/features/billing/checkout-intent";
 import { trackCheckoutStarted, trackEvent } from "@/shared/lib/analytics";
 import {
+  emailFailureCategory,
   reportAuthError,
   trackAuthApiError,
   trackAuthClientError,
   trackAuthProviderClicked,
+  trackLoginCompleted,
+  trackLoginStarted,
   trackSignupSelected,
+  trackSocialLoginCompleted,
+  trackSocialLoginFailed,
+  trackSocialLoginStarted,
   useAuthScreenView,
+  type AuthAttemptContext,
 } from "@/features/auth/auth-analytics";
+import { endAuthAttempt, startAuthAttempt } from "@/shared/lib/auth-attempt";
 import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
-import {
-  GoogleAuthError,
-  authLog,
-  classifyGoogleAuthError,
-  startGoogleAuth,
-} from "@/shared/lib/googleAuth";
+import { authLog, describeGoogleAuthError, startGoogleAuth } from "@/shared/lib/googleAuth";
 
 const OAUTH_ERROR_MESSAGE_KEYS: Record<string, string> = {
   account_deleted: "accountDeletedError",
@@ -46,6 +49,10 @@ export default function LoginPage() {
   // A Google account the backend has never seen. Kept apart from `error` so the
   // recovery CTA survives re-renders instead of being replaced by a plain string.
   const [googleSignUpNeeded, setGoogleSignUpNeeded] = useState(false);
+  // The user dismissed the account picker. Its own state, never `error`: this is
+  // a deliberate exit, and rendering it in the red error box would tell someone
+  // their own decision was a failure.
+  const [authCancelled, setAuthCancelled] = useState(false);
   const submittingRef = useRef(false);
   const googleRef = useRef(false);
   const hydrated = useIsHydrated();
@@ -59,54 +66,72 @@ export default function LoginPage() {
     e.preventDefault();
     e.stopPropagation();
     if (googleRef.current) return;
-    trackAuthProviderClicked({ provider: "google", authScreen: "login", intent: "login" });
+    // A retry is a NEW attempt: a fresh id, never the one that was cancelled.
+    const attempt: AuthAttemptContext = {
+      authAttemptId: startAuthAttempt(),
+      provider: "google",
+      intent: "login",
+      authScreen: "login",
+    };
+    trackAuthProviderClicked({ ...attempt, authScreen: "login", intent: "login" });
     googleRef.current = true;
 
     setError("");
     setGoogleSignUpNeeded(false);
+    setAuthCancelled(false);
     setGoogleLoading(true);
     // The TAP itself. google_auth_started is emitted by the API when the request
     // lands, so without this a picker the user cancels leaves no trace at all.
-    trackEvent("social_login_started", { provider: "google", intent: "login" });
+    trackSocialLoginStarted(attempt);
     try {
       // No consent from this screen: signing in is not consenting. A brand-new
       // account is refused by the backend and routed to /sign-up below.
       const outcome = await startGoogleAuth({ native: isNative });
+      // The web flow navigates to the OmniAuth endpoint and never comes back
+      // here, so its terminal event cannot be emitted on this screen. Only the
+      // native flow returns with a session in hand.
       if (outcome.navigated) return; // leaving the page; keep the loading state
+      trackSocialLoginCompleted(attempt);
+      endAuthAttempt();
       window.location.replace(outcome.redirectPath);
     } catch (err) {
       googleRef.current = false;
       setGoogleLoading(false);
-      const code = err instanceof GoogleAuthError ? err.code : "unknown";
-      const failure = classifyGoogleAuthError(err);
+      const { failure, category, errorCode, reachedBackend } = describeGoogleAuthError(err);
       authLog("login_failed", {
-        code,
+        code: errorCode,
         failure,
+        category,
         name: (err as Error)?.name,
         message: (err as Error)?.message,
       });
-      // "exchange_failed" and the classified backend codes mean the request did
-      // reach the API; anything else broke on the device, before the network.
-      const reachedApi = failure === "network" || code === "exchange_failed" ||
-        ["consent_required", "account_deleted", "invalid_token"].includes(code);
-      if (reachedApi) {
-        trackAuthApiError("google_exchange", err, "google");
+
+      // Emitted for EVERY terminal failure, cancellation included. It used to be
+      // skipped whenever the API had been reached, so a network failure simply
+      // did not exist for this counter.
+      trackSocialLoginFailed(attempt, category, errorCode);
+
+      if (category === "user_cancelled") {
+        // A dismissed picker is a decision, not a defect: no client error, no
+        // Sentry, no red banner. Only the neutral notice below.
+        setAuthCancelled(true);
+      } else if (reachedBackend) {
+        trackAuthApiError("google_exchange", err, attempt, category);
       } else {
-        trackEvent("social_login_failed", { provider: "google", error_code: failure });
-        trackAuthClientError("google_plugin", code, "google");
+        trackAuthClientError("google_plugin", errorCode, attempt, category);
       }
-      // A cancelled picker is a user decision, not a defect — it is counted
-      // above but must not page anyone through Sentry.
-      if (failure !== "cancelled" && failure !== "consent_required") {
-        reportAuthError("google_plugin", err, { failure, code });
+
+      if (category !== "user_cancelled" && failure !== "consent_required") {
+        reportAuthError("google_plugin", err, { failure, category, code: errorCode });
       }
+      endAuthAttempt();
 
       switch (failure) {
         case "consent_required":
           setGoogleSignUpNeeded(true);
           break;
         case "cancelled":
-          break; // the user chose to back out — not an error to report
+          break; // the notice above is the whole response
         case "account_deleted":
           setError(t("accountDeletedError"));
           break;
@@ -122,15 +147,25 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submittingRef.current) return;
-    trackAuthProviderClicked({ provider: "email", authScreen: "login", intent: "login" });
+    const attempt: AuthAttemptContext = {
+      authAttemptId: startAuthAttempt(),
+      provider: "email",
+      intent: "login",
+      authScreen: "login",
+    };
+    trackAuthProviderClicked({ ...attempt, authScreen: "login", intent: "login" });
     setError("");
+    setAuthCancelled(false);
     setLoading(true);
     submittingRef.current = true;
     // The submit itself, before the request leaves. Paired with login_completed
     // this is what shows an email login that never got an answer.
-    trackEvent("login_started", { method: "email" });
+    trackLoginStarted(attempt);
     try {
       await signIn(email, password);
+      // The session exists. Emitted before any redirect so it cannot be lost to
+      // the navigation, and once per attempt so a rerender cannot double it.
+      trackLoginCompleted(attempt);
       const pending = getPendingPlan();
       if (pending) {
         clearPendingPlan();
@@ -144,22 +179,24 @@ export default function LoginPage() {
         router.push("/dashboard");
       }
     } catch (err) {
-      trackEvent("login_failed", { method: "email" });
+      const category = emailFailureCategory(err);
+      trackEvent("login_failed", { method: "email", auth_attempt_id: attempt.authAttemptId });
       if (err instanceof ApiError) {
-        trackAuthApiError("email_login", err);
+        trackAuthApiError("email_login", err, attempt, category);
         setError(err.message);
       } else if (err instanceof TypeError) {
         // fetch itself rejected: the request never got an answer.
-        trackAuthClientError("email_login", "network");
+        trackAuthClientError("email_login", "network", attempt, category);
         setError("Não foi possível conectar ao servidor. Tente novamente.");
       } else {
-        trackAuthClientError("email_login", "unknown");
+        trackAuthClientError("email_login", "unknown", attempt, category);
         reportAuthError("email_login", err);
         setError(t("loginError"));
       }
     } finally {
       submittingRef.current = false;
       setLoading(false);
+      endAuthAttempt();
     }
   }
 
@@ -221,6 +258,24 @@ export default function LoginPage() {
               ? t("signingInWithGoogle")
               : t("continueWithGoogle")}
         </button>
+
+        {/* The picker was dismissed. Neutral on purpose — same surface as the
+            informational block below, never the red error box: cancelling is a
+            decision, and calling it an error is both wrong and discouraging.
+            role="status" so a screen reader announces it without stealing focus. */}
+        {authCancelled && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              background: "var(--bg-2)", border: "1.5px solid var(--border)",
+              borderRadius: "var(--r-md)", padding: "12px 16px", marginBottom: 20,
+              fontSize: 14, color: "var(--text-muted)",
+            }}
+          >
+            {t("googleLoginCancelled")}
+          </div>
+        )}
 
         {/* This Google account has no EasyHealth account yet. Consent was never
             collected, so we route to sign-up to collect it — nothing is carried

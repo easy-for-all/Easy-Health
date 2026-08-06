@@ -22,6 +22,23 @@ module Analytics
       "source" => %w[auth_screen]
     }.freeze
 
+    # failure_category is a DIMENSION, so it must be a closed vocabulary: a value
+    # outside this list is dropped, never "cleaned up and kept". The device is
+    # the one choosing the string, and one stray plugin message turning into a
+    # dimension value is how a panel starts growing rows nobody can group by.
+    FAILURE_CATEGORIES = %w[
+      user_cancelled provider_error oauth_configuration_error network_error
+      timeout backend_error invalid_credentials validation_error rate_limited unknown
+    ].freeze
+
+    # Events allowed to carry failure_category. Anywhere else the key is simply
+    # not part of the contract.
+    FAILURE_CATEGORY_EVENTS = %w[social_login_failed auth_client_error auth_api_error].freeze
+
+    # One authentication attempt. Opaque, random and client-minted, so it is
+    # bounded exactly like the correlation headers are.
+    ATTEMPT_ID_PATTERN = /\A[A-Za-z0-9._:-]{1,64}\z/
+
     Result = Struct.new(:accepted, :persisted, :skipped, :rejected, :rejections, keyword_init: true)
 
     def self.enabled?
@@ -123,7 +140,7 @@ module Analytics
       clean = sanitized_properties(value)
       return auth_provider_clicked_properties(clean) if event_name == "auth_provider_clicked"
 
-      clean
+      guard_failure_category(event_name, guard_auth_attempt_id(clean))
     end
 
     def auth_provider_clicked_properties(properties)
@@ -140,7 +157,36 @@ module Analytics
 
       installation_id = properties["installation_id"].to_s.presence
       out["installation_id"] = installation_id if installation_id
+      # This event builds a NEW hash from an allow-list, so anything not named
+      # here is dropped — including the attempt id, which is the only thing that
+      # ties this click to the failure or the success that followed it.
+      attempt_id = auth_attempt_id(properties)
+      out["auth_attempt_id"] = attempt_id if attempt_id
       out
+    end
+
+    def guard_auth_attempt_id(properties)
+      return properties unless properties.key?("auth_attempt_id")
+
+      attempt_id = auth_attempt_id(properties)
+      return properties.merge("auth_attempt_id" => attempt_id) if attempt_id
+
+      properties.except("auth_attempt_id")
+    end
+
+    def guard_failure_category(event_name, properties)
+      return properties unless properties.key?("failure_category")
+
+      value = properties["failure_category"].to_s
+      return properties.merge("failure_category" => value) if
+        FAILURE_CATEGORY_EVENTS.include?(event_name) && FAILURE_CATEGORIES.include?(value)
+
+      properties.except("failure_category")
+    end
+
+    def auth_attempt_id(properties)
+      value = properties["auth_attempt_id"].to_s.strip
+      value.match?(ATTEMPT_ID_PATTERN) ? value : nil
     end
 
     def boolean_property?(value)

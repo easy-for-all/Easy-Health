@@ -148,9 +148,10 @@ module Api
           landing_page_viewed native_entry_viewed auth_screen_viewed signup_selected login_selected
           auth_provider_clicked
           signup_started login_started login_failed
-          social_login_started social_login_failed
+          social_login_started social_login_failed social_login_completed
           auth_client_error auth_api_error
           google_auth_started google_auth_succeeded google_auth_failed
+          email_auth_started email_auth_succeeded email_auth_failed
           android_registration_started android_registration_succeeded android_registration_failed
           installation_link_succeeded installation_link_failed
           signup_completed login_completed
@@ -198,6 +199,11 @@ module Api
               # never be echoed whole into an admin response.
               result: safe_property(event, "result"),
               error_code: safe_property(event, "error_code"),
+              # What separates a deliberate exit from a defect. Without it the
+              # panel had to paint every social_login_failed red, including the
+              # ones where the user simply changed their mind.
+              failure_category: safe_property(event, "failure_category"),
+              auth_attempt_id: safe_property(event, "auth_attempt_id"),
               auth_flow: safe_property(event, "auth_flow"),
               link_result: safe_property(event, "link_result"),
               auth_screen: safe_property(event, "auth_screen"),

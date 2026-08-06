@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { ApiError } from "@/shared/lib/api";
 import { trackEvent, trackOnce } from "@/shared/lib/analytics";
 import { getAnalyticsContext } from "@/shared/lib/analytics/context";
+import type { AuthFailureCategory } from "@/shared/lib/googleAuth";
 
 // Instrumentation for the stretch that used to be completely dark: from the
 // moment an auth screen renders to the moment the request reaches the API.
@@ -16,19 +17,32 @@ import { getAnalyticsContext } from "@/shared/lib/analytics/context";
 export type AuthScreen = "login" | "sign_up";
 export type AuthOrigin = "landing" | "login" | "sign_up" | "native_entry";
 export type AuthProvider = "google" | "email";
+export type AuthIntent = "login" | "sign_up";
+
+/**
+ * Everything every event of ONE attempt must carry. `authAttemptId` is what
+ * turns a scattered set of rows into a story: the tap, the failure and the retry
+ * of the same person stop being indistinguishable from three different people.
+ */
+export interface AuthAttemptContext {
+  authAttemptId: string;
+  provider: AuthProvider;
+  intent: AuthIntent;
+  authScreen: AuthScreen;
+}
+
+function attemptParams(ctx: AuthAttemptContext) {
+  return {
+    auth_attempt_id: ctx.authAttemptId,
+    provider: ctx.provider,
+    intent: ctx.intent,
+    auth_screen: ctx.authScreen,
+  };
+}
 
 type AuthProviderClick =
-  | {
-      provider: AuthProvider;
-      authScreen: "sign_up";
-      intent: "sign_up";
-      termsAccepted: boolean;
-    }
-  | {
-      provider: AuthProvider;
-      authScreen: "login";
-      intent: "login";
-    };
+  | (AuthAttemptContext & { authScreen: "sign_up"; intent: "sign_up"; termsAccepted: boolean })
+  | (AuthAttemptContext & { authScreen: "login"; intent: "login" });
 
 // Where in the flow it broke. Closed vocabulary so a stray string can never
 // become a new dimension value.
@@ -72,28 +86,77 @@ export function trackLoginSelected(from: AuthOrigin): void {
 /** The user clicked an auth provider/submit before any auth side effect begins. */
 export function trackAuthProviderClicked(click: AuthProviderClick): void {
   trackEvent("auth_provider_clicked", {
-    provider: click.provider,
-    auth_screen: click.authScreen,
-    intent: click.intent,
+    ...attemptParams(click),
     source: "auth_screen",
     ...(click.authScreen === "sign_up" ? { terms_accepted: click.termsAccepted } : {}),
   });
 }
 
+/** The social provider flow began on the device. */
+export function trackSocialLoginStarted(ctx: AuthAttemptContext): void {
+  trackEvent("social_login_started", attemptParams(ctx));
+}
+
+/**
+ * The terminal failure of a social attempt — including a deliberate
+ * cancellation, which is a failure of the attempt but NOT a defect. It is
+ * emitted exactly once per attempt, whether the flow died on the device or the
+ * API answered with an error; the second event (auth_client_error /
+ * auth_api_error) is what says which.
+ */
+export function trackSocialLoginFailed(
+  ctx: AuthAttemptContext,
+  failureCategory: AuthFailureCategory,
+  errorCode: unknown
+): void {
+  trackEvent("social_login_failed", {
+    ...attemptParams(ctx),
+    failure_category: failureCategory,
+    error_code: safeCode(errorCode),
+  });
+}
+
+/**
+ * The social attempt ended with a session. Fires once per attempt: a resume or a
+ * rerender must never turn one successful login into two conversions.
+ */
+export function trackSocialLoginCompleted(ctx: AuthAttemptContext): void {
+  trackOnce(`social_login_completed:${ctx.authAttemptId}`, "social_login_completed", attemptParams(ctx));
+}
+
+export function trackLoginStarted(ctx: AuthAttemptContext): void {
+  trackEvent("login_started", { ...attemptParams(ctx), method: ctx.provider });
+}
+
+export function trackLoginCompleted(ctx: AuthAttemptContext): void {
+  trackOnce(`login_completed:${ctx.authAttemptId}`, "login_completed", attemptParams(ctx));
+}
+
+export function trackSignupStarted(ctx: AuthAttemptContext): void {
+  trackEvent("signup_started", { ...attemptParams(ctx), method: ctx.provider });
+}
+
+export function trackSignupCompleted(ctx: AuthAttemptContext): void {
+  trackOnce(`signup_completed:${ctx.authAttemptId}`, "signup_completed", attemptParams(ctx));
+}
+
 /**
  * A real client-side failure during authentication: the native plugin refused,
  * the SDK never loaded, the picker returned nothing. Never used for a validation
- * message the user can simply fix.
+ * message the user can simply fix, and NEVER for a cancellation — the user
+ * choosing to back out is not a client error.
  */
 export function trackAuthClientError(
   stage: AuthStage,
   errorCode: unknown,
-  provider?: string
+  ctx?: AuthAttemptContext,
+  failureCategory?: AuthFailureCategory | EmailFailureCategory
 ): void {
   trackEvent("auth_client_error", {
     stage,
     error_code: safeCode(errorCode),
-    ...(provider ? { provider } : {}),
+    ...(ctx ? attemptParams(ctx) : {}),
+    ...(failureCategory ? { failure_category: failureCategory } : {}),
   });
 }
 
@@ -102,7 +165,12 @@ export function trackAuthClientError(
  * reached the server" (auth_client_error) from "the server said no", which is
  * the distinction the funnel could not make at all.
  */
-export function trackAuthApiError(stage: AuthStage, error: unknown, provider?: string): void {
+export function trackAuthApiError(
+  stage: AuthStage,
+  error: unknown,
+  ctx?: AuthAttemptContext,
+  failureCategory?: AuthFailureCategory | EmailFailureCategory
+): void {
   const status = error instanceof ApiError ? error.status : 0;
   const code = error instanceof ApiError ? error.errorCode : undefined;
 
@@ -110,8 +178,32 @@ export function trackAuthApiError(stage: AuthStage, error: unknown, provider?: s
     stage,
     http_status: status,
     error_code: safeCode(code ?? (status === 0 ? "network" : String(status))),
-    ...(provider ? { provider } : {}),
+    ...(ctx ? attemptParams(ctx) : {}),
+    ...(failureCategory ? { failure_category: failureCategory } : {}),
   });
+}
+
+// Closed vocabulary for the e-mail flows, derived from the HTTP status rather
+// than from the server's message: the message is user-facing copy that changes,
+// the status is the contract.
+export type EmailFailureCategory =
+  | "invalid_credentials"
+  | "validation_error"
+  | "rate_limited"
+  | "network_error"
+  | "backend_error"
+  | "unknown";
+
+export function emailFailureCategory(error: unknown): EmailFailureCategory {
+  if (error instanceof TypeError) return "network_error";
+  if (!(error instanceof ApiError)) return "unknown";
+
+  if (error.status === 401) return "invalid_credentials";
+  if (error.status === 422 || error.status === 400) return "validation_error";
+  if (error.status === 429) return "rate_limited";
+  if (error.status >= 500) return "backend_error";
+  if (error.status === 0) return "network_error";
+  return "unknown";
 }
 
 /**

@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // para /login mesmo assim — e o onboarding do Android começa sem sessão.
     // Quem protege /onboarding na Web é a própria página, que redireciona quando
     // não é nativo e não há usuário.
-    const publicPaths = ["/", "/login", "/sign-up", "/native-entry", "/onboarding", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];
+    const publicPaths = ["/", "/login", "/sign-up", "/native-entry", "/onboarding", "/plano", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];
 
     api.get<User>("/api/v1/auth/me")
       .then((u) => {
@@ -63,6 +63,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // sinks (GA4 user_id, Clarity identify). anonymous_id is preserved.
   useEffect(() => {
     if (user?.id) identifyUser(user.id);
+  }, [user?.id]);
+
+  // Reivindica plano e treinos feitos antes da conta existir. Roda em toda
+  // sessão resolvida, não só logo após o cadastro: um claim que não completou
+  // (rede caiu, app foi fechado) deixa dado real preso na instalação, e a
+  // próxima abertura é a única chance de recuperá-lo. É no-op quando não há
+  // token anônimo — que é o caso da Web, do PWA e de quem nunca usou sem conta.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    import("@/features/anonymous/claim").then(({ claimAnonymousData }) => {
+      void claimAnonymousData();
+    });
   }, [user?.id]);
 
   useEffect(() => {

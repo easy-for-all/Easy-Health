@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "@/shared/lib/api";
+import { AnonApiError } from "@/features/anonymous/anon-api";
 import { EVENTS, trackEvent } from "@/shared/lib/analytics";
 import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import type { WorkoutPlan } from "@/shared/types/workout";
 import { clearDraft, loadDraft, saveDraft } from "./draft";
 import { stepsForMode } from "./flows";
-import { generatePlan, upsertProfile } from "./submit";
+import { generatePlan, upsertProfile, type SubmitMode } from "./submit";
 import { hydrateFormFromProfile, type CreationMode, type EntryMode, type StepId, type WizardFormState } from "./types";
 
 type Phase = "start" | "form" | "generating" | "error";
@@ -41,12 +42,15 @@ export interface WizardOptions {
   // Acrescenta a etapa de resumo ao final do fluxo. Quem liga isto é responsável
   // por decidir o que acontece no fim — ver onRequireAuth em PlanCreationFlow.
   withPreview?: boolean;
+  // Para onde a geração vai. O wizard continua ignorante sobre autenticação:
+  // ele não decide se há conta, só repassa o que a página decidiu.
+  submitMode?: SubmitMode;
 }
 
 export function usePlanCreationWizard(
   entryMode: EntryMode,
   initialProfile: HealthProfile | null,
-  { withPreview = false }: WizardOptions = {},
+  { withPreview = false, submitMode = "authenticated" }: WizardOptions = {},
 ) {
   const hasExistingProfile = !!initialProfile;
 
@@ -143,8 +147,8 @@ export function usePlanCreationWizard(
     setError("");
     lastFormRef.current = form;
     try {
-      await upsertProfile(entryMode, form);
-      const plan = await generatePlan(form);
+      await upsertProfile(entryMode, form, submitMode);
+      const plan = await generatePlan(form, submitMode);
       trackEvent(EVENTS.WORKOUT_CREATED, { workout_days: plan.days.length, modality: form.modality });
       trackEvent(EVENTS.AI_WORKOUT_GENERATED, { modality: form.modality });
       trackOnboardingEvent("plan_created", {
@@ -156,7 +160,19 @@ export function usePlanCreationWizard(
       if (persists) clearDraft();
       return plan;
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
+      // O 4º plano sem conta. Não é erro que se resolve tentando de novo: é a
+      // fronteira do que o produto entrega de graça, e a única saída é criar a
+      // conta. Deixar isso cair na tela de erro genérica ofereceria um botão
+      // "Tentar novamente" que o servidor vai recusar de novo, para sempre.
+      if (err instanceof AnonApiError && err.isLimitReached) {
+        trackEvent("anonymous_plan_limit_reached", { onboarding_flow: mode });
+        window.location.replace("/sign-up?from=anonymous_limit");
+        return null;
+      }
+      // No fluxo autenticado um 401 é sessão expirada. No anônimo é o token que
+      // venceu — e mandar para /login ali descartaria um plano que a pessoa
+      // acabou de pedir, num fluxo onde ela nem tem conta para entrar.
+      if (submitMode === "authenticated" && err instanceof ApiError && err.status === 401) {
         window.location.replace("/login");
         return null;
       }

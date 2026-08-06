@@ -229,6 +229,44 @@ RSpec.describe "Admin observability", type: :request do
       expect(response.body).not_to include("Pessoa Investigada")
     end
 
+    # A cancellation is a deliberate exit. The panel could only paint it red,
+    # because failure_category was not part of the response at all.
+    it "exposes failure_category so a cancellation is not read as a defect" do
+      ProductAnalyticsEvent.create!(
+        event_name: "social_login_failed", event_version: 1,
+        occurred_at: 30.minutes.ago, received_at: Time.current,
+        user_id: user.id, platform: "android", app_surface: "unknown",
+        environment: "test", source: "web_client",
+        properties: {
+          "failure_category" => "user_cancelled", "error_code" => "USER_CANCELLED",
+          "auth_attempt_id" => "attempt-1", "provider" => "google"
+        }
+      )
+
+      get "/api/v1/admin/observability/timeline", params: { user_id: user.id }
+
+      event = payload["events"].find { |row| row["event_name"] == "social_login_failed" }
+      expect(event["failure_category"]).to eq("user_cancelled")
+      expect(event["auth_attempt_id"]).to eq("attempt-1")
+    end
+
+    it "includes the e-mail flow's server-side events in the journey" do
+      %w[email_auth_started email_auth_succeeded].each do |name|
+        ProductAnalyticsEvent.create!(
+          event_name: name, event_version: 1,
+          occurred_at: 20.minutes.ago, received_at: Time.current,
+          user_id: user.id, platform: "android", app_surface: "unknown",
+          environment: "test", source: "easyhealth_backend",
+          properties: { "auth_intent" => "login" }
+        )
+      end
+
+      get "/api/v1/admin/observability/timeline", params: { user_id: user.id }
+
+      names = payload["events"].map { |row| row["event_name"] }
+      expect(names).to include("email_auth_started", "email_auth_succeeded")
+    end
+
     it "reports a missing installation without failing" do
       get "/api/v1/admin/observability/timeline", params: { installation_id: "does-not-exist" }
 

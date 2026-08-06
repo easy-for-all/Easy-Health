@@ -252,7 +252,7 @@ export async function startGoogleAuth(
 // What actually went wrong, so each screen can respond instead of collapsing
 // every outcome into "Não foi possível entrar".
 // - consent_required: this Google account does not exist yet → send to sign-up.
-// - cancelled:        the user dismissed the account picker → say nothing.
+// - cancelled:        the user dismissed the account picker → not an error.
 export type GoogleAuthFailure =
   | "consent_required"
   | "cancelled"
@@ -261,23 +261,108 @@ export type GoogleAuthFailure =
   | "network"
   | "unknown";
 
-// The capgo plugin surfaces a dismissed picker without a stable contract, so
-// both the code and the message are inspected. Android's canonical value is
-// 12501 (SIGN_IN_CANCELLED); other builds return a "cancelled"/"canceled" string.
-const CANCELLED_PATTERN = /cancel/i;
+// The analytics dimension, kept apart from GoogleAuthFailure on purpose: the
+// vocabulary above routes the UI (which banner, which CTA), this one answers
+// "what kind of thing went wrong" for the funnel and the Admin.
+export type AuthFailureCategory =
+  | "user_cancelled"
+  | "provider_error"
+  | "oauth_configuration_error"
+  | "network_error"
+  | "timeout"
+  | "backend_error"
+  | "unknown";
 
-export function classifyGoogleAuthError(err: unknown): GoogleAuthFailure {
+// A voluntary cancellation is recognised by EXPLICIT CODES ONLY.
+//
+// It used to be inferred from /cancel/i over the code AND the message, which
+// meant any plugin error whose message happened to contain "cancel" — a
+// cancelled request, a cancelled coroutine — was filed as a user decision and
+// silently dropped from the failure counters.
+//
+// The contract is documented by the plugin itself: GoogleProvider.java rejects
+// GetCredentialCancellationException with USER_CANCELLED, and definitions.d.ts
+// declares `SocialLoginErrorCode = 'USER_CANCELLED'`. "cancelled" is kept
+// because the plugin's own JS layer mints it on some web/provider paths.
+const CANCELLED_CODES = ["USER_CANCELLED", "cancelled"];
+
+// The single normalized code we report for a cancellation, whatever spelling
+// the plugin used, so the Admin has one value to match on.
+export const USER_CANCELLED_CODE = "USER_CANCELLED";
+
+function isCancelledCode(code: string): boolean {
+  return CANCELLED_CODES.some((known) => known.toLowerCase() === code.toLowerCase());
+}
+
+// Codes that mean the request never left the device.
+const CONFIGURATION_CODES = ["missing_web_client_id", "plugin_init_failed"];
+const PROVIDER_CODES = ["plugin_import_failed", "plugin_login_failed", "missing_id_token"];
+// Codes the BACKEND produced. oauth_failed belongs here: it is the error_code
+// the API returns from its own rescue, so filing it as a plugin failure blamed
+// the device for something the server said.
+const BACKEND_CODES = ["consent_required", "account_deleted", "invalid_token", "invalid_audience", "oauth_failed"];
+
+export interface GoogleAuthErrorInfo {
+  /** Drives the UI. Unchanged vocabulary. */
+  failure: GoogleAuthFailure;
+  /** Drives analytics. Closed vocabulary, never a message. */
+  category: AuthFailureCategory;
+  /** Normalized, safe to send as a dimension. */
+  errorCode: string;
+  /** true when the API answered (or was reached); false when it broke on the device. */
+  reachedBackend: boolean;
+}
+
+/**
+ * The one place that decides what a Google auth rejection means. Reads the code
+ * only — never the message, which is human text from a third-party SDK and must
+ * never become a dimension value or a branch condition.
+ */
+export function describeGoogleAuthError(err: unknown): GoogleAuthErrorInfo {
   const code = err instanceof GoogleAuthError ? err.code : "";
-  const message = (err as Error)?.message ?? "";
 
-  if (code === "consent_required") return "consent_required";
-  if (code === "account_deleted") return "account_deleted";
-  if (code === "invalid_token") return "invalid_token";
-  if (code === "12501" || CANCELLED_PATTERN.test(code) || CANCELLED_PATTERN.test(message)) {
-    return "cancelled";
+  if (isCancelledCode(code)) {
+    return {
+      failure: "cancelled",
+      category: "user_cancelled",
+      errorCode: USER_CANCELLED_CODE,
+      reachedBackend: false,
+    };
   }
-  if (code === "exchange_failed" || err instanceof TypeError || (err as Error)?.name === "TimeoutError") {
-    return "network";
+
+  if (BACKEND_CODES.includes(code)) {
+    const failure: GoogleAuthFailure =
+      code === "consent_required" ? "consent_required"
+      : code === "account_deleted" ? "account_deleted"
+      : code === "oauth_failed" ? "unknown"
+      : "invalid_token";
+
+    return { failure, category: "backend_error", errorCode: code, reachedBackend: true };
   }
-  return "unknown";
+
+  if (CONFIGURATION_CODES.includes(code)) {
+    return { failure: "unknown", category: "oauth_configuration_error", errorCode: code, reachedBackend: false };
+  }
+
+  if (PROVIDER_CODES.includes(code)) {
+    return { failure: "unknown", category: "provider_error", errorCode: code, reachedBackend: false };
+  }
+
+  const name = (err as Error)?.name;
+  if (name === "TimeoutError" || name === "AbortError") {
+    return { failure: "network", category: "timeout", errorCode: code || "timeout", reachedBackend: true };
+  }
+
+  // exchange_failed is the fallback code of postGoogleNative: the request left
+  // the device and never came back with a structured answer.
+  if (code === "exchange_failed" || err instanceof TypeError) {
+    return { failure: "network", category: "network_error", errorCode: code || "network", reachedBackend: true };
+  }
+
+  return { failure: "unknown", category: "unknown", errorCode: code || "unknown", reachedBackend: false };
+}
+
+/** Kept for the screens and tests that only need the UI vocabulary. */
+export function classifyGoogleAuthError(err: unknown): GoogleAuthFailure {
+  return describeGoogleAuthError(err).failure;
 }

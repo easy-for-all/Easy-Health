@@ -167,6 +167,8 @@ Rails.application.routes.draw do
         # to instrumented builds (source: app_installations + product_analytics_events)
         get "analytics/android_funnel", to: "analytics#android_funnel"
         get "analytics/android_funnel/installations", to: "analytics#android_funnel_installations"
+        # EXPERIMENTO ANDROID — CONTA APÓS O ONBOARDING (unidade: instalação exposta)
+        get "analytics/post_onboarding_experiment", to: "analytics#post_onboarding_experiment"
         get "analytics/event_deliveries", to: "analytics#event_deliveries"
         get "analytics/event_deliveries/:id", to: "analytics#event_delivery"
         # Admin-only diagnostic: sends a test push to the CURRENT admin's own
@@ -187,6 +189,27 @@ Rails.application.routes.draw do
       # Product analytics ingestion (auth optional; accepts anonymous_id pre-login)
       namespace :analytics do
         post "events", to: "events#create"
+      end
+
+      # Modo anônimo — Android nativo antes de a conta existir. Todos autenticados
+      # por AnonymousSessions::Token (Bearer), exceto o mint e o claim: o mint
+      # ainda não tem token, e o claim exige a sessão de verdade.
+      namespace :anonymous do
+        post  "sessions",                to: "sessions#create"
+        get   "state",                   to: "states#show"
+        put   "profile",                 to: "profiles#update"
+        post  "workout_plan/generate",   to: "workout_plans#generate"
+        get   "workout_plan",            to: "workout_plans#show"
+        get   "workout_plan/today",      to: "workout_plans#today"
+        get   "workout_days/:id",        to: "workout_plans#day"
+        post  "workout_sessions",        to: "workout_sessions#create"
+      end
+      post "anonymous/claim", to: "anonymous_claims#create"
+
+      # Experiment assignments (auth optional; the pre-auth Android experiment is
+      # decided before an account exists and is keyed by installation_id)
+      namespace :experiments do
+        post "assignments", to: "assignments#create"
       end
 
       # App installation register/refresh (auth optional; associates user post-login)

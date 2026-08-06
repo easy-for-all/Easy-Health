@@ -65,6 +65,23 @@ module Api
                  status: :service_unavailable
         end
 
+        # GET /api/v1/admin/analytics/post_onboarding_experiment
+        # EXPERIMENTO ANDROID — CONTA APÓS O ONBOARDING. A unidade é a instalação
+        # EXPOSTA: atribuídas incluem quem nunca chegou à bifurcação, e dividir
+        # por elas mediria o abandono do wizard em vez do efeito da variante.
+        def post_onboarding_experiment
+          render json: ::Analytics::PostOnboardingExperiment.new(
+            period: params[:period],
+            build: params[:build],
+            audience: params[:audience],
+            variant: params[:variant]
+          ).call
+        rescue StandardError => e
+          Rails.logger.error("[Admin::Analytics#post_onboarding_experiment] #{e.class}: #{e.message}")
+          render json: { error: "Painel do experimento indisponível no momento." },
+                 status: :service_unavailable
+        end
+
         # GET /api/v1/admin/analytics/event_deliveries
         def event_deliveries
           page = [ params[:page].to_i, 1 ].max

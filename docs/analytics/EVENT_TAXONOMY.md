@@ -68,10 +68,14 @@ saiu era idêntica a uma que tocou no Google e falhou no aparelho.
 | `signup_selected` / `login_selected` | escolha explícita de cadastro/entrada | frontend (CTAs) |
 | `signup_started` / `login_started` | formulário **enviado**, após validação client | frontend (submit) |
 | `social_login_started` | **toque** no botão do provedor | frontend (telas de auth) |
-| `social_login_failed` | falhou **no aparelho**, sem chegar na API | frontend |
-| `auth_client_error` | erro client-side real (plugin, rede) | frontend |
+| `social_login_failed` | desfecho terminal da tentativa social, **inclusive cancelamento** (traz `failure_category`) | frontend |
+| `social_login_completed` | a tentativa social terminou com sessão (nativo) | frontend |
+| `login_completed` / `signup_completed` | a tentativa por e-mail terminou com sessão | frontend |
+| `auth_client_error` | erro client-side real (plugin, rede), **nunca** cancelamento | frontend |
 | `auth_api_error` | a API **respondeu** erro (traz `http_status`) | frontend |
 | `google_auth_started` | a **requisição chegou** em `POST /auth/google/native` | backend |
+| `email_auth_started` | a **requisição chegou** em `/auth/sign_in` ou `/auth/sign_up` | backend |
+| `email_auth_succeeded` / `email_auth_failed` | desfecho da requisição por e-mail no servidor | backend |
 | `android_registration_started` | a mesma requisição, com `terms_accepted` | backend |
 | `installation_link_succeeded` | instalação vinculada ao usuário | backend |
 
@@ -79,6 +83,31 @@ saiu era idêntica a uma que tocou no Google e falhou no aparelho.
 recebimento da requisição no servidor, já com o `id_token` do Google em mãos.
 Quem toca no botão e cancela o seletor de contas produz `social_login_started`
 sem nunca produzir `google_auth_started` — é assim que essa perda vira número.
+
+### Cancelamento não é erro
+
+`social_login_failed` é o único evento emitido quando a pessoa fecha o seletor de
+contas: `failure_category: "user_cancelled"`, `error_code: "USER_CANCELLED"`.
+**Não** sai `auth_client_error` e **nada** vai para o Sentry — o Admin mostra isso
+como saída deliberada, em cinza, nunca em vermelho.
+
+O cancelamento é reconhecido **só por código** (`USER_CANCELLED`/`cancelled`,
+contrato do `@capgo/capacitor-social-login`). Ler a mensagem, como antes, fazia
+qualquer falha cujo texto mencionasse "cancel" sumir das contagens de falha.
+
+`failure_category` é vocabulário fechado, validado em `Analytics::Ingestion`:
+`user_cancelled`, `provider_error`, `oauth_configuration_error`, `network_error`,
+`timeout`, `backend_error`, `invalid_credentials`, `validation_error`,
+`rate_limited`, `unknown`.
+
+### Correlação por tentativa: `auth_attempt_id`
+
+Todo evento de uma mesma tentativa (do clique ao desfecho) carrega o mesmo
+`auth_attempt_id`, gerado no cliente (`shared/lib/auth-attempt.ts`) e enviado ao
+backend no header `X-Auth-Attempt-Id`. É opaco, aleatório e **opcional**: sem ele
+a requisição é atendida igual, apenas não dá para juntar as duas metades. Uma
+nova tentativa depois de um cancelamento ou de uma falha **sempre** gera um id
+novo — reaproveitar faria uma pessoa insistindo parecer várias pessoas.
 
 ## Correlação por `installation_id`
 

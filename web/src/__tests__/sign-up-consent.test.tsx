@@ -7,7 +7,7 @@ const {
   mockIsNative,
   mockIsHydrated,
   mockStartGoogleAuth,
-  mockClassify,
+  mockDescribe,
   mockAuthLog,
   mockTrackEvent,
   mockSignUp,
@@ -17,13 +17,24 @@ const {
   mockIsNative: vi.fn(() => false),
   mockIsHydrated: vi.fn(() => true),
   mockStartGoogleAuth: vi.fn(),
-  mockClassify: vi.fn(() => "unknown"),
+  mockDescribe: vi.fn(),
   mockAuthLog: vi.fn(),
   mockTrackEvent: vi.fn(),
   mockSignUp: vi.fn(),
   mockPush: vi.fn(),
   mockSearchParams: vi.fn(() => new URLSearchParams()),
 }));
+
+// The shape describeGoogleAuthError returns, so each test states an outcome
+// rather than a code the classifier then has to be trusted to read correctly.
+function outcome(
+  failure: string,
+  category: string,
+  errorCode = "boom",
+  reachedBackend = false,
+) {
+  return { failure, category, errorCode, reachedBackend };
+}
 
 vi.mock("@/shared/lib/platform", () => ({
   useIsNativePlatform: () => mockIsNative(),
@@ -34,7 +45,7 @@ vi.mock("@/shared/lib/googleAuth", () => ({
   GoogleAuthError: class GoogleAuthError extends Error {},
   authLog: mockAuthLog,
   startGoogleAuth: mockStartGoogleAuth,
-  classifyGoogleAuthError: mockClassify,
+  describeGoogleAuthError: mockDescribe,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -91,7 +102,7 @@ describe("SignUp consent gate for Google sign-in", () => {
     vi.clearAllMocks();
     mockIsNative.mockReturnValue(false);
     mockIsHydrated.mockReturnValue(true);
-    mockClassify.mockReturnValue("unknown");
+    mockDescribe.mockReturnValue(outcome("unknown", "unknown"));
     mockSearchParams.mockReturnValue(new URLSearchParams());
     mockStartGoogleAuth.mockResolvedValue({ navigated: false, redirectPath: "/onboarding" });
     Object.defineProperty(window, "location", {
@@ -113,6 +124,7 @@ describe("SignUp consent gate for Google sign-in", () => {
       intent: "sign_up",
       terms_accepted: false,
       source: "auth_screen",
+      auth_attempt_id: expect.any(String),
     });
     expect(mockTrackEvent).not.toHaveBeenCalledWith(
       "social_login_started",
@@ -128,6 +140,7 @@ describe("SignUp consent gate for Google sign-in", () => {
     expect(mockTrackEvent).toHaveBeenCalledWith("auth_consent_blocked", {
       provider: "google",
       auth_screen: "sign_up",
+      auth_attempt_id: expect.any(String),
     });
   });
 
@@ -167,6 +180,7 @@ describe("SignUp consent gate for Google sign-in", () => {
     expect(mockTrackEvent).toHaveBeenCalledWith("auth_consent_blocked", {
       provider: "email",
       auth_screen: "sign_up",
+      auth_attempt_id: expect.any(String),
     });
   });
 
@@ -221,6 +235,7 @@ describe("SignUp consent gate for Google sign-in", () => {
       intent: "sign_up",
       terms_accepted: true,
       source: "auth_screen",
+      auth_attempt_id: expect.any(String),
     });
     const clickedIndex = mockTrackEvent.mock.calls.findIndex(([name]) => name === "auth_provider_clicked");
     const startedIndex = mockTrackEvent.mock.calls.findIndex(([name]) => name === "social_login_started");
@@ -297,6 +312,7 @@ describe("SignUp consent gate for Google sign-in", () => {
       intent: "sign_up",
       terms_accepted: true,
       source: "auth_screen",
+      auth_attempt_id: expect.any(String),
     });
     expect(mockSignUp).toHaveBeenCalledWith("Marcus", "marcus@test.com", "supersecret", false);
     expect(mockStartGoogleAuth).not.toHaveBeenCalled();

@@ -5,9 +5,17 @@ class WorkoutSession < ApplicationRecord
   # last-weight, or progression lookups (see ExerciseHistoryService).
   STATUSES = %w[in_progress completed cancelled].freeze
 
-  belongs_to :user
+  # Dono único, como em WorkoutPlan: usuário OU instalação. Uma sessão anônima
+  # existe de verdade no banco porque o primeiro treino executado é a métrica
+  # que o experimento mede, e ela precisa sobreviver ao cadastro.
+  belongs_to :user, optional: true
+  belongs_to :app_installation, optional: true
   belongs_to :workout_day, optional: true
   has_many :exercise_sessions, dependent: :destroy
+
+  validate :exactly_one_owner
+
+  scope :owned_by_installation, ->(installation) { where(app_installation_id: installation) }
 
   validates :status, inclusion: { in: STATUSES }
   validates :completed_at, presence: true, if: -> { status == "completed" }
@@ -18,12 +26,26 @@ class WorkoutSession < ApplicationRecord
 
   # Guarded by status so the in_progress -> completed transition (finish action)
   # fires these exactly once, and starting a session (in_progress) never does.
-  after_create :maybe_create_community_post, if: -> { status == "completed" }
-  after_update :maybe_create_community_post, if: -> { saved_change_to_status?(to: "completed") }
-  after_commit :trigger_fitness_recalibration, on: :create, if: -> { status == "completed" }
-  after_commit :trigger_fitness_recalibration, on: :update, if: -> { saved_change_to_status?(to: "completed") }
+  #
+  # Também guardados por user_id: comunidade e recalibração do perfil de fitness
+  # são coisas de conta, e uma sessão anônima não tem nenhuma das duas. Rodá-las
+  # aqui não daria "post sem autor", daria NoMethodError em nil.
+  after_create :maybe_create_community_post, if: -> { status == "completed" && user_id.present? }
+  after_update :maybe_create_community_post, if: -> { saved_change_to_status?(to: "completed") && user_id.present? }
+  after_commit :trigger_fitness_recalibration, on: :create, if: -> { status == "completed" && user_id.present? }
+  after_commit :trigger_fitness_recalibration, on: :update, if: -> { saved_change_to_status?(to: "completed") && user_id.present? }
+
+  def anonymous?
+    user_id.nil?
+  end
 
   private
+
+  def exactly_one_owner
+    return if user_id.present? ^ app_installation_id.present?
+
+    errors.add(:base, "requires exactly one owner (user or app_installation)")
+  end
 
   def trigger_fitness_recalibration
     RecalibrateFitnessProfileJob.perform_later(user_id, source: "workout_completed")

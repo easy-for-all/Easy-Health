@@ -66,8 +66,11 @@ module Analytics
       { key: "auth_choice",     label: "Escolheu login/cadastro",   events: %w[signup_selected login_selected] },
       { key: "auth_provider",   label: "Tentou autenticar",         events: %w[auth_provider_clicked] },
       { key: "auth_client",     label: "Auth iniciada no cliente",  events: %w[social_login_started signup_started login_started] },
-      { key: "auth_api",        label: "Auth chegou à API",         events: %w[google_auth_started android_registration_started] },
-      { key: "auth_done",       label: "Auth concluída",            events: %w[google_auth_succeeded android_registration_succeeded signup_completed] },
+      # email_auth_started é o equivalente por e-mail de google_auth_started: a
+      # prova, do lado do servidor, de que a requisição entrou no controller.
+      # Sem ele o fluxo por e-mail nunca saía de "iniciou no cliente".
+      { key: "auth_api",        label: "Auth chegou à API",         events: %w[google_auth_started android_registration_started email_auth_started] },
+      { key: "auth_done",       label: "Auth concluída",            events: %w[google_auth_succeeded android_registration_succeeded signup_completed email_auth_succeeded] },
       { key: "linked",          label: "Instalação vinculada",      events: %w[installation_link_succeeded] }
     ].freeze
 
@@ -83,6 +86,24 @@ module Analytics
 
     NO_EVENTS_BUCKET = "no_events".freeze
     COMPLETED_BUCKET = "completed".freeze
+
+    # "Iniciou no cliente e não chegou à API" juntava três coisas diferentes:
+    # quem desistiu de propósito, quem quebrou no aparelho e quem sumiu sem
+    # desfecho nenhum. Somar cancelamento com erro fazia uma decisão do usuário
+    # parecer defeito — e escondia o tamanho real do defeito.
+    AUTH_CLIENT_BUCKET = "stopped_auth_client".freeze
+
+    AUTH_OUTCOME_LABELS = {
+      "cancelled_auth" => "Cancelou a autenticação",
+      "technical_failure" => "Falha técnica",
+      "no_outcome" => "Sem desfecho"
+    }.freeze
+
+    USER_CANCELLED_CATEGORY = "user_cancelled".freeze
+
+    # Eventos de desfecho do cliente. Nenhum deles é etapa do funil: eles
+    # explicam a parada, não avançam ninguém.
+    AUTH_OUTCOME_EVENTS = %w[social_login_failed auth_client_error login_failed].freeze
 
     # Same order as the funnel, so "where did they stop" reads top to bottom.
     BUCKET_LABELS = {
@@ -164,6 +185,7 @@ module Analytics
         steps: steps,
         biggest_drop: biggest_drop,
         stage_buckets: stage_buckets,
+        stopped_auth_client_breakdown: stopped_auth_client_breakdown,
         link_failures: link_failures
       }
     end
@@ -498,6 +520,63 @@ module Analytics
       cohort_scope.where.not(last_link_failure_code: [ nil, "" ])
                   .group(:last_link_failure_code)
                   .count
+    end
+
+    # A unidade continua sendo installation_id distinto: uma instalação que
+    # cancelou três vezes é UMA que cancelou, e nunca três. A precedência é
+    # deliberada — se houve falha técnica, é isso que precisa ser consertado,
+    # mesmo que a pessoa também tenha cancelado em alguma tentativa.
+    def stopped_auth_client_breakdown
+      ids = states.values.select { |state| state[:bucket] == AUTH_CLIENT_BUCKET }
+                  .map { |state| state[:installation_id] }
+      counts = Hash.new(0)
+      outcomes = auth_outcomes(ids)
+
+      ids.each do |installation_id|
+        row = outcomes[installation_id]
+        counts[outcome_key(row)] += 1
+      end
+
+      AUTH_OUTCOME_LABELS.map do |key, label|
+        { key: key, label: label, count: counts.fetch(key, 0) }
+      end
+    end
+
+    def outcome_key(row)
+      return "no_outcome" if row.nil?
+      return "technical_failure" if row["technical"].to_i.positive?
+      return "cancelled_auth" if row["cancelled"].to_i.positive?
+
+      "no_outcome"
+    end
+
+    # Uma consulta agregada, no banco, só para as instalações do bucket.
+    def auth_outcomes(installation_ids)
+      return {} if installation_ids.empty?
+
+      quoted_ids = installation_ids.map { |id| ApplicationRecord.connection.quote(id) }.join(", ")
+      quoted_events = AUTH_OUTCOME_EVENTS.map { |name| ApplicationRecord.connection.quote(name) }.join(", ")
+      cancelled = ApplicationRecord.connection.quote(USER_CANCELLED_CATEGORY)
+
+      sql = <<~SQL.squish
+        SELECT e.properties->>'installation_id' AS installation_id,
+               COUNT(*) FILTER (
+                 WHERE e.event_name = 'social_login_failed'
+                   AND e.properties->>'failure_category' = #{cancelled}
+               ) AS cancelled,
+               COUNT(*) FILTER (
+                 WHERE e.event_name IN ('auth_client_error', 'login_failed')
+                    OR (e.event_name = 'social_login_failed'
+                        AND COALESCE(e.properties->>'failure_category', '') <> #{cancelled})
+               ) AS technical
+        FROM product_analytics_events e
+        WHERE e.event_name IN (#{quoted_events})
+          AND e.properties->>'installation_id' IN (#{quoted_ids})
+          #{event_window_clause}
+        GROUP BY 1
+      SQL
+
+      ApplicationRecord.connection.select_all(sql).to_a.index_by { |row| row["installation_id"] }
     end
 
     # -------------------------------------------------------------------- list

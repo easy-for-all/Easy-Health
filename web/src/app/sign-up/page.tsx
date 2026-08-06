@@ -9,18 +9,25 @@ import { checkoutErrorCode, checkoutErrorMessage, reportCheckoutException } from
 import { getPendingPlan, clearPendingPlan, type PendingPlan } from "@/features/billing/checkout-intent";
 import { checkoutEventParams, trackCheckoutStarted, trackEvent, EVENTS, trackConversion, CONVERSIONS } from "@/shared/lib/analytics";
 import {
+  emailFailureCategory,
   reportAuthError,
   trackAuthApiError,
   trackAuthClientError,
   trackAuthProviderClicked,
   trackLoginSelected,
+  trackSignupCompleted,
+  trackSignupStarted,
+  trackSocialLoginCompleted,
+  trackSocialLoginFailed,
+  trackSocialLoginStarted,
   useAuthScreenView,
+  type AuthAttemptContext,
 } from "@/features/auth/auth-analytics";
+import { endAuthAttempt, startAuthAttempt } from "@/shared/lib/auth-attempt";
 import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
 import {
-  GoogleAuthError,
   authLog,
-  classifyGoogleAuthError,
+  describeGoogleAuthError,
   startGoogleAuth,
   type GoogleConsent,
 } from "@/shared/lib/googleAuth";
@@ -73,6 +80,9 @@ export default function SignUpPage() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
+  // The user dismissed the account picker. Its own state, never `error`: this is
+  // a deliberate exit, and the red error banner would call it a failure.
+  const [authCancelled, setAuthCancelled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [pendingPlan] = useState<PendingPlan | null>(() => getPendingPlan());
@@ -109,12 +119,20 @@ export default function SignUpPage() {
     e.stopPropagation();
 
     if (googleRef.current) return;
-    trackAuthProviderClicked({
+    // A retry is a NEW attempt: a fresh id, never the one that was cancelled.
+    const attempt: AuthAttemptContext = {
+      authAttemptId: startAuthAttempt(),
       provider: "google",
+      intent: "sign_up",
+      authScreen: "sign_up",
+    };
+    trackAuthProviderClicked({
+      ...attempt,
       authScreen: "sign_up",
       intent: "sign_up",
       termsAccepted: acceptedTerms,
     });
+    setAuthCancelled(false);
 
     // Defense in depth: block the social flow before ANY side effect when the
     // required consent is missing — same gate as the email/password submit.
@@ -123,7 +141,11 @@ export default function SignUpPage() {
       consentCheckboxRef.current?.focus();
       // Countable in the funnel, not just in the console: this is the event that
       // separates "the consent gate stopped them" from "they never tapped".
-      trackEvent("auth_consent_blocked", { provider: "google", auth_screen: "sign_up" });
+      trackEvent("auth_consent_blocked", {
+        provider: "google",
+        auth_screen: "sign_up",
+        auth_attempt_id: attempt.authAttemptId,
+      });
       authLog("auth_blocked_missing_consent", {
         provider: "google",
         surface: "signup",
@@ -131,6 +153,7 @@ export default function SignUpPage() {
         missing_terms: true,
         missing_privacy: true,
       });
+      endAuthAttempt(); // the gate is a terminal outcome for this attempt
       return;
     }
 
@@ -138,35 +161,45 @@ export default function SignUpPage() {
 
     setError("");
     setGoogleLoading(true);
-    trackEvent("social_login_started", { provider: "google", intent: "sign_up" });
+    trackSocialLoginStarted(attempt);
     try {
       const outcome = await startGoogleAuth({ native: isNative, consent });
+      // Only the native flow returns here with a session; the web flow navigates
+      // away to OmniAuth and its outcome lands on another page.
       if (outcome.navigated) return; // leaving the page; keep the loading state
+      trackSocialLoginCompleted(attempt);
+      endAuthAttempt();
       window.location.replace(outcome.redirectPath);
     } catch (err) {
       googleRef.current = false;
       setGoogleLoading(false);
-      const code = err instanceof GoogleAuthError ? err.code : "unknown";
-      const failure = classifyGoogleAuthError(err);
+      const { failure, category, errorCode, reachedBackend } = describeGoogleAuthError(err);
       authLog("signup_failed", {
-        code,
+        code: errorCode,
         failure,
+        category,
         name: (err as Error)?.name,
         message: (err as Error)?.message,
       });
-      // Same split as the login screen: did it die on the device, or did the API
-      // answer? That is the distinction the funnel could not make at all.
-      const reachedApi = failure === "network" || code === "exchange_failed" ||
-        ["consent_required", "account_deleted", "invalid_token"].includes(code);
-      if (reachedApi) {
-        trackAuthApiError("google_exchange", err, "google");
+
+      // Emitted for EVERY terminal failure, cancellation included — it used to be
+      // skipped whenever the API had been reached.
+      trackSocialLoginFailed(attempt, category, errorCode);
+
+      if (category === "user_cancelled") {
+        // A dismissed picker is a decision, not a defect: no client error, no
+        // Sentry, no red banner.
+        setAuthCancelled(true);
+      } else if (reachedBackend) {
+        trackAuthApiError("google_exchange", err, attempt, category);
       } else {
-        trackEvent("social_login_failed", { provider: "google", error_code: failure });
-        trackAuthClientError("google_plugin", code, "google");
+        trackAuthClientError("google_plugin", errorCode, attempt, category);
       }
-      if (failure !== "cancelled" && failure !== "consent_required") {
-        reportAuthError("google_plugin", err, { failure, code });
+
+      if (category !== "user_cancelled" && failure !== "consent_required") {
+        reportAuthError("google_plugin", err, { failure, category, code: errorCode });
       }
+      endAuthAttempt();
 
       switch (failure) {
         case "consent_required":
@@ -175,7 +208,7 @@ export default function SignUpPage() {
           setError("Aceite os Termos de Uso e a Política de Privacidade para criar sua conta.");
           break;
         case "cancelled":
-          break; // the user chose to back out — not an error to report
+          break; // the neutral notice above is the whole response
         case "account_deleted":
           setError("Esta conta foi excluída e não pode ser reativada.");
           break;
@@ -203,12 +236,19 @@ export default function SignUpPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submittingRef.current) return;
-    trackAuthProviderClicked({
+    const attempt: AuthAttemptContext = {
+      authAttemptId: startAuthAttempt(),
       provider: "email",
+      intent: "sign_up",
+      authScreen: "sign_up",
+    };
+    trackAuthProviderClicked({
+      ...attempt,
       authScreen: "sign_up",
       intent: "sign_up",
       termsAccepted: acceptedTerms,
     });
+    setAuthCancelled(false);
     const formData = new FormData(e.currentTarget);
     const submittedName = String(formData.get("name") ?? "").trim();
     const submittedEmail = String(formData.get("email") ?? "").trim();
@@ -217,17 +257,24 @@ export default function SignUpPage() {
     if (!acceptedTerms) {
       setTermsWarning(true);
       consentCheckboxRef.current?.focus();
-      trackEvent("auth_consent_blocked", { provider: "email", auth_screen: "sign_up" });
+      trackEvent("auth_consent_blocked", {
+        provider: "email",
+        auth_screen: "sign_up",
+        auth_attempt_id: attempt.authAttemptId,
+      });
+      endAuthAttempt();
       return;
     }
 
     if (!submittedName || !submittedEmail || !submittedPassword) {
       setError("Preencha todos os campos para continuar.");
+      endAuthAttempt();
       return;
     }
 
     if (submittedPassword.length < 8) {
       setError("A senha deve ter pelo menos 8 caracteres.");
+      endAuthAttempt();
       return;
     }
 
@@ -235,10 +282,12 @@ export default function SignUpPage() {
     setLoading(true);
     submittingRef.current = true;
     // Past every client-side gate, before the request leaves.
-    trackEvent(EVENTS.SIGNUP_STARTED, { method: "email" });
+    trackSignupStarted(attempt);
     try {
       await signUp(submittedName, submittedEmail, submittedPassword, marketingConsent);
-      trackEvent(EVENTS.SIGNUP_COMPLETED);
+      // Once per attempt: a rerender or a retried checkout must not turn one
+      // account into two conversions.
+      trackSignupCompleted(attempt);
       trackConversion(CONVERSIONS.SIGNUP);
       const pending = getPendingPlan();
       if (pending) {
@@ -267,21 +316,23 @@ export default function SignUpPage() {
         router.push("/onboarding");
       }
     } catch (err) {
+      const category = emailFailureCategory(err);
       if (err instanceof ApiError) {
-        trackAuthApiError("email_signup", err);
+        trackAuthApiError("email_signup", err, attempt, category);
         setError(err.message);
       } else if (err instanceof TypeError) {
         // fetch itself rejected: the request never got an answer.
-        trackAuthClientError("email_signup", "network");
+        trackAuthClientError("email_signup", "network", attempt, category);
         setError("Não foi possível conectar ao servidor. Tente novamente.");
       } else {
-        trackAuthClientError("email_signup", "unknown");
+        trackAuthClientError("email_signup", "unknown", attempt, category);
         reportAuthError("email_signup", err);
         setError("Erro ao criar conta");
       }
     } finally {
       submittingRef.current = false;
       setLoading(false);
+      endAuthAttempt();
     }
   }
 
@@ -343,6 +394,19 @@ export default function SignUpPage() {
             className="mb-3 rounded-xl border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-300"
           >
             Aceite os Termos de Uso e a Política de Privacidade abaixo para continuar.
+          </p>
+        )}
+
+        {/* The picker was dismissed. Neutral slate, never the red error banner
+            below: cancelling is a decision, not a failure, and it must not read
+            like something broke. role="status" announces it without stealing focus. */}
+        {authCancelled && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="mb-3 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-300"
+          >
+            Login cancelado. Toque em &quot;Continuar com Google&quot; para tentar novamente.
           </p>
         )}
 

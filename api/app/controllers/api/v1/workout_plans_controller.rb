@@ -2,6 +2,7 @@ module Api
   module V1
     class WorkoutPlansController < BaseController
       include WorkoutBlockSerialization
+      include WorkoutPlanSerialization
 
       before_action :require_active_access!, only: [:regenerate]
       before_action(only: [:regenerate]) { check_rate_limit!(:generate_workout) }
@@ -207,142 +208,13 @@ module Api
         }
       end
 
-      def serialize_plan(plan)
-        log = plan.ai_training_decision_log
-        days = plan.workout_days.order(Arel.sql("COALESCE(position, day_of_week) ASC")).to_a
-        last_completed = last_completed_at_by_day(days.map(&:id))
-        payload = {
-          id: plan.id,
-          active: plan.active,
-          created_at: plan.created_at,
-          ai_rationale:           log&.rationale,
-          ai_training_method:     log&.training_method,
-          personalization_reason: log&.output_summary&.dig("personalization_reason"),
-          user_explanation:       log&.output_summary&.dig("user_explanation"),
-          coach_notes:            log&.output_summary&.dig("coach_notes"),
-          days: days.map { |d| serialize_day(d, last_completed[d.id]) }
-        }
-        payload[:strategy] = strategy_summary(plan.workout_strategy) if FitnessIntelligence.enabled?
-        payload
+      # Este controller é sempre autenticado, então o dono da serialização é
+      # sempre o usuário da sessão. O serializer em si vive em
+      # WorkoutPlanSerialization, compartilhado com o endpoint anônimo.
+      def plan_owner
+        @plan_owner ||= Workouts::UserOwner.new(current_user)
       end
 
-      def strategy_summary(workout_strategy)
-        return nil unless workout_strategy
-
-        strategy = workout_strategy.strategy
-        {
-          version: workout_strategy.strategy_version,
-          training_split: strategy["training_split"],
-          primary_focus: Array(strategy["primary_focus"]),
-          user_facing_explanation: strategy["user_facing_explanation"]
-        }
-      end
-
-      def serialize_day(day, last_completed_at = nil)
-        exercises = day.workout_day_exercises.includes(:exercise)
-        {
-          id: day.id,
-          position: day.position,
-          day_of_week: day.day_of_week,
-          name: day.name,
-          custom_name: day.custom_name,
-          favorited: day.favorited,
-          muscle_groups: exercises.map { |wde| wde.exercise.muscle_group }.compact.uniq,
-          exercise_types: exercises.map { |wde| wde.exercise.exercise_type }.compact.uniq,
-          exercise_count: exercises.count,
-          last_completed_at: last_completed_at
-        }
-      end
-
-      def serialize_day_with_exercises(day)
-        wdes = day.workout_day_exercises.includes(:exercise, :workout_block).to_a
-        exercise_ids   = wdes.map { |wde| wde.exercise.id }
-        last_performed = exercise_last_performed(current_user, exercise_ids)
-        favorite_ids   = current_user.user_favorite_exercises
-                                     .where(exercise_id: exercise_ids)
-                                     .pluck(:exercise_id).to_set
-
-        {
-          id: day.id,
-          position: day.position,
-          day_of_week: day.day_of_week,
-          name: day.name,
-          custom_name: day.custom_name,
-          favorited: day.favorited,
-          invalid_workout_reason: day.invalid_workout_reason,
-          last_completed_at: last_completed_at_by_day([day.id])[day.id],
-          exercises: wdes.map do |wde|
-            history = ExerciseHistoryService.new(
-              user: current_user,
-              exercise_id: wde.exercise.id,
-              block_type: wde.workout_block&.block_type
-            )
-
-            {
-              workout_day_exercise_id: wde.id,
-              exercise_id: wde.exercise.id,
-              name: wde.exercise.name,
-              muscle_group: wde.exercise.muscle_group,
-              exercise_type: wde.exercise.exercise_type,
-              description: wde.exercise.description,
-              instructions: wde.exercise.instructions,
-              image_url: exercise_image_url(wde.exercise),
-              gif_url: wde.exercise.gif_url,
-              video_url: wde.exercise.video_url,
-              muscle_image_url: muscle_image_url(wde.exercise.muscle_group),
-              sets: wde.sets,
-              reps: wde.reps,
-              planned_weight_kg: wde.planned_weight,
-              rest_seconds: wde.rest_seconds,
-              duration_minutes: wde.duration_minutes,
-              intensity: wde.intensity,
-              order_index: wde.order_index,
-              is_favorite: favorite_ids.include?(wde.exercise.id),
-              last_performed_at: last_performed[wde.exercise.id],
-              last_execution_label: history.last_execution_label,
-              last_completed_at: history.last_completed_at,
-              last_weight_kg: history.last_used_weight,
-              suggested_weight_kg: history.suggested_starting_weight,
-              progression_reason: history.progression_reason,
-              **block_fields_for(wde)
-            }
-          end
-        }
-      end
-
-      # Returns hash { exercise_id => completed_at } for the user's most recent session per exercise
-      def exercise_last_performed(user, exercise_ids)
-        return {} if exercise_ids.empty?
-
-        rows = ActiveRecord::Base.connection.execute(<<~SQL.squish)
-          SELECT DISTINCT ON ((elem->>'exercise_id')::integer)
-            (elem->>'exercise_id')::integer AS exercise_id,
-            completed_at
-          FROM workout_sessions,
-            jsonb_array_elements(exercise_logs) AS elem
-          WHERE user_id = #{user.id.to_i}
-            AND status = 'completed'
-            AND (elem->>'exercise_id')::integer = ANY(ARRAY[#{exercise_ids.map(&:to_i).join(',')}])
-          ORDER BY (elem->>'exercise_id')::integer, completed_at DESC
-        SQL
-
-        rows.each_with_object({}) do |row, hash|
-          hash[row["exercise_id"].to_i] = row["completed_at"]
-        end
-      end
-
-      # Returns hash { workout_day_id => completed_at } — last session per day for current user
-      def last_completed_at_by_day(day_ids)
-        return {} if day_ids.empty?
-
-        WorkoutSession
-          .where(user_id: current_user.id, workout_day_id: day_ids, status: "completed")
-          .select("DISTINCT ON (workout_day_id) workout_day_id, completed_at")
-          .order("workout_day_id, completed_at DESC")
-          .each_with_object({}) { |s, h| h[s.workout_day_id] = s.completed_at }
-      end
-
-      include ExerciseImageHelper
     end
   end
 end

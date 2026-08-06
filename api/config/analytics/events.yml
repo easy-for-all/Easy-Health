@@ -157,9 +157,31 @@ events:
   trial_expired:            { version: 1, sinks: [server, ga4] }
 
   # ── Experiments ────────────────────────────────────────────────────────────
+  # Assignment is not exposure. experiment_assigned fires when a variant is
+  # decided; experiment_exposed only when that variant actually changed what the
+  # person saw. The denominator of every rate in the admin panel is exposure —
+  # dividing by assignment would count people who never reached the decision.
   experiment_assigned:      { version: 1, sinks: [server] }
   experiment_exposed:       { version: 1, sinks: [server, ga4] }
   experiment_converted:     { version: 1, sinks: [server, ga4] }
+  # The branch itself, recorded where it is taken. Redundant with the variant on
+  # the exposure event by design: it is what lets a mismatch between "assigned
+  # open_app" and "actually sent to the account gate" be seen instead of assumed.
+  post_onboarding_destination_selected: { version: 1, sinks: [server, ga4] }
+
+  # ── Modo anônimo ───────────────────────────────────────────────────────────
+  # Chegam sem user_id, como os do onboarding pré-auth, e se ligam à conta final
+  # por installation_id dentro de properties.
+  #
+  # O teto de treinos sem conta: é aqui que o valor entregue de graça termina e
+  # o cadastro passa a ser o preço. A contagem autoritativa vive em
+  # anonymous_onboarding_sessions; este evento é o que localiza o momento no funil.
+  anonymous_plan_limit_reached:  { version: 1, sinks: [server, ga4] }
+  # Vínculo dos dados anônimos à conta recém-criada. O "failed" importa tanto
+  # quanto o "succeeded": sem ele, um claim que nunca completou é indistinguível
+  # de uma instalação que nunca teve nada a reivindicar.
+  anonymous_workouts_claim_succeeded: { version: 1, sinks: [server, ga4] }
+  anonymous_workouts_claim_failed:    { version: 1, sinks: [server, ga4] }
 
   # ── Functional errors ──────────────────────────────────────────────────────
   analytics_event_rejected: { version: 1, sinks: [server] }
@@ -179,6 +201,13 @@ events:
   google_auth_started:            { version: 1, sinks: [server] }
   google_auth_succeeded:          { version: 1, sinks: [server] }
   google_auth_failed:             { version: 1, sinks: [server] }
+  # The e-mail counterparts of google_auth_*. Without them the e-mail flow was
+  # invisible past the client: signup_started/login_started are emitted by the
+  # device and the next observable fact was a user row appearing. These say the
+  # request actually entered the controller, and how it ended.
+  email_auth_started:             { version: 1, sinks: [server] }
+  email_auth_succeeded:           { version: 1, sinks: [server] }
+  email_auth_failed:              { version: 1, sinks: [server] }
   installation_link_attempted:    { version: 1, sinks: [server] }
   installation_link_succeeded:    { version: 1, sinks: [server] }
   installation_link_failed:       { version: 1, sinks: [server] }

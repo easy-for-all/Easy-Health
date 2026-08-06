@@ -164,7 +164,8 @@
     "signingInWithGoogle": "Entrando com Google...",
     "loadingButton": "Carregando...",
     "googleAccountNotRegistered": "Esta conta Google ainda não está cadastrada. Para criar sua conta, aceite os Termos de Uso e a Política de Privacidade.",
-    "createAccountWithGoogle": "Criar conta com Google"
+    "createAccountWithGoogle": "Criar conta com Google",
+    "googleLoginCancelled": "Login cancelado. Toque em \"Continuar com Google\" para tentar novamente."
   },
   "dashboard": {
     "hello": "Olá,",

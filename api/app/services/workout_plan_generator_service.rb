@@ -148,13 +148,19 @@ class WorkoutPlanGeneratorService
 
   attr_reader :plan_rationale
 
-  def initialize(user, days_per_week: nil, activity_preferences: nil,
+  # `subject` é um User (caminho de sempre) ou um Workouts::*Owner. Aceitar os
+  # dois mantém todos os chamadores existentes intactos: quem passa um User
+  # continua passando um User e recebe exatamente o mesmo comportamento.
+  def initialize(subject, days_per_week: nil, activity_preferences: nil,
                  modality: nil, split_type: nil, cardio_type: nil,
                  cardio_format: nil, custom_splits: nil, training_location: nil,
                  selected_muscles: nil, muscle_priorities: nil,
                  chat_decision: nil)
-    @user    = user
-    @profile = user.health_profile
+    @owner   = subject.is_a?(User) ? Workouts::UserOwner.new(subject) : subject
+    # nil quando o dono é uma instalação. Toda leitura de @user a partir daqui
+    # usa &. — e o que não pode ser nil está atrás de um guard de anonymous?.
+    @user    = @owner.user
+    @profile = @owner.health_profile
     @chat_decision = chat_decision
     @fitness_level     = @profile&.fitness_level || "beginner"
     @days_per_week     = @chat_decision ? Array(@chat_decision[:week_structure]).size.clamp(1, 6) : (days_per_week || @profile&.training_days_per_week || 3).clamp(1, 6)
@@ -171,18 +177,26 @@ class WorkoutPlanGeneratorService
     @plan_rationale    = @chat_decision ? @chat_decision[:rationale] : nil
     @ai_decision       = @chat_decision
     @ai_sets_reps      = @chat_decision ? @chat_decision[:sets_reps] : nil
-    @fitness_profile   = user.fitness_profile
+    @fitness_profile   = @user&.fitness_profile
   end
 
   def call
     @workout_strategy = build_workout_strategy
-    @strategy_active = @chat_decision ? false : FitnessIntelligence.enabled?
-    old_favorited_names = @user.active_workout_plan
+    # A camada de estratégia depende de fitness_profile, que é derivado do
+    # histórico da CONTA. Uma instalação anônima não tem nem um nem outro, então
+    # ela cai no caminho baseado em regras + IA — o mesmo que um usuário recém
+    # cadastrado recebe na primeira geração.
+    @strategy_active = if @chat_decision || @owner.anonymous?
+      false
+    else
+      FitnessIntelligence.enabled?
+    end
+    old_favorited_names = @owner.active_plan
                             &.workout_days&.where(favorited: true)&.pluck(:name) || []
     fav_exercise_ids = if @strategy_active
       Array(@workout_strategy["preferred_exercises"])
     else
-      @user.user_favorite_exercises.pluck(:exercise_id)
+      @owner.all_favorite_exercise_ids
     end
     @candidate_scope = WorkoutIntelligence::ExerciseCandidateScope.new(
       training_location: @training_location,
@@ -232,7 +246,7 @@ class WorkoutPlanGeneratorService
     @top_up_filler = WorkoutIntelligence::TopUpFiller.new
     @exercises_used_this_week = Set.new
     WorkoutIntelligence::DecisionLogger.log(
-      event: "plan_generation_started", user_id: @user.id,
+      event: "plan_generation_started", user_id: @user&.id,
       goal: WorkoutIntelligence::GoalTrainingProfile.normalize_goal(@goal), fitness_level: @fitness_level,
       days_per_week: plan_days_per_week, weekly_volume_targets: @volume_planner.targets,
       decision_source: @ai_decision ? "ai" : (@strategy_active ? "strategy" : "rule_based")
@@ -240,13 +254,17 @@ class WorkoutPlanGeneratorService
 
     plan = nil
     WorkoutPlan.transaction do
-      @user.workout_plans.update_all(active: false)
-      plan = @user.workout_plans.create!(active: true)
+      @owner.plans.update_all(active: false)
+      plan = WorkoutPlan.create!(active: true, **@owner.plan_attributes)
       persist_workout_strategy(plan)
+      # No fluxo anônimo o perfil é um HealthProfile em memória, montado do
+      # jsonb das respostas. update_columns nele levantaria — e persistir uma
+      # linha órfã em health_profiles só para satisfazer esta escrita deixaria
+      # lixo que o claim depois teria que reconciliar.
       @profile&.update_columns(
         training_days_per_week: @days_per_week,
         activity_preferences:   @activity_preferences
-      )
+      ) if @profile&.persisted?
 
       template.each_with_index do |day_tmpl, idx|
         day = plan.workout_days.create!(
@@ -318,7 +336,7 @@ class WorkoutPlanGeneratorService
             end
 
             if picked.empty?
-              WorkoutIntelligence::DecisionLogger.log(event: "group_exercises_unavailable", user_id: @user.id, group: group, day: day_tmpl[:name])
+              WorkoutIntelligence::DecisionLogger.log(event: "group_exercises_unavailable", user_id: @user&.id, group: group, day: day_tmpl[:name])
             end
 
             picked.each do |ex|
@@ -339,7 +357,7 @@ class WorkoutPlanGeneratorService
         decision_source: decision_source_label
       ).call
       WorkoutIntelligence::DecisionLogger.log(
-        event: "plan_validated", user_id: @user.id, plan_id: plan.id,
+        event: "plan_validated", user_id: @user&.id, plan_id: plan.id,
         valid: @plan_validation.valid, violations: @plan_validation.violations,
         warnings: @plan_validation.warnings, auto_fixes: @plan_validation.auto_fixes
       )
@@ -391,6 +409,11 @@ class WorkoutPlanGeneratorService
   private
 
   def build_workout_strategy
+    # A estratégia inteira é derivada do fitness_profile da conta. Sem conta não
+    # há o que derivar, e chamar o estrategista com user: nil só produziria uma
+    # exceção capturada e um log de erro por geração anônima.
+    return nil if @owner.anonymous?
+
     if strategy_profile_stale?
       @fitness_profile = FitnessIntelligence::ProfileBuilder.new(@user).call(source: "workout_plan_strategy")
     end
@@ -416,6 +439,11 @@ class WorkoutPlanGeneratorService
   end
 
   def persist_workout_strategy(plan)
+    # workout_strategies continua sendo NOT NULL em user_id, e é de propósito:
+    # a estratégia é um artefato da conta. Sem estratégia construída não há o
+    # que persistir, e o plano anônimo simplesmente não tem essa camada.
+    return if @workout_strategy.blank?
+
     WorkoutStrategy.create!(
       user: @user,
       workout_plan: plan,
@@ -551,18 +579,21 @@ class WorkoutPlanGeneratorService
     # Only use AI for musculacao/ai_choice modalities — rule-based handles cardio/funcional well
     return nil unless %w[musculacao ai_choice].include?(@modality)
 
-    if AiWorkout::DailyLimitChecker.new(@user).limit_reached?
-      Rails.logger.info("[WorkoutPlanGeneratorService] Daily AI limit reached for user #{@user.id}")
+    if AiWorkout::DailyLimitChecker.new(@owner).limit_reached?
+      Rails.logger.info("[WorkoutPlanGeneratorService] Daily AI limit reached for #{@owner.anonymous? ? "installation #{@owner.installation.id}" : "user #{@user.id}"}")
       return nil
     end
 
-    fav_ids = @user.user_favorite_exercises.pluck(:exercise_id)
+    fav_ids = @owner.all_favorite_exercise_ids
     avail   = available_exercises_by_group
 
     prebuilt_prompt, prompt_version_id = build_ai_workout_prompt(fav_ids, avail)
 
+    # O plano anônimo passa pela MESMA IA do plano com conta. Rebaixá-lo para o
+    # caminho de regras faria o experimento medir qualidade de treino em vez de
+    # momento do cadastro — que é a única coisa que ele deveria variar.
     planner = AiAgents::WorkoutPlannerService.new(
-      @user,
+      @owner,
       days_per_week:       @days_per_week,
       profile:             @profile,
       fav_exercise_ids:    fav_ids,
@@ -636,14 +667,19 @@ class WorkoutPlanGeneratorService
       @ai_prompt_version_id = prompt_version_id
     end
 
-    UserEventService.track(
-      user:     @user,
-      event:    :ai_workout_generated,
-      metadata: {
-        training_method:   raw_decision[:training_method],
-        prompt_version_id: prompt_version_id
-      }
-    )
+    # user_events é escopado em usuário e não tem para onde apontar antes da
+    # conta. O equivalente do fluxo anônimo já viaja pelo pipeline de product
+    # analytics, que aceita evento anônimo e junta por installation_id.
+    if @user
+      UserEventService.track(
+        user:     @user,
+        event:    :ai_workout_generated,
+        metadata: {
+          training_method:   raw_decision[:training_method],
+          prompt_version_id: prompt_version_id
+        }
+      )
+    end
     raw_decision
   end
 
@@ -831,7 +867,7 @@ class WorkoutPlanGeneratorService
     ).call
 
     AiTrainingDecisionLog.create!(
-      user:                   @user,
+      **@owner.log_attributes,
       workout_plan:           plan,
       decision_source:        decision_source_label,
       training_method:        decision[:training_method],
@@ -865,9 +901,11 @@ class WorkoutPlanGeneratorService
   end
 
   def update_adherence_score_safely
-    return unless @profile
+    # Aderência é uma coluna do health_profile persistido e uma média sobre o
+    # histórico da conta. Uma instalação anônima não tem nem um nem outro.
+    return unless @profile&.persisted?
 
-    sessions_last_30 = @user.workout_sessions
+    sessions_last_30 = @owner.sessions
       .where(completed_at: 30.days.ago..)
       .count
     expected = (@days_per_week * 4.3).round

@@ -11,7 +11,10 @@ import { type NextRequest, NextResponse } from "next/server";
 // /login. The page itself requires a session via AuthProvider, so letting the
 // request through costs nothing and closes that race.
 const PUBLIC_PATHS = [
-  "/", "/native-entry", "/login", "/sign-up", "/onboarding", "/terms", "/privacy", "/forgot-password",
+  // /plano é o modo anônimo do Android: existe plano e treino ali sem que exista
+  // sessão. Quem protege essas telas é o layout de (anon), que exige app nativo
+  // e recusa usuário logado — a borda não tem como distinguir os dois.
+  "/", "/native-entry", "/login", "/sign-up", "/onboarding", "/plano", "/terms", "/privacy", "/forgot-password",
   "/reset-password", "/billing/success", "/billing/cancel", "/pricing",
   "/ia-para-treino", "/treino-personalizado", "/emagrecimento",
   "/treino-em-casa", "/analise-de-exames", "/exercicios", "/sobre", "/precos",
