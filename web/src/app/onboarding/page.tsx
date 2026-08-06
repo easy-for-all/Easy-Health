@@ -87,6 +87,9 @@ export default function OnboardingPage() {
       // O resumo é o degrau comum: as duas variantes o veem, e é ele que separa
       // "desistiu das perguntas" de "viu o plano e recusou o que veio depois".
       withPreview={preAuth}
+      // Só open_app gera sem conta. Em account_gate o wizard nem chega a gerar
+      // aqui: ele entrega para /sign-up e a geração acontece depois, logada.
+      submitMode={openApp ? "anonymous" : "authenticated"}
       autoGenerate={!!user && hadDraft}
       onBeforeFinish={(mode) => {
         if (!preAuth || !variant.eligible) return;

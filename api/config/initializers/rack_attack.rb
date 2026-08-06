@@ -32,6 +32,30 @@ class Rack::Attack
     req.ip if req.path.start_with?("/api/v1/app/installations") && (req.post? || req.patch?)
   end
 
+  # Modo anônimo. Estes três são a única superfície do sistema onde uma
+  # requisição SEM autenticação nenhuma pode provocar uma chamada paga a um
+  # provedor de IA — por isso os limites são apertados e por IP e por aparelho.
+  #
+  # Não substituem o contador por instalação nem o disjuntor global (ver
+  # AnonymousSessions::GeneratePlan): estes protegem contra volume, aqueles
+  # contra custo. Um atacante com muitos IPs passa por aqui e ainda assim para
+  # no teto global.
+  throttle("anonymous-sessions/ip", limit: 20, period: 1.hour) do |req|
+    req.ip if req.path == "/api/v1/anonymous/sessions" && req.post?
+  end
+
+  throttle("anonymous-generate/ip", limit: 5, period: 1.hour) do |req|
+    req.ip if req.path == "/api/v1/anonymous/workout_plan/generate" && req.post?
+  end
+
+  # Por aparelho, não por IP: um prédio inteiro atrás de um NAT compartilha IP,
+  # e limitar só por IP puniria vizinhos legítimos.
+  throttle("anonymous-generate/installation", limit: 5, period: 1.hour) do |req|
+    if req.path == "/api/v1/anonymous/workout_plan/generate" && req.post?
+      req.get_header("HTTP_X_INSTALLATION_ID").presence
+    end
+  end
+
   self.throttled_responder = lambda do |_req|
     [
       429,

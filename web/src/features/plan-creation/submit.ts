@@ -1,7 +1,15 @@
 import { ApiError, api } from "@/shared/lib/api";
 import type { HealthProfile } from "@/shared/types/health-profile";
 import type { WorkoutPlan } from "@/shared/types/workout";
+import { generateAnonymousPlan, saveAnonymousProfile } from "@/features/anonymous/anonymous-plan";
 import type { EntryMode, WizardFormState } from "./types";
+
+// Quem é o dono do plano que está sendo criado. A tradução do formulário para o
+// corpo da requisição é a MESMA nos dois casos — é só o destino que muda. Foi
+// para isso que este parâmetro existe em vez de um segundo módulo de submit:
+// duas traduções divergiriam, e a divergência apareceria como "o plano anônimo
+// saiu diferente do plano com conta".
+export type SubmitMode = "authenticated" | "anonymous";
 
 function buildProfilePayload(form: WizardFormState) {
   return {
@@ -45,8 +53,19 @@ function resolveTimeZone(): string | undefined {
 // Onboarding faz POST (cria o profile); se o profile já existir (422), cai para PATCH —
 // mesmo tratamento que já existia em onboarding/page.tsx. Replan sempre faz PATCH direto,
 // já que o profile é pré-condição para chegar nesse fluxo.
-export async function upsertProfile(entryMode: EntryMode, form: WizardFormState): Promise<HealthProfile> {
+export async function upsertProfile(
+  entryMode: EntryMode,
+  form: WizardFormState,
+  mode: SubmitMode = "authenticated",
+): Promise<HealthProfile | null> {
   const payload = buildProfilePayload(form);
+  // Sem conta as respostas vão para o jsonb da sessão anônima, não para
+  // health_profiles (que é escopada em usuário). O claim as replica numa
+  // HealthProfile de verdade quando a conta existir.
+  if (mode === "anonymous") {
+    await saveAnonymousProfile(payload);
+    return null;
+  }
   // Timeout maior que o default (15s): recalculo de FitnessIntelligence e webhooks
   // síncronos no backend podem levar a resposta bem além do default nesse endpoint.
   const options = { timeout: 30_000 };
@@ -73,7 +92,10 @@ function toActivityPref(cardioType: WizardFormState["cardio_type"]): string {
   return map[cardioType] ?? "cardio";
 }
 
-export async function generatePlan(form: WizardFormState): Promise<WorkoutPlan & { summary?: string }> {
+export async function generatePlan(
+  form: WizardFormState,
+  mode: SubmitMode = "authenticated",
+): Promise<WorkoutPlan & { summary?: string }> {
   const body: Record<string, unknown> = {
     training_days_per_week: form.training_days_per_week ?? 3,
     modality: form.modality,
@@ -105,6 +127,10 @@ export async function generatePlan(form: WizardFormState): Promise<WorkoutPlan &
   if (form.modality === "misto")      body.activity_preferences = ["musculacao", toActivityPref(form.cardio_type)];
   if (form.modality === "musculacao") body.activity_preferences = ["musculacao"];
   // ai_choice: omit activity_preferences so the backend uses its own logic
+
+  if (mode === "anonymous") {
+    return generateAnonymousPlan(body);
+  }
 
   return api.post<WorkoutPlan & { summary?: string }>("/api/v1/workout_plan/regenerate", body, { timeout: 90_000 });
 }

@@ -19,10 +19,11 @@ import { CompleteSchedule } from "./screens/complete/complete-schedule";
 import { CompleteCare } from "./screens/complete/complete-care";
 import { WhenStep } from "./screens/shared/when-step";
 import { PlanPreview } from "./screens/plan-preview";
+import type { SubmitMode } from "./submit";
 import type { CreationMode, EntryMode } from "./types";
 
 export function PlanCreationFlow({
-  entryMode, initialProfile, onDone, onCancel, onRequireAuth, autoGenerate, withPreview, onBeforeFinish,
+  entryMode, initialProfile, onDone, onCancel, onRequireAuth, autoGenerate, withPreview, onBeforeFinish, submitMode,
 }: {
   entryMode: EntryMode;
   initialProfile: HealthProfile | null;
@@ -41,6 +42,9 @@ export function PlanCreationFlow({
   // aparece nas duas variantes do experimento, e só uma delas pede a conta.
   // Continua caindo no comportamento antigo quando não é informado.
   withPreview?: boolean;
+  // Onde o plano será criado. A página é quem sabe se existe conta; o wizard
+  // apenas repassa.
+  submitMode?: SubmitMode;
   // Chamado no fim do wizard, ANTES de decidir para onde ir. É onde a página
   // registra que a bifurcação aconteceu de fato — o componente segue ignorante
   // sobre experimento, do mesmo jeito que é sobre autenticação.
@@ -48,6 +52,7 @@ export function PlanCreationFlow({
 }) {
   const wizard = usePlanCreationWizard(entryMode, initialProfile, {
     withPreview: withPreview ?? !!onRequireAuth,
+    submitMode,
   });
 
   async function handleFinish() {

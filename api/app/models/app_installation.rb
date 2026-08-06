@@ -33,6 +33,14 @@ class AppInstallation < ApplicationRecord
   belongs_to :user, optional: true
   belongs_to :device_token, optional: true
 
+  # Uma instalação pode ser dona de plano e sessão enquanto não existe conta.
+  # dependent: :nullify em nenhum deles de propósito: o claim move a posse
+  # explicitamente, e apagar uma instalação com plano anônimo dentro é um caso
+  # que deve falhar alto, não perder o treino de alguém em silêncio.
+  has_one  :anonymous_onboarding_session, dependent: :destroy
+  has_many :workout_plans
+  has_many :workout_sessions
+
   validates :installation_id, presence: true, uniqueness: true
   validates :platform, inclusion: { in: PLATFORMS }
   validates :notification_permission,

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_04_130003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -57,6 +57,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
   end
 
   create_table "ai_training_decision_logs", force: :cascade do |t|
+    t.bigint "app_installation_id"
     t.datetime "created_at", null: false
     t.string "decision_source", default: "ai", null: false
     t.text "error_message"
@@ -74,18 +75,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
     t.integer "tokens_output"
     t.string "training_method"
     t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
+    t.bigint "user_id"
     t.jsonb "week_structure", default: []
     t.bigint "workout_plan_id", null: false
+    t.index ["app_installation_id"], name: "index_ai_training_decision_logs_on_app_installation_id"
     t.index ["decision_source"], name: "index_ai_training_decision_logs_on_decision_source"
     t.index ["prompt_version_id"], name: "index_ai_training_decision_logs_on_prompt_version_id"
     t.index ["status"], name: "index_ai_training_decision_logs_on_status"
     t.index ["user_id", "created_at"], name: "index_ai_training_decision_logs_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_ai_training_decision_logs_on_user_id"
     t.index ["workout_plan_id"], name: "index_ai_training_decision_logs_on_workout_plan_id"
+    t.check_constraint "user_id IS NOT NULL OR app_installation_id IS NOT NULL", name: "ai_training_decision_logs_has_owner"
   end
 
   create_table "ai_usage_logs", force: :cascade do |t|
+    t.bigint "app_installation_id"
     t.datetime "created_at", null: false
     t.string "error_summary"
     t.integer "estimated_cost_cents"
@@ -96,10 +100,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
     t.string "status", default: "success", null: false
     t.string "task_type", null: false
     t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
+    t.bigint "user_id"
+    t.index ["app_installation_id"], name: "index_ai_usage_logs_on_app_installation_id"
     t.index ["user_id", "provider", "created_at"], name: "index_ai_usage_logs_on_user_provider_created"
     t.index ["user_id", "task_type", "created_at"], name: "index_ai_usage_logs_on_user_id_and_task_type_and_created_at"
     t.index ["user_id"], name: "index_ai_usage_logs_on_user_id"
+    t.check_constraint "user_id IS NOT NULL OR app_installation_id IS NOT NULL", name: "ai_usage_logs_has_owner"
   end
 
   create_table "ai_workout_chat_conversations", force: :cascade do |t|
@@ -135,6 +141,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
     t.index ["experiment_key", "user_id"], name: "index_analytics_experiments_unique_user", unique: true, where: "(user_id IS NOT NULL)"
     t.index ["experiment_key", "variant"], name: "idx_on_experiment_key_variant_60f2dbba2f"
     t.index ["user_id"], name: "index_analytics_experiment_assignments_on_user_id"
+  end
+
+  create_table "anonymous_onboarding_sessions", force: :cascade do |t|
+    t.bigint "app_installation_id", null: false
+    t.integer "claim_attempts_count", default: 0, null: false
+    t.datetime "claimed_at"
+    t.bigint "claimed_by_user_id"
+    t.date "counter_date"
+    t.datetime "created_at", null: false
+    t.datetime "first_generated_at"
+    t.string "last_claim_failure_code"
+    t.datetime "last_generated_at"
+    t.string "last_generation_error_code"
+    t.string "last_generation_status"
+    t.integer "plans_generated_count", default: 0, null: false
+    t.integer "plans_generated_today_count", default: 0, null: false
+    t.jsonb "profile_answers", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.index ["app_installation_id"], name: "index_anonymous_onboarding_sessions_on_app_installation_id", unique: true
+    t.index ["claimed_at"], name: "index_anonymous_onboarding_sessions_on_claimed_at"
+    t.index ["claimed_by_user_id"], name: "index_anonymous_onboarding_sessions_on_claimed_by_user_id"
+    t.index ["last_generation_status"], name: "index_anonymous_onboarding_sessions_on_last_generation_status"
+    t.index ["plans_generated_count"], name: "index_anonymous_onboarding_sessions_on_plans_generated_count"
   end
 
   create_table "app_installations", force: :cascade do |t|
@@ -1119,15 +1148,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
 
   create_table "workout_plans", force: :cascade do |t|
     t.boolean "active"
+    t.bigint "app_installation_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
+    t.bigint "user_id"
+    t.index ["app_installation_id"], name: "index_workout_plans_on_app_installation_id"
+    t.index ["app_installation_id"], name: "index_workout_plans_one_active_per_installation", unique: true, where: "((active = true) AND (app_installation_id IS NOT NULL))"
     t.index ["user_id"], name: "index_workout_plans_on_user_id"
-    t.index ["user_id"], name: "index_workout_plans_one_active_per_user", unique: true, where: "(active = true)"
+    t.index ["user_id"], name: "index_workout_plans_one_active_per_user", unique: true, where: "((active = true) AND (user_id IS NOT NULL))"
+    t.check_constraint "(user_id IS NULL) <> (app_installation_id IS NULL)", name: "workout_plans_single_owner"
   end
 
   create_table "workout_sessions", force: :cascade do |t|
     t.jsonb "abandon_reason", default: {}, null: false
+    t.bigint "app_installation_id"
     t.integer "calories_estimated"
     t.datetime "completed_at"
     t.integer "completed_sets_count"
@@ -1154,8 +1188,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
     t.datetime "started_at"
     t.string "status", default: "completed", null: false
     t.datetime "updated_at", null: false
-    t.bigint "user_id", null: false
+    t.bigint "user_id"
     t.bigint "workout_day_id"
+    t.index ["app_installation_id"], name: "index_workout_sessions_on_app_installation_id"
     t.index ["completion_status"], name: "index_workout_sessions_on_completion_status"
     t.index ["finished_at"], name: "index_workout_sessions_on_finished_at"
     t.index ["last_exercise_id"], name: "index_workout_sessions_on_last_exercise_id"
@@ -1164,6 +1199,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
     t.index ["user_id", "status"], name: "index_workout_sessions_on_user_id_and_status"
     t.index ["user_id"], name: "index_workout_sessions_on_user_id"
     t.index ["workout_day_id"], name: "index_workout_sessions_on_workout_day_id"
+    t.check_constraint "(user_id IS NULL) <> (app_installation_id IS NULL)", name: "workout_sessions_single_owner"
   end
 
   create_table "workout_strategies", force: :cascade do |t|
@@ -1182,11 +1218,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_training_decision_logs", "ai_prompt_versions", column: "prompt_version_id"
+  add_foreign_key "ai_training_decision_logs", "app_installations"
   add_foreign_key "ai_training_decision_logs", "users"
   add_foreign_key "ai_training_decision_logs", "workout_plans"
+  add_foreign_key "ai_usage_logs", "app_installations"
   add_foreign_key "ai_usage_logs", "users"
   add_foreign_key "ai_workout_chat_conversations", "users"
   add_foreign_key "analytics_experiment_assignments", "users"
+  add_foreign_key "anonymous_onboarding_sessions", "app_installations"
+  add_foreign_key "anonymous_onboarding_sessions", "users", column: "claimed_by_user_id"
   add_foreign_key "app_installations", "device_tokens"
   add_foreign_key "app_installations", "users"
   add_foreign_key "client_permissions", "personal_client_relationships"
@@ -1244,7 +1284,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_120000) do
   add_foreign_key "workout_days", "workout_plans"
   add_foreign_key "workout_plan_generations", "users"
   add_foreign_key "workout_plan_generations", "workout_plans"
+  add_foreign_key "workout_plans", "app_installations"
   add_foreign_key "workout_plans", "users"
+  add_foreign_key "workout_sessions", "app_installations"
   add_foreign_key "workout_sessions", "exercises", column: "last_exercise_id"
   add_foreign_key "workout_sessions", "users"
   add_foreign_key "workout_sessions", "workout_days"

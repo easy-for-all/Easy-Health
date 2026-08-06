@@ -2,14 +2,17 @@ module AiAgents
   class BaseAgentService
     SESSIONS_TO_ANALYZE = 15
 
-    def initialize(user)
-      @user = user
+    # Aceita um User (todos os chamadores de hoje) ou um Workouts::*Owner, para
+    # que o planejador de treino rode igual antes e depois da conta existir.
+    def initialize(subject)
+      @owner = subject.is_a?(User) ? Workouts::UserOwner.new(subject) : subject
+      @user = @owner.user
     end
 
     private
 
     def recent_sessions
-      @recent_sessions ||= @user.workout_sessions
+      @recent_sessions ||= @owner.sessions
         .order(completed_at: :desc)
         .limit(SESSIONS_TO_ANALYZE)
     end
@@ -18,7 +21,9 @@ module AiAgents
     # Kept out of #call_claude so tasks logged elsewhere (e.g. coach_chat) are not double-counted.
     def log_agent_usage(task_key)
       cfg = AiConfig.for(task_key)
-      AiUsageLog.create!(user: @user, task_type: task_key.to_s, model: cfg[:model], status: "success")
+      # O custo é atribuído ao dono, que pode ser uma instalação: a geração
+      # anônima gasta OpenAI igual e precisa aparecer na contabilidade.
+      AiUsageLog.create!(task_type: task_key.to_s, model: cfg[:model], status: "success", **@owner.log_attributes)
     rescue => e
       Rails.logger.error("[AiAgent] failed to log usage (#{task_key}): #{e.message}")
     end
