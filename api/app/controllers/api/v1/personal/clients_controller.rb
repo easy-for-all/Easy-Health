@@ -57,11 +57,11 @@ module Api
 
           client = relationship.client
 
-          # Deactivate existing active plan
-          client.workout_plans.where(active: true).update_all(active: false)
-
-          # Create plan skeleton — personal fills days separately
-          plan = client.workout_plans.create!(active: true)
+          # Deactivate the previous plan and create the skeleton — personal fills
+          # days separately. Same serialized path the generator uses: a personal
+          # double-clicking "assign plan" is the same race that left 52 users
+          # with two active plans.
+          plan = WorkoutPlans::ActivatePlan.call(owner: Workouts::UserOwner.new(client))
 
           render json: {
             message: "Plan created for client",
