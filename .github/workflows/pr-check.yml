@@ -28,6 +28,27 @@ jobs:
 
       - run: npm run typecheck
 
+  # O build do Next é o que o Capacitor empacota. Sem ele aqui, um erro de build
+  # só aparecia no deploy (ou, pior, no job Android, depois do deploy).
+  web-build:
+    name: Web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -72,6 +93,73 @@ jobs:
       # can be added now and start reporting, rather than waiting.
       - run: npm test
         continue-on-error: true
+
+  # A migration que derrubou produção em 04/08 estava sintaticamente perfeita e
+  # passava em qualquer suíte: ela só falhava ao ENCONTRAR o banco. db:test:prepare
+  # carrega schema.rb e nunca executa migration nenhuma, então nada no CI a
+  # exercitava. Este job roda a fila inteira de migrations do zero, que é o mesmo
+  # que o migration gate do deploy faz — só que antes do merge, e sem produção
+  # do outro lado.
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RAILS_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: api
+
+      - name: Run every migration from an empty database
+        run: |
+          set -euo pipefail
+          bin/rails db:create
+          bin/rails db:migrate
+
+      # Nenhuma pode ficar "down" depois de um db:migrate limpo. Uma que fique é
+      # uma migration que o Rails pulou — e que vai aparecer no boot em produção.
+      - name: Assert no pending migration
+        run: |
+          set -euo pipefail
+          bin/rails db:migrate:status
+          if bin/rails db:migrate:status | grep -E '^\s+down\s'; then
+            echo "::error::pending migration after a clean db:migrate"
+            exit 1
+          fi
+
+      # Um db:migrate limpo tem que reproduzir exatamente o schema.rb versionado.
+      # Divergência aqui é o sinal de que produção e o repositório discordam sobre
+      # o formato do banco — que é a raiz do incidente de 04/08.
+      - name: Assert schema.rb matches the migrations
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code db/schema.rb; then
+            echo "::error::db/schema.rb does not match the result of running the migrations"
+            exit 1
+          fi
 
   rspec:
     name: Backend tests
@@ -118,6 +206,17 @@ jobs:
       # See docs/observability/BI_VIEWS.md.
       - name: Apply BI views
         run: bin/rails observability:bi_views:apply
+
+      # Bloqueante, ao contrário da suíte completa abaixo. São os specs do
+      # incidente de 04/08 (dois workout_plans ativos para o mesmo dono) e o
+      # smoke de rotas do login Google. Um continue-on-error aqui devolveria o
+      # bug para produção em silêncio, que é precisamente o que se está corrigindo.
+      - name: Workout plan invariant and Google OAuth route specs
+        run: |
+          bundle exec rspec \
+            spec/services/workout_plans/activate_plan_spec.rb \
+            spec/migrations/add_installation_owner_to_workout_plans_spec.rb \
+            spec/requests/google_oauth_routes_spec.rb
 
       # TODO: drop continue-on-error once the pre-existing failures
       # (personal/clients, coach/recommendations, block_load_context_service)
