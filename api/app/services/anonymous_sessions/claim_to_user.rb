@@ -54,7 +54,14 @@ module AnonymousSessions
       sessions = 0
       profile_claimed = false
 
-      ActiveRecord::Base.transaction do
+      # Os MESMOS dois locks que WorkoutPlans::ActivatePlan usa, pelo mesmo
+      # motivo: sem eles, uma geração de plano que comita durante o claim não é
+      # vista pelo update_all abaixo, e o plano movido da instalação vira o
+      # segundo ativo do usuário. O usuário é travado primeiro e a instalação
+      # depois — ordem fixa, para que dois claims concorrentes não se cruzem.
+      @user.with_lock do
+        @installation.lock!
+
         profile_claimed = apply_profile_answers
 
         # Desativa os planos do usuário ANTES de mover, senão o índice parcial

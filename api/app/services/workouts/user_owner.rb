@@ -11,6 +11,12 @@ module Workouts
 
     def installation = nil
     def anonymous? = false
+
+    # Serializa por dono a troca do plano ativo (WorkoutPlans::ActivatePlan). A
+    # linha travada é a do próprio usuário: é o único ponto que as duas
+    # requisições concorrentes têm garantidamente em comum quando ainda não
+    # existe plano nenhum para travar.
+    def with_lock(&block) = @user.with_lock(&block)
     def plans = WorkoutPlan.where(user_id: @user.id)
     def sessions = WorkoutSession.where(user_id: @user.id)
     def plan_attributes = { user_id: @user.id }

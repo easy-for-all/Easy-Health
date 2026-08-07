@@ -252,11 +252,13 @@ class WorkoutPlanGeneratorService
       decision_source: @ai_decision ? "ai" : (@strategy_active ? "strategy" : "rule_based")
     )
 
-    plan = nil
-    WorkoutPlan.transaction do
-      @owner.plans.update_all(active: false)
-      plan = WorkoutPlan.create!(active: true, **@owner.plan_attributes)
-      persist_workout_strategy(plan)
+    # A desativação do plano anterior e a criação do novo saíram daqui para
+    # WorkoutPlans::ActivatePlan: a transação sozinha não impedia duas
+    # requisições simultâneas do mesmo dono de terminarem com dois planos
+    # ativos. O bloco continua rodando dentro da mesma transação — o que mudou
+    # é que agora ela começa com um lock na linha do dono.
+    plan = WorkoutPlans::ActivatePlan.call(owner: @owner) do |created_plan|
+      persist_workout_strategy(created_plan)
       # No fluxo anônimo o perfil é um HealthProfile em memória, montado do
       # jsonb das respostas. update_columns nele levantaria — e persistir uma
       # linha órfã em health_profiles só para satisfazer esta escrita deixaria
@@ -267,7 +269,7 @@ class WorkoutPlanGeneratorService
       ) if @profile&.persisted?
 
       template.each_with_index do |day_tmpl, idx|
-        day = plan.workout_days.create!(
+        day = created_plan.workout_days.create!(
           day_of_week: schedule[idx],
           name:        day_tmpl[:name],
           position:    idx + 1
@@ -352,12 +354,12 @@ class WorkoutPlanGeneratorService
       end
 
       @plan_validation = WorkoutIntelligence::PlanValidator.new(
-        plan: plan, health_profile: @profile, fitness_level: @fitness_level, goal: @goal,
+        plan: created_plan, health_profile: @profile, fitness_level: @fitness_level, goal: @goal,
         weekly_volume_targets: @volume_planner.targets, candidate_scope: @candidate_scope,
         decision_source: decision_source_label
       ).call
       WorkoutIntelligence::DecisionLogger.log(
-        event: "plan_validated", user_id: @user&.id, plan_id: plan.id,
+        event: "plan_validated", user_id: @user&.id, plan_id: created_plan.id,
         valid: @plan_validation.valid, violations: @plan_validation.violations,
         warnings: @plan_validation.warnings, auto_fixes: @plan_validation.auto_fixes
       )
@@ -365,7 +367,7 @@ class WorkoutPlanGeneratorService
         raise @plan_validation.violations.map { |v| v[:message] }.join("; ")
       end
 
-      plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
+      created_plan.workout_days.where(name: old_favorited_names).update_all(favorited: true) if old_favorited_names.any?
     end
 
     persist_training_decision_log_safely(plan, template)

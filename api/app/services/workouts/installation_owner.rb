@@ -11,6 +11,10 @@ module Workouts
 
     def user = nil
     def anonymous? = true
+
+    # Mesmo papel que em UserOwner: a linha da instalação é o ponto de
+    # serialização das gerações concorrentes de um aparelho sem conta.
+    def with_lock(&block) = @installation.with_lock(&block)
     def plans = WorkoutPlan.where(app_installation_id: @installation.id)
     def sessions = WorkoutSession.where(app_installation_id: @installation.id)
     def plan_attributes = { app_installation_id: @installation.id }

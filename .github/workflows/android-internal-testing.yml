@@ -1,9 +1,29 @@
 name: Android Build
 
+# Dois gatilhos, um pipeline só.
+#
+# 1. pull_request tocando código compartilhado Web/Capacitor: compila e valida o
+#    AAB do MESMO commit, sem publicar nada. Existe para o cenário "Web passa,
+#    API passa, e o Android daquele commit não compila" ser descoberto antes do
+#    merge, e não depois do deploy.
+#
+# 2. workflow_run do "Deploy EasyHealth": a release só avança quando o deploy da
+#    API/Web terminou com sucesso — o que hoje inclui o migration gate e o health
+#    check. É a forma mais simples que o GitHub Actions oferece de encadear dois
+#    workflows separados, sem inventar arquitetura de CI.
+#
+# O push direto em main foi substituído pelo workflow_run: era ele que permitia
+# publicar no Play em paralelo a um deploy que estava falhando.
 on:
-  push:
+  pull_request:
     branches:
       - main
+    paths:
+      - "web/**"
+      - ".github/workflows/android-internal-testing.yml"
+  workflow_run:
+    workflows: ["Deploy EasyHealth"]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
@@ -11,10 +31,19 @@ jobs:
     name: Build Android AAB
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Um deploy que falhou não gera release. workflow_dispatch e pull_request não
+    # carregam workflow_run, e por isso passam direto.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # workflow_run roda no HEAD do branch por padrão, não no commit que
+          # disparou o deploy. Sem isto o AAB publicado poderia ser de um commit
+          # diferente do que acabou de ir para produção. Vazio nos outros
+          # gatilhos, onde o checkout padrão já é o commit certo.
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -193,6 +222,57 @@ jobs:
           ANDROID_VERSION_NAME: "1.0.${{ github.run_number }}"
         run: ./gradlew bundleRelease --no-daemon
 
+      # Gradle pode terminar com exit 0 e não ter produzido o bundle (task
+      # pulada, variante inesperada, output redirecionado). Sem esta checagem o
+      # workflow fica verde e a ausência do artefato só aparece no passo de
+      # upload, ou pior: um AAB antigo em cache é publicado no lugar.
+      - name: Verify the AAB was produced
+        working-directory: web/android
+        run: |
+          set -euo pipefail
+          aab="app/build/outputs/bundle/release/app-release.aab"
+
+          if [ ! -s "$aab" ]; then
+            echo "::error::expected AAB not found at web/android/$aab"
+            ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "(bundle output directory does not exist)"
+            exit 1
+          fi
+
+          # Um AAB é um zip; um arquivo truncado ou um placeholder de texto
+          # passariam no teste de existência acima.
+          unzip -l "$aab" > /dev/null
+          echo "AAB OK ($(wc -c < "$aab") bytes, versionCode ${ANDROID_VERSION_CODE})"
+        env:
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+
+      # Smoke do login Google no lado nativo: o applicationId é o que amarra
+      # keystore, google-services.json e o cliente OAuth Android no Google Cloud.
+      # Se ele mudar, o login Google do app quebra e mais nada avisa.
+      - name: Verify applicationId did not change
+        working-directory: web/android
+        run: |
+          set -euo pipefail
+          grep -q 'applicationId "com.EasyHealth.myapp"' app/build.gradle
+          grep -q 'namespace = "com.EasyHealth.myapp"' app/build.gradle
+          echo "applicationId OK: com.EasyHealth.myapp"
+
+      # O plugin nativo rejeita scopes customizados no login() — foi essa a causa
+      # do plugin_login_failed que já derrubou o login Google no Android uma vez.
+      - name: Verify no custom Google scopes reached the native login
+        working-directory: web
+        run: |
+          set -euo pipefail
+          files="$(grep -rl "SocialLogin" src --include=*.ts --include=*.tsx || true)"
+          [ -n "$files" ] || { echo "::error::no SocialLogin call site found"; exit 1; }
+
+          # `scopes:` como chave de objeto, e não a palavra solta: o comentário
+          # que explica por que ela não pode existir contém a palavra.
+          if grep -nE '^[[:space:]]*scopes[[:space:]]*:' $files; then
+            echo "::error::custom scopes passed to the native Google login — the plugin rejects them"
+            exit 1
+          fi
+          echo "no custom scopes in the native Google login"
+
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
@@ -204,6 +284,10 @@ jobs:
     name: Upload to Google Play Internal Testing
     runs-on: ubuntu-latest
     needs: build
+    # Em pull_request o AAB é construído e validado, mas NÃO publicado: um PR
+    # não é uma release. O track e os secrets seguem exatamente os que já
+    # existiam — nada aqui muda para onde a release vai.
+    if: github.event_name != 'pull_request'
     environment: internal-testing
     timeout-minutes: 15
 

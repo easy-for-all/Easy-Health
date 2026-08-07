@@ -250,6 +250,33 @@ module Observability
       )
     end
 
+    # ── Workout plans ────────────────────────────────────────────────────────
+
+    # Duas requisições tentaram ativar um plano para o mesmo dono e o índice
+    # único recusou a segunda. Com o lock de WorkoutPlans::ActivatePlan isto não
+    # deveria acontecer — se aparecer, existe um caminho de escrita que não
+    # passa pelo service, e é isso que este evento serve para localizar.
+    #
+    # Log-only: é um evento de diagnóstico raro, não uma métrica de produto, e
+    # não tem denominador que justifique uma linha em product_analytics_events.
+    # request_id e trace_id entram sozinhos, via Observability::Context.
+    #
+    # PRIVACIDADE: só chaves primárias internas e o nome da classe da exceção.
+    # Nada de token, header, payload ou mensagem crua do Postgres.
+    def workout_plan_activation_conflict(user_id: nil, app_installation_id: nil, error_code: nil, recovered: nil)
+      log_only(
+        "workout_plan_activation_conflict",
+        level: :warn,
+        result: recovered ? "recovered" : "failure",
+        error_code: safe_code(error_code),
+        metadata: {
+          user_id: user_id,
+          app_installation_id: app_installation_id,
+          recovered: boolean_or_nil(recovered)
+        }.compact
+      )
+    end
+
     # ── Integrations ─────────────────────────────────────────────────────────
 
     def integration_delivery_succeeded(integration:, attempt: nil, duration_ms: nil)
