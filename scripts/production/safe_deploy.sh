@@ -8,7 +8,12 @@ WEB_SERVICE="${WEB_SERVICE:-web}"
 DB_NAME="${DB_NAME:-easy_health_production}"
 DB_USER="${DB_USER:-${DB_USERNAME:-postgres}}"
 TARGET_REF="${1:-${GIT_COMMIT:-origin/main}}"
-HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://localhost:3001/up}"
+# /api/v1/health e não /up: o endpoint do Rails responde 200 com o processo de
+# pé e o banco inacessível, que é exatamente o estado que este deploy precisa
+# saber distinguir. Interno, antes do Cloudflare: um 502 do Cloudflare e uma API
+# morta se parecem, e só um deles é problema nosso.
+HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://localhost:3001/api/v1/health}"
+HEALTHCHECK_TIMEOUT="${HEALTHCHECK_TIMEOUT:-60}"
 
 log() {
   printf '[safe-deploy] %s\n' "$*"
@@ -100,17 +105,81 @@ assert_web_client_id() {
   esac
 }
 
+# Exige 200 E db:true. "Container running" não é deploy bem sucedido: o
+# incidente de 04/08 teve container de pé o tempo todo — o que estava morto era
+# o Rails atrás dele, e o Cloudflare traduzia isso em 502 para o usuário.
 healthcheck() {
-  log "Rodando healthcheck em $HEALTHCHECK_URL"
-  for attempt in 1 2 3 4 5 6; do
-    if curl -fsS "$HEALTHCHECK_URL" >/dev/null; then
-      log "Healthcheck OK"
+  log "Rodando healthcheck em $HEALTHCHECK_URL (ate ${HEALTHCHECK_TIMEOUT}s)"
+  body_file="$(mktemp)"
+  deadline=$((SECONDS + HEALTHCHECK_TIMEOUT))
+  last_status="nenhuma resposta"
+
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    http_code="$(curl -sS -m 5 -o "$body_file" -w '%{http_code}' "$HEALTHCHECK_URL" 2>/dev/null || echo "000")"
+
+    if [ "$http_code" = "200" ] && grep -q '"db":true' "$body_file"; then
+      log "Healthcheck OK (HTTP 200, db acessivel)"
+      rm -f "$body_file"
       return
     fi
-    log "Healthcheck tentativa $attempt falhou; aguardando"
+
+    last_status="HTTP $http_code"
+    log "Healthcheck ainda nao passou ($last_status); aguardando"
     sleep 5
   done
-  fail "healthcheck falhou"
+
+  log "Ultima resposta do healthcheck:"
+  cat "$body_file" || true
+  rm -f "$body_file"
+  show_new_api_logs
+  fail "healthcheck falhou apos ${HEALTHCHECK_TIMEOUT}s (ultimo: $last_status)"
+}
+
+# Só o que o container NOVO escreveu. Depois do incidente, metade do tempo de
+# diagnóstico foi gasto lendo stack trace do container anterior e concluindo a
+# coisa errada; a janela é fixada antes do up justamente para não haver dúvida.
+show_new_api_logs() {
+  [ -n "${DEPLOY_STARTED_AT:-}" ] || return 0
+  log "Logs da API desde $DEPLOY_STARTED_AT"
+  compose logs --since "$DEPLOY_STARTED_AT" --tail 200 "$API_SERVICE" || true
+}
+
+# O portão. Migrations rodam num container efêmero da imagem NOVA, com a API
+# antiga ainda no ar e atendendo. Se falharem, o deploy morre aqui e produção
+# continua exatamente como estava — que é o oposto do que aconteceu em 04/08,
+# quando a migration só foi descoberta no boot do container que já havia
+# substituído o que funcionava.
+run_migration_gate() {
+  log "Migration gate: rodando migrations em container one-off da imagem nova"
+
+  compose run --rm -T "$API_SERVICE" bin/rails db:create || true
+
+  if ! compose run --rm -T "$API_SERVICE" bin/rails db:migrate; then
+    printf '\n' >&2
+    printf 'DEPLOY ABORTED: database migration failed.\n' >&2
+    printf 'Existing production containers were not replaced.\n' >&2
+    printf '\n' >&2
+    exit 1
+  fi
+
+  validate_critical_migrations
+
+  # Dados que a aplicação nova pressupõe. Mesma regra do migrate: se o banco não
+  # consegue ficar no formato que o código novo espera, a API que está no ar não
+  # é substituída para descobrir isso em produção.
+  if ! compose run --rm -T "$API_SERVICE" bin/rails blocks:backfill_single_blocks; then
+    printf 'DEPLOY ABORTED: workout block backfill failed.\n' >&2
+    printf 'Existing production containers were not replaced.\n' >&2
+    exit 1
+  fi
+
+  if ! compose run --rm -T "$API_SERVICE" bin/rails blocks:assert_no_null_workout_blocks; then
+    printf 'DEPLOY ABORTED: workout block invariant check failed.\n' >&2
+    printf 'Existing production containers were not replaced.\n' >&2
+    exit 1
+  fi
+
+  log "Migration gate OK; liberado para substituir os containers"
 }
 
 [ -f "$COMPOSE_FILE" ] || fail "compose de producao nao encontrado: $COMPOSE_FILE"
@@ -139,27 +208,33 @@ assert_web_client_id
 
 copy_exercise_images
 
-log "Rebuild e subida dos containers sem apagar volumes"
-compose up -d --build
+# Build SEM recriar nada. A API que está no ar continua servindo enquanto a
+# imagem nova é construída e enquanto as migrations são validadas contra ela.
+log "Construindo imagens novas (containers atuais seguem no ar)"
+compose build
+
+log "Garantindo que o banco esta de pe para o migration gate"
+compose up -d "$DB_SERVICE"
+compose exec -T "$DB_SERVICE" sh -lc "pg_isready -U '$DB_USER' -d '$DB_NAME'" >/dev/null
+
+run_migration_gate
+
+# Só aqui os containers são substituídos, e só porque o banco já está no
+# formato que a imagem nova espera.
+DEPLOY_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+log "Migrations aplicadas; subindo containers novos sem apagar volumes"
+compose up -d
 
 log "Limpando cache de build do Docker (evita esgotar disco em deploys futuros)"
 docker builder prune -af || true
 docker image prune -af || true
 
-log "Aguardando API e banco"
-sleep 15
-compose exec -T "$DB_SERVICE" sh -lc "pg_isready -U '$DB_USER' -d '$DB_NAME'" >/dev/null
+log "Aguardando API"
+sleep 10
 
-log "Criando banco de dados se necessario"
-compose exec -T "$API_SERVICE" bin/rails db:create || true
-
-log "Rodando migrations Rails incrementais"
-compose exec -T "$API_SERVICE" bin/rails db:migrate
-validate_critical_migrations
-
-log "Garantindo workout_blocks para exercicios existentes"
-compose exec -T "$API_SERVICE" bin/rails blocks:backfill_single_blocks
-compose exec -T "$API_SERVICE" bin/rails blocks:assert_no_null_workout_blocks
+# Antes dos assets: importar catálogo por vários minutos contra uma API que não
+# subiu só atrasa a descoberta de que ela não subiu.
+healthcheck
 
 log "Atualizando assets de exercicios"
 compose exec -T "$API_SERVICE" bin/rails exercises:import_local_images || true
@@ -168,11 +243,11 @@ compose run --rm -v /home/easy/Easy-Health/external/free-exercise-db/exercises:/
 log "Auditando catalogo gifdotreino em modo dry-run"
 compose exec -T "$API_SERVICE" bin/rails exercises:purge_non_gifdotreino DRY_RUN=1
 
-healthcheck
-
 log "Validando persistencia depois do deploy"
 bash scripts/production/check_persistence.sh
 write_snapshot "$after_snapshot"
 validate_no_drop "$before_snapshot" "$after_snapshot"
+
+show_new_api_logs
 
 printf 'DEPLOY SEGURO CONCLUIDO COM SUCESSO\n'
