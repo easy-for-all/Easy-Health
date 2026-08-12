@@ -177,14 +177,18 @@ module Analytics
 
     def numeric_build = "(#{AppInstallation::NUMERIC_BUILD_SQL})"
 
-    # Instalações Android elegíveis: build acima do corte e, quando declarado,
-    # criadas a partir do início do experimento.
+    # Instalações Android elegíveis: plataforma e build, nada mais.
+    #
+    # O início do experimento NÃO entra aqui. Ele corta pelo momento do EVENTO
+    # (started_clause), porque é assim que o cliente decide participação:
+    # `Date.now() >= started_at`. Cortar por created_at excluiria do painel
+    # instalações que o app tratou de verdade — e o app Android é WebView de site
+    # remoto, então toda instalação já existente recebe o código novo assim que a
+    # web sobe.
     def eligible_scope
       scope = AppInstallation.for_platform(PLATFORM)
       scope = scope.where("#{numeric_build} >= ?", min_build) if min_build.positive?
       scope = scope.where("#{numeric_build} = ?", build) if build
-      started = self.class.started_at
-      scope = scope.where("app_installations.created_at >= ?", started) if started
       scope
     end
 
@@ -241,6 +245,7 @@ module Analytics
           WHERE e.event_name = #{quote(EXPOSED_EVENT)}
             AND e.properties->>'experiment_key' = #{quote(EXPERIMENT_KEY)}
             AND e.properties->>'installation_id' IN (#{cohort_scope.select(:installation_id).to_sql})
+            #{started_clause("e.occurred_at")}
             #{window_clause("e.occurred_at")}
           GROUP BY 1
         SQL
@@ -278,7 +283,18 @@ module Analytics
     # ------------------------------------------------- eventos observados
 
     # Para cada instalação exposta, o primeiro occurred_at de cada evento
-    # observado. Uma query, agregada no banco.
+    # observado A PARTIR DA EXPOSIÇÃO DAQUELA INSTALAÇÃO.
+    #
+    # O piso é por instalação, e agregar sem ele quebra: um workout_created de
+    # semanas atrás viraria o MIN, seria descartado por ser anterior à exposição,
+    # e o workout_created POSTERIOR nunca apareceria — a instalação contaria como
+    # "nunca gerou plano" tendo gerado. Isso não é hipotético desde que o corte de
+    # início passou a admitir instalações pré-existentes, e o viés não é simétrico
+    # entre os braços.
+    #
+    # Expressar esse piso em SQL exigiria um VALUES com os pares
+    # (installation_id, exposed_at), join e cast. Não vale: filtered_exposures já
+    # está em memória, então a query fica trivial e a dobra acontece aqui.
     def first_event_at
       @first_event_at ||= begin
         ids = filtered_exposures.keys
@@ -287,16 +303,21 @@ module Analytics
         sql = <<~SQL.squish
           SELECT e.properties->>'installation_id' AS installation_id,
                  e.event_name AS event_name,
-                 MIN(e.occurred_at) AS first_at
+                 e.occurred_at AS occurred_at
           FROM product_analytics_events e
           WHERE e.event_name IN (#{OBSERVED_EVENTS.map { |n| quote(n) }.join(', ')})
             AND e.properties->>'installation_id' IN (#{ids.map { |id| quote(id) }.join(', ')})
-          GROUP BY 1, 2
         SQL
 
         ApplicationRecord.connection.select_all(sql).to_a.each_with_object({}) do |row, acc|
-          acc[row["installation_id"]] ||= {}
-          acc[row["installation_id"]][row["event_name"]] = parse_time(row["first_at"])
+          id = row["installation_id"]
+          at = parse_time(row["occurred_at"])
+          exposed_at = filtered_exposures.dig(id, :exposed_at)
+          next if at.nil? || exposed_at.nil? || at < exposed_at
+
+          acc[id] ||= {}
+          current = acc[id][row["event_name"]]
+          acc[id][row["event_name"]] = at if current.nil? || at < current
         end
       end
     end
@@ -369,6 +390,7 @@ module Analytics
           WHERE e.event_name = #{quote(ASSIGNED_EVENT)}
             AND e.properties->>'experiment_key' = #{quote(EXPERIMENT_KEY)}
             AND e.properties->>'installation_id' IN (#{cohort_scope.select(:installation_id).to_sql})
+            #{started_clause("e.occurred_at")}
             #{window_clause("e.occurred_at")}
           GROUP BY 1
         SQL
@@ -581,21 +603,35 @@ module Analytics
     # Lido do BANCO e não de eventos do cliente: o cliente não enxerga uma falha
     # que aconteceu no servidor, então um funil baseado só nele reportaria zero
     # erro justamente quando a geração está quebrada.
+    # Os três guardrails abaixo contam sobre instalações EXPOSTAS, não sobre a
+    # coorte elegível: essa é a unidade declarada do painel, e é o que mantém cada
+    # razão com numerador e denominador na mesma população.
     def generation_errors
-      AnonymousOnboardingSession.where(app_installation_id: cohort_scope.select(:id))
+      exposed = AppInstallation.where(installation_id: filtered_exposures.keys).select(:id)
+
+      AnonymousOnboardingSession.where(app_installation_id: exposed)
                                 .where(last_generation_status: "failed")
                                 .count
     end
 
     def claim_failures
-      AnonymousOnboardingSession.where(app_installation_id: cohort_scope.select(:id))
+      exposed = AppInstallation.where(installation_id: filtered_exposures.keys).select(:id)
+
+      AnonymousOnboardingSession.where(app_installation_id: exposed)
                                 .where.not(last_claim_failure_code: [ nil, "" ])
                                 .group(:last_claim_failure_code)
                                 .count
     end
 
+    # Só open_app, porque o denominador de hit_limit_rate é
+    # exposed_count("open_app") — e account_gate mal chega a abrir uma sessão
+    # anônima, então somá-la aqui inflaria a taxa com quem não podia contribuir.
     def sessions_at_limit
-      AnonymousOnboardingSession.where(app_installation_id: cohort_scope.select(:id))
+      exposed_open_app = AppInstallation.where(
+        installation_id: exposures_by_variant.fetch("open_app", []).map { |row| row[:installation_id] }
+      ).select(:id)
+
+      AnonymousOnboardingSession.where(app_installation_id: exposed_open_app)
                                 .at_limit
                                 .count
     end
@@ -621,6 +657,16 @@ module Analytics
       return "" unless window
 
       ApplicationRecord.sanitize_sql_array([ "AND #{column} >= ? AND #{column} <= ?", window.begin, window.end ])
+    end
+
+    # O corte de início do experimento, sobre o tempo do evento. Convive com o
+    # window_clause: os dois são AND, então o piso efetivo é o mais tardio, que é
+    # o que um filtro de período deve fazer.
+    def started_clause(column)
+      started = self.class.started_at
+      return "" unless started
+
+      ApplicationRecord.sanitize_sql_array([ "AND #{column} >= ?", started ])
     end
 
     def quote(value) = ApplicationRecord.connection.quote(value)

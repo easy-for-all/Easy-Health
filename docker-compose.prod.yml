@@ -24,6 +24,9 @@ services:
       - ./api/public/exercise-images:/rails/public/exercise-images
     environment:
       RAILS_ENV: production
+      # Marks a real deployed server. config/initializers/sentry.rb reports only
+      # when this is present, so local containers never reach production Sentry.
+      DEPLOY_ENV: production
       RAILS_SERVE_STATIC_FILES: "true"
       DB_HOST: db
       DB_PORT: 5432
@@ -57,6 +60,11 @@ services:
         NEXT_PUBLIC_ANDROID_POST_ONBOARDING_AB_ENABLED: ${NEXT_PUBLIC_ANDROID_POST_ONBOARDING_AB_ENABLED:-}
         NEXT_PUBLIC_ANDROID_POST_ONBOARDING_AB_MIN_BUILD: ${NEXT_PUBLIC_ANDROID_POST_ONBOARDING_AB_MIN_BUILD:-}
         NEXT_PUBLIC_ANDROID_POST_ONBOARDING_AB_STARTED_AT: ${NEXT_PUBLIC_ANDROID_POST_ONBOARDING_AB_STARTED_AT:-}
+        # Default true (e não `:-` como as de cima): `:-` trata ausente e vazio
+        # igual, e injetaria "" no build arg, sobrescrevendo o default do ARG e
+        # derrubando o guard do Dockerfile. Assim, ausência no .env => true, e a
+        # única forma de desligar é `NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED=false`.
+        NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED: ${NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED:-true}
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
     ports:
       - "3000:3000"

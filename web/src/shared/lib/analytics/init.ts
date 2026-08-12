@@ -64,7 +64,7 @@ export function initAnalytics(): void {
       void ensureInstallationRegistered({}, { sessionStarted: true });
     })();
     // Native Firebase (Analytics/Crashlytics) — no-op unless flags are on.
-    void initFirebase(storedConsent() === "granted");
+    void initFirebase(storedConsent());
   } else {
     // Web/PWA session start (idempotent per tab session).
     trackOnce("web_session_started", "web_session_started", {

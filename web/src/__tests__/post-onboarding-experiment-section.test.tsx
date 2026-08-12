@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PostOnboardingExperimentSection } from "@/app/(app)/admin/post-onboarding-experiment-section";
+import { VARIANT_KEYS } from "@/app/(app)/admin/post-onboarding-experiment-metrics";
 
 const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
 
@@ -166,5 +167,35 @@ describe("PostOnboardingExperimentSection", () => {
     render(<PostOnboardingExperimentSection />);
 
     await waitFor(() => expect(screen.getByText(/Painel indisponível/)).toBeInTheDocument());
+  });
+
+  // As linhas por variante do bloco Guardrails são indexadas por VARIANT_KEYS.
+  // Uma chave escrita errado não quebra nada visível: o valor vira `undefined`,
+  // formatMetricValue devolve "—", e o rótulo continua dizendo "abre o app" —
+  // parece "sem problema" exatamente no número que se olha antes de liberar.
+  it("reads the per-variant guardrails for BOTH arms, not just the control", async () => {
+    render(<PostOnboardingExperimentSection />);
+
+    await screen.findAllByText("Conta antes do plano");
+
+    // Consulta pelo rótulo do Stat, e não pelo texto solto: as porcentagens da
+    // tabela de métricas colidiriam. Nada de toBeVisible — o bloco vive dentro
+    // de um <details> fechado, que jest-dom trata como invisível.
+    const cell = (label: string) =>
+      screen.getByText(label).closest("div")?.querySelector("dd")?.textContent;
+
+    expect(cell("Sem plano — conta antes")).toBe("60.0%");
+    expect(cell("Sem plano — abre o app")).toBe("20.0%");
+    expect(cell("Falha de auth — conta antes")).toBe("3");
+    expect(cell("Falha de auth — abre o app")).toBe("1");
+  });
+});
+
+describe("VARIANT_KEYS", () => {
+  // Guarda de vocabulário, espelhando Analytics::ExperimentRegistry. O tsc já
+  // rejeita uma chave inválida, mas foi uma edição direta na VPS — que contorna
+  // o CI — que introduziu `open_ap` no painel de produção.
+  it("matches the experiment registry exactly", () => {
+    expect(VARIANT_KEYS).toEqual(["account_gate", "open_app"]);
   });
 });
