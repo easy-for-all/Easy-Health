@@ -3,7 +3,7 @@
 // gtag config runs so no cookie is written without consent.
 import { setFirebaseAnalyticsConsent } from "./firebase";
 
-type ConsentState = "granted" | "denied";
+export type ConsentState = "granted" | "denied";
 const CONSENT_KEY = "eh_consent";
 
 function gtag(...args: unknown[]): void {

@@ -3,8 +3,10 @@ require "rails_helper"
 RSpec.describe Analytics::PostOnboardingExperiment do
   let(:experiment_key) { described_class::EXPERIMENT_KEY }
 
-  def installation(id, build: "60", user: nil)
-    AppInstallation.create!(installation_id: id, platform: "android", native: true, app_build: build, user: user)
+  def installation(id, build: "60", user: nil, created_at: nil)
+    attrs = { installation_id: id, platform: "android", native: true, app_build: build, user: user }
+    attrs[:created_at] = created_at if created_at
+    AppInstallation.create!(**attrs)
   end
 
   def event(name, installation_id:, at:, properties: {})
@@ -85,6 +87,51 @@ RSpec.describe Analytics::PostOnboardingExperiment do
       event("workout_started", installation_id: "i-1", at: 4.days.ago)
 
       expect(metric(result, "workout_started")[:variants]["open_app"][:cumulative][:numerator]).to eq(0)
+    end
+  end
+
+  # O corte de início vale sobre o momento do EVENTO, igual ao predicado do
+  # cliente (Date.now() >= started_at). Cortar pela criação da instalação mediria
+  # uma população que o app não trata.
+  describe "the experiment start cut" do
+    let(:started) { 5.days.ago }
+
+    def with_start(&block) = with_env("ANDROID_POST_ONBOARDING_AB_STARTED_AT" => started.iso8601, &block)
+
+    # O app é WebView de site remoto: as instalações que já existem recebem o
+    # código novo assim que a web sobe, e são expostas de verdade.
+    it "keeps an installation that predates the start but was exposed after it" do
+      with_start do
+        installation("veteran", created_at: started - 10.days)
+        expose("veteran", variant: "open_app", at: started + 1.day)
+
+        expect(result[:header][:exposed_installations]).to eq(1)
+      end
+    end
+
+    it "leaves out an exposure that happened before the start" do
+      with_start do
+        installation("early")
+        expose("early", variant: "open_app", at: started - 1.day)
+
+        expect(result[:header][:exposed_installations]).to eq(0)
+      end
+    end
+
+    # Um evento anterior à exposição não pode virar o primeiro e esconder o que
+    # veio DEPOIS dela: a instalação contaria como "nunca gerou plano" tendo
+    # gerado, e o viés não é simétrico entre os braços.
+    it "does not let a pre-exposure event hide a later one" do
+      with_start do
+        installation("returning", created_at: started + 1.hour)
+        event("workout_created", installation_id: "returning", at: started + 2.hours)
+        expose("returning", variant: "open_app", at: started + 1.day)
+        event("workout_created", installation_id: "returning", at: started + 2.days)
+
+        row = metric(result, "plan_generated")
+
+        expect(row[:variants]["open_app"][:cumulative][:numerator]).to eq(1)
+      end
     end
   end
 
@@ -206,6 +253,21 @@ RSpec.describe Analytics::PostOnboardingExperiment do
 
       expect(result[:guardrails][:hit_limit_rate][:numerator]).to eq(1)
       expect(result[:guardrails][:hit_limit_rate][:denominator]).to eq(1)
+    end
+
+    # O denominador destas razões é a instalação EXPOSTA. Contar sessões da
+    # coorte inteira poria numerador e denominador em populações diferentes.
+    it "ignores sessions from installations that were never exposed" do
+      exposed = installation("exposed")
+      unexposed = installation("unexposed")
+      expose("exposed", variant: "open_app")
+      AnonymousOnboardingSession.create!(app_installation: exposed, plans_generated_count: 0)
+      AnonymousOnboardingSession.create!(
+        app_installation: unexposed, last_generation_status: "failed", plans_generated_count: 3
+      )
+
+      expect(result[:guardrails][:generation_errors]).to eq(0)
+      expect(result[:guardrails][:hit_limit_rate][:numerator]).to eq(0)
     end
   end
 

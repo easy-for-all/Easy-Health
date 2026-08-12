@@ -33,6 +33,21 @@ block_dangerous_commands() {
   fi
 }
 
+# Tarefas que reconstroem ou esvaziam um banco. A varredura cobre apenas
+# scripts/: o CI legitimamente roda db:test:prepare sob RAILS_ENV=test
+# (.github/workflows/pr-check.yml), enquanto um script de deploy nunca tem
+# motivo para invocar qualquer uma delas.
+block_test_database_tasks() {
+  log "Procurando tarefas de banco de teste nos scripts de deploy"
+  if [ -d "scripts" ]; then
+    if grep -RInE 'rails[[:space:]]+db:(test:[a-z_]+|truncate_all|schema:load|migrate:reset)' scripts \
+      --exclude='restore_production.sh' \
+      --exclude='pre_deploy_guard.sh' 2>/dev/null; then
+      fail "tarefa de banco de teste encontrada nos scripts de deploy"
+    fi
+  fi
+}
+
 confirm_production() {
   [ -f "$COMPOSE_FILE" ] || fail "compose de producao nao encontrado: $COMPOSE_FILE"
   grep -q 'RAILS_ENV: production' "$COMPOSE_FILE" || fail "compose nao declara RAILS_ENV production"
@@ -68,6 +83,7 @@ check_runtime() {
 
 confirm_production
 block_dangerous_commands
+block_test_database_tasks
 check_runtime
 
 if [ "$COLD_START" = "true" ]; then

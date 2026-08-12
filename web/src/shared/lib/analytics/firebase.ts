@@ -1,4 +1,7 @@
 import { isNativeApp } from "./context";
+// import type: apagado na compilação, então não fecha ciclo em runtime com o
+// consent.ts -> firebase.ts que já existe.
+import type { ConsentState } from "./consent";
 
 // Native Firebase bridge (Analytics / Crashlytics / Performance) via
 // @capacitor-firebase/*. WebView note: the app loads the remote site, so on
@@ -44,14 +47,20 @@ function sanitize(params?: Record<string, unknown>): Record<string, unknown> {
 
 let initialized = false;
 
-export async function initFirebase(consentGranted: boolean): Promise<void> {
+// `consent` tem TRÊS estados, e null não é "denied". Sem decisão explícita do
+// usuário NÃO chamamos setEnabled: no Android o valor persiste em
+// SharedPreferences e sobrevive a restarts, então tratar "não decidiu" como
+// "negou" desligaria a coleta permanentemente — inclusive os eventos automáticos
+// (first_open, session_start) que hoje funcionam. Um "denied" explícito continua
+// desligando, aqui e em setFirebaseAnalyticsConsent (updateConsent).
+export async function initFirebase(consent: ConsentState | null): Promise<void> {
   if (!isNativeApp() || initialized) return;
   initialized = true;
 
-  if (FIREBASE_ANALYTICS_ENABLED) {
+  if (FIREBASE_ANALYTICS_ENABLED && consent !== null) {
     try {
       const { FirebaseAnalytics } = await import("@capacitor-firebase/analytics");
-      await FirebaseAnalytics.setEnabled({ enabled: consentGranted });
+      await FirebaseAnalytics.setEnabled({ enabled: consent === "granted" });
     } catch {
       /* plugin unavailable — no-op */
     }
