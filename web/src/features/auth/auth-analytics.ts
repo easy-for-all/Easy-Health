@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { ApiError } from "@/shared/lib/api";
 import { trackEvent, trackOnce } from "@/shared/lib/analytics";
 import { getAnalyticsContext } from "@/shared/lib/analytics/context";
+import { logFirebaseEvent } from "@/shared/lib/analytics/firebase";
 import type { AuthFailureCategory } from "@/shared/lib/googleAuth";
 
 // Instrumentation for the stretch that used to be completely dark: from the
@@ -116,12 +117,80 @@ export function trackSocialLoginFailed(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Firebase recommended auth events (Android only)
+//
+// `sign_up` and `login` are Google's RECOMMENDED event names; Google Ads reads
+// them to optimise Android campaigns towards people who create an account.
+//
+// They are ADDITIVE. signup_completed / login_completed / social_login_completed
+// keep feeding the internal taxonomy exactly as before and answer a different
+// question (product funnel + server-side audit); these two exist for the Ads
+// side and carry nothing else.
+//
+// Deliberately NOT routed through trackEvent: that would also emit them to GA4
+// on web, creating a second parallel count of signup/login on a stream that
+// already has its own events. logFirebaseEvent no-ops unless
+// firebaseAnalyticsActive() (isNativeApp() && the build flag), so the
+// Android-only guarantee is structural — no second platform check to drift.
+//
+// PRIVACY: `method` is the only parameter, and it is the AuthProvider enum
+// ("email" | "google"). Never an e-mail, a name, a token or an id.
+
+type RecommendedAuthEvent = "sign_up" | "login";
+
+// One emission per (event, attempt), in memory ONLY. Nothing about new-vs-
+// existing may be cached across sessions or installations: one device can
+// legitimately create more than one account over its life, and the backend is
+// the authority. This guards a single React flow against a double invoke.
+const emittedRecommendedEvents = new Set<string>();
+
+function logRecommendedAuthEvent(
+  name: RecommendedAuthEvent,
+  ctx: AuthAttemptContext
+): Promise<void> {
+  const key = `${name}:${ctx.authAttemptId}`;
+  if (emittedRecommendedEvents.has(key)) return Promise.resolve();
+  emittedRecommendedEvents.add(key);
+  // logFirebaseEvent already swallows plugin failures; the catch is repeated
+  // here so no future change to it can ever reject into an auth handler.
+  return logFirebaseEvent(name, { method: ctx.provider }).catch(() => undefined);
+}
+
+// The native bridge resolves a dynamic import before reaching the SDK, and the
+// Google screens hard-navigate (window.location.replace) right after the event —
+// which tears the WebView's JS context down mid-flight. So those callers await.
+// Time-boxed and resolve-only: a slow or broken plugin delays the redirect by at
+// most this budget, and can never block or reject it.
+const FIREBASE_NAVIGATION_BUDGET_MS = 800;
+
+function bestEffortFirebaseBeforeNavigation(pending: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, FIREBASE_NAVIGATION_BUDGET_MS);
+  });
+  return Promise.race([pending, budget]).finally(() => clearTimeout(timer));
+}
+
 /**
  * The social attempt ended with a session. Fires once per attempt: a resume or a
  * rerender must never turn one successful login into two conversions.
+ *
+ * `newUser` comes from the backend, which is the only party that knows whether
+ * this request inserted a row. Creating an account already leaves the session
+ * authenticated, so a new account emits `sign_up` and NOT also `login` — one
+ * operation, one event. `login` is what a returning user produces.
+ *
+ * Returns a promise the caller awaits before a hard redirect.
  */
-export function trackSocialLoginCompleted(ctx: AuthAttemptContext): void {
+export function trackSocialLoginCompleted(
+  ctx: AuthAttemptContext,
+  newUser: boolean
+): Promise<void> {
   trackOnce(`social_login_completed:${ctx.authAttemptId}`, "social_login_completed", attemptParams(ctx));
+  return bestEffortFirebaseBeforeNavigation(
+    logRecommendedAuthEvent(newUser ? "sign_up" : "login", ctx)
+  );
 }
 
 export function trackLoginStarted(ctx: AuthAttemptContext): void {
@@ -130,6 +199,9 @@ export function trackLoginStarted(ctx: AuthAttemptContext): void {
 
 export function trackLoginCompleted(ctx: AuthAttemptContext): void {
   trackOnce(`login_completed:${ctx.authAttemptId}`, "login_completed", attemptParams(ctx));
+  // No await: this path continues with a client-side router.push, which does not
+  // tear the JS context down. No artificial delay where there is no hard nav.
+  void logRecommendedAuthEvent("login", ctx);
 }
 
 export function trackSignupStarted(ctx: AuthAttemptContext): void {
@@ -138,6 +210,7 @@ export function trackSignupStarted(ctx: AuthAttemptContext): void {
 
 export function trackSignupCompleted(ctx: AuthAttemptContext): void {
   trackOnce(`signup_completed:${ctx.authAttemptId}`, "signup_completed", attemptParams(ctx));
+  void logRecommendedAuthEvent("sign_up", ctx);
 }
 
 /**

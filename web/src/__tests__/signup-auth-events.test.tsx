@@ -97,7 +97,7 @@ beforeEach(() => {
   mockIsNative.mockReturnValue(true);
   mockIsHydrated.mockReturnValue(true);
   mockDescribe.mockReturnValue(outcome("unknown", "unknown"));
-  mockStartGoogleAuth.mockResolvedValue({ navigated: false, redirectPath: "/onboarding" });
+  mockStartGoogleAuth.mockResolvedValue({ navigated: false, redirectPath: "/onboarding", newUser: true });
   Object.defineProperty(window, "location", {
     value: { replace: vi.fn(), assign: vi.fn(), href: "" },
     writable: true,

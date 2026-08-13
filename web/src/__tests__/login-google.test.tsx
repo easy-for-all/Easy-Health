@@ -110,7 +110,9 @@ beforeEach(() => {
   mockIsNative.mockReturnValue(false);
   mockIsHydrated.mockReturnValue(true);
   mockDescribe.mockReturnValue(outcome("unknown", "unknown"));
-  mockStartGoogleAuth.mockResolvedValue({ navigated: false, redirectPath: "/dashboard" });
+  // The login screen only ever completes for accounts the backend already knows:
+  // a brand-new Google account is refused here with consent_required.
+  mockStartGoogleAuth.mockResolvedValue({ navigated: false, redirectPath: "/dashboard", newUser: false });
   Object.defineProperty(window, "location", {
     value: { replace: vi.fn(), assign: vi.fn(), href: "" },
     writable: true,

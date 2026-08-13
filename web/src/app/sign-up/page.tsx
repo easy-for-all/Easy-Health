@@ -167,7 +167,10 @@ export default function SignUpPage() {
       // Only the native flow returns here with a session; the web flow navigates
       // away to OmniAuth and its outcome lands on another page.
       if (outcome.navigated) return; // leaving the page; keep the loading state
-      trackSocialLoginCompleted(attempt);
+      // Awaited (time-boxed inside) because the replace() below tears the
+      // WebView's JS context down, which would kill the native Firebase call
+      // mid-flight. `newUser` is the backend's answer, never a guess here.
+      await trackSocialLoginCompleted(attempt, outcome.newUser);
       endAuthAttempt();
       window.location.replace(outcome.redirectPath);
     } catch (err) {
