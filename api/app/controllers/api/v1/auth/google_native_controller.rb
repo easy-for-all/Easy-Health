@@ -40,7 +40,12 @@ module Api
 
           sign_in(user)
           set_auth_indicator_cookie
-          fresh_account = new_user?(user)
+          # Authoritative: User.from_omniauth sets this at the exact point where
+          # it inserts the row. It used to be inferred from the account's age
+          # (created_at > 5.minutes.ago && health_profile.nil?), so someone who
+          # signed up and re-authenticated before finishing onboarding was
+          # reported as a brand-new account a second time.
+          fresh_account = user.newly_registered?
           Observability::Context.user_id = user.id
           installation_link_result = reconcile_app_installation
           Observability::Events.google_auth_succeeded(
@@ -153,10 +158,6 @@ module Api
               image: claims["picture"]
             }
           )
-        end
-
-        def new_user?(user)
-          user.created_at > 5.minutes.ago && user.health_profile.nil?
         end
       end
     end

@@ -69,6 +69,37 @@ Regra de roteamento (anti-duplicidade, `index.ts`):
 2. Login → `identifyUser()` re-registra com cookie de sessão → associa `user_id`.
 3. Painel "App Android" conta a base real; backfill recupera o histórico de `device_tokens`.
 
+## Eventos de autenticação: dois conjuntos, finalidades diferentes
+
+Autenticação emite **dois** conjuntos de eventos, que não se substituem.
+
+| | Taxonomia interna | Recomendados do Firebase |
+|---|---|---|
+| Nomes | `signup_completed`, `login_completed`, `social_login_completed` | `sign_up`, `login` |
+| Sinks | server (`events.yml`) + GA4 na web / Firebase no nativo, via `trackEvent` | **só** Firebase nativo, via `logFirebaseEvent` |
+| Parâmetros | `auth_attempt_id`, `provider`, `intent`, `auth_screen` | apenas `method` (`email` \| `google`) |
+| Para quê | funil de produto, Admin, investigação por tentativa | otimização de campanha no Google Ads |
+| Onde | `features/auth/auth-analytics.ts` | idem, funções `trackSignupCompleted` / `trackLoginCompleted` / `trackSocialLoginCompleted` |
+
+Pontos que não podem ser perdidos num refactor:
+
+1. Os eventos internos **continuam existindo como sempre**. Os recomendados são aditivos.
+2. `sign_up`/`login` **não** passam pelo `trackEvent` e **não** estão em `events.yml` /
+   `taxonomy.ts`: pelo dispatch central eles também iriam para o GA4 na web, criando uma
+   segunda contagem paralela de cadastro/login. `logFirebaseEvent` já é no-op fora do nativo
+   (`firebaseAnalyticsActive() = isNativeApp() && NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED`),
+   então o isolamento Android/Web é estrutural.
+3. Uma operação, um evento: criar conta já autentica, então cadastro emite `sign_up` e **não**
+   também `login`. `login` é o acesso posterior de quem já existe.
+4. Novo vs existente no Google vem **do backend** (`new_user` em
+   `Api::V1::Auth::GoogleNativeController`), que o marca em `User#newly_registered` no ponto
+   exato em que `User.from_omniauth` insere a linha. Nada é inferido no cliente, e nada é
+   persistido em `localStorage`: um aparelho pode legitimamente criar mais de uma conta.
+   A dedupe do cliente é só em memória, por `authAttemptId`, contra duplo disparo do React.
+5. As telas Google fazem `window.location.replace` logo em seguida, o que derruba o contexto
+   JS da WebView. Por isso o envio é aguardado com orçamento de 800 ms — que resolve, nunca
+   rejeita: analytics não pode atrasar nem quebrar o redirect.
+
 ## Identidade de instalação e Android Auto Backup
 
 **Problema (jul/2026):** o app subia com `android:allowBackup="true"` e sem regras. O Auto

@@ -119,6 +119,19 @@ class User < ApplicationRecord
   # authenticate normally and never trigger this.
   class ConsentRequiredError < StandardError; end
 
+  # Did THIS request create the account? Set by from_omniauth at the exact point
+  # where it decides to create rather than reuse, so callers never have to guess
+  # from the account's age.
+  #
+  # Not `previously_new_record?`: from_omniauth attaches the Google avatar right
+  # after create!, and that second save flips the flag back to false — which is
+  # precisely the kind of accident this attribute exists to avoid.
+  attr_accessor :newly_registered
+
+  def newly_registered?
+    newly_registered == true
+  end
+
   # Finds or provisions a user from an OmniAuth hash. Creating a brand-new
   # account requires that the caller pass the required legal consent; existing
   # users log in normally and their acceptance timestamps are never overwritten.
@@ -133,6 +146,9 @@ class User < ApplicationRecord
     user ||= find_by(email: auth.info.email)
 
     if user
+      # An account that already existed and merely gained a Google identity is
+      # NOT a registration.
+      user.newly_registered = false
       user.update(provider: auth.provider, uid: auth.uid) unless user.provider.present?
     else
       raise BlockedEmailError if BlockedEmail.blocked?(auth.info.email)
@@ -149,6 +165,9 @@ class User < ApplicationRecord
          # .compact so a nil never overwrites the column default with NULL.
          .merge({ signup_source: signup_source }.compact)
       )
+      # Set on the object the caller receives, at the only point in the flow
+      # where a User row is actually inserted.
+      user.newly_registered = true
     end
 
     attach_google_avatar(user, auth.info.image) if auth.info.image.present? && !user.avatar.attached?

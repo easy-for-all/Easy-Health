@@ -91,7 +91,10 @@ export default function LoginPage() {
       // here, so its terminal event cannot be emitted on this screen. Only the
       // native flow returns with a session in hand.
       if (outcome.navigated) return; // leaving the page; keep the loading state
-      trackSocialLoginCompleted(attempt);
+      // Awaited (time-boxed inside) because the replace() below tears the
+      // WebView's JS context down, which would kill the native Firebase call
+      // mid-flight. `newUser` is the backend's answer, never a guess here.
+      await trackSocialLoginCompleted(attempt, outcome.newUser);
       endAuthAttempt();
       window.location.replace(outcome.redirectPath);
     } catch (err) {

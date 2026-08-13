@@ -230,9 +230,12 @@ export async function postGoogleNative(idToken: string, consent?: GoogleConsent)
  *
  * `consent` is only ever passed by the sign-up screen, after its own gate.
  */
+// `newUser` is the BACKEND's answer to "did this request create the account"
+// (see Api::V1::Auth::GoogleNativeController). It is never inferred here: only
+// the server knows whether it inserted a row or reused one.
 export type GoogleAuthOutcome =
   | { navigated: true }
-  | { navigated: false; redirectPath: string };
+  | { navigated: false; redirectPath: string; newUser: boolean };
 
 export async function startGoogleAuth(
   { native, consent }: { native: boolean; consent?: GoogleConsent },
@@ -245,8 +248,8 @@ export async function startGoogleAuth(
   }
 
   const idToken = await nativeGoogleSignIn();
-  const { redirectPath } = await postGoogleNative(idToken, consent);
-  return { navigated: false, redirectPath };
+  const { user, redirectPath } = await postGoogleNative(idToken, consent);
+  return { navigated: false, redirectPath, newUser: user.new_user === true };
 }
 
 // What actually went wrong, so each screen can respond instead of collapsing

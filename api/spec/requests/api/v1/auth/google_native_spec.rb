@@ -71,6 +71,69 @@ RSpec.describe "Api::V1::Auth::GoogleNative", type: :request do
       end
     end
 
+    # `new_user` drives the Android sign_up-vs-login conversion sent to Firebase,
+    # so it has to mean "this request inserted the row" and nothing else. It used
+    # to be inferred from the account's age (created_at > 5.minutes.ago &&
+    # health_profile.nil?), which reported the SAME account as new more than once.
+    describe "new_user" do
+      let(:consent) { { terms_accepted: true, privacy_accepted: true } }
+
+      before { allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims) }
+
+      it "is true when the request creates the account" do
+        expect do
+          post "/api/v1/auth/google/native",
+               params: { id_token: "valid.jwt", platform: "android" }.merge(consent), as: :json
+        end.to change(User, :count).by(1)
+
+        expect(response.parsed_body["new_user"]).to be(true)
+      end
+
+      it "is false when the request reuses an existing account" do
+        create(:user, email: "native@example.com")
+
+        post "/api/v1/auth/google/native", params: { id_token: "valid.jwt", platform: "android" }, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["new_user"]).to be(false)
+      end
+
+      # The regression the old heuristic could not survive: someone who signs up
+      # and comes straight back — before finishing onboarding, so still without a
+      # health_profile, and well inside the five-minute window — was counted as a
+      # second brand-new account.
+      it "is false when the same account authenticates again seconds later" do
+        post "/api/v1/auth/google/native",
+             params: { id_token: "valid.jwt", platform: "android" }.merge(consent), as: :json
+        expect(response.parsed_body["new_user"]).to be(true)
+
+        user = User.find_by(email: "native@example.com")
+        expect(user.health_profile).to be_nil
+        expect(user.created_at).to be > 5.minutes.ago
+
+        expect do
+          post "/api/v1/auth/google/native",
+               params: { id_token: "valid.jwt", platform: "android" }.merge(consent), as: :json
+        end.not_to change(User, :count)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["new_user"]).to be(false)
+      end
+
+      # An e-mail account that had never used Google gains the identity here. The
+      # row is updated, not inserted, so this is a login.
+      it "is false when a pre-existing account merely gains the Google identity" do
+        existing = create(:user, email: "native@example.com", provider: nil, uid: nil)
+
+        post "/api/v1/auth/google/native", params: { id_token: "valid.jwt", platform: "android" }, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["new_user"]).to be(false)
+        expect(existing.reload.provider).to eq("google_oauth2")
+        expect(existing.uid).to eq("google-sub-123")
+      end
+    end
+
     it "refuses to create a new user without consent" do
       allow(Auth::GoogleIdTokenVerifier).to receive(:verify!).and_return(claims)
 
