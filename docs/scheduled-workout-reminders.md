@@ -9,7 +9,7 @@ horario fixo de treino informado no onboarding. O Rails so registra o fato em
 Fluxo:
 
 ```text
-cron */5 -> scheduled_workout_reminders:run
+cron */15 -> orchestration:run_15min
 -> ScheduledWorkoutReminderSchedulerJob
 -> ScheduledWorkoutReminderEligibility
 -> RelationshipEventTracker
@@ -41,8 +41,16 @@ cron */5 -> scheduled_workout_reminders:run
   `user_events(user_id, event_name, idempotency_key)`.
 - `reminder_local_date` e a data local em que o lembrete e emitido. Exemplo:
   treino `00:15` gera lembrete `23:45` na data local anterior.
-- O scheduler usa janela de 10 minutos para cron de 5 minutos:
-  `reminder_at <= now` e `reminder_at > now - 10.minutes`.
+- Regra de produto: `reminder_due_at = preferred_workout_time - lead_time`, com
+  `lead_time` em `SCHEDULED_WORKOUT_REMINDER_LEAD_MINUTES` (default 30).
+- A janela de 20 minutos e TOLERANCIA do scheduler, nao parte da regra:
+  `reminder_due_at <= now` e `reminder_due_at > now - 20.minutes`. Nunca dispara
+  adiantado; so pega um alvo que JA ficou due. Precisa ser >= o intervalo do
+  cron (15min), senao um instante due cai entre dois ticks e se perde.
+  Treino 07:10 => due 06:40 => tick 06:30 nao gera, tick 06:45 gera 5min tarde.
+- Elegibilidade so bloqueia por regra de NEGOCIO (plano, horario, timezone,
+  treino concluido, maximo, ja enviado hoje). `push_disabled`, ausencia de
+  token e allowlist do Make NAO impedem o evento: sao decididos no dispatch.
 - Se o plano foi criado depois do horario de lembrete do dia, a primeira
   ocorrencia valida fica para o proximo dia.
 
@@ -54,15 +62,21 @@ MAKE_WEBHOOK_ENABLED=true
 MAKE_WEBHOOK_URL=https://make.example/webhook
 MAKE_WEBHOOK_SECRET=secret
 MAKE_EVENT_SCHEMA_VERSION=2
-MAKE_WEBHOOK_ALLOWED_EVENTS=scheduled_workout_reminder_due
 MAKE_PUSH_ORCHESTRATION_ENABLED=true
+SCHEDULED_WORKOUT_REMINDER_LEAD_MINUTES=30
 ```
 
-Adicionar ao cron da VPS:
+`MAKE_WEBHOOK_ALLOWED_EVENTS` nao e mais necessario: a fonte de verdade e
+`config/communication_events.yml`, que ja lista `scheduled_workout_reminder_due`.
 
-```cron
-*/5 * * * * cd /path/api && bin/rails scheduled_workout_reminders:run
+Cron: instalado pelo bloco versionado, nunca a mao.
+
+```bash
+scripts/cron/install_cron.sh            # DRY RUN, mostra o diff
+APPLY=1 scripts/cron/install_cron.sh    # aplica
 ```
+
+Rollout completo em `docs/event-orchestration.md`.
 
 ## Execucao Local
 

@@ -5,6 +5,7 @@ module Api
       include RateLimiter
       include RequiresActiveAccess
       include AppInstallationReconciliation
+      include OriginSurfaceContext
 
       before_action :authenticate_user!
       before_action :set_sentry_user_context

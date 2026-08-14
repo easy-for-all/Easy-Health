@@ -65,6 +65,29 @@ module Api
                  status: :service_unavailable
         end
 
+        # GET /api/v1/admin/analytics/android_acquisition
+        # AQUISIÇÃO ANDROID — o que o Google Ads atribuiu à campanha ao lado do
+        # que o produto realmente registrou. Lê apenas o cache
+        # google_ads_daily_metrics; a API do Google é chamada exclusivamente
+        # pelo cron (GoogleAdsAndroidAcquisitionSyncJob).
+        #
+        # Uma indisponibilidade do Google NÃO derruba esta página: o cache
+        # anterior continua sendo servido com sync.status "stale"/"error". O 503
+        # abaixo cobre só falha do nosso próprio lado (banco, erro inesperado).
+        def android_acquisition
+          render json: ::Analytics::AndroidAcquisition.new(
+            period: params[:period],
+            start_date: params[:start],
+            end_date: params[:end]
+          ).call
+        rescue ::Analytics::AndroidAcquisition::InvalidRange => e
+          render json: { error: e.message }, status: :unprocessable_entity
+        rescue StandardError => e
+          Rails.logger.error("[Admin::Analytics#android_acquisition] #{e.class}: #{e.message}")
+          render json: { error: "Aquisição Android indisponível no momento." },
+                 status: :service_unavailable
+        end
+
         # GET /api/v1/admin/analytics/post_onboarding_experiment
         # EXPERIMENTO ANDROID — CONTA APÓS O ONBOARDING. A unidade é a instalação
         # EXPOSTA: atribuídas incluem quem nunca chegou à bifurcação, e dividir
@@ -79,6 +102,24 @@ module Api
         rescue StandardError => e
           Rails.logger.error("[Admin::Analytics#post_onboarding_experiment] #{e.class}: #{e.message}")
           render json: { error: "Painel do experimento indisponível no momento." },
+                 status: :service_unavailable
+        end
+
+        # GET /api/v1/admin/analytics/event_orchestration
+        # EVENTOS & COMUNICAÇÕES — o pipeline inteiro: evento de orquestração
+        # gerado -> enviado ao Make -> aceito -> push solicitado -> resultado do
+        # provider. Só observabilidade: copy e campanha continuam no Make.
+        def event_orchestration
+          render json: ::Analytics::EventOrchestration.new(
+            period: params[:period],
+            start_date: params[:from],
+            end_date: params[:to]
+          ).call
+        rescue ::Analytics::EventOrchestration::InvalidRange => e
+          render json: { error: e.message }, status: :unprocessable_entity
+        rescue StandardError => e
+          Rails.logger.error("[Admin::Analytics#event_orchestration] #{e.class}: #{e.message}")
+          render json: { error: "Painel de eventos e comunicações indisponível no momento." },
                  status: :service_unavailable
         end
 

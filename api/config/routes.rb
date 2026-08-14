@@ -167,8 +167,12 @@ Rails.application.routes.draw do
         # to instrumented builds (source: app_installations + product_analytics_events)
         get "analytics/android_funnel", to: "analytics#android_funnel"
         get "analytics/android_funnel/installations", to: "analytics#android_funnel_installations"
+        # AQUISIÇÃO ANDROID — Google Ads atribuído x uso real do produto. Lê
+        # apenas o cache google_ads_daily_metrics: nunca chama a API do Google.
+        get "analytics/android_acquisition", to: "analytics#android_acquisition"
         # EXPERIMENTO ANDROID — CONTA APÓS O ONBOARDING (unidade: instalação exposta)
         get "analytics/post_onboarding_experiment", to: "analytics#post_onboarding_experiment"
+        get "analytics/event_orchestration", to: "analytics#event_orchestration"
         get "analytics/event_deliveries", to: "analytics#event_deliveries"
         get "analytics/event_deliveries/:id", to: "analytics#event_delivery"
         # Admin-only diagnostic: sends a test push to the CURRENT admin's own

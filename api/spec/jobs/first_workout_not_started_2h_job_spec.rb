@@ -57,18 +57,56 @@ RSpec.describe FirstWorkoutNotStarted2hJob, type: :job do
     expect(event_count(user)).to eq(0)
   end
 
-  it "skips outside the quiet-hours window, then emits on the next daytime run", :no_travel do
+  # The fact is independent of the clock. Quiet hours belong to dispatch, and
+  # holding the event back until daytime used to lose it whenever the anchor
+  # aged past the detection window overnight.
+  it "emits inside the quiet-hours window too", :no_travel do
     user = create(:user, time_zone: "America/Sao_Paulo")
 
     travel_to(Time.utc(2026, 7, 20, 6, 0)) do # 03:00 São Paulo
       create_anchor(user, hours_ago: 3)
       described_class.perform_now
-      expect(event_count(user)).to eq(0)
-    end
 
-    travel_to(Time.utc(2026, 7, 20, 13, 0)) do # 10:00 São Paulo (same anchor, still in window)
-      described_class.perform_now
       expect(event_count(user)).to eq(1)
     end
+  end
+
+  it "does not duplicate when a later run happens outside quiet hours", :no_travel do
+    user = create(:user, time_zone: "America/Sao_Paulo")
+
+    travel_to(Time.utc(2026, 7, 20, 6, 0)) do # 03:00 São Paulo
+      create_anchor(user, hours_ago: 3)
+      described_class.perform_now
+    end
+
+    travel_to(Time.utc(2026, 7, 20, 13, 0)) do # 10:00 São Paulo
+      described_class.perform_now
+    end
+
+    expect(event_count(user)).to eq(1)
+  end
+
+  it "carries the anchor reference and its origin into the metadata" do
+    user = create(:user, time_zone: "America/Sao_Paulo")
+    anchor = create_anchor(user, hours_ago: 3)
+    anchor.update_column(:origin_surface, "android")
+
+    described_class.perform_now
+
+    metadata = UserEvent.find_by(user: user, event_name: "first_workout_not_started_2h").metadata
+    expect(metadata["anchor_event_id"]).to eq(anchor.id)
+    expect(metadata["anchor_origin_surface"]).to eq("android")
+  end
+
+  it "reports counters on the heartbeat metadata" do
+    user = create(:user, time_zone: "America/Sao_Paulo")
+    create_anchor(user, hours_ago: 3)
+
+    job = described_class.new
+    stats = job.perform
+
+    expect(stats[:candidates_found]).to eq(1)
+    expect(stats[:events_created]).to eq(1)
+    expect(job.heartbeat_metadata).to eq(stats)
   end
 end

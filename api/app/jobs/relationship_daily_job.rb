@@ -21,7 +21,8 @@ class RelationshipDailyJob < ApplicationJob
           metadata: candidate[:metadata],
           occurred_at: candidate[:occurred_at],
           idempotency_key: candidate[:idempotency_key],
-          source: "relationship_daily"
+          source: "relationship_daily",
+          origin_surface: "backend_scheduler"
         )
         next unless event
 
@@ -34,9 +35,12 @@ class RelationshipDailyJob < ApplicationJob
       end
     end
 
+    @heartbeat_metadata = stats
     Rails.logger.info("[RelationshipDailyJob] #{stats.inspect}")
     stats
   end
+
+  attr_reader :heartbeat_metadata
 
   private
 
@@ -104,11 +108,19 @@ class RelationshipDailyJob < ApplicationJob
     }
   end
 
+  # Quiet hours are deliberately absent here. This job runs once a day; gating
+  # it on the local clock meant that a user whose timezone put the cron outside
+  # 08–21 never got an inactivity event at all, because there is no second tick
+  # to catch up. Whether a push may be sent is decided at dispatch.
+  #
+  # Catch-up is explicit: a user 10 days idle with neither event recorded gets
+  # BOTH thresholds in one run, because both were genuinely crossed. The
+  # metadata says when each was crossed and that the detection was late, so
+  # Make can decide whether to communicate and the admin does not read the
+  # event as having happened at that instant.
   def inactivity_candidates(user)
     last_workout_at = user.workout_sessions.maximum(:completed_at)
     return [] unless last_workout_at
-    # Inactivity events route to push; respect the quiet-hours window (V1).
-    return [] unless PushQuietHours.allowed?(user: user)
 
     days_inactive = (Date.current - last_workout_at.to_date).to_i
     [ 3, 7 ].filter_map do |threshold|
@@ -119,7 +131,14 @@ class RelationshipDailyJob < ApplicationJob
         event_name: event_name,
         occurred_at: Time.current,
         idempotency_key: "#{event_name}:#{user.id}:#{last_workout_at.to_date}",
-        metadata: { days_since_last_workout: days_inactive, last_workout_at: last_workout_at.iso8601 }
+        metadata: {
+          days_since_last_workout: days_inactive,
+          last_workout_at: last_workout_at.iso8601,
+          threshold_days: threshold,
+          threshold_crossed_at: (last_workout_at + threshold.days).iso8601,
+          detected_at: Time.current.iso8601,
+          catchup: days_inactive > threshold + 1
+        }
       }
     end
   end

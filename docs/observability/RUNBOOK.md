@@ -26,6 +26,28 @@ E limpeza diária (retenção de check results + incidentes órfãos):
 
 Confira o cron existente da réplica BI com `crontab -l` e mantenha `BI_REPLICA_EXPECTED_HOUR` coerente com ele.
 
+### Bloco gerenciado da orquestração de eventos
+
+As rotinas acima continuam manuais. Os produtores de evento de orquestração
+(lembretes 2h/24h, horário preferido e jornada diária) vivem em um bloco
+**versionado**, instalado por script e delimitado por
+`# >>> easyhealth-orchestration >>>`:
+
+```bash
+scripts/cron/install_cron.sh          # DRY RUN (default): mostra o diff, não aplica
+APPLY=1 scripts/cron/install_cron.sh  # aplica
+```
+
+O script preserva byte a byte tudo que está fora dos marcadores. Se o diff
+mostrar a entrada legada `rails runner "RelationshipDailyJob..."`, substitua-a
+com `MIGRATE_RELATIONSHIP_DAILY=1` — mantê-la junto com
+`orchestration:relationship_daily` rodaria o mesmo job duas vezes por dia.
+
+Saúde desses schedulers: heartbeats `first_workout_not_started_2h`,
+`first_workout_not_started_24h`, `scheduled_workout_reminder` e
+`relationship_daily_job`, visíveis em `/admin/events-communications` e via
+`rake orchestration:status`. Detalhes em `docs/event-orchestration.md`.
+
 ---
 
 ## 1. Cadastro Android caiu

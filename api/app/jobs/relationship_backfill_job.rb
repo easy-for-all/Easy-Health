@@ -44,7 +44,8 @@ class RelationshipBackfillJob < ApplicationJob
           occurred_at: candidate[:occurred_at],
           idempotency_key: candidate[:idempotency_key],
           source: "relationship_backfill",
-          suppress_make_delivery: !allow_make_delivery
+          suppress_make_delivery: !allow_make_delivery,
+          origin_surface: "backend_scheduler"
         )
         stats[:events_created] += 1 if event
       end

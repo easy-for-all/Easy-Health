@@ -101,9 +101,9 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
 
   it "does not create a replacement event when a previous Make delivery failed" do
     user, plan = build_candidate
-    create_reminder_event(user, plan, local_date: "2026-07-19", reminder_number: 1, status: "failed")
-    create_reminder_event(user, plan, local_date: "2026-07-20", reminder_number: 2, status: "failed")
-    create_reminder_event(user, plan, local_date: "2026-07-21", reminder_number: 3, status: "failed")
+    create_reminder_event(user, plan, local_date: "2026-07-19", reminder_number: 1, status: "dead_letter")
+    create_reminder_event(user, plan, local_date: "2026-07-20", reminder_number: 2, status: "dead_letter")
+    create_reminder_event(user, plan, local_date: "2026-07-21", reminder_number: 3, status: "dead_letter")
 
     described_class.perform_now(now: now)
 
@@ -151,6 +151,49 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     end
 
     expect(reminder_events(user).count).to eq(1)
+  end
+
+  it "records when the reminder became due, apart from when it was detected" do
+    user, = build_candidate
+    detected_at = zone.local(2026, 7, 21, 6, 44) # a tick 14 minutes late
+
+    described_class.perform_now(now: detected_at)
+
+    activation = reminder_events(user).last.metadata["activation"]
+    expect(Time.zone.parse(activation["reminder_due_at"])).to eq(zone.local(2026, 7, 21, 6, 30))
+    expect(Time.zone.parse(activation["detected_at"])).to eq(detected_at)
+    expect(activation["reminder_lead_minutes"]).to eq(30)
+    expect(activation["timezone"]).to eq("America/Sao_Paulo")
+  end
+
+  it "stamps the scheduler as the origin surface" do
+    user, = build_candidate
+
+    described_class.perform_now(now: now)
+
+    expect(reminder_events(user).last.origin_surface).to eq("backend_scheduler")
+  end
+
+  # These users are the whole point of the reminder: they said when they want to
+  # train but have not granted push yet. Make still gets the fact.
+  it "creates the event for a user with no push permission" do
+    user, = build_candidate
+    user.notification_preferences.update!(push_enabled: false)
+    user.device_tokens.destroy_all
+
+    described_class.perform_now(now: now)
+
+    expect(reminder_events(user).count).to eq(1)
+  end
+
+  it "reports counters on the heartbeat metadata" do
+    build_candidate
+
+    job = described_class.new
+    stats = job.perform(now: now)
+
+    expect(stats[:event_created]).to eq(1)
+    expect(job.heartbeat_metadata[:event_created]).to eq(1)
   end
 
   it "does not register events when the feature flag is disabled" do

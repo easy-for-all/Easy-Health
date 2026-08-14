@@ -72,6 +72,8 @@ class MakeWebhookClient
     else
       mark_http_failure(user_event, response, duration_ms)
     end
+  rescue Make::EventPayloadSerializer::IncompleteEventError => e
+    mark_contract_failure(user_event, e, attempt_started_at)
   rescue Net::OpenTimeout, Net::ReadTimeout => e
     mark_exception(user_event, e, attempt_started_at)
   rescue => e
@@ -81,6 +83,47 @@ class MakeWebhookClient
   private
 
   attr_reader :max_attempts
+
+  # An orchestration event that cannot produce its required payload is a
+  # CONTRACT failure, not a transient network problem and not a skip: the fact
+  # was born and something in the producer/serializer is broken.
+  #
+  # It gets exactly ONE retry. Most REQUIRED_CONTEXT fields come from metadata
+  # written at creation and are deterministic, but first_workout_completed
+  # resolves its session with a DB lookup — and with the :async adapter,
+  # perform_later can run before the creating transaction commits. One retry
+  # covers that race; after it, the failure is permanent and burning the
+  # remaining attempts would only hide it.
+  def mark_contract_failure(user_event, error, attempt_started_at)
+    missing_fields = error.message[/fields=(\S+)/, 1].to_s
+    retriable = user_event.make_attempts_count.to_i <= 1
+    status = retriable ? "retrying" : "dead_letter"
+
+    Rails.logger.error(
+      {
+        message: "make_event_contract_failed",
+        event_id: user_event.id,
+        event_name: user_event.event_name,
+        user_id: user_event.user_id,
+        error_code: "missing_required_context",
+        missing_fields: missing_fields,
+        attempts: user_event.make_attempts_count,
+        status: status,
+        timestamp: Time.current.utc.iso8601
+      }.to_json
+    )
+
+    user_event.update!(
+      make_delivery_status: status,
+      make_last_error: "missing_required_context",
+      make_last_error_class: error.class.name,
+      make_last_error_message: error.message.to_s.first(1000),
+      make_next_retry_at: retriable ? 1.minute.from_now : nil,
+      make_delivery_duration_ms: duration_ms_since(attempt_started_at)
+    )
+
+    Result.new(status: status, error: "missing_required_context")
+  end
 
   # A communication event must be known AND enabled with at least one channel.
   # Anything else is recorded as skipped — never sent with an empty/implicit

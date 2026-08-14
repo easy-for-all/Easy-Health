@@ -1,4 +1,8 @@
 class ScheduledWorkoutReminderSchedulerJob < ApplicationJob
+  # Runs every ~15min from cron. Silence means nobody gets the reminder they
+  # asked for at onboarding, with no other symptom.
+  def self.observability_heartbeat_key = "scheduled_workout_reminder"
+
   queue_as :default
 
   SOURCE = "scheduled_workout_reminder_scheduler".freeze
@@ -48,19 +52,24 @@ class ScheduledWorkoutReminderSchedulerJob < ApplicationJob
       end
     end
 
+    @heartbeat_metadata = stats.to_h
     Rails.logger.info("[ScheduledWorkoutReminderSchedulerJob] #{stats.inspect}")
     stats
   end
 
+  attr_reader :heartbeat_metadata
+
   private
 
+  # Business preconditions only. Push preferences and device tokens are NOT
+  # joined here any more: whether the reminder can be delivered is answered at
+  # dispatch, and filtering on it here silently erased the event for anyone who
+  # had not granted push yet — exactly the users a reminder is meant to reach.
   def candidate_users(only_user_ids:)
     relation = User
-      .joins(:health_profile, :notification_preferences, :workout_plans, :device_tokens)
+      .joins(:health_profile, :workout_plans)
       .where(deletion_requested_at: nil, anonymized_at: nil)
       .where(workout_plans: { active: true })
-      .where(user_notification_preferences: { push_enabled: true, workout_reminders_enabled: true })
-      .where(device_tokens: { enabled: true, invalidated_at: nil, permission_status: "granted" })
       .where.not(users: { time_zone: [ nil, "" ] })
       .where.not(health_profiles: { preferred_workout_time: nil })
       .where.not(health_profiles: { preferred_workout_period: "variable" })

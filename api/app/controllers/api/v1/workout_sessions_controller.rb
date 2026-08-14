@@ -57,7 +57,8 @@ module Api
             event: :first_workout_started,
             metadata: { workout_session_id: session.id, workout_day_id: workout_day_id },
             occurred_at: session.created_at,
-            idempotency_key: "first_workout_started:#{current_user.id}:#{session.id}"
+            idempotency_key: "first_workout_started:#{current_user.id}:#{session.id}",
+            origin_surface: origin_surface_from_request
           )
         end
 
@@ -432,7 +433,8 @@ module Api
           event: event,
           metadata: metadata,
           occurred_at: session.completed_at,
-          idempotency_key: "#{event}:#{current_user.id}:#{session.id}"
+          idempotency_key: "#{event}:#{current_user.id}:#{session.id}",
+          origin_surface: origin_surface_from_request
         )
 
         return unless status == "completed"
@@ -466,7 +468,8 @@ module Api
           event: :first_workout_completed,
           metadata: metadata,
           occurred_at: session.completed_at,
-          idempotency_key: "first_workout_completed:#{current_user.id}:#{session.id}"
+          idempotency_key: "first_workout_completed:#{current_user.id}:#{session.id}",
+          origin_surface: origin_surface_from_request
         )
         if first_completed
           PushJourney.track_eligible(user: current_user, event_name: "first_workout_completed",

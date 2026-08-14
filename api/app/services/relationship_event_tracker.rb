@@ -97,8 +97,15 @@ class RelationshipEventTracker
 
   SENSITIVE_KEY_PATTERN = /(password|token|secret|authorization|card|stripe|cpf|ssn|cvv|cvc|dsn|api_key|access_key)/i
 
+  # Surfaces/processes that can produce an event. "unknown" is stored as NULL:
+  # a historical or unclassifiable event genuinely has no origin, and inventing
+  # one from an indirect signal (a device token proves capability, not origin)
+  # would be worse than admitting the gap.
+  ORIGIN_SURFACES = %w[android web backend_scheduler admin unknown].freeze
+
   def self.track(user:, event_name: nil, event: nil, metadata: {}, source: "easyhealth_backend",
-                 occurred_at: Time.current, idempotency_key: nil, suppress_make_delivery: false)
+                 occurred_at: Time.current, idempotency_key: nil, suppress_make_delivery: false,
+                 origin_surface: nil)
     new(
       user: user,
       event_name: event_name || event,
@@ -106,8 +113,16 @@ class RelationshipEventTracker
       source: source,
       occurred_at: occurred_at,
       idempotency_key: idempotency_key,
-      suppress_make_delivery: suppress_make_delivery
+      suppress_make_delivery: suppress_make_delivery,
+      origin_surface: origin_surface
     ).track
+  end
+
+  def self.normalize_origin_surface(value)
+    normalized = value.to_s.strip.downcase
+    return nil if normalized.blank? || normalized == "unknown"
+
+    ORIGIN_SURFACES.include?(normalized) ? normalized : nil
   end
 
   def self.sanitize_metadata(value)
@@ -129,7 +144,8 @@ class RelationshipEventTracker
     end
   end
 
-  def initialize(user:, event_name:, metadata:, source:, occurred_at:, idempotency_key:, suppress_make_delivery:)
+  def initialize(user:, event_name:, metadata:, source:, occurred_at:, idempotency_key:,
+                 suppress_make_delivery:, origin_surface: nil)
     @user = user
     @event_name = event_name.to_s
     @metadata = self.class.sanitize_metadata(metadata || {})
@@ -137,6 +153,7 @@ class RelationshipEventTracker
     @occurred_at = occurred_at || Time.current
     @idempotency_key = idempotency_key.presence
     @suppress_make_delivery = suppress_make_delivery
+    @origin_surface = self.class.normalize_origin_surface(origin_surface)
   end
 
   def track
@@ -193,25 +210,51 @@ class RelationshipEventTracker
       event_name: @event_name,
       occurred_at: @occurred_at,
       source: @source,
+      origin_surface: @origin_surface,
       metadata: @metadata,
       payload_json: build_payload,
       idempotency_key: @idempotency_key,
       make_delivery_status: initial_make_delivery_status,
       make_delivery_channels: delivery_channels,
-      make_destination: delivery_destination
+      make_destination: delivery_destination,
+      make_last_error: initial_make_delivery_error
     }
   end
 
-  def initial_make_delivery_status
-    MakeWebhookEligibility.eligible_for_new_event?(
+  def eligible_for_make?
+    return @eligible_for_make if defined?(@eligible_for_make)
+
+    @eligible_for_make = MakeWebhookEligibility.eligible_for_new_event?(
       user: @user,
       event_name: @event_name,
       suppress_make_delivery: @suppress_make_delivery
-    ) ? "pending" : "disabled"
+    )
   end
 
+  def initial_make_delivery_status
+    eligible_for_make? ? "pending" : "disabled"
+  end
+
+  # Why an event was born "disabled". Without this the admin cannot tell an
+  # expected skip (analytics event, no email consent) from a broken pipeline,
+  # and every orchestration event stuck at "disabled" looks the same.
+  def initial_make_delivery_error
+    return nil if eligible_for_make?
+    return "suppressed_by_producer" if @suppress_make_delivery
+
+    MakeWebhookEligibility.ineligibility_reason(
+      UserEvent.new(user: @user, event_name: @event_name)
+    )
+  rescue => e
+    Rails.logger.warn("[RelationshipEventTracker] Failed to resolve ineligibility reason: #{e.class}")
+    nil
+  end
+
+  # Candidate channels for THIS user: the catalog's channels minus the ones a
+  # per-channel hard gate closes (e.g. no marketing consent removes email but
+  # leaves push). Empty for events that are not orchestration events at all.
   def delivery_channels
-    CommunicationEvents.channels_for(@event_name)
+    MakeWebhookEligibility.deliverable_channels(@user, @event_name)
   rescue CommunicationEvents::ConfigError
     []
   end

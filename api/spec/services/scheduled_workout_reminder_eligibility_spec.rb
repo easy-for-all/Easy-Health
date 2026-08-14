@@ -88,23 +88,58 @@ RSpec.describe ScheduledWorkoutReminderEligibility do
     expect(result_for(invalid_tz).reason).to eq("invalid_timezone")
   end
 
-  it "rejects disabled push or missing granted device tokens" do
-    push_disabled, = build_candidate
-    push_disabled.notification_preferences.update!(push_enabled: false)
+  # "The user asked to train at 07:00 and it is 06:30" is a fact about the
+  # user's plan, not about their push settings. Those settings are re-checked at
+  # dispatch, where they are still true when Make actually asks; blocking the
+  # event here lost the fact for exactly the people a reminder should reach.
+  describe "communication settings do not block the event" do
+    it "stays eligible with push disabled" do
+      user, = build_candidate
+      user.notification_preferences.update!(push_enabled: false)
 
-    denied_device, = build_candidate
-    denied_device.device_tokens.update_all(permission_status: "denied") # rubocop:disable Rails/SkipsModelValidations
+      expect(result_for(user)).to be_eligible
+    end
 
-    expect(result_for(push_disabled).reason).to eq("push_disabled")
-    expect(result_for(denied_device).reason).to eq("no_active_device_token")
+    it "stays eligible with workout reminders disabled" do
+      user, = build_candidate
+      user.notification_preferences.update!(workout_reminders_enabled: false)
+
+      expect(result_for(user)).to be_eligible
+    end
+
+    it "stays eligible with no granted device token" do
+      user, = build_candidate
+      user.device_tokens.update_all(permission_status: "denied") # rubocop:disable Rails/SkipsModelValidations
+
+      expect(result_for(user)).to be_eligible
+    end
+
+    it "stays eligible with no preferences row at all" do
+      user, = build_candidate
+      user.notification_preferences.destroy!
+      user.reload
+
+      expect(result_for(user)).to be_eligible
+    end
+
+    it "stays eligible with the legacy env allowlist empty" do
+      user, = build_candidate
+
+      with_env("MAKE_WEBHOOK_ALLOWED_EVENTS" => "") do
+        expect(result_for(user)).to be_eligible
+      end
+    end
   end
 
-  it "rejects a candidate with no preferences row (stays blocked)" do
-    user, = build_candidate
-    user.notification_preferences.destroy!
-    user.reload
+  it "rejects a deleted or anonymized account" do
+    deleted, = build_candidate
+    deleted.update!(deletion_requested_at: Time.current)
 
-    expect(result_for(user).reason).to eq("push_disabled")
+    anonymized, = build_candidate
+    anonymized.update!(anonymized_at: Time.current)
+
+    expect(result_for(deleted).reason).to eq("user_deleted_or_anonymized")
+    expect(result_for(anonymized).reason).to eq("user_deleted_or_anonymized")
   end
 
   it "rejects a missing current plan" do
@@ -180,6 +215,56 @@ RSpec.describe ScheduledWorkoutReminderEligibility do
 
     with_env("SCHEDULED_WORKOUT_REMINDER_ENABLED" => "false") do
       expect(result_for(user).reason).to eq("feature_disabled")
+    end
+  end
+
+  # The product rule is reminder_due_at = preferred_workout_time - lead_time.
+  # The scheduler's tolerance window only decides how LATE a due moment may
+  # still be picked up; it must never make a reminder fire early.
+  describe "the due moment" do
+    it "does not fire before the lead time, even inside the window" do
+      user, = build_candidate(preferred_time: "07:10") # due 06:40
+
+      expect(result_for(user, at: zone.local(2026, 7, 21, 6, 30))).not_to be_eligible
+    end
+
+    it "fires late rather than not at all when a tick straddles the due moment" do
+      user, = build_candidate(preferred_time: "07:10") # due 06:40
+
+      result = result_for(user, at: zone.local(2026, 7, 21, 6, 45))
+
+      expect(result).to be_eligible
+      expect(result.schedule.reminder_time).to eq("06:40")
+    end
+
+    # With a 15min cron, a 10min window let a due moment fall between two ticks
+    # and vanish. The window must cover the whole gap.
+    it "still catches a reminder due 14 minutes ago" do
+      user, = build_candidate(preferred_time: "07:00") # due 06:30
+
+      expect(result_for(user, at: zone.local(2026, 7, 21, 6, 44))).to be_eligible
+    end
+
+    it "honours a configured lead time" do
+      user, = build_candidate(preferred_time: "07:00")
+
+      with_env("SCHEDULED_WORKOUT_REMINDER_LEAD_MINUTES" => "45") do
+        result = result_for(user, at: zone.local(2026, 7, 21, 6, 15))
+
+        expect(result).to be_eligible
+        expect(result.schedule.reminder_time).to eq("06:15")
+        expect(result.schedule.reminder_lead_minutes).to eq(45)
+      end
+    end
+
+    it "resolves the due moment in the user's own timezone" do
+      user, = build_candidate(preferred_time: "07:00")
+      user.update!(time_zone: "Europe/Lisbon")
+
+      lisbon_due = ActiveSupport::TimeZone["Europe/Lisbon"].local(2026, 7, 21, 6, 30)
+
+      expect(result_for(user, at: lisbon_due)).to be_eligible
+      expect(result_for(user, at: zone.local(2026, 7, 21, 6, 30))).not_to be_eligible
     end
   end
 end

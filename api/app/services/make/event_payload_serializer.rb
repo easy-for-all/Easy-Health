@@ -68,6 +68,9 @@ module Make
         event_name: event.event_name,
         occurred_at: event.occurred_at&.iso8601,
         source: SOURCE,
+        # The surface that produced the event, distinct from the channel it may
+        # be communicated on. NULL reads as "unknown" rather than being guessed.
+        origin_surface: event.origin_surface.presence || "unknown",
         environment: Rails.env,
         delivery: delivery_payload,
         user: user_payload,
@@ -186,10 +189,21 @@ module Make
     # Channels come from the override (smoke test) or the canonical config;
     # communication_type and engagement always come from the canonical config so
     # Make can route and cap without a second source of truth.
+    #
+    # `channels` is what the live Make scenario filters on ("contains push") and
+    # is deliberately unchanged. `candidate_channels` is the same array under
+    # the name that says what it means — these are channels this user COULD be
+    # reached on, not channels anything was sent on. notification_type and route
+    # are mirrored here from the push block so a scenario can route without
+    # reaching into a second object; both remain populated.
     def delivery_payload
+      channels = resolved_channels
       payload = {
-        channels: resolved_channels,
+        channels: channels,
+        candidate_channels: channels,
         communication_type: CommunicationEvents.communication_type_for(event.event_name),
+        notification_type: CommunicationEvents.notification_type_for(event.event_name),
+        route: CommunicationEvents.route_for(event.event_name),
         engagement: CommunicationEvents.engagement?(event.event_name)
       }
       campaign = sanitized_metadata["campaign"].presence ||
