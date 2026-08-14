@@ -1,7 +1,11 @@
 # Shared logic for the "first workout not started" reminders (2h / 24h).
-# Detects eligibility, re-checks the LIVE condition, respects the quiet-hours
-# window, and emits the business event exactly once. The event is delivered to
-# Make, which selects the copy and calls the push dispatch endpoint.
+# Detects eligibility, re-checks the LIVE condition, and emits the business
+# event exactly once. The event is delivered to Make, which selects the copy and
+# calls the push dispatch endpoint.
+#
+# Quiet hours are deliberately NOT consulted here. "This user created a plan 2h
+# ago and never started it" is a fact regardless of the local clock; whether a
+# push may be sent for it is decided later, at dispatch.
 #
 # Cancellation is implicit: if the user starts a workout the condition fails and
 # no event is emitted. Idempotency (per anchor event) prevents duplicates.
@@ -11,31 +15,34 @@
 class FirstWorkoutNotStartedJob < ApplicationJob
   queue_as :default
 
-  def perform(now: Time.current)
-    stats = { candidates_found: 0, events_created: 0, skipped_quiet_hours: 0 }
+  def perform
+    stats = { candidates_found: 0, events_created: 0, already_emitted: 0 }
 
     candidate_events.find_each do |anchor_event|
       user = anchor_event.user
       next unless user
       next if started_first_workout?(user)
 
-      key = idempotency_key(user, anchor_event)
-      next if UserEvent.exists?(user: user, event_name: event_name, idempotency_key: key)
-
       stats[:candidates_found] += 1
 
-      unless PushQuietHours.allowed?(user: user, at: now)
-        stats[:skipped_quiet_hours] += 1
-        next # next cron tick re-evaluates once inside 08–21 local
+      key = idempotency_key(user, anchor_event)
+      if UserEvent.exists?(user: user, event_name: event_name, idempotency_key: key)
+        stats[:already_emitted] += 1
+        next
       end
 
       event = emit(user, anchor_event, key)
       stats[:events_created] += 1 if event
     end
 
+    @heartbeat_metadata = stats
     Rails.logger.info("[#{self.class.name}] #{stats.inspect}")
     stats
   end
+
+  # Reported on the heartbeat so the admin can tell "ran and found nothing" from
+  # "ran and produced nothing", which look identical from liveness alone.
+  attr_reader :heartbeat_metadata
 
   private
 
@@ -56,11 +63,17 @@ class FirstWorkoutNotStartedJob < ApplicationJob
       metadata: {
         workout_plan_id: anchor_event.metadata["workout_plan_id"],
         activation_event_id: anchor_event.id,
+        # The journey's origin, kept apart from origin_surface: THIS event was
+        # produced by the scheduler, but it started from wherever the user
+        # created the plan. Two questions, two fields, no second column.
+        anchor_event_id: anchor_event.id,
+        anchor_origin_surface: anchor_event.origin_surface.presence || "unknown",
         first_workout_created_at: anchor_event.created_at.iso8601
       },
       occurred_at: Time.current,
       idempotency_key: key,
-      source: "push_journey"
+      source: "push_journey",
+      origin_surface: "backend_scheduler"
     )
     # Funnel: eligible fires on successful creation; requested_to_make is emitted
     # centrally by MakeWebhookClient when the webhook is actually delivered.

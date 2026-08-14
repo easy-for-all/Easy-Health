@@ -459,6 +459,119 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
     end
   end
 
+  describe "quiet hours" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    let!(:token) { create(:device_token, user: user, permission_status: "granted") }
+
+    before { user.update!(time_zone: "America/Sao_Paulo") }
+
+    # 03:00 in São Paulo — outside the 08–21 window.
+    def at_night(&block)
+      travel_to(Time.utc(2026, 7, 20, 6, 0), &block)
+    end
+
+    it "sends at night when the gate is off, preserving today's behaviour" do
+      at_night do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "false") { post_dispatch(valid_payload) }
+      end
+
+      expect(json["sent"]).to be(true)
+    end
+
+    it "skips at night when the gate is on" do
+      at_night do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(json["skip_reason"]).to eq("quiet_hours")
+      expect(json["sent"]).to be(false)
+    end
+
+    # Without this, a quiet-hours skip would silently destroy the
+    # communication: Make has no way to know it could retry.
+    it "tells Make when it may try again, in the user's timezone" do
+      at_night do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+      end
+
+      expect(json["deferred"]).to be(true)
+      expect(json["user_timezone"]).to eq("America/Sao_Paulo")
+
+      next_allowed = Time.zone.parse(json["next_allowed_at"])
+      expect(next_allowed.in_time_zone("America/Sao_Paulo").hour).to eq(PushQuietHours::START_HOUR)
+      expect(next_allowed).to be > Time.utc(2026, 7, 20, 6, 0)
+    end
+
+    it "marks a permanent skip as not deferred" do
+      user.notification_preferences!.update!(push_enabled: false)
+
+      with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+
+      expect(json["skip_reason"]).to eq("global_opt_out")
+      expect(json["deferred"]).to be(false)
+      expect(json["next_allowed_at"]).to be_nil
+    end
+
+    it "persists the reason on the dispatch row" do
+      at_night do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+      end
+
+      expect(PushDispatch.last.skip_reason).to eq("quiet_hours")
+      expect(PushDispatch::SKIP_REASONS).to include("quiet_hours")
+    end
+
+    it "sends during the day with the gate on" do
+      travel_to(Time.utc(2026, 7, 20, 13, 0)) do # 10:00 São Paulo
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+      end
+
+      expect(json["sent"]).to be(true)
+    end
+  end
+
+  describe "correlation with the business event" do
+    let!(:token) { create(:device_token, user: user, permission_status: "granted") }
+
+    let(:user_event) do
+      UserEvent.create!(user: user, event_name: "user_inactive_3_days",
+                        occurred_at: Time.current, metadata: {})
+    end
+
+    it "links the dispatch to the UserEvent Make echoed back" do
+      post_dispatch(valid_payload(event_id: user_event.id.to_s))
+
+      expect(PushDispatch.last.user_event_id).to eq(user_event.id)
+    end
+
+    # event_id is client-supplied. Attaching one user's dispatch to another
+    # user's event would corrupt the whole pipeline view.
+    it "refuses to correlate an event that belongs to somebody else" do
+      other_event = UserEvent.create!(user: create(:user), event_name: "user_inactive_3_days",
+                                      occurred_at: Time.current, metadata: {})
+
+      post_dispatch(valid_payload(event_id: other_event.id.to_s))
+
+      expect(PushDispatch.last.user_event_id).to be_nil
+    end
+
+    it "falls back to the legacy make-<id> correlation_id" do
+      post_dispatch(valid_payload(event_id: "", correlation_id: "make-#{user_event.id}"))
+
+      expect(PushDispatch.last.user_event_id).to eq(user_event.id)
+    end
+
+    it "leaves the link empty rather than guessing from campaign_key" do
+      post_dispatch(valid_payload(event_id: "not-an-id"))
+
+      dispatch = PushDispatch.last
+      expect(dispatch.user_event_id).to be_nil
+      expect(dispatch.campaign_key).to eq("workout_not_started_v1")
+    end
+  end
+
   def json
     JSON.parse(response.body)
   end

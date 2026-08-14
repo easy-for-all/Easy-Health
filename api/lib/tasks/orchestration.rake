@@ -1,0 +1,88 @@
+# Versioned entry points for the orchestration event producers.
+#
+# These used to exist only as lines in a hand-maintained crontab on the VPS,
+# which meant the schedule was not reproducible, not reviewable and not visible
+# to anyone reading the repository. The tasks live here; scripts/cron/ installs
+# them.
+#
+# Each job carries its own heartbeat, so "is this alive?" is answered by the
+# admin panel rather than by reading the server's crontab.
+namespace :orchestration do
+  # Every ~15 minutes. The three producers are independent: one raising must not
+  # stop the other two from running, or a single bad user silences the whole
+  # journey until someone notices.
+  desc "Run the 15-minute orchestration event producers (2h / 24h / scheduled reminder)"
+  task run_15min: :environment do
+    results = {}
+    failures = {}
+
+    {
+      "first_workout_not_started_2h" => FirstWorkoutNotStarted2hJob,
+      "first_workout_not_started_24h" => FirstWorkoutNotStarted24hJob,
+      "scheduled_workout_reminder" => ScheduledWorkoutReminderSchedulerJob
+    }.each do |name, job_class|
+      results[name] = job_class.perform_now
+    rescue StandardError => e
+      # The job's own heartbeat already recorded the failure; this keeps the
+      # loop going and puts the error in the cron log.
+      failures[name] = "#{e.class}: #{e.message}"
+      Rails.logger.error("[orchestration:run_15min] #{name} failed: #{e.class}: #{e.message}")
+    end
+
+    puts({ task: "orchestration:run_15min", at: Time.current.utc.iso8601,
+           results: results, failures: failures }.to_json)
+    abort("orchestration:run_15min: #{failures.keys.join(', ')} falhou(ram)") if failures.any?
+  end
+
+  # Once a day. This job already ran in production, but only from an unversioned
+  # `rails runner "RelationshipDailyJob.new.perform"` line in the crontab, so
+  # nothing in the repo declared it and it could silently differ per server.
+  desc "Run the daily relationship journey (segments, trial, inactivity)"
+  task relationship_daily: :environment do
+    stats = RelationshipDailyJob.perform_now
+    puts({ task: "orchestration:relationship_daily", at: Time.current.utc.iso8601, stats: stats }.to_json)
+  end
+
+  desc "Print the health of every orchestration scheduler and any catalog drift"
+  task status: :environment do
+    keys = %w[
+      first_workout_not_started_2h first_workout_not_started_24h
+      scheduled_workout_reminder relationship_daily_job
+    ]
+
+    puts "SCHEDULERS"
+    puts format("%-32s %-18s %-22s %s", "processo", "status", "último sucesso", "métricas")
+    keys.each do |key|
+      record = ObservabilityHeartbeat.by_key(key).first
+      if record.nil?
+        puts format("%-32s %-18s %-22s %s", key, "sem registro", "-", "rode rake observability:heartbeats")
+        next
+      end
+
+      puts format(
+        "%-32s %-18s %-22s %s",
+        key,
+        record.status,
+        record.last_succeeded_at&.iso8601 || "nunca",
+        (record.metadata.presence || {}).to_json
+      )
+    end
+
+    puts "\nORCHESTRATION EVENTS (fonte de verdade: config/communication_events.yml)"
+    puts CommunicationEvents.orchestration_event_names.join(", ")
+
+    drift = MakeWebhookEligibility.allowlist_drift
+    puts "\nALLOWLIST DRIFT"
+    if drift[:env_only].any?
+      puts "  env-only (sem entrada no YAML): #{drift[:env_only].join(', ')}"
+    else
+      puts "  nenhum"
+    end
+
+    puts "\nFLAGS"
+    puts "  MAKE_WEBHOOK_ENABLED=#{MakeWebhookEligibility.enabled?}"
+    puts "  SCHEDULED_WORKOUT_REMINDER_ENABLED=#{ScheduledWorkoutReminderEligibility.enabled?}"
+    puts "  MAKE_PUSH_ORCHESTRATION_ENABLED=#{ENV.fetch('MAKE_PUSH_ORCHESTRATION_ENABLED', 'false')}"
+    puts "  PUSH_QUIET_HOURS_ENABLED=#{PushQuietHours.enabled?}"
+  end
+end

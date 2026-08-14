@@ -309,11 +309,17 @@ export default function AdminPage() {
         </div>
 
         <div className="flex flex-wrap gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+          <Link href="/admin/events-communications" className="text-sm font-semibold text-primary-600 hover:text-primary-700">
+            Eventos &amp; Comunicações
+          </Link>
           <Link href="/admin/analytics/event-deliveries" className="text-sm font-semibold text-primary-600 hover:text-primary-700">
             Log de eventos e entregas
           </Link>
           <Link href="/admin/observability" className="text-sm font-semibold text-primary-600 hover:text-primary-700">
             Observabilidade
+          </Link>
+          <Link href="/admin/android-acquisition" className="text-sm font-semibold text-primary-600 hover:text-primary-700">
+            Aquisição Android
           </Link>
         </div>
 

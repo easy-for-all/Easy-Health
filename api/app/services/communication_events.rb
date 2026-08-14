@@ -77,6 +77,25 @@ class CommunicationEvents
       known_events.include?(normalize_event_name(event_name))
     end
 
+    # THE source of truth for "this fact must reach Make".
+    #
+    # An orchestration event is one with a YAML entry that is enabled and
+    # declares at least one channel. There is deliberately NO separate
+    # `orchestration:` key: it would be a fourth place to drift from (an event
+    # with channels but `orchestration: false` means nothing coherent), and the
+    # whole point of this layer is to have one catalog, not two.
+    #
+    # `enabled?` already requires a non-empty channel list; the second check is
+    # kept explicit so the implementation cannot silently diverge from the
+    # sentence above.
+    def orchestration_event_names
+      config.keys.select { |name| enabled?(name) && channels_for(name).any? }
+    end
+
+    def orchestration?(event_name)
+      orchestration_event_names.include?(normalize_event_name(event_name))
+    end
+
     # Event names that have a YAML entry (in file order), for audit/reporting.
     def configured_event_names
       config.keys

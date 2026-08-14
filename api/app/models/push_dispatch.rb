@@ -16,10 +16,18 @@ class PushDispatch < ApplicationRecord
   SKIP_REASONS = %w[
     orchestration_disabled user_not_found no_preferences global_opt_out category_opt_out
     no_active_token permission_denied duplicate invalid_payload rate_limited
-    frequency_capped cooldown_active
+    frequency_capped cooldown_active quiet_hours
   ].freeze
 
+  # The only skip reason that could succeed if retried later. Everything else
+  # is an opt-out, a cap or a bad request.
+  DEFERRABLE_SKIP_REASONS = %w[quiet_hours].freeze
+
   belongs_to :user
+  # The business event this push was requested for. Nullable: Make may send a
+  # dispatch we cannot resolve to an event, and those must stay visible as
+  # "not correlated" rather than being rejected.
+  belongs_to :user_event, optional: true
 
   validates :notification_type, presence: true
   validates :idempotency_key, presence: true, uniqueness: true

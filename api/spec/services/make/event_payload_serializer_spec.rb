@@ -1,6 +1,71 @@
 require "rails_helper"
 
 RSpec.describe Make::EventPayloadSerializer do
+  describe "additive schema 2 fields" do
+    let(:serializer_user) { create(:user, time_zone: "America/Sao_Paulo", marketing_consent: true) }
+
+    def payload_for(event_name, metadata: {}, origin_surface: nil)
+      event = UserEvent.create!(user: serializer_user, event_name: event_name,
+                                occurred_at: Time.current, metadata: metadata,
+                                origin_surface: origin_surface)
+      described_class.new(event: event, schema_version: 2).as_json
+    end
+
+    # The live Make scenario filters on delivery.channels. Renaming or removing
+    # it would break every running scenario, so the new name is added ALONGSIDE.
+    it "keeps delivery.channels exactly as the Make scenario reads it" do
+      payload = payload_for("user_inactive_3_days", metadata: { last_workout_at: 4.days.ago.iso8601 })
+
+      expect(payload[:delivery][:channels]).to eq(%w[push])
+      expect(payload[:schema_version]).to eq(2)
+    end
+
+    it "adds candidate_channels as a synonym of channels" do
+      payload = payload_for("user_inactive_7_days", metadata: { last_workout_at: 8.days.ago.iso8601 })
+
+      expect(payload[:delivery][:candidate_channels]).to eq(payload[:delivery][:channels])
+      expect(payload[:delivery][:candidate_channels]).to match_array(%w[push email])
+    end
+
+    it "mirrors notification_type and route into delivery without emptying the push block" do
+      payload = payload_for("first_workout_completed", metadata: { workout_session_id: 1 })
+
+      expect(payload[:delivery][:notification_type]).to eq("progress_update")
+      expect(payload[:delivery][:route]).to eq("/workouts")
+      expect(payload[:push][:notification_type]).to eq("progress_update")
+      expect(payload[:push][:route]).to eq("/workouts")
+    end
+
+    it "reports the producing surface" do
+      payload = payload_for("first_workout_completed", metadata: { workout_session_id: 1 },
+                            origin_surface: "android")
+
+      expect(payload[:origin_surface]).to eq("android")
+    end
+
+    it "reports an unclassified event as unknown rather than guessing" do
+      payload = payload_for("first_workout_completed", metadata: { workout_session_id: 1 })
+
+      expect(payload[:origin_surface]).to eq("unknown")
+    end
+
+    it "carries the reminder timing the Make scenario needs" do
+      activation = {
+        plan_id: 1, reminder_local_date: Date.current.iso8601,
+        preferred_workout_time: "07:00", reminder_time: "06:30",
+        reminder_due_at: Time.current.iso8601, reminder_lead_minutes: 30,
+        timezone: "America/Sao_Paulo", detected_at: Time.current.iso8601
+      }
+      payload = payload_for("scheduled_workout_reminder_due", metadata: { activation: activation })
+
+      context = payload[:context][:activation]
+      expect(context["preferred_workout_time"]).to eq("07:00")
+      expect(context["reminder_due_at"]).to be_present
+      expect(context["reminder_lead_minutes"]).to eq(30)
+      expect(payload[:user][:timezone]).to eq("America/Sao_Paulo")
+    end
+  end
+
   let(:user) { create(:user, marketing_consent: true, time_zone: "America/Sao_Paulo") }
 
   def build_event(event_name:, metadata: {}, source: "relationship_daily")

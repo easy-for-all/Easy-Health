@@ -7,7 +7,7 @@ Família B interna (`NotificationDelivery` + `PushDispatchService` + cron
 ## Fluxo
 
 ```
-Rails detecta elegibilidade (cron 15min / controller) + janela 08–21 local
+Rails detecta o FATO (cron 15min / controller) — sem filtro de horário
  → cria UserEvent uma vez  → push_event_eligible
  → webhook v2 assinado → Make               → push_requested_to_make
  → Make escolhe title/body pelo event_name e chama:
@@ -32,10 +32,14 @@ Config técnica em [api/config/communication_events.yml](../api/config/communica
 | `user_inactive_7_days` | ≥7 dias sem concluir | push, email | workout_reminder | /workouts/ready | sim |
 
 - Atividade = `workout_sessions.maximum(:completed_at)` (não login/abertura).
-- Emissão: jobs `FirstWorkoutNotStarted2hJob`/`24hJob` (rake `push_journey:*`),
-  inatividade em `RelationshipDailyJob`, conclusão em `WorkoutSessionsController`.
+- Emissão: jobs `FirstWorkoutNotStarted2hJob`/`24hJob` (rake `orchestration:run_15min`),
+  inatividade em `RelationshipDailyJob` (rake `orchestration:relationship_daily`),
+  conclusão em `WorkoutSessionsController`.
 - Cancelamento = **não emitir quando a condição falha** + idempotência (sem sinal Rails→Make).
-- Janela de silêncio: `PushQuietHours.allowed?` (08–21 local, fallback America/Sao_Paulo).
+- Janela de silêncio: **não** bloqueia a geração do evento. `PushQuietHours` só
+  atua no dispatch, atrás de `PUSH_QUIET_HOURS_ENABLED`, respondendo
+  `skipped` + `deferred: true` + `next_allowed_at` para o Make reagendar.
+  Ver `docs/event-orchestration.md`.
 
 ## Copy sugerida (configurar no Make)
 

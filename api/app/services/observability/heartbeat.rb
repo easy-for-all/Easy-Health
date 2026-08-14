@@ -18,7 +18,14 @@ module Observability
       "android_analytics_ingestion" => { category: "pipeline", interval: 6.hours },
       "push_dispatch" => { category: "job", interval: 1.hour },
       "observability_health_check" => { category: "cron", interval: 15.minutes },
-      "bi_replica_refresh" => { category: "pipeline", interval: 1.day }
+      "bi_replica_refresh" => { category: "pipeline", interval: 1.day },
+      "google_ads_acquisition_sync" => { category: "cron", interval: 1.hour },
+      # Orchestration event producers. These have no other symptom when they
+      # stop: no error, no queue backlog — just events that never get created,
+      # which is invisible until someone asks why nobody is being reminded.
+      "first_workout_not_started_2h" => { category: "cron", interval: 15.minutes },
+      "first_workout_not_started_24h" => { category: "cron", interval: 15.minutes },
+      "scheduled_workout_reminder" => { category: "cron", interval: 15.minutes }
     }.freeze
 
     module_function

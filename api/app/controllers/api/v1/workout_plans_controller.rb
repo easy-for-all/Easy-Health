@@ -69,7 +69,8 @@ module Api
           event: :workout_created,
           metadata: { workout_plan_id: plan.id },
           occurred_at: plan.created_at,
-          idempotency_key: "workout_created:#{current_user.id}:#{plan.id}"
+          idempotency_key: "workout_created:#{current_user.id}:#{plan.id}",
+          origin_surface: origin_surface_from_request
         )
         unless had_workout_plan
           UserEventService.track(
@@ -77,7 +78,8 @@ module Api
             event: :first_workout_created,
             metadata: { workout_plan_id: plan.id },
             occurred_at: plan.created_at,
-            idempotency_key: "first_workout_created:#{current_user.id}:#{plan.id}"
+            idempotency_key: "first_workout_created:#{current_user.id}:#{plan.id}",
+            origin_surface: origin_surface_from_request
           )
           track_activation_workout_created(plan)
         end
@@ -193,7 +195,11 @@ module Api
             }
           },
           occurred_at: plan.created_at,
-          idempotency_key: "activation_workout_created:#{current_user.id}:#{plan.id}"
+          idempotency_key: "activation_workout_created:#{current_user.id}:#{plan.id}",
+          # This is the anchor of the 2h/24h journey. Its origin is what the
+          # derived reminders later report as anchor_origin_surface, so it is
+          # the one place where losing the surface loses the journey's origin.
+          origin_surface: origin_surface_from_request
         )
       end
 

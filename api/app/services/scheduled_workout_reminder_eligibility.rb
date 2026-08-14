@@ -53,13 +53,19 @@ class ScheduledWorkoutReminderEligibility
     @manual = manual
   end
 
+  # Only BUSINESS rules may stop the event from being born.
+  #
+  # Everything about whether a push can actually be delivered — push_enabled,
+  # workout_reminders_enabled, an active device token, the Make webhook being
+  # configured, quiet hours — was checked here before, which meant "this user
+  # asked to train at 07:00 and it is 06:30" stopped being recorded because of a
+  # setting that could change by the time Make asked. Those are dispatch
+  # concerns now (Make::PushDispatchRequest), where they are re-evaluated at the
+  # moment they matter.
   def call
     return ineligible("feature_disabled") unless manual? || self.class.enabled?
     return ineligible("missing_user") unless user
-    return ineligible("make_schema_not_v2") unless make_schema_v2?
-    return ineligible("make_webhook_disabled_or_unconfigured") unless MakeWebhookEligibility.configured?
-    return ineligible("event_not_allowed_for_make") unless MakeWebhookEligibility.event_allowed?(EVENT_NAME)
-    return ineligible("user_not_eligible_for_relationship") unless MakeWebhookEligibility.user_eligible_for_relationship?(user)
+    return ineligible("user_deleted_or_anonymized") unless MakeWebhookEligibility.account_valid?(user)
 
     plan = user.active_workout_plan
     return ineligible("missing_plan") unless plan
@@ -72,12 +78,6 @@ class ScheduledWorkoutReminderEligibility
     zone = ScheduledWorkoutReminderSchedule.time_zone_for(user)
     return ineligible("missing_timezone") if user.time_zone.blank?
     return ineligible("invalid_timezone") unless zone
-
-    prefs = user.notification_preferences
-    return ineligible("push_disabled") unless prefs&.push_enabled?
-    return ineligible("push_disabled") if prefs.notifications_disabled_at.present?
-    return ineligible("workout_reminders_disabled") unless prefs.workout_reminders_enabled?
-    return ineligible("no_active_device_token") unless active_granted_device_tokens.exists?
 
     return ineligible("workout_completed") if workout_completed_for_plan?(plan)
 
@@ -105,22 +105,12 @@ class ScheduledWorkoutReminderEligibility
     @manual
   end
 
-  def make_schema_v2?
-    MakeWebhookEligibility.event_schema_version == 2
-  rescue ArgumentError
-    false
-  end
-
   def schedule_for
     if manual?
       ScheduledWorkoutReminderSchedule.next_occurrence(user:, now:)
     else
       ScheduledWorkoutReminderSchedule.due(user:, now:, window:)
     end
-  end
-
-  def active_granted_device_tokens
-    user.device_tokens.active.where(permission_status: "granted")
   end
 
   def workout_completed_for_plan?(plan)

@@ -40,6 +40,14 @@ module ObservabilityInstrumented
     self.class.name.to_s.underscore
   end
 
+  # Counters a scheduled job wants attached to its heartbeat (candidates_found,
+  # events_created, ...). Jobs set @heartbeat_metadata while performing and it
+  # rides along on the single succeeded! call below — a job must never write a
+  # second heartbeat of its own, or one execution shows up as two lifecycles.
+  def heartbeat_metadata
+    nil
+  end
+
   def run_with_observability
     started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     heartbeat_key = self.class.observability_heartbeat_key
@@ -51,7 +59,9 @@ module ObservabilityInstrumented
     result = yield
 
     duration = elapsed_ms(started_at)
-    Observability::Heartbeat.succeeded!(heartbeat_key, duration_ms: duration) if heartbeat_key
+    if heartbeat_key
+      Observability::Heartbeat.succeeded!(heartbeat_key, duration_ms: duration, metadata: heartbeat_metadata)
+    end
     Observability::Events.job_succeeded(job_key: job_key, duration_ms: duration)
     result
   rescue StandardError => e

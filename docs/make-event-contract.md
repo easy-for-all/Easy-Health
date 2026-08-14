@@ -88,9 +88,17 @@ Campos:
 - `event_id`: id do `user_events`, usado para correlacao e idempotencia.
 - `event_name`: evento de negocio, sem prefixo de canal.
 - `source`: origem raiz fixa do produtor do contrato, `easyhealth_backend`.
-- `delivery.channels`: canais do evento. Valores atuais: `email`, `push`.
+- `origin_surface`: superficie que PRODUZIU o evento (`android`, `web`,
+  `backend_scheduler`, `admin`, `unknown`). E outra dimensao que canal: origem
+  diz de onde veio o fato, canal diz por onde a comunicacao pode sair.
+- `delivery.channels`: canais candidatos do evento. Valores atuais: `email`,
+  `push`. **Campo estavel** — e o que os cenarios filtram hoje.
+- `delivery.candidate_channels`: mesmo array de `channels`, com o nome que diz o
+  que ele e. Adicionado sem remover `channels`; prefira este em cenarios novos.
 - `delivery.communication_type`: bucket editorial (`lifecycle`, `activation`,
   `progress`, `retention`).
+- `delivery.notification_type` / `delivery.route`: espelho do bloco `push`, para
+  rotear sem alcancar um segundo objeto. Os dois blocos seguem preenchidos.
 - `delivery.engagement`: `true` se o evento conta para o cap de frequencia.
 - `email.template_key`: chave do template no Make (default = `event_name`). A
   copia/HTML fica no Make, nunca no payload.
@@ -99,9 +107,18 @@ Campos:
 - `context`: dados de negocio diretamente ligados ao evento.
 - `metadata`: diagnostico operacional; use `trigger_source`, nao `source`.
 
-Eventos sem comunicacao configurada NAO chegam ao Make: o backend marca a
-entrega como `skipped` (`unknown_communication_event` /
-`communication_event_disabled`) e nao inventa canal padrao.
+Eventos sem entrada em `communication_events.yml` NAO chegam ao Make: o backend
+marca a entrega como `disabled` com `event_not_orchestration` e nao inventa canal
+padrao. (`skipped` / `communication_event_disabled` sobrou apenas para o caminho
+legado de `MAKE_WEBHOOK_ALLOWED_EVENTS`, fora de producao.)
+
+Um evento de orquestracao que NAO consegue montar o payload obrigatorio vira
+`dead_letter` com `missing_required_context` apos um unico retry — e falha de
+contrato, nao de rede, e nunca e escondida como `skipped`.
+
+Canais sao filtrados POR USUARIO antes do envio: quem nao tem consentimento de
+e-mail recebe `user_inactive_7_days` com `channels: ["push"]`, em vez de nao
+receber o evento. Ver `docs/event-orchestration.md`.
 
 ## Canais
 

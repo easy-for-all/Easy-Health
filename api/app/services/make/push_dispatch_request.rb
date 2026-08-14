@@ -88,7 +88,7 @@ module Make
       dispatch = resolve_dispatch(user)
       return duplicate(dispatch) if dispatch.delivered?
 
-      reason = preference_skip_reason(user) || frequency_skip_reason(user)
+      reason = preference_skip_reason(user) || frequency_skip_reason(user) || timing_skip_reason(user)
       return skip_dispatch(user, dispatch, reason) if reason
 
       perform_dispatch(dispatch, user)
@@ -175,6 +175,7 @@ module Make
 
       dispatch.assign_attributes(
         event_id: event_id.presence,
+        user_event: resolve_user_event(user),
         user: user,
         campaign_key: campaign_key.presence,
         notification_type: notification_type,
@@ -189,6 +190,26 @@ module Make
       )
       dispatch.save!
       dispatch
+    end
+
+    # Links the dispatch back to the business event that caused it, so the
+    # pipeline (UserEvent -> Make delivery -> dispatch -> provider) is joinable
+    # without string parsing.
+    #
+    # Scoped to THIS user on purpose: event_id is client-supplied, and an id
+    # belonging to somebody else must not attach one person's dispatch to
+    # another person's event. campaign_key is never used here — it names the
+    # campaign and copy, which Make versions freely.
+    def resolve_user_event(user)
+      id = Integer(event_id, exception: false)
+      return UserEvent.find_by(id: id, user_id: user.id) if id&.positive?
+
+      # Documented fallback for older scenarios that only send correlation_id in
+      # the historical "make-<user_event_id>" shape.
+      legacy_id = params[:correlation_id].to_s[/\Amake-(\d+)\z/, 1]
+      return nil if legacy_id.blank?
+
+      UserEvent.find_by(id: legacy_id.to_i, user_id: user.id)
     end
 
     # Persisted context for audit — MUST NOT contain a device token.
@@ -232,6 +253,37 @@ module Make
 
     def engagement_category?
       ENGAGEMENT_CATEGORIES.include?(notification_type)
+    end
+
+    # --- Timing (quiet hours) -----------------------------------------------
+
+    # A hard safety gate: EasyHealth will not wake someone at 03:00 even if Make
+    # asks. Unlike every other skip this one is TEMPORARY, so the response says
+    # so (deferred + next_allowed_at) and Make can reschedule instead of losing
+    # the communication. The backend deliberately runs no retry of its own —
+    # deciding whether a late push is still worth sending is the orchestrator's
+    # call, not ours.
+    #
+    # Off by default (PUSH_QUIET_HOURS_ENABLED): nothing in the Make path
+    # enforced quiet hours before, so turning it on is a deliberate rollout once
+    # the scenario knows how to read next_allowed_at.
+    def timing_skip_reason(user)
+      return nil unless PushQuietHours.enabled?
+      return nil if PushQuietHours.allowed?(user: user)
+
+      @quiet_hours_user = user
+      "quiet_hours"
+    end
+
+    def quiet_hours_extra
+      return {} if @quiet_hours_user.nil?
+
+      zone = PushQuietHours.time_zone_for(@quiet_hours_user)
+      {
+        deferred: true,
+        next_allowed_at: PushQuietHours.next_allowed_at(user: @quiet_hours_user).iso8601,
+        user_timezone: zone.tzinfo.name
+      }
     end
 
     # True only when every one of the five conditions documented on BYPASS_SOURCE
@@ -321,7 +373,7 @@ module Make
           correlation_id: dispatch.correlation_id
         }
       )
-      skip(reason, dispatch: dispatch)
+      skip(reason, dispatch: dispatch, extra: reason == "quiet_hours" ? quiet_hours_extra : {})
     end
 
     def data_event_name
@@ -465,12 +517,17 @@ module Make
     #
     # `reason` is a deprecated alias of `skip_reason`, kept so existing Make
     # scenarios and dashboards do not break on this change.
+    #
+    # `deferred` tells the orchestrator whether retrying later could ever
+    # succeed. It is false for everything except quiet hours, which overrides it
+    # and adds next_allowed_at — an opt-out is permanent, a clock is not.
     def skip(reason, dispatch: nil, http_status: :ok, extra: {})
       body = {
         status: "skipped",
         sent: false,
         skip_reason: reason,
         reason: reason,
+        deferred: false,
         dispatch_id: dispatch&.id,
         notification_type: notification_type.presence,
         campaign_key: campaign_key.presence,

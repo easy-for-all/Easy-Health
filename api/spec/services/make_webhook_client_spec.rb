@@ -168,32 +168,86 @@ RSpec.describe MakeWebhookClient do
     end
   end
 
-  it "marks an incoherent schema version 2 event retrying without posting" do
-    # A configured communication event whose required context is missing must
-    # fail loudly (not post), distinct from an unconfigured event which skips.
+  describe "an orchestration event whose required context is missing" do
+    # A configured communication event that cannot produce its payload is a
+    # contract failure: it must fail loudly (not post), it must NOT be hidden as
+    # "skipped", and it must not burn all five attempts on a deterministic bug.
+    let(:incomplete_event) do
+      UserEvent.create!(
+        user: user,
+        event_name: "first_workout_completed",
+        occurred_at: Time.current,
+        source: "relationship_daily",
+        metadata: {},
+        make_delivery_status: "pending"
+      )
+    end
+
+    it "retries once, to cover the commit race" do
+      with_env(make_env.merge("MAKE_EVENT_SCHEMA_VERSION" => "2")) do
+        expect(Net::HTTP).not_to receive(:new)
+
+        result = described_class.new.deliver(incomplete_event)
+
+        expect(result.status).to eq("retrying")
+        expect(incomplete_event.reload.make_delivery_status).to eq("retrying")
+        expect(incomplete_event.make_last_error).to eq("missing_required_context")
+        expect(incomplete_event.make_attempts_count).to eq(1)
+        expect(incomplete_event.make_next_retry_at).to be_present
+      end
+    end
+
+    it "dead-letters on the second attempt instead of skipping" do
+      with_env(make_env.merge("MAKE_EVENT_SCHEMA_VERSION" => "2")) do
+        described_class.new.deliver(incomplete_event)
+        result = described_class.new.deliver(incomplete_event.reload)
+
+        expect(result.status).to eq("dead_letter")
+        expect(incomplete_event.reload.make_delivery_status).to eq("dead_letter")
+        expect(incomplete_event.make_last_error).to eq("missing_required_context")
+        expect(incomplete_event.make_last_error_class)
+          .to eq("Make::EventPayloadSerializer::IncompleteEventError")
+        expect(incomplete_event.make_next_retry_at).to be_nil
+      end
+    end
+
+    it "never reports the failure as skipped" do
+      with_env(make_env.merge("MAKE_EVENT_SCHEMA_VERSION" => "2")) do
+        3.times { described_class.new.deliver(incomplete_event.reload) }
+
+        expect(incomplete_event.reload.make_delivery_status).not_to eq("skipped")
+        expect(incomplete_event.make_attempts_count).to be <= 3
+      end
+    end
+  end
+
+  # An event with no catalog entry is not an orchestration event at all, so it
+  # is rejected up front rather than reaching the communication check.
+  it "disables an event that is not an orchestration event" do
     user_event = UserEvent.create!(
       user: user,
-      event_name: "first_workout_completed",
+      event_name: "workout_created_not_started",
       occurred_at: Time.current,
       source: "relationship_daily",
       metadata: {},
       make_delivery_status: "pending"
     )
 
-    with_env(make_env.merge("MAKE_EVENT_SCHEMA_VERSION" => "2")) do
+    with_env(make_env) do
       expect(Net::HTTP).not_to receive(:new)
 
       result = described_class.new.deliver(user_event)
 
-      expect(result.status).to eq("retrying")
-      expect(user_event.reload.make_delivery_status).to eq("retrying")
-      expect(user_event.make_last_error_message).to include("missing_required_context")
-      expect(user_event.make_attempts_count).to eq(1)
-      expect(user_event.make_next_retry_at).to be_present
+      expect(result.status).to eq("disabled")
+      expect(user_event.reload.make_delivery_status).to eq("disabled")
+      expect(user_event.make_last_error).to eq("event_not_orchestration")
     end
   end
 
-  it "skips an event that is not a configured communication event" do
+  # The legacy env allowlist can still force an uncatalogued event through
+  # outside production (smoke tests). It then reaches the communication check,
+  # which is what keeps it from being delivered as a real communication.
+  it "skips a legacy env-only event that has no communication config" do
     user_event = UserEvent.create!(
       user: user,
       event_name: "workout_created_not_started",

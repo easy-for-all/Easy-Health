@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_04_130003) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_14_120001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -503,6 +503,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_130003) do
     t.index ["user_id"], name: "index_fitness_profiles_on_user_id", unique: true
   end
 
+  create_table "google_ads_daily_metrics", force: :cascade do |t|
+    t.string "campaign_id", null: false
+    t.string "campaign_name"
+    t.bigint "clicks", default: 0, null: false
+    t.bigint "cost_micros", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.date "date", null: false
+    t.bigint "impressions", default: 0, null: false
+    t.decimal "installs", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "sign_ups", precision: 12, scale: 2, default: "0.0", null: false
+    t.datetime "synced_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["date", "campaign_id"], name: "idx_google_ads_daily_metrics_date_campaign", unique: true
+  end
+
   create_table "health_data_points", force: :cascade do |t|
     t.text "ai_notes"
     t.datetime "collected_at"
@@ -799,9 +814,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_130003) do
     t.integer "tokens_attempted_count", default: 0, null: false
     t.integer "tokens_rejected_count", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.bigint "user_event_id"
     t.bigint "user_id", null: false
     t.index ["idempotency_key"], name: "index_push_dispatches_on_idempotency_key", unique: true
     t.index ["status"], name: "index_push_dispatches_on_status"
+    t.index ["user_event_id"], name: "index_push_dispatches_on_user_event_id"
     t.index ["user_id", "created_at"], name: "index_push_dispatches_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_push_dispatches_on_user_id"
   end
@@ -930,6 +947,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_130003) do
     t.string "make_processing_status", default: "unknown", null: false
     t.jsonb "metadata", default: {}
     t.datetime "occurred_at", null: false
+    t.string "origin_surface"
     t.jsonb "payload_json", default: {}, null: false
     t.string "source", default: "easyhealth_backend", null: false
     t.datetime "updated_at", null: false
@@ -943,6 +961,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_130003) do
     t.index ["make_last_http_status"], name: "index_user_events_on_make_last_http_status"
     t.index ["make_next_retry_at"], name: "index_user_events_on_make_next_retry_at"
     t.index ["make_processing_status"], name: "index_user_events_on_make_processing_status"
+    t.index ["origin_surface", "created_at"], name: "index_user_events_on_origin_surface_and_created_at"
     t.index ["user_id", "event_name", "idempotency_key"], name: "index_user_events_on_user_event_idempotency", unique: true, where: "(idempotency_key IS NOT NULL)"
     t.index ["user_id", "event_name"], name: "index_user_events_on_user_id_and_event_name"
     t.index ["user_id"], name: "index_user_events_on_user_id"
@@ -1265,6 +1284,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_04_130003) do
   add_foreign_key "personal_notes", "users", column: "personal_id"
   add_foreign_key "product_analytics_events", "users"
   add_foreign_key "public_profiles", "users"
+  add_foreign_key "push_dispatches", "user_events", on_delete: :nullify
   add_foreign_key "push_dispatches", "users"
   add_foreign_key "shared_workouts", "users", column: "owner_id"
   add_foreign_key "subscriptions", "users"

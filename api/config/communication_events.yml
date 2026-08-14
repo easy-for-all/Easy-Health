@@ -1,10 +1,24 @@
-# Central technical config for EasyHealth business events sent to Make.
-# Single source of truth for communication channels: which channels each event
-# routes to, the technical push descriptor (notification_type/route), the
-# communication_type bucket and whether the event counts toward the engagement
-# frequency cap. Copy (title/body/emoji) and email HTML live in the Make
-# scenario, NOT here. Omitted known events resolve to an empty channel list and
-# are never delivered as communication.
+# THE source of truth for EasyHealth's orchestration events.
+#
+# An event with an entry here that is enabled and declares at least one channel
+# IS an orchestration event: it is delivered to Make, always. There is no
+# separate `orchestration:` flag — the entry itself is the declaration, and a
+# second switch would just be a fourth place to drift from.
+#
+# MAKE_WEBHOOK_ALLOWED_EVENTS no longer narrows this list; it is legacy and can
+# only ADD an uncatalogued event for smoke tests outside production. To turn one
+# event off, set `enabled: false` below; to turn everything off,
+# MAKE_WEBHOOK_ENABLED=false.
+#
+# What lives here is the technical routing: channels, the push descriptor
+# (notification_type/route), the communication_type bucket and the engagement
+# cap flag. Copy (title/body/emoji) and email HTML live in the Make scenario,
+# NOT here. Known events with no entry resolve to an empty channel list and are
+# never delivered as communication.
+#
+# Per-channel hard gates still apply per user: a user without email consent
+# gets the email channel removed from delivery.channels, keeping push. See
+# MakeWebhookEligibility.deliverable_channels and docs/event-orchestration.md.
 #
 # Conventions (keep the YAML lean):
 #   enabled       : optional, defaults to true. Set `enabled: false` to keep the
