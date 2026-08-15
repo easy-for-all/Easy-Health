@@ -8,6 +8,16 @@ class CommunicationEvents
   ALLOWED_CHANNELS = %w[email push].freeze
   COMMUNICATION_TYPES = %w[lifecycle activation progress retention].freeze
 
+  # Why an event deliberately never reaches Make. See
+  # config/non_communication_events.yml for what each one means.
+  NON_COMMUNICATION_REASONS = %w[
+    push_telemetry
+    product_analytics
+    internal_audit
+    legacy_inactive
+    covered_by_other_event
+  ].freeze
+
   class ConfigError < StandardError; end
   class UnknownEventError < ConfigError; end
 
@@ -101,6 +111,40 @@ class CommunicationEvents
       config.keys
     end
 
+    # --- The other half of the catalog --------------------------------------
+    #
+    # An event is either orchestration (entry in communication_events.yml) or
+    # deliberately not communication (entry in non_communication_events.yml).
+    # Anything in neither is `uncatalogued`: a fact nobody decided about. That
+    # is not a harmless gap — it is how activation_workout_created spent months
+    # being born `disabled` with nobody noticing, because the admin panel only
+    # ever looked at events that were already in the catalog.
+
+    def analytics_only_event_names
+      non_communication_config.keys
+    end
+
+    def analytics_only?(event_name)
+      non_communication_config.key?(normalize_event_name(event_name))
+    end
+
+    def analytics_only_reason_for(event_name)
+      non_communication_config.dig(normalize_event_name(event_name), "reason")
+    end
+
+    # Registry events with no decision recorded in either file. Derived from
+    # RelationshipEventTracker::EVENTS on purpose: the question is "which facts
+    # this product emits have no orchestration decision", not "which strings
+    # ever appeared in the user_events table". Names produced by other
+    # subsystems are none of this catalog's business.
+    def uncatalogued_event_names
+      known_events - orchestration_event_names - analytics_only_event_names
+    end
+
+    def uncatalogued?(event_name)
+      uncatalogued_event_names.include?(normalize_event_name(event_name))
+    end
+
     # Validate a single configured entry. Raises ConfigError if invalid.
     def assert_entry!(event_name)
       name = normalize_event_name(event_name)
@@ -135,16 +179,35 @@ class CommunicationEvents
     end
 
     # Boot/CI guard: every configured event must be structurally valid.
+    #
+    # `uncatalogued` is deliberately NOT raised here. It is a real problem, but
+    # it is a problem of a missing decision, not of a broken file — failing boot
+    # in production because someone added an event name would be worse than the
+    # gap it reports. It surfaces as a critical warning in the admin panel and
+    # as a failing registry spec in CI, which is where a decision can be made.
     def validate!
       unknown = config.keys - known_events
       raise ConfigError, "unknown communication event(s): #{unknown.join(', ')}" if unknown.any?
 
+      unknown_non_communication = non_communication_config.keys - known_events
+      if unknown_non_communication.any?
+        raise ConfigError, "unknown non-communication event(s): #{unknown_non_communication.join(', ')}"
+      end
+
+      both = config.keys & non_communication_config.keys
+      if both.any?
+        raise ConfigError,
+              "event(s) declared as BOTH communication and non-communication: #{both.join(', ')}"
+      end
+
       config.each { |name, cfg| validate_entry!(name, cfg) }
+      non_communication_config.each { |name, cfg| validate_non_communication_entry!(name, cfg) }
       true
     end
 
     def reload!
       @config = nil
+      @non_communication_config = nil
       @known_events = nil
       validate!
     end
@@ -165,6 +228,16 @@ class CommunicationEvents
             "template_key" => attrs["template_key"],
             "engagement" => attrs.fetch("engagement", false) == true
           }
+        end
+      end
+    end
+
+    def non_communication_config
+      @non_communication_config ||= begin
+        raw = YAML.safe_load_file(non_communication_config_path, aliases: false) || {}
+        raw.each_with_object({}) do |(event_name, attrs), result|
+          attrs = {} unless attrs.is_a?(Hash)
+          result[normalize_event_name(event_name)] = { "reason" => attrs["reason"] }
         end
       end
     end
@@ -192,8 +265,19 @@ class CommunicationEvents
       end
     end
 
+    def validate_non_communication_entry!(name, cfg)
+      return if NON_COMMUNICATION_REASONS.include?(cfg["reason"])
+
+      raise ConfigError,
+            "#{name}: reason must be one of #{NON_COMMUNICATION_REASONS.join(', ')}"
+    end
+
     def config_path
       Rails.root.join("config/communication_events.yml")
+    end
+
+    def non_communication_config_path
+      Rails.root.join("config/non_communication_events.yml")
     end
 
     def known_events

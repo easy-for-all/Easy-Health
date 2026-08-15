@@ -118,6 +118,112 @@ RSpec.describe Analytics::EventOrchestration do
     end
   end
 
+  # The panel used to read "182 generated / 33 accepted / 0 errors" while
+  # activation_workout_created was being parked with event_not_orchestration,
+  # because the denominator only ever contained catalogued events. Coverage
+  # exists to make that denominator honest.
+  describe "coverage" do
+    it "separates expected, sent and not sent" do
+      create_event("user_inactive_3_days", make_delivery_status: "accepted_by_make", make_attempts_count: 1)
+      create_event("user_inactive_7_days", make_delivery_status: "disabled",
+                                           make_last_error: "no_deliverable_channel")
+
+      summary = described_class.new.call[:summary]
+
+      expect(summary[:orchestration_expected]).to eq(2)
+      expect(summary[:orchestration_sent]).to eq(1)
+      expect(summary[:orchestration_not_sent]).to eq(1)
+      expect(summary[:orchestration_coverage_pct]).to eq({ numerator: 1, denominator: 2, value: 0.5 })
+    end
+
+    it "counts every event produced, not only the catalogued ones" do
+      create_event("user_inactive_3_days", make_delivery_status: "accepted_by_make", make_attempts_count: 1)
+      create_event("push_sent")
+      create_event("workout_started")
+
+      summary = described_class.new.call[:summary]
+
+      expect(summary[:all_events_generated]).to eq(3)
+      expect(summary[:orchestration_expected]).to eq(1)
+    end
+
+    # The whole point of the second catalog: a push telemetry event must never
+    # read as missing coverage.
+    it "never counts an analytics-only event as a coverage failure" do
+      create_event("push_sent")
+      create_event("push_opened")
+
+      summary = described_class.new.call[:summary]
+
+      expect(summary[:analytics_only_events]).to eq(2)
+      expect(summary[:orchestration_expected]).to eq(0)
+      expect(summary[:orchestration_not_sent]).to eq(0)
+      expect(summary[:uncatalogued_events]).to eq(0)
+    end
+
+    it "reports zero uncatalogued events while every registry event is classified" do
+      expect(described_class.new.call[:summary][:uncatalogued_events]).to eq(0)
+      expect(described_class.new.call[:catalog][:uncatalogued_events]).to be_empty
+    end
+
+    # Names produced by other subsystems are not this catalog's business; if the
+    # scope were a `where.not` over arbitrary names they would raise a critical.
+    it "ignores an event name that is not in the tracker's registry" do
+      create_event("some_other_subsystem_event")
+
+      summary = described_class.new.call[:summary]
+
+      expect(summary[:uncatalogued_events]).to eq(0)
+      expect(described_class.new.call[:warnings].map { |w| w[:code] }).not_to include("uncatalogued_event")
+    end
+
+    it "raises a critical warning when a registry event has no decision" do
+      allow(CommunicationEvents).to receive(:uncatalogued_event_names).and_return(%w[workout_started])
+      create_event("workout_started")
+
+      warning = described_class.new.call[:warnings].find { |w| w[:code] == "uncatalogued_event" }
+
+      expect(warning[:severity]).to eq("critical")
+      expect(warning[:message]).to include("workout_started")
+      expect(described_class.new.call[:summary][:uncatalogued_events]).to eq(1)
+    end
+  end
+
+  # Grouped by cause, not by status: 'disabled' alone cannot tell an event
+  # nobody catalogued apart from a user who withdrew email consent.
+  describe "not_sent_breakdown" do
+    it "separates causes that share the same delivery status" do
+      allow(CommunicationEvents).to receive(:uncatalogued_event_names).and_return(%w[workout_started])
+      create_event("workout_started", make_delivery_status: "disabled",
+                                      make_last_error: "event_not_orchestration")
+      create_event("user_inactive_3_days", make_delivery_status: "disabled",
+                                           make_last_error: "no_deliverable_channel")
+
+      breakdown = described_class.new.call[:not_sent_breakdown].index_by { |row| row[:reason] }
+
+      expect(breakdown["event_not_orchestration"][:count]).to eq(1)
+      expect(breakdown["event_not_orchestration"][:event_names]).to eq(%w[workout_started])
+      expect(breakdown["no_deliverable_channel"][:count]).to eq(1)
+    end
+
+    it "falls back to the delivery status when no error explains it" do
+      create_event("user_inactive_3_days", make_delivery_status: "pending")
+      create_event("user_inactive_7_days", make_delivery_status: "disabled", make_last_error: nil)
+
+      breakdown = described_class.new.call[:not_sent_breakdown].index_by { |row| row[:reason] }
+
+      expect(breakdown["pending"][:count]).to eq(1)
+      expect(breakdown["disabled_without_reason"][:count]).to eq(1)
+    end
+
+    it "excludes events that were sent and events classified as never-communication" do
+      create_event("user_inactive_3_days", make_delivery_status: "accepted_by_make", make_attempts_count: 1)
+      create_event("push_sent")
+
+      expect(described_class.new.call[:not_sent_breakdown]).to be_empty
+    end
+  end
+
   describe "per event" do
     it "breaks the funnel down by event name with push results" do
       event = create_event("user_inactive_3_days", make_delivery_status: "accepted_by_make", make_attempts_count: 1)

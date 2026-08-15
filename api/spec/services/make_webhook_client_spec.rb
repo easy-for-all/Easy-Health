@@ -221,6 +221,44 @@ RSpec.describe MakeWebhookClient do
     end
   end
 
+  # The client — not the serializer — is where "which channels do we expose"
+  # gets answered, so the payload and make_delivery_channels can no longer
+  # disagree. A user without email consent loses the EMAIL channel; the catalog
+  # intent stays whole in candidate_channels.
+  it "narrows the exposed channels to what routing decided, keeping candidate_channels whole" do
+    no_email_consent = create(:user, marketing_consent: false)
+    user_event = UserEvent.create!(
+      user: no_email_consent,
+      event_name: "user_inactive_7_days",
+      occurred_at: Time.current,
+      source: "relationship_daily",
+      metadata: { last_workout_at: 8.days.ago.iso8601 },
+      make_delivery_status: "pending"
+    )
+    captured_body = nil
+    response = Net::HTTPOK.new("1.1", "200", "OK")
+    allow(response).to receive(:body).and_return("ok")
+    http = instance_double(Net::HTTP)
+
+    with_env(make_env) do
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request) do |request|
+        captured_body = request.body
+        response
+      end
+
+      described_class.new.deliver(user_event)
+    end
+
+    body = JSON.parse(captured_body)
+    expect(body.dig("delivery", "channels")).to eq(%w[push])
+    expect(body.dig("delivery", "candidate_channels")).to match_array(%w[push email])
+    expect(user_event.reload.make_delivery_channels_list).to eq(%w[push])
+  end
+
   # An event with no catalog entry is not an orchestration event at all, so it
   # is rejected up front rather than reaching the communication check.
   it "disables an event that is not an orchestration event" do

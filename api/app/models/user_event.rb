@@ -36,6 +36,9 @@ class UserEvent < ApplicationRecord
   SQL
 
   scope :sent_to_make, -> { where(Arel.sql(SENT_TO_MAKE_SQL)) }
+  # COALESCE because a plain NOT over a NULL column evaluates to NULL and would
+  # silently drop exactly the rows a coverage report exists to find.
+  scope :not_sent_to_make, -> { where(Arel.sql("NOT COALESCE(#{SENT_TO_MAKE_SQL}, FALSE)")) }
   scope :pending_make_delivery, -> { where(make_delivery_status: "pending") }
   scope :accepted_by_make, -> { where(make_delivery_status: "accepted_by_make") }
   scope :failed_make_delivery, -> { where(make_delivery_status: ERROR_DELIVERY_STATUSES) }

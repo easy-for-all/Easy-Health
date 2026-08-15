@@ -1,0 +1,200 @@
+# Events from RelationshipEventTracker::EVENTS that must NEVER reach Make, each
+# with the reason it does not communicate.
+#
+# This file is the other half of the catalog. communication_events.yml declares
+# what IS orchestration; this one declares what deliberately is not. An event in
+# NEITHER file is `uncatalogued`: reported as a critical warning by the admin
+# panel and failing spec/services/communication_events_registry_spec.rb. That
+# silence is exactly what kept activation_workout_created out of Make for
+# months, so "no decision" is no longer a valid state.
+#
+# reason must be one of:
+#   push_telemetry        : records what happened to a push we already sent.
+#                           Feeding it back to Make would be an echo, not a fact.
+#   product_analytics     : product/BI measurement. Its home is
+#                           product_analytics_events, not a communication.
+#   internal_audit        : security, moderation and admin trails. Never leaves
+#                           the backend.
+#   legacy_inactive       : in the registry but with no producer today. Do not
+#                           reintroduce without a deliberate decision.
+#   covered_by_other_event: the moment IS communicated, but through a different
+#                           event that owns the contract. Naming which one is
+#                           mandatory, in a comment.
+#
+# Adding an event here is a product decision, not a formality: it says the
+# business accepts that Make never learns about this fact.
+
+# --- Lifecycle facts already covered, or not communicated in V1 --------------
+signup_completed:
+  reason: covered_by_other_event # user_created owns the welcome contract
+trial_started:
+  reason: covered_by_other_event # user_created + subscription payloads carry trial state
+trial_day_1:
+  reason: legacy_inactive # journey starts at trial_day_3
+trial_expired:
+  reason: covered_by_other_event # trial_expired_without_subscription is the communicated one
+subscription_renewed:
+  reason: product_analytics
+subscription_canceled:
+  reason: product_analytics
+
+# --- Workout activity (high volume, measured not communicated) --------------
+workout_created:
+  reason: product_analytics # first_workout_created is the communicated milestone
+workout_started:
+  reason: product_analytics
+first_workout_started:
+  reason: product_analytics
+exercise_weight_changed:
+  reason: product_analytics
+exercise_set_completed:
+  reason: product_analytics
+exercise_load_progressed:
+  reason: product_analytics
+workout_completed:
+  reason: product_analytics # first_workout_completed is the communicated milestone
+workout_abandoned:
+  reason: product_analytics
+
+# --- Retention / segmentation not in the journey ----------------------------
+user_inactive_15_days:
+  reason: legacy_inactive # LEGACY: journey stops at 7 days. Do not reintroduce.
+workout_created_not_started:
+  reason: legacy_inactive
+high_intent_trial:
+  reason: legacy_inactive
+streak_3:
+  reason: legacy_inactive
+streak_7:
+  reason: legacy_inactive
+streak_lost:
+  reason: legacy_inactive
+personal_record:
+  reason: legacy_inactive
+
+# --- Profile, media and onboarding ------------------------------------------
+body_photo_uploaded:
+  reason: product_analytics
+body_photo_deleted:
+  reason: product_analytics
+photo_uploaded:
+  reason: product_analytics
+exam_uploaded:
+  reason: product_analytics
+bioimpedance_added:
+  reason: product_analytics
+onboarding_completed:
+  reason: product_analytics
+fitness_profile_created:
+  reason: product_analytics
+fitness_profile_recalculated:
+  reason: product_analytics
+persona_classified:
+  reason: product_analytics
+training_archetype_classified:
+  reason: product_analytics
+behavior_pattern_updated:
+  reason: product_analytics
+progress_viewed:
+  reason: product_analytics
+favorite_added:
+  reason: product_analytics
+exercise_favorited:
+  reason: product_analytics
+exercise_skipped:
+  reason: product_analytics
+exercise_substituted:
+  reason: product_analytics
+
+# --- Billing funnel ---------------------------------------------------------
+paywall_viewed:
+  reason: product_analytics
+checkout_session_created:
+  reason: covered_by_other_event # checkout_started owns the abandoned-cart contract
+checkout_redirect_opened:
+  reason: product_analytics
+checkout_failed:
+  reason: product_analytics
+
+# --- AI / coach -------------------------------------------------------------
+workout_strategy_created:
+  reason: product_analytics
+ai_workout_generated:
+  reason: product_analytics
+ai_workout_validation_failed:
+  reason: internal_audit
+coach_insight_created:
+  reason: product_analytics
+ai_workout_chat_started:
+  reason: product_analytics
+ai_workout_message_sent:
+  reason: product_analytics
+ai_workout_blocked_security:
+  reason: internal_audit
+ai_workout_blocked_out_of_scope:
+  reason: internal_audit
+ai_workout_preview_generated:
+  reason: product_analytics
+ai_workout_preview_adjusted:
+  reason: product_analytics
+ai_workout_confirmed:
+  reason: product_analytics
+ai_workout_creation_failed:
+  reason: internal_audit
+
+# --- Activation aliases superseded by the V1 journey -------------------------
+activation_first_workout_completed:
+  reason: covered_by_other_event # first_workout_completed
+activation_reminder_2h_due:
+  reason: covered_by_other_event # first_workout_not_started_2h
+activation_reminder_24h_due:
+  reason: covered_by_other_event # first_workout_not_started_24h
+
+# --- Push telemetry ----------------------------------------------------------
+# The outcome of a push Make already asked us to send. Sending it back would be
+# an echo of Make's own decision, and every one of these is written with
+# suppress_make_delivery: true at the producer.
+push_scheduled:
+  reason: push_telemetry
+push_sent:
+  reason: push_telemetry
+push_failed:
+  reason: push_telemetry
+push_opened:
+  reason: push_telemetry
+push_deep_link_opened:
+  reason: push_telemetry
+push_provider_accepted:
+  reason: push_telemetry
+push_provider_rejected:
+  reason: push_telemetry
+push_event_eligible:
+  reason: push_telemetry
+push_requested_to_make:
+  reason: push_telemetry
+push_dispatch_skipped:
+  reason: push_telemetry
+workout_started_from_push:
+  reason: push_telemetry
+workout_completed_from_push:
+  reason: push_telemetry
+notification_skipped:
+  reason: push_telemetry
+
+# --- Admin / audit trails ----------------------------------------------------
+admin_push_test_requested:
+  reason: internal_audit
+push_frequency_bypass_granted:
+  reason: internal_audit
+push_frequency_bypass_denied:
+  reason: internal_audit
+
+# --- Notification preference changes ----------------------------------------
+# Consent state lives in EasyHealth and is enforced at dispatch time; Make does
+# not need to mirror it.
+notification_disliked:
+  reason: product_analytics
+notification_type_disabled:
+  reason: product_analytics
+notification_time_changed:
+  reason: product_analytics

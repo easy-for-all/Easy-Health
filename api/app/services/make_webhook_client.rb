@@ -307,7 +307,10 @@ class MakeWebhookClient
 
     payload = Make::EventPayloadSerializer.new(
       event: user_event,
-      delivery_channels: delivery_channels
+      # Resolved here so the serializer never has to ask about eligibility.
+      # `.presence` keeps the serializer's catalog fallback for the degenerate
+      # case where resolution yields nothing.
+      delivery_channels: channels_for(user_event, delivery_channels).presence
     ).as_json
 
     user_event.update!(payload_json: JSON.parse(JSON.generate(payload)))
@@ -341,8 +344,22 @@ class MakeWebhookClient
     payload[:schema_version] || payload["schema_version"] || MakeWebhookEligibility.event_schema_version
   end
 
+  # The channels EasyHealth decided to EXPOSE to Make for this event, resolved
+  # here (not in the serializer, which stays a pure formatter) in order of
+  # authority: an explicit override from a smoke test, then what was decided and
+  # persisted when the event was born, then a recomputation for legacy rows
+  # written before the column existed.
+  #
+  # This is orchestration channel routing, NOT "deliverable right now". Push is
+  # never removed here because the user has no token, has push_enabled=false or
+  # has not granted permission — those belong to Make::PushDispatchRequest, at
+  # dispatch time. The only gate that narrows a channel at this layer is EMAIL
+  # consent, because Make sends email directly and no EasyHealth callback can
+  # reapply that rule afterwards.
   def channels_for(user_event, delivery_channels)
-    channels = delivery_channels.presence || CommunicationEvents.channels_for(user_event.event_name)
+    channels = delivery_channels.presence ||
+               user_event.make_delivery_channels_list.presence ||
+               MakeWebhookEligibility.deliverable_channels(user_event.user, user_event.event_name)
     Array(channels).map(&:to_s).reject(&:blank?)
   rescue CommunicationEvents::ConfigError
     []
