@@ -99,17 +99,7 @@ namespace :make_webhook do
                          .order(:created_at)
                          .limit(limit)
 
-        stats = { considered: 0, delivered: 0, failed: 0 }
-
-        stuck.each do |user_event|
-          stats[:considered] += 1
-          result = MakeWebhookClient.new.deliver(user_event)
-          result.success? ? stats[:delivered] += 1 : stats[:failed] += 1
-        rescue StandardError => e
-          # One poisoned event must not stop the sweep.
-          stats[:failed] += 1
-          Rails.logger.warn("[make_webhook:retry_pending] event=#{user_event.id} error=#{e.class}")
-        end
+        stats = MakePendingDeliveryRetry.call(scope: stuck, batch: false)
 
         puts "\n=== Make pending retry ==="
         puts "  older than    : #{age_minutes} min"

@@ -70,7 +70,6 @@ class ScheduledWorkoutReminderSchedulerJob < ApplicationJob
       .joins(:health_profile, :workout_plans)
       .where(deletion_requested_at: nil, anonymized_at: nil)
       .where(workout_plans: { active: true })
-      .where.not(users: { time_zone: [ nil, "" ] })
       .where.not(health_profiles: { preferred_workout_time: nil })
       .where.not(health_profiles: { preferred_workout_period: "variable" })
       .select("users.*")

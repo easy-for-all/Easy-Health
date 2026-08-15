@@ -33,13 +33,14 @@ Config técnica em [api/config/communication_events.yml](../api/config/communica
 | `user_inactive_7_days` | ≥7 dias sem concluir | push, email | workout_reminder | /workouts/ready | sim |
 
 - Atividade = `workout_sessions.maximum(:completed_at)` (não login/abertura).
-- Emissão: jobs `FirstWorkoutNotStarted2hJob`/`24hJob` (rake `orchestration:run_15min`),
-  inatividade em `RelationshipDailyJob` (rake `orchestration:relationship_daily`),
+- Emissão: jobs `FirstWorkoutNotStarted2hJob`/`24hJob` (`bin/rails orchestration:run_15min`),
+  inatividade em `RelationshipDailyJob` (`bin/rails orchestration:relationship_daily`),
   conclusão em `WorkoutSessionsController`.
 - Cancelamento = **não emitir quando a condição falha** + idempotência (sem sinal Rails→Make).
 - Janela de silêncio: **não** bloqueia a geração do evento. `PushQuietHours` só
-  atua no dispatch, atrás de `PUSH_QUIET_HOURS_ENABLED`, respondendo
-  `skipped` + `deferred: true` + `next_allowed_at` para o Make reagendar.
+  atua no dispatch, atrás de `PUSH_QUIET_HOURS_ENABLED`. Durante 22:00–07:00,
+  o backend persiste `PushDispatch status=deferred` com `next_allowed_at` e o
+  sweep backend libera depois. Não depende de o Make chamar novamente.
   Ver `docs/event-orchestration.md`.
 
 ## Copy sugerida (configurar no Make)

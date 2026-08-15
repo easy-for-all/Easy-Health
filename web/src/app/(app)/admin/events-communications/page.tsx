@@ -15,7 +15,7 @@ import {
   formatInterval,
   formatRate,
   formatRateDetail,
-  isDeferrable,
+  isDeferReason,
   makeStatusLabel,
   makeStatusTone,
   originLabel,
@@ -330,7 +330,7 @@ export default function EventsCommunicationsPage() {
               title="Resultado do push"
               subtitle="O que o Make efetivamente pediu e o que o provider fez. Aqui, sim, é envio."
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               <Card label="Solicitados" value={formatCount(dispatch?.requested)} />
               <Card
                 label="Aceitos pelo provider"
@@ -338,6 +338,7 @@ export default function EventsCommunicationsPage() {
                 description={`${formatRate(summary?.rates.dispatch_to_provider_accepted)} dos solicitados`}
               />
               <Card label="Rejeitados" value={formatCount(dispatch?.provider_rejected)} />
+              <Card label="Deferidos" value={formatCount(dispatch?.deferred)} />
               <Card
                 label="Ignorados"
                 value={formatCount(dispatch?.skipped)}
@@ -347,9 +348,40 @@ export default function EventsCommunicationsPage() {
             <TableShell>
               <thead>
                 <tr className="border-b border-[var(--border)]">
+                  <th className={TH}>Motivo do defer</th>
+                  <th className={TH}>Total</th>
+                  <th className={TH}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(dispatch?.deferred_reasons ?? []).map((row) => (
+                  <tr key={row.defer_reason} className="border-b border-[var(--border)] last:border-0">
+                    <td className={`${TD} font-semibold`}>{row.defer_reason}</td>
+                    <td className={TD}>{formatCount(row.count)}</td>
+                    <td className={TD}>
+                      {isDeferReason(row.defer_reason, dispatch?.defer_reasons ?? []) ? (
+                        <Badge tone="warn">aguardando backend</Badge>
+                      ) : (
+                        <Badge tone="muted">desconhecido</Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!dispatch?.deferred_reasons?.length && (
+                  <tr>
+                    <td className={`${TD} text-[var(--text-dim)]`} colSpan={3}>
+                      Nenhum push deferido no período.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </TableShell>
+            <TableShell>
+              <thead>
+                <tr className="border-b border-[var(--border)]">
                   <th className={TH}>Motivo do skip</th>
                   <th className={TH}>Total</th>
-                  <th className={TH}>Reagendável?</th>
+                  <th className={TH}>Terminal?</th>
                 </tr>
               </thead>
               <tbody>
@@ -358,11 +390,7 @@ export default function EventsCommunicationsPage() {
                     <td className={`${TD} font-semibold`}>{row.skip_reason}</td>
                     <td className={TD}>{formatCount(row.count)}</td>
                     <td className={TD}>
-                      {isDeferrable(row.skip_reason, dispatch?.deferrable_skip_reasons ?? []) ? (
-                        <Badge tone="warn">sim, o Make pode reagendar</Badge>
-                      ) : (
-                        <Badge tone="muted">não</Badge>
-                      )}
+                      <Badge tone="muted">sim</Badge>
                     </td>
                   </tr>
                 ))}
@@ -472,7 +500,9 @@ export default function EventsCommunicationsPage() {
                     <Badge tone={pushStatusTone(row.push_status)}>{pushStatusLabel(row.push_status)}</Badge>
                   </td>
                   <td className={`${TD} text-xs text-[var(--text-dim)]`}>
-                    {row.skip_reason || row.make_error || "—"}
+                    {row.defer_reason
+                      ? `${row.defer_reason}${row.next_allowed_at ? ` até ${formatDateTime(row.next_allowed_at)}` : ""}`
+                      : row.skip_reason || row.make_error || "—"}
                   </td>
                 </tr>
               ))}

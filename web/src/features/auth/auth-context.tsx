@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { api, ApiError, TRIAL_EXPIRED_EVENT } from "@/shared/lib/api";
 import type { User } from "@/shared/types/user";
-import { Capacitor } from "@capacitor/core";
+import { isNativeApp } from "@/shared/lib/analytics/context";
 import { identifyUser, resetIdentity } from "@/shared/lib/analytics";
 import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
 
@@ -80,7 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    if (!Capacitor.isNativePlatform()) return;
+    // isNativeApp(), never Capacitor.isNativePlatform(): the shell loads the
+    // REMOTE site in a WebView, where isNativePlatform() can return false. This
+    // gate was silently skipping the whole push sync on real Android devices
+    // (see docs/android-tracking-audit.md).
+    if (!isNativeApp()) return;
 
     // Runs once the session is ready (user resolved from /auth/me or a login).
     // Only re-syncs the token if the user already granted permission — never

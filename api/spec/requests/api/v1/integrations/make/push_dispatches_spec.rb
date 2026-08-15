@@ -463,10 +463,11 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
     include ActiveSupport::Testing::TimeHelpers
 
     let!(:token) { create(:device_token, user: user, permission_status: "granted") }
+    let(:zone) { ActiveSupport::TimeZone["America/Sao_Paulo"] }
 
     before { user.update!(time_zone: "America/Sao_Paulo") }
 
-    # 03:00 in São Paulo — outside the 08–21 window.
+    # 03:00 in São Paulo — inside the 22:00–07:00 quiet-hours window.
     def at_night(&block)
       travel_to(Time.utc(2026, 7, 20, 6, 0), &block)
     end
@@ -479,19 +480,21 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       expect(json["sent"]).to be(true)
     end
 
-    it "skips at night when the gate is on" do
+    it "defers at night when the gate is on" do
+      expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+
       at_night do
         with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
       end
 
       expect(response).to have_http_status(:ok)
-      expect(json["skip_reason"]).to eq("quiet_hours")
+      expect(json["status"]).to eq("deferred")
+      expect(json["defer_reason"]).to eq("quiet_hours")
+      expect(json["skip_reason"]).to be_nil
       expect(json["sent"]).to be(false)
     end
 
-    # Without this, a quiet-hours skip would silently destroy the
-    # communication: Make has no way to know it could retry.
-    it "tells Make when it may try again, in the user's timezone" do
+    it "records next_allowed_at in the user's timezone" do
       at_night do
         with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
       end
@@ -500,7 +503,7 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       expect(json["user_timezone"]).to eq("America/Sao_Paulo")
 
       next_allowed = Time.zone.parse(json["next_allowed_at"])
-      expect(next_allowed.in_time_zone("America/Sao_Paulo").hour).to eq(PushQuietHours::START_HOUR)
+      expect(next_allowed.in_time_zone("America/Sao_Paulo").hour).to eq(PushQuietHours::END_HOUR)
       expect(next_allowed).to be > Time.utc(2026, 7, 20, 6, 0)
     end
 
@@ -514,13 +517,44 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       expect(json["next_allowed_at"]).to be_nil
     end
 
-    it "persists the reason on the dispatch row" do
+    it "persists a non-terminal deferred dispatch row" do
       at_night do
         with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
       end
 
-      expect(PushDispatch.last.skip_reason).to eq("quiet_hours")
-      expect(PushDispatch::SKIP_REASONS).to include("quiet_hours")
+      dispatch = PushDispatch.last
+      expect(dispatch.status).to eq("deferred")
+      expect(dispatch.skip_reason).to be_nil
+      expect(dispatch.defer_reason).to eq("quiet_hours")
+      expect(dispatch.next_allowed_at).to be_present
+    end
+
+    it "reuses the same deferred dispatch for the same idempotency key" do
+      payload = valid_payload(event_id: "evt_same")
+
+      at_night do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") do
+          post_dispatch(payload)
+          post_dispatch(payload)
+        end
+      end
+
+      expect(PushDispatch.where(idempotency_key: "evt_same:workout_not_started_v1:#{user.id}:workout_reminder").count).to eq(1)
+      expect(json["status"]).to eq("deferred")
+    end
+
+    it "dispatches a deferred push after quiet hours and revalidates gates" do
+      at_night do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+      end
+
+      dispatch = PushDispatch.last
+      travel_to(Time.utc(2026, 7, 20, 11, 0)) do # 08:00 São Paulo
+        stats = Make::PushDispatchRequest.dispatch_deferred(now: Time.current)
+        expect(stats[:sent]).to eq(1)
+      end
+
+      expect(dispatch.reload.status).to eq("provider_accepted")
     end
 
     it "sends during the day with the gate on" do
@@ -529,6 +563,67 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       end
 
       expect(json["sent"]).to be(true)
+    end
+
+    it "does not count a deferred dispatch toward cooldown" do
+      at_night do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+      end
+
+      travel_to(Time.utc(2026, 7, 20, 13, 0)) do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload(event_id: "evt_after_quiet")) }
+      end
+
+      expect(json["sent"]).to be(true)
+    end
+
+    it "skips a 07:00 workout reminder made stale by quiet hours" do
+      event = user.user_events.create!(
+        event_name: "scheduled_workout_reminder_due",
+        occurred_at: Time.current,
+        metadata: {
+          activation: {
+            target_workout_at: zone.local(2026, 7, 20, 7, 0).iso8601
+          }
+        }
+      )
+      payload = valid_payload(
+        event_id: event.id.to_s,
+        campaign_key: "scheduled_workout_reminder_due",
+        data: { "event_name" => "scheduled_workout_reminder_due" }
+      )
+
+      travel_to(zone.local(2026, 7, 20, 6, 30)) do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(payload) }
+      end
+
+      expect(json["status"]).to eq("skipped")
+      expect(json["skip_reason"]).to eq("stale_after_quiet_hours")
+      expect(PushDispatch.last.skip_reason).to eq("stale_after_quiet_hours")
+    end
+
+    it "sends a 07:30 workout reminder at 07:00" do
+      event = user.user_events.create!(
+        event_name: "scheduled_workout_reminder_due",
+        occurred_at: Time.current,
+        metadata: {
+          activation: {
+            target_workout_at: zone.local(2026, 7, 20, 7, 30).iso8601
+          }
+        }
+      )
+      payload = valid_payload(
+        event_id: event.id.to_s,
+        campaign_key: "scheduled_workout_reminder_due",
+        data: { "event_name" => "scheduled_workout_reminder_due" }
+      )
+
+      travel_to(zone.local(2026, 7, 20, 7, 0)) do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(payload) }
+      end
+
+      expect(json["sent"]).to be(true)
+      expect(PushDispatch.last.status).to eq("provider_accepted")
     end
   end
 

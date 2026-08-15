@@ -8,10 +8,14 @@ RSpec.describe "orchestration tasks" do
 
   let(:run_15min) { Rake::Task["orchestration:run_15min"] }
   let(:daily) { Rake::Task["orchestration:relationship_daily"] }
+  let(:retry_pending_make) { Rake::Task["orchestration:retry_pending_make"] }
+  let(:dispatch_deferred) { Rake::Task["orchestration:dispatch_deferred_pushes"] }
 
   before do
     run_15min.reenable
     daily.reenable
+    retry_pending_make.reenable
+    dispatch_deferred.reenable
   end
 
   describe "orchestration:run_15min" do
@@ -53,13 +57,53 @@ RSpec.describe "orchestration tasks" do
     end
   end
 
+  describe "orchestration:retry_pending_make" do
+    it "re-drives recent pending Make events and records heartbeat" do
+      user = create(:user)
+      recent = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                 occurred_at: Time.current, make_delivery_status: "pending")
+      old = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                              occurred_at: Time.current, make_delivery_status: "pending")
+      old.update_columns(created_at: 2.hours.ago, updated_at: 2.hours.ago) # rubocop:disable Rails/SkipsModelValidations
+
+      client = instance_double(MakeWebhookClient)
+      allow(MakeWebhookClient).to receive(:new).and_return(client)
+      allow(client).to receive(:deliver).with(recent).and_return(MakeWebhookClient::Result.new(status: "accepted_by_make"))
+
+      expect { retry_pending_make.invoke }.to output(/orchestration:retry_pending_make/).to_stdout
+
+      expect(client).to have_received(:deliver).with(recent)
+      expect(client).not_to have_received(:deliver).with(old)
+      expect(ObservabilityHeartbeat.find_by(key: "make_pending_retry").last_succeeded_at).to be_present
+    end
+  end
+
+  describe "orchestration:dispatch_deferred_pushes" do
+    it "dispatches due PushDispatch rows and records heartbeat" do
+      allow(Make::PushDispatchRequest).to receive(:dispatch_deferred).and_return({ sent: 1 })
+
+      expect { dispatch_deferred.invoke }.to output(/orchestration:dispatch_deferred_pushes/).to_stdout
+
+      expect(Make::PushDispatchRequest).to have_received(:dispatch_deferred).with(limit: 500)
+      expect(ObservabilityHeartbeat.find_by(key: "push_dispatch_deferred").last_succeeded_at).to be_present
+    end
+  end
+
   describe "orchestration:status" do
     it "reports each scheduler and the catalog" do
       Rake::Task["orchestration:status"].reenable
       Observability::Heartbeat.register_all!
 
       expect { Rake::Task["orchestration:status"].invoke }
-        .to output(/SCHEDULERS.*scheduled_workout_reminder.*ORCHESTRATION EVENTS.*ALLOWLIST DRIFT/m).to_stdout
+        .to output(a_string_including(
+          "SCHEDULERS",
+          "scheduled_workout_reminder",
+          "make_pending_retry",
+          "push_dispatch_deferred",
+          "ORCHESTRATION EVENTS",
+          "ALLOWLIST DRIFT",
+          "PUSH_QUIET_HOURS_WINDOW"
+        )).to_stdout
     end
   end
 end

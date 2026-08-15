@@ -68,7 +68,7 @@ class ScheduledWorkoutReminderSchedule
     end
 
     def time_zone_for(user)
-      ActiveSupport::TimeZone[user.time_zone.to_s]
+      CommunicationTime.zone_for(user)
     end
 
     private

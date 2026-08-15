@@ -136,7 +136,7 @@ module Observability
             "#{config.make_backlog_warning}. Backlog normal."
           else
             "#{stuck} evento(s) pendente(s) há mais de #{age} min aguardando entrega ao Make. " \
-            "Remediação: rake make_webhook:retry_pending."
+            "Remediação: bin/rails orchestration:retry_pending_make."
           end
 
         Observability::CheckResult.new(

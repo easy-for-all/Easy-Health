@@ -7,20 +7,32 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const h = vi.hoisted(() => {
   const listeners: Record<string, Array<(arg: unknown) => void>> = {};
   const state = {
-    isNative: true,
+    // The two Capacitor signals are controlled INDEPENDENTLY on purpose: the
+    // production regression is isNativePlatform() === false while
+    // getPlatform() === "android" inside the remote-URL WebView shell.
+    isNativePlatform: true,
+    platform: "android" as string,
     checkReceive: "granted" as string,
     requestReceive: "granted" as string,
     // What register() does when called (default: emit a token synchronously).
     onRegister: null as null | (() => void),
     listeners,
+    // Call counters survive vi.resetModules(), unlike the mocked fns themselves.
+    checkPermissionCalls: 0,
+    requestPermissionCalls: 0,
+    registerCalls: 0,
     emit(event: string, arg: unknown) {
       (listeners[event] ?? []).slice().forEach((cb) => cb(arg));
     },
     reset() {
       for (const k of Object.keys(listeners)) delete listeners[k];
-      state.isNative = true;
+      state.isNativePlatform = true;
+      state.platform = "android";
       state.checkReceive = "granted";
       state.requestReceive = "granted";
+      state.checkPermissionCalls = 0;
+      state.requestPermissionCalls = 0;
+      state.registerCalls = 0;
       state.onRegister = () => state.emit("registration", { value: "fcm-token-abcd1234" });
     },
   };
@@ -40,7 +52,10 @@ const apiPost = vi.hoisted(() => vi.fn());
 const trackEventMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => h.isNative },
+  Capacitor: {
+    isNativePlatform: (): boolean => h.isNativePlatform,
+    getPlatform: (): string => h.platform,
+  },
 }));
 
 vi.mock("@capacitor/app", () => ({
@@ -49,14 +64,19 @@ vi.mock("@capacitor/app", () => ({
 
 vi.mock("@capacitor/push-notifications", () => ({
   PushNotifications: {
-    checkPermissions: vi.fn(async () => ({ receive: h.checkReceive })),
+    checkPermissions: vi.fn(async () => {
+      h.checkPermissionCalls++;
+      return { receive: h.checkReceive };
+    }),
     requestPermissions: vi.fn(async () => {
+      h.requestPermissionCalls++;
       // Mirror a real device: after the prompt resolves, checkPermissions
       // reflects the user's choice.
       h.checkReceive = h.requestReceive;
       return { receive: h.requestReceive };
     }),
     register: vi.fn(async () => {
+      h.registerCalls++;
       h.onRegister?.();
     }),
     createChannel: vi.fn(async () => {}),
@@ -161,7 +181,8 @@ describe("ensurePushTokenRegistered", () => {
   });
 
   it("returns unsupported and does nothing on a non-native platform", async () => {
-    h.isNative = false;
+    h.isNativePlatform = false;
+    h.platform = "web";
     const svc = await loadService();
     const result = await svc.ensurePushTokenRegistered("auth_boot");
     expect(result).toEqual({ permissionState: "unsupported", registered: false, failureReason: "unsupported" });
@@ -244,6 +265,85 @@ describe("ensurePushTokenRegistered", () => {
     expect(resultB.registered).toBe(true);
     expect(apiPost).toHaveBeenCalledTimes(1);
     expect(apiPost.mock.calls[0][1]).toMatchObject({ token: "fresh-token-B" });
+  });
+});
+
+// The production regression: inside the Capacitor shell that loads the REMOTE
+// site, isNativePlatform() answers false while getPlatform() still says
+// "android". The push service must trust the corroborated signal (isNativeApp)
+// — otherwise every entry point degrades to "unsupported" and no FCM token is
+// ever registered on real devices.
+describe("native detection when isNativePlatform() lies", () => {
+  function deviceTokenPosts() {
+    return apiPost.mock.calls.filter(([path]) => path === "/api/v1/device_tokens");
+  }
+
+  it("registers and posts once when isNativePlatform()=false but getPlatform()=android", async () => {
+    h.isNativePlatform = false;
+    h.platform = "android";
+
+    const svc = await loadService();
+    const result = await svc.ensurePushTokenRegistered("auth_boot");
+
+    expect(result).toEqual({ permissionState: "granted", registered: true });
+    expect(h.registerCalls).toBe(1);
+
+    const posts = deviceTokenPosts();
+    expect(posts).toHaveLength(1);
+    expect(posts[0][1]).toMatchObject({
+      platform: "android",
+      permission_status: "granted",
+      app_version: "9.9.9",
+    });
+  });
+
+  it("does not touch push at all on the web (isNativePlatform()=false, getPlatform()=web)", async () => {
+    h.isNativePlatform = false;
+    h.platform = "web";
+
+    const svc = await loadService();
+    const result = await svc.ensurePushTokenRegistered("auth_boot");
+
+    expect(result).toEqual({
+      permissionState: "unsupported",
+      registered: false,
+      failureReason: "unsupported",
+    });
+    expect(h.checkPermissionCalls).toBe(0);
+    expect(h.registerCalls).toBe(0);
+    expect(deviceTokenPosts()).toHaveLength(0);
+  });
+
+  it("does not register (nor prompt) on a robustly-detected Android with permission denied", async () => {
+    h.isNativePlatform = false;
+    h.platform = "android";
+    h.checkReceive = "denied";
+
+    const svc = await loadService();
+    const result = await svc.ensurePushTokenRegistered("auth_boot");
+
+    expect(result.registered).toBe(false);
+    expect(result.failureReason).toBe("permission_denied");
+    expect(h.requestPermissionCalls).toBe(0);
+    expect(h.registerCalls).toBe(0);
+    expect(deviceTokenPosts()).toHaveLength(0);
+  });
+
+  it("auth boot never opens the native prompt when permission is still 'prompt'", async () => {
+    h.isNativePlatform = false;
+    h.platform = "android";
+    h.checkReceive = "prompt";
+
+    const svc = await loadService();
+    const result = await svc.syncPushIfGranted("auth_boot");
+
+    expect(result.permissionState).toBe("prompt");
+    expect(result.registered).toBe(false);
+    expect(result.failureReason).toBe("permission_denied");
+    // The prompt belongs exclusively to requestPushPermissionAndRegister().
+    expect(h.requestPermissionCalls).toBe(0);
+    expect(h.registerCalls).toBe(0);
+    expect(deviceTokenPosts()).toHaveLength(0);
   });
 });
 

@@ -35,6 +35,7 @@ class ScheduledWorkoutReminderEventEmitter
         # noticed it. The gap between them is the cron's lateness, and without
         # both Make cannot tell a fresh reminder from one detected 15min late.
         reminder_due_at: schedule.reminder_due_at&.iso8601,
+        target_workout_at: schedule.workout_at&.iso8601,
         reminder_lead_minutes: schedule.reminder_lead_minutes,
         detected_at: occurred_at.iso8601,
         timezone: schedule.timezone,

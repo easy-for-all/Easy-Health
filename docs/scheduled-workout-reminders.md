@@ -24,11 +24,13 @@ cron */15 -> orchestration:run_15min
 - Horario preferencial: `health_profiles.preferred_workout_time`.
 - Periodo preferencial: `health_profiles.preferred_workout_period`.
 - "Meu horario varia": `preferred_workout_period = "variable"`; controllers limpam `preferred_workout_time`.
-- Timezone: `users.time_zone`; esta feature nao aplica fallback silencioso.
+- Timezone: `CommunicationTime.zone_for(user)`; preferencia de notificacao vence,
+  depois `users.time_zone`, depois instalacao Android vinculada se aplicavel, e
+  fallback `America/Sao_Paulo`.
 - Plano atual: `User#active_workout_plan`.
 - Treino especifico no payload: primeiro `workout_days.id` do plano ativo por `COALESCE(position, day_of_week)`.
 - Conclusao valida: `workout_sessions.status = "completed"` e `completion_status = "completed"`.
-- Push autorizado: `user_notification_preferences.push_enabled = true`, `workout_reminders_enabled = true`, e ao menos um `device_tokens.active` com `permission_status = "granted"`.
+- Push autorizado: decidido depois, em `Make::PushDispatchRequest`.
 
 ## Regras
 
@@ -48,16 +50,20 @@ cron */15 -> orchestration:run_15min
   adiantado; so pega um alvo que JA ficou due. Precisa ser >= o intervalo do
   cron (15min), senao um instante due cai entre dois ticks e se perde.
   Treino 07:10 => due 06:40 => tick 06:30 nao gera, tick 06:45 gera 5min tarde.
-- Elegibilidade so bloqueia por regra de NEGOCIO (plano, horario, timezone,
+- Elegibilidade so bloqueia por regra de NEGOCIO (plano, horario,
   treino concluido, maximo, ja enviado hoje). `push_disabled`, ausencia de
   token e allowlist do Make NAO impedem o evento: sao decididos no dispatch.
+- O evento persiste `activation.target_workout_at`, calculado no momento em que
+  o fato nasce. Esse valor, e nao uma preferencia futura do usuario, decide se
+  um push deferido por quiet hours ficou obsoleto.
 - Se o plano foi criado depois do horario de lembrete do dia, a primeira
   ocorrencia valida fica para o proximo dia.
 
 ## Configuracao
 
 ```env
-SCHEDULED_WORKOUT_REMINDER_ENABLED=false
+COMMUNICATION_DEFAULT_TIMEZONE=America/Sao_Paulo
+SCHEDULED_WORKOUT_REMINDER_ENABLED=true
 MAKE_WEBHOOK_ENABLED=true
 MAKE_WEBHOOK_URL=https://make.example/webhook
 MAKE_WEBHOOK_SECRET=secret
@@ -89,7 +95,7 @@ MAKE_WEBHOOK_URL=https://make.example/webhook \
 MAKE_WEBHOOK_SECRET=secret \
 MAKE_EVENT_SCHEMA_VERSION=2 \
 MAKE_WEBHOOK_ALLOWED_EVENTS=scheduled_workout_reminder_due \
-bundle exec rake scheduled_workout_reminders:run \
+bin/rails scheduled_workout_reminders:run \
 USER_ID=123 \
 NOW="2026-07-21T06:30:00-03:00"
 ```

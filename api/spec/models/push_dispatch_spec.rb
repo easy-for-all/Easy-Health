@@ -31,8 +31,41 @@ RSpec.describe PushDispatch do
     expect(build_dispatch(status: "provider_accepted").delivered?).to be(true)
     expect(build_dispatch(status: "partially_accepted").delivered?).to be(true)
     expect(build_dispatch(status: "opened").delivered?).to be(true)
+    expect(build_dispatch(status: "deferred").delivered?).to be(false)
     expect(build_dispatch(status: "failed").delivered?).to be(false)
     expect(build_dispatch(status: "skipped").delivered?).to be(false)
+  end
+
+  it "stores quiet-hours deferral without using skip_reason" do
+    dispatch = build_dispatch
+    dispatch.save!
+
+    dispatch.mark_deferred!(reason: "quiet_hours", next_allowed_at: 1.hour.from_now)
+
+    expect(dispatch.status).to eq("deferred")
+    expect(dispatch.skip_reason).to be_nil
+    expect(dispatch.defer_reason).to eq("quiet_hours")
+    expect(dispatch.next_allowed_at).to be_present
+  end
+
+  it "declares and enforces the allowed lifecycle transitions" do
+    dispatch = build_dispatch
+    dispatch.save!
+
+    dispatch.mark_deferred!(reason: "quiet_hours", next_allowed_at: 1.hour.from_now)
+    dispatch.update!(status: "processing")
+    dispatch.update!(status: "provider_accepted")
+    dispatch.mark_opened!
+
+    expect(dispatch.status).to eq("opened")
+  end
+
+  it "rejects invalid lifecycle jumps" do
+    dispatch = build_dispatch
+    dispatch.save!
+
+    expect { dispatch.update!(status: "provider_accepted") }
+      .to raise_error(ActiveRecord::RecordInvalid, /cannot transition from received to provider_accepted/)
   end
 
   it "never exposes payload_json through as_json" do

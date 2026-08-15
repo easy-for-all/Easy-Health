@@ -62,6 +62,7 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     expect(event.metadata.dig("activation", "plan_id")).to eq(plan.id)
     expect(event.metadata.dig("activation", "workout_id")).to eq(day.id)
     expect(event.metadata.dig("activation", "reminder_time")).to eq("06:30")
+    expect(Time.zone.parse(event.metadata.dig("activation", "target_workout_at"))).to eq(zone.local(2026, 7, 21, 7, 0))
     expect(event.metadata.dig("activation", "reminder_number")).to eq(1)
     expect(event.idempotency_key).to eq("scheduled-workout-reminder:v1:user:#{user.id}:plan:#{plan.id}:date:2026-07-21")
     expect(MakeWebhookDeliveryJob).to have_received(:perform_later).with(event.id)

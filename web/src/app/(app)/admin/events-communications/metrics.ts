@@ -22,6 +22,7 @@ export interface Summary {
   push_requested: number;
   provider_accepted: number;
   provider_rejected: number;
+  push_deferred: number;
   push_skipped: number;
   rates: {
     generated_to_sent: Rate;
@@ -41,6 +42,7 @@ export interface EventRow {
   push_requested: number;
   provider_accepted: number;
   provider_rejected: number;
+  push_deferred: number;
   push_skipped: number;
   unique_users: number;
   last_generated_at: string | null;
@@ -66,14 +68,21 @@ export interface SkipRow {
   count: number;
 }
 
+export interface DeferredRow {
+  defer_reason: string;
+  count: number;
+}
+
 export interface PushDispatchResults {
   requested: number;
   provider_accepted: number;
   provider_rejected: number;
+  deferred: number;
   skipped: number;
   not_correlated: number;
+  deferred_reasons: DeferredRow[];
   skips: SkipRow[];
-  deferrable_skip_reasons: string[];
+  defer_reasons: string[];
 }
 
 export type SchedulerStatus = "healthy" | "warning" | "critical" | "insufficient_data";
@@ -86,6 +95,7 @@ export interface SchedulerRow {
   last_run_at?: string | null;
   last_success_at?: string | null;
   last_failure_at?: string | null;
+  next_expected_at?: string | null;
   last_error_code?: string | null;
   consecutive_failures?: number;
   duration_ms?: number | null;
@@ -107,6 +117,8 @@ export interface RecentEvent {
   push_dispatch_id: number | null;
   push_status: string | null;
   skip_reason: string | null;
+  defer_reason: string | null;
+  next_allowed_at: string | null;
   correlation_id: string | null;
 }
 
@@ -143,6 +155,8 @@ const SCHEDULER_LABELS: Record<string, string> = {
   first_workout_not_started_24h: "Lembrete 24h",
   scheduled_workout_reminder: "Horário preferido",
   relationship_daily_job: "Jornada diária",
+  make_pending_retry: "Retry Make",
+  push_dispatch_deferred: "Push deferido",
 };
 
 const ORIGIN_LABELS: Record<string, string> = {
@@ -265,6 +279,7 @@ const PUSH_STATUS_LABELS: Record<string, string> = {
   partially_accepted: "parcial",
   opened: "aberto",
   failed: "rejeitado",
+  deferred: "deferido",
   skipped: "ignorado",
 };
 
@@ -277,13 +292,11 @@ export function pushStatusTone(status: string | null | undefined): Tone {
   if (!status) return "muted";
   if (["provider_accepted", "partially_accepted", "opened"].includes(status)) return "ok";
   if (status === "failed") return "bad";
+  if (status === "deferred") return "warn";
   if (status === "skipped") return "warn";
   return "muted";
 }
 
-// quiet_hours is the one skip Make can retry later; everything else is an
-// opt-out, a cap or a bad request. Saying so avoids an operator chasing a
-// "failure" that is just the clock.
-export function isDeferrable(reason: string, deferrable: string[]): boolean {
-  return deferrable.includes(reason);
+export function isDeferReason(reason: string, deferReasons: string[]): boolean {
+  return deferReasons.includes(reason);
 }

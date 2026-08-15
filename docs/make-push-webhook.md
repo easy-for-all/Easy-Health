@@ -64,8 +64,8 @@ Campos relevantes para push:
 }
 ```
 
-- `timezone` (de `users.time_zone`, fallback `America/Sao_Paulo`) é o que o Make
-  usa para agendar no horário local do usuário.
+- `timezone` vem de `CommunicationTime.zone_for(user)` e é o que o Make usa para
+  agendar no horário local do usuário.
 - O schema 1 continua disponivel temporariamente com `MAKE_EVENT_SCHEMA_VERSION=1`.
 - `email`/`name` só aparecem com `MAKE_WEBHOOK_PAYLOAD_MODE=full`.
 

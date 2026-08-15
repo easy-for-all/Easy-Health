@@ -164,24 +164,25 @@ O Make **não consegue furar** um opt-out: ele só pede; quem envia é o backend
 
 ## 4. Quiet hours e o contrato `deferred`
 
-Quiet hours (08–21 local) **não** impede o evento de nascer. No dispatch, com
+Quiet hours (22:00–07:00 local) **não** impede o evento de nascer. No dispatch, com
 `PUSH_QUIET_HOURS_ENABLED=true`:
 
 ```json
-{ "status": "skipped", "sent": false, "skip_reason": "quiet_hours",
+{ "status": "deferred", "sent": false, "defer_reason": "quiet_hours",
   "deferred": true,
-  "next_allowed_at": "2026-08-15T08:00:00-03:00",
+  "next_allowed_at": "2026-08-15T07:00:00-03:00",
   "user_timezone": "America/Sao_Paulo",
   "dispatch_id": 123, "correlation_id": "make-456" }
 ```
 
-`deferred` distingue "não pode agora" de "não pode nunca" — todos os outros
-skips vêm com `deferred: false`. **O backend não faz retry**: quem reagenda em
-`next_allowed_at`, ou desiste, é o Make. Sem isso, um skip por horário destruiria
-a comunicação em silêncio.
+`deferred` distingue "não pode agora" de "não pode nunca". Não é `skipped` e não
+usa `skip_reason`: o backend guarda a decisão/copy/campanha em `PushDispatch` e
+um sweep próprio libera depois de `next_allowed_at`. Skips continuam terminais
+(`global_opt_out`, `no_active_token`, `stale_after_quiet_hours`, etc.).
 
-**Rollout recomendado:** manter `false` até o cenário Make ler `next_allowed_at`
-e reagendar. Depois disso, ligar — é o que torna a comunicação não invasiva.
+Para `scheduled_workout_reminder_due`, se o fim de quiet hours for igual ou
+posterior ao `activation.target_workout_at` persistido quando o evento nasceu, o
+dispatch vira `skipped/stale_after_quiet_hours` e não envia lembrete obsoleto.
 
 ---
 
@@ -292,8 +293,10 @@ filtra hoje (`contains push`). `candidate_channels` responde outra pergunta — 
 
 | Processo | Cadência | Entry point | Heartbeat |
 |---|---|---|---|
-| 2h / 24h / lembrete de horário | ~15min | `rake orchestration:run_15min` | 3 chaves, 15min |
-| Jornada diária | 1×/dia (08:00 UTC) | `rake orchestration:relationship_daily` | `relationship_daily_job`, 1d |
+| 2h / 24h / lembrete de horário | ~15min | `bin/rails orchestration:run_15min` | 3 chaves, 15min |
+| Jornada diária | 1×/dia (08:00 America/Sao_Paulo) | `bin/rails orchestration:relationship_daily` | `relationship_daily_job`, 1d |
+| Retry Make pending | ~15min | `bin/rails orchestration:retry_pending_make` | `make_pending_retry`, 15min |
+| Push Make deferido | ~15min | `bin/rails orchestration:dispatch_deferred_pushes` | `push_dispatch_deferred`, 15min |
 
 Cada produtor roda isolado dentro do `run_15min`: um erro não silencia os outros.
 Cada job anexa `candidates_found` / `events_created` ao **seu único** heartbeat —
@@ -306,19 +309,16 @@ execução; um job jamais deve chamar `succeeded!` por conta própria.
 # 1. SEMPRE revisar o diff primeiro (DRY_RUN é o default)
 scripts/cron/install_cron.sh
 
-# 2. Aplicar
+# 2. Aplicar. Linhas legacy reconhecidas da EasyHealth são migradas
+#    automaticamente; refresh_analytics e crons externos são preservados.
 APPLY=1 scripts/cron/install_cron.sh
-
-# 3. Se o diff mostrar a entrada legada `rails runner "RelationshipDailyJob..."`,
-#    substitua-a explicitamente (senão o job roda DUAS vezes por dia)
-APPLY=1 MIGRATE_RELATIONSHIP_DAILY=1 scripts/cron/install_cron.sh
 ```
 
-O bloco gerenciado fica entre `# >>> easyhealth-orchestration >>>` e
-`# <<< easyhealth-orchestration <<<`. Tudo fora dele é preservado byte a byte.
-`observability:check`, `make_webhook:retry_pending`, `observability:resolve_stale`,
-`google_ads:sync_android_acquisition` e `refresh_bi_replica.sh` **não** entram no
-bloco: não foram auditados neste projeto e não devem mudar como efeito colateral.
+O bloco gerenciado fica entre `# BEGIN EASYHEALTH ORCHESTRATION` e
+`# END EASYHEALTH ORCHESTRATION`. Tudo fora dele é preservado byte a byte.
+Logs ficam em `logs/` no projeto. O instalador usa `CRON_TZ=America/Sao_Paulo`
+quando detectado; caso contrário, registra fallback técnico em UTC mantendo o
+horário de negócio como 08:00 São Paulo.
 
 ---
 
@@ -339,9 +339,9 @@ das 06:45 gera com 5 minutos de atraso. A janela só precisa cobrir o intervalo 
 cron (15min), senão um instante due cai entre dois ticks e se perde. Timezone e
 DST via `ActiveSupport::TimeZone`, sem cálculo manual de offset.
 
-O evento carrega `reminder_due_at` **e** `detected_at`: a diferença entre eles é
-o atraso do cron, e sem os dois não dá para distinguir um lembrete fresco de um
-detectado tarde.
+O evento carrega `reminder_due_at`, `detected_at` e `target_workout_at`: a
+diferença entre os dois primeiros é o atraso do cron; o último é o horário alvo
+determinístico usado para descartar lembrete obsoleto depois de quiet hours.
 
 ---
 
@@ -374,30 +374,30 @@ Só observabilidade. Copy e campanha continuam no Make; o admin não vira CMS.
 - **Canais candidatos** vs **Resultado do push**: blocos separados de propósito. Candidato = elegível (um evento push+email conta nos dois); resultado = o que foi pedido e o que o provider fez. WhatsApp e in-app aparecem como categoria conhecida com zero e rótulo "sem evento configurado" — sem integração fictícia.
 - **Por origem**: `origin_surface`, nunca misturado com canal.
 - **Schedulers**: status, último sucesso, candidatos e eventos criados.
-- **Eventos recentes**: a tabela de debug — evento, origem, status Make, HTTP, dispatch, status do push e motivo do skip, tudo em uma linha.
+- **Eventos recentes**: a tabela de debug — evento, origem, status Make, HTTP, dispatch, status do push, `defer_reason`/`next_allowed_at` ou motivo de skip, tudo em uma linha.
 - **Alertas**: `orchestration_event_unserializable`, `orchestration_event_dead_letter`, `orchestration_event_disabled` (anormal salvo razão prevista ou webhook globalmente off), `scheduler_stale`, `zero_push_to_make`, `zero_provider_accepted`, `allowlist_drift`, `uncatalogued_event` (**crítico**: evento do registry sem decisão em nenhum catálogo), `heartbeat_missing`.
 
-Diagnóstico por CLI: `rake orchestration:status`.
+Diagnóstico por CLI: `bin/rails orchestration:status`.
 
 ---
 
 ## 12. Rollout do `scheduled_workout_reminder_due`
 
 1. Deploy do código.
-2. `rake db:migrate`.
-3. `scripts/cron/install_cron.sh` (DRY_RUN) → revisar diff → `APPLY=1` (+ `MIGRATE_RELATIONSHIP_DAILY=1` se aparecer a entrada legada).
-4. `rake orchestration:status` e `SCHEDULED_WORKOUT_REMINDER_ENABLED` ainda `false`: confira que os schedulers ficam `healthy`.
-5. `rake "communication_events:preview[scheduled_workout_reminder_due,<email>]"` para conferir o payload.
-6. Configurar/validar o cenário no Make (filtro `delivery.channels contains push`).
-7. `SCHEDULED_WORKOUT_REMINDER_ENABLED=true` no `.env` do servidor + `docker compose -f docker-compose.prod.yml up -d api`.
+2. `bin/rails db:migrate`.
+3. Healthcheck OK.
+4. `scripts/cron/install_cron.sh` (DRY_RUN) → revisar diff → `APPLY=1`.
+5. `bin/rails orchestration:status`: conferir timezone default, daily 08:00 São Paulo, schedulers 15min, lead 30 e quiet hours 22:00–07:00.
+6. `bin/rails "communication_events:preview[scheduled_workout_reminder_due,<email>]"` para conferir o payload.
+7. Configurar/validar o cenário no Make (filtro `delivery.channels contains push`).
 8. Validar com um usuário de teste cujo `preferred_workout_time` esteja ~40min à frente.
 9. Observar o painel (Eventos recentes + Schedulers) e os logs por 24h.
 10. Liberar geral.
 
 Rollback de qualquer etapa: voltar a flag para `false`.
 
-Rollout análogo para `PUSH_QUIET_HOURS_ENABLED=true`, **depois** que o Make souber
-tratar `deferred` / `next_allowed_at`.
+`PUSH_QUIET_HOURS_ENABLED=true` não exige que Make reagende: o backend mantém e
+libera `PushDispatch deferred`.
 
 ---
 

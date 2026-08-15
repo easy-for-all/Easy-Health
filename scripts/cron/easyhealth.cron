@@ -1,18 +1,19 @@
 # EasyHealth — orquestração de eventos. Bloco GERENCIADO por
 # scripts/cron/install_cron.sh. Não editar no servidor: edite o template
 # versionado e reinstale.
-#
-# Escopo deliberadamente estreito: só as rotinas auditadas no projeto de
-# orquestração. observability:check, make_webhook:retry_pending,
-# observability:resolve_stale, google_ads:sync_android_acquisition e
-# refresh_bi_replica.sh seguem FORA deste bloco, sob manutenção manual.
+CRON_TZ_LINE_PLACEHOLDER
+
+# Jornada diária (segmentos, trial, inatividade 3/7 dias).
+# Horário de negócio: 08:00 America/Sao_Paulo.
+DAILY_CRON_PLACEHOLDER cd APP_DIR_PLACEHOLDER && FLOCK_DAILY_PLACEHOLDER docker compose -f COMPOSE_FILE_PLACEHOLDER exec -T API_SERVICE_PLACEHOLDER bin/rails orchestration:relationship_daily >> LOG_DIR_PLACEHOLDER/relationship_daily.log 2>&1
 
 # Produtores de evento, a cada 15min: first_workout_not_started_2h,
 # first_workout_not_started_24h, scheduled_workout_reminder_due.
-# Cada job tem heartbeat; o painel admin acusa "stale" se parar.
-*/15 * * * * cd APP_DIR_PLACEHOLDER && docker compose -f COMPOSE_FILE_PLACEHOLDER exec -T api bundle exec rake orchestration:run_15min >> LOG_DIR_PLACEHOLDER/orchestration.log 2>&1
+*/15 * * * * cd APP_DIR_PLACEHOLDER && FLOCK_15MIN_PLACEHOLDER docker compose -f COMPOSE_FILE_PLACEHOLDER exec -T API_SERVICE_PLACEHOLDER bin/rails orchestration:run_15min >> LOG_DIR_PLACEHOLDER/orchestration_15min.log 2>&1
 
-# Jornada diária (segmentos, trial, inatividade 3/7 dias). 08:00 UTC = 05:00
-# America/Sao_Paulo; o horário deixou de importar quando a geração do evento
-# parou de depender de quiet hours.
-0 8 * * * cd APP_DIR_PLACEHOLDER && docker compose -f COMPOSE_FILE_PLACEHOLDER exec -T api bundle exec rake orchestration:relationship_daily >> LOG_DIR_PLACEHOLDER/relationship_daily.log 2>&1
+# Retry Make pending — substitui o runner inline legado por task versionada.
+*/15 * * * * cd APP_DIR_PLACEHOLDER && FLOCK_MAKE_RETRY_PLACEHOLDER docker compose -f COMPOSE_FILE_PLACEHOLDER exec -T API_SERVICE_PLACEHOLDER bin/rails orchestration:retry_pending_make >> LOG_DIR_PLACEHOLDER/make_pending_retry.log 2>&1
+
+# Pushes Make deferidos por quiet hours. A decisão/copy/campanha já está em
+# PushDispatch; o backend só libera a entrega quando for seguro.
+*/15 * * * * cd APP_DIR_PLACEHOLDER && FLOCK_DEFERRED_PLACEHOLDER docker compose -f COMPOSE_FILE_PLACEHOLDER exec -T API_SERVICE_PLACEHOLDER bin/rails orchestration:dispatch_deferred_pushes >> LOG_DIR_PLACEHOLDER/push_dispatch_deferred.log 2>&1

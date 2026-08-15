@@ -31,8 +31,9 @@ O GitHub Actions tambem deve chamar esse script na VPS.
 9. Roda `bin/rails blocks:backfill_single_blocks` e `bin/rails blocks:assert_no_null_workout_blocks`.
 10. Audita o catalogo gifdotreino com `bin/rails exercises:purge_non_gifdotreino DRY_RUN=1`.
 11. Roda healthcheck.
-12. Valida contagens minimas antes/depois do deploy.
-13. Roda `scripts/production/check_persistence.sh`.
+12. Registra heartbeats esperados, instala o cron versionado de orquestracao e roda `bin/rails orchestration:status`.
+13. Valida contagens minimas antes/depois do deploy.
+14. Roda `scripts/production/check_persistence.sh`.
 
 ## Dados protegidos
 
