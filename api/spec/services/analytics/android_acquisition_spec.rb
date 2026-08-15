@@ -37,14 +37,14 @@ RSpec.describe Analytics::AndroidAcquisition do
     WorkoutPlan.create!(user: user, active: true) if plan
 
     if started
-      WorkoutSession.create!(user: user, status: "in_progress", started_at: created_at + 1.hour,
-                             completion_status: "abandoned")
+      WorkoutSession.create!(user: user, status: "in_progress", completion_status: "abandoned",
+                             created_at: created_at + 1.hour)
     end
 
     if completed
-      WorkoutSession.create!(user: user, status: "completed", started_at: created_at + 2.hours,
+      WorkoutSession.create!(user: user, status: "completed", completion_status: "completed",
                              completed_at: created_at + 3.hours, duration_minutes: 30,
-                             completion_status: "completed")
+                             created_at: created_at + 2.hours)
     end
 
     user
@@ -167,6 +167,51 @@ RSpec.describe Analytics::AndroidAcquisition do
       expect(eh[:started_workout]).to eq(2)
       expect(eh[:completed_workout]).to eq(1)
       expect(eh[:account_to_created][:value]).to eq(75.0)
+    end
+
+    # WorkoutSession is created by workout_sessions#start at the moment the
+    # workout begins, so the row's existence IS the start. There is no start
+    # timestamp column to test for — asking for one is what produced the 503.
+    describe "started_workout" do
+      let(:cohort_time) { Time.zone.parse("2026-08-10 10:00:00") }
+
+      it "is false for an account with no workout session" do
+        android_user(created_at: cohort_time, plan: true)
+
+        expect(result[:easyhealth][:started_workout]).to eq(0)
+      end
+
+      it "is true for a session still in progress" do
+        user = android_user(created_at: cohort_time)
+        WorkoutSession.create!(user: user, status: "in_progress", completion_status: "abandoned")
+
+        eh = result[:easyhealth]
+
+        expect(eh[:started_workout]).to eq(1)
+        expect(eh[:completed_workout]).to eq(0)
+      end
+
+      it "is true for a completed session, which also counts as completed" do
+        user = android_user(created_at: cohort_time)
+        WorkoutSession.create!(user: user, status: "completed", completion_status: "completed",
+                               completed_at: cohort_time + 1.hour, duration_minutes: 30)
+
+        eh = result[:easyhealth]
+
+        expect(eh[:started_workout]).to eq(1)
+        expect(eh[:completed_workout]).to eq(1)
+      end
+
+      it "keeps completed_workout tied to completion_status alone" do
+        user = android_user(created_at: cohort_time)
+        WorkoutSession.create!(user: user, status: "completed", completion_status: "abandoned",
+                               completed_at: cohort_time + 1.hour, duration_minutes: 30)
+
+        eh = result[:easyhealth]
+
+        expect(eh[:started_workout]).to eq(1)
+        expect(eh[:completed_workout]).to eq(0)
+      end
     end
 
     it "cuts the cohort day in the reporting timezone, not in UTC" do

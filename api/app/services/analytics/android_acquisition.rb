@@ -51,8 +51,11 @@ module Analytics
       "Cada linha conta as contas Android criadas naquele dia e, dessas MESMAS contas, quantas " \
       "depois criaram, iniciaram e concluíram um treino.".freeze
 
+    # A workout_sessions row is created by workout_sessions#start at the moment
+    # the workout begins, so its existence IS the start — there is no separate
+    # start timestamp to check.
     STARTED_NOTE =
-      "Iniciou = existe sessão de treino com started_at preenchido. Concluiu = existe sessão com " \
+      "Iniciou = existe sessão de treino registrada. Concluiu = existe sessão com " \
       "completion_status 'completed'.".freeze
 
     SYNC_LABELS = {
@@ -291,7 +294,7 @@ module Analytics
                    ) AS created_workout,
                    EXISTS (
                      SELECT 1 FROM workout_sessions ws
-                     WHERE ws.user_id = u.id AND ws.started_at IS NOT NULL
+                     WHERE ws.user_id = u.id
                    ) AS started_workout,
                    EXISTS (
                      SELECT 1 FROM workout_sessions ws

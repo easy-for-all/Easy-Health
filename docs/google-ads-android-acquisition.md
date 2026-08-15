@@ -213,7 +213,7 @@ soltos por dia — é isso que torna as taxas legítimas.
 |---|---|
 | Contas Android | `users.signup_source = 'android'`, filtradas por `Analytics::AccountClassification.exclude_non_external` |
 | Criaram treino | existe `workout_plans` do usuário |
-| Iniciaram treino | existe `workout_sessions` com `started_at` preenchido |
+| Iniciaram treino | existe `workout_sessions` do usuário — a linha é criada no momento em que o treino começa |
 | Concluíram treino | existe `workout_sessions` com `completion_status = 'completed'` |
 
 `exclude_non_external` remove contas internas e do Google Play pre-launch report
@@ -222,8 +222,9 @@ soltos por dia — é isso que torna as taxas legítimas.
 Coortes com menos de 1 dia vêm marcadas como `immature`: quem se cadastrou hoje ainda pode
 treinar amanhã, e mostrar isso como taxa final de conversão seria mentira.
 
-O rodapé reporta `completed_without_started`: contas que concluíram treino sem sessão com
-`started_at` (sessões antigas gravadas já concluídas). Fica visível em vez de escondido.
+O rodapé reporta `completed_without_started`: contas que concluíram treino sem nenhuma sessão
+registrada. Como concluir exige uma sessão, o valor é sempre `0` — o aviso existe só como
+sentinela e nunca aparece no painel.
 
 ---
 
