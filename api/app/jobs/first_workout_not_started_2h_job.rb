@@ -1,5 +1,5 @@
 # Candidates: created the first plan 2–26h ago and still haven't started a
-# workout. Run every ~15min from cron (rake orchestration:run_15min).
+# workout. Run every ~15min from cron (bin/rails orchestration:run_15min).
 class FirstWorkoutNotStarted2hJob < FirstWorkoutNotStartedJob
   def self.observability_heartbeat_key = "first_workout_not_started_2h"
 

@@ -93,7 +93,7 @@ module Api
           workout_ready_enabled: prefs.workout_ready_enabled,
           preferred_workout_period: profile&.preferred_workout_period,
           preferred_workout_time: profile&.preferred_workout_time&.strftime("%H:%M"),
-          timezone: current_user.time_zone || prefs.timezone,
+          timezone: CommunicationTime.zone_name_for(current_user),
           notifications_disabled_at: prefs.notifications_disabled_at,
           has_active_device: current_user.device_tokens.active.exists?
         }

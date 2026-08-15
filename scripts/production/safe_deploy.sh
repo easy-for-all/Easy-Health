@@ -236,6 +236,17 @@ sleep 10
 # subiu só atrasa a descoberta de que ela não subiu.
 healthcheck
 
+log "Registrando heartbeats esperados"
+compose exec -T "$API_SERVICE" bin/rails observability:heartbeats
+
+log "Instalando/atualizando cron de orquestracao"
+APP_DIR="$(pwd)" COMPOSE_FILE="$COMPOSE_FILE" API_SERVICE="$API_SERVICE" LOG_DIR="${ORCHESTRATION_LOG_DIR:-logs}" \
+  APPLY=1 scripts/cron/install_cron.sh
+
+log "Smoke check de orquestracao"
+compose exec -T "$API_SERVICE" bin/rails orchestration:status || \
+  log "ATENCAO: orchestration:status falhou; cron foi instalado, revisar smoke manualmente"
+
 log "Atualizando assets de exercicios"
 compose exec -T "$API_SERVICE" bin/rails exercises:import_local_images || true
 compose run --rm -v /home/easy/Easy-Health/external/free-exercise-db/exercises:/external/free-exercise-db/exercises "$API_SERVICE" bin/rails exercises:import_all || true

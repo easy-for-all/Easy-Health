@@ -1,5 +1,6 @@
 import { api, ApiError } from "./api";
 import { trackEvent } from "./analytics";
+import { isNativeApp } from "./analytics/context";
 import { resolveDeepLink } from "./push-deep-link";
 
 // Centralized push service. Responsibilities:
@@ -10,6 +11,12 @@ import { resolveDeepLink } from "./push-deep-link";
 //   the token to the pending operation — it never posts);
 // - report the device token to the backend with safe metadata (never the token);
 // - no-op on the web (only runs on the native Android platform).
+//
+// Native detection comes from isNativeApp() (analytics/context.ts) — the single
+// source of truth. This module used to call Capacitor.isNativePlatform()
+// directly, which returns false inside the remote-URL WebView shell (see
+// docs/android-tracking-audit.md): every entry point below then answered
+// "unsupported" and the FCM token was never registered on real devices.
 
 export type PushPermissionState =
   | "granted"
@@ -71,15 +78,6 @@ export interface PushDiagnosticsSnapshot {
   lastAction: { path: string | null; type: string | null; at: string } | null;
 }
 
-async function isNative(): Promise<boolean> {
-  try {
-    const { Capacitor } = await import("@capacitor/core");
-    return Capacitor.isNativePlatform();
-  } catch {
-    return false;
-  }
-}
-
 function markRequested(): void {
   try {
     localStorage.setItem(REQUESTED_KEY, "1");
@@ -105,7 +103,7 @@ function mapState(receive: string): PushPermissionState {
 }
 
 export async function getPushPermissionState(): Promise<PushPermissionState> {
-  if (!(await isNative())) return "unsupported";
+  if (!isNativeApp()) return "unsupported";
   const { PushNotifications } = await import("@capacitor/push-notifications");
   const status = await PushNotifications.checkPermissions();
   return mapState(status.receive);
@@ -169,7 +167,7 @@ export async function syncPushIfGranted(
 // Called from the pre-permission card when the user taps "Ativar lembretes".
 // Shows the native prompt when needed, then registers + persists the token.
 export async function requestPushPermissionAndRegister(): Promise<PushRegistrationResult> {
-  if (!(await isNative())) {
+  if (!isNativeApp()) {
     return { permissionState: "unsupported", registered: false, failureReason: "unsupported" };
   }
   const { PushNotifications } = await import("@capacitor/push-notifications");
@@ -191,7 +189,7 @@ export async function requestPushPermissionAndRegister(): Promise<PushRegistrati
 // Registration operation — single owner of the backend sync
 // ---------------------------------------------------------------------------
 async function runRegistration(source: PushRegistrationSource): Promise<PushRegistrationResult> {
-  if (!(await isNative())) {
+  if (!isNativeApp()) {
     return { permissionState: "unsupported", registered: false, failureReason: "unsupported" };
   }
   const permissionState = await getPushPermissionState();
@@ -414,7 +412,7 @@ async function handleActionPerformed(data: Record<string, unknown>): Promise<voi
 // ---------------------------------------------------------------------------
 
 export async function collectPushDiagnostics(): Promise<PushDiagnosticsSnapshot> {
-  const native = await isNative();
+  const native = isNativeApp();
   let platform = "web";
   try {
     const { Capacitor } = await import("@capacitor/core");
@@ -452,7 +450,7 @@ export async function collectPushDiagnostics(): Promise<PushDiagnosticsSnapshot>
 // Opens the OS notification settings for this app (Android). Returns false on web
 // or if the native plugin is unavailable.
 export async function openAppNotificationSettings(): Promise<boolean> {
-  if (!(await isNative())) return false;
+  if (!isNativeApp()) return false;
   try {
     const { NativeSettings, AndroidSettings } = await import("capacitor-native-settings");
     await NativeSettings.openAndroid({ option: AndroidSettings.AppNotification });
@@ -466,7 +464,7 @@ export async function openAppNotificationSettings(): Promise<boolean> {
 // Fires an immediate LOCAL notification (no server / FCM) so we can isolate an
 // on-device display problem from a delivery problem. Android-only.
 export async function sendLocalTestNotification(): Promise<boolean> {
-  if (!(await isNative())) return false;
+  if (!isNativeApp()) return false;
   try {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
     let perm = await LocalNotifications.checkPermissions();

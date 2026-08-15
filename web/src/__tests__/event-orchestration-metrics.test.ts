@@ -5,7 +5,7 @@ import {
   formatInterval,
   formatRate,
   formatRateDetail,
-  isDeferrable,
+  isDeferReason,
   makeStatusLabel,
   makeStatusTone,
   originLabel,
@@ -114,17 +114,17 @@ describe("push status", () => {
 
   it("separates rejection from skip", () => {
     expect(pushStatusTone("failed")).toBe("bad");
+    expect(pushStatusTone("deferred")).toBe("warn");
     expect(pushStatusTone("skipped")).toBe("warn");
     expect(pushStatusTone(null)).toBe("muted");
   });
 });
 
-describe("deferrable skips", () => {
-  // quiet_hours is the one skip Make can retry later; an opt-out never is.
-  it("only marks the reasons the backend declared deferrable", () => {
-    expect(isDeferrable("quiet_hours", ["quiet_hours"])).toBe(true);
-    expect(isDeferrable("global_opt_out", ["quiet_hours"])).toBe(false);
-    expect(isDeferrable("quiet_hours", [])).toBe(false);
+describe("defer reasons", () => {
+  it("only marks the reasons the backend declared as deferred", () => {
+    expect(isDeferReason("quiet_hours", ["quiet_hours"])).toBe(true);
+    expect(isDeferReason("global_opt_out", ["quiet_hours"])).toBe(false);
+    expect(isDeferReason("quiet_hours", [])).toBe(false);
   });
 });
 

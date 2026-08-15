@@ -109,8 +109,8 @@ class RelationshipDailyJob < ApplicationJob
   end
 
   # Quiet hours are deliberately absent here. This job runs once a day; gating
-  # it on the local clock meant that a user whose timezone put the cron outside
-  # 08–21 never got an inactivity event at all, because there is no second tick
+  # it on the local clock meant that a user whose timezone put the cron inside
+  # quiet hours never got an inactivity event at all, because there is no second tick
   # to catch up. Whether a push may be sent is decided at dispatch.
   #
   # Catch-up is explicit: a user 10 days idle with neither event recorded gets

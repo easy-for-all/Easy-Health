@@ -12,7 +12,7 @@ module Observability
     # row exists. That absence is exactly the failure mode this layer is for.
     REGISTRY = {
       "relationship_daily_job" => { category: "job", interval: 1.day },
-      "make_pending_retry" => { category: "cron", interval: 1.hour },
+      "make_pending_retry" => { category: "cron", interval: 15.minutes },
       "make_webhook_delivery" => { category: "integration", interval: 1.day },
       "stripe_webhook_processing" => { category: "integration", interval: 1.day },
       "android_analytics_ingestion" => { category: "pipeline", interval: 6.hours },
@@ -25,7 +25,8 @@ module Observability
       # which is invisible until someone asks why nobody is being reminded.
       "first_workout_not_started_2h" => { category: "cron", interval: 15.minutes },
       "first_workout_not_started_24h" => { category: "cron", interval: 15.minutes },
-      "scheduled_workout_reminder" => { category: "cron", interval: 15.minutes }
+      "scheduled_workout_reminder" => { category: "cron", interval: 15.minutes },
+      "push_dispatch_deferred" => { category: "cron", interval: 15.minutes }
     }.freeze
 
     module_function

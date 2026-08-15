@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_14_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -800,6 +800,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_14_120001) do
     t.string "idempotency_key", null: false
     t.string "last_error_code"
     t.text "last_error_message"
+    t.datetime "next_allowed_at"
     t.string "notification_type", null: false
     t.datetime "opened_at"
     t.jsonb "payload_json", default: {}, null: false
@@ -817,6 +818,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_14_120001) do
     t.bigint "user_event_id"
     t.bigint "user_id", null: false
     t.index ["idempotency_key"], name: "index_push_dispatches_on_idempotency_key", unique: true
+    t.index ["status", "next_allowed_at"], name: "index_push_dispatches_deferred_due", where: "((status)::text = 'deferred'::text)"
     t.index ["status"], name: "index_push_dispatches_on_status"
     t.index ["user_event_id"], name: "index_push_dispatches_on_user_event_id"
     t.index ["user_id", "created_at"], name: "index_push_dispatches_on_user_id_and_created_at"

@@ -3,7 +3,7 @@ require "rails_helper"
 RSpec.describe FirstWorkoutNotStarted2hJob, type: :job do
   include ActiveSupport::Testing::TimeHelpers
 
-  # 10:00 in São Paulo (inside the 08–21 quiet-hours window).
+  # 10:00 in São Paulo (outside the 22:00–07:00 quiet-hours window).
   let(:daytime) { Time.utc(2026, 7, 20, 13, 0) }
 
   def create_anchor(user, hours_ago:)

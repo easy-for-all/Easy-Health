@@ -187,6 +187,7 @@ module Analytics
           push_requested: dispatch[:requested],
           provider_accepted: dispatch[:accepted],
           provider_rejected: dispatch[:rejected],
+          push_deferred: dispatch[:deferred],
           push_skipped: dispatch[:skipped],
 
           # --- Coverage ------------------------------------------------------
@@ -287,6 +288,7 @@ module Analytics
           push_requested: counts[:requested].to_i,
           provider_accepted: counts[:accepted].to_i,
           provider_rejected: counts[:rejected].to_i,
+          push_deferred: counts[:deferred].to_i,
           push_skipped: counts[:skipped].to_i,
           unique_users: users.to_i,
           last_generated_at: last_generated&.iso8601,
@@ -357,11 +359,12 @@ module Analytics
           Arel.sql("COUNT(*)"),
           Arel.sql("COUNT(*) FILTER (WHERE status IN ('#{PROVIDER_ACCEPTED_STATUSES.join("','")}'))"),
           Arel.sql("COUNT(*) FILTER (WHERE status IN ('#{PROVIDER_REJECTED_STATUSES.join("','")}'))"),
+          Arel.sql("COUNT(*) FILTER (WHERE status = 'deferred')"),
           Arel.sql("COUNT(*) FILTER (WHERE status = 'skipped')")
-        ) || [ 0, 0, 0, 0 ]
+        ) || [ 0, 0, 0, 0, 0 ]
 
-        requested, accepted, rejected, skipped = row.map(&:to_i)
-        { requested: requested, accepted: accepted, rejected: rejected, skipped: skipped }
+        requested, accepted, rejected, deferred, skipped = row.map(&:to_i)
+        { requested: requested, accepted: accepted, rejected: rejected, deferred: deferred, skipped: skipped }
       end
     end
 
@@ -377,26 +380,33 @@ module Analytics
           Arel.sql("COUNT(*)"),
           Arel.sql("COUNT(*) FILTER (WHERE push_dispatches.status IN ('#{PROVIDER_ACCEPTED_STATUSES.join("','")}'))"),
           Arel.sql("COUNT(*) FILTER (WHERE push_dispatches.status IN ('#{PROVIDER_REJECTED_STATUSES.join("','")}'))"),
+          Arel.sql("COUNT(*) FILTER (WHERE push_dispatches.status = 'deferred')"),
           Arel.sql("COUNT(*) FILTER (WHERE push_dispatches.status = 'skipped')")
         )
-        .each_with_object({}) do |(name, requested, accepted, rejected, skipped), result|
-          result[name] = { requested: requested, accepted: accepted, rejected: rejected, skipped: skipped }
+        .each_with_object({}) do |(name, requested, accepted, rejected, deferred, skipped), result|
+          result[name] = { requested: requested, accepted: accepted, rejected: rejected, deferred: deferred, skipped: skipped }
         end
     end
 
     def push_dispatch_results
       totals = dispatch_totals
       skips = dispatch_scope.where(status: "skipped").group(:skip_reason).count
+      deferred_reasons = dispatch_scope.where(status: "deferred")
+                                       .group(Arel.sql("COALESCE(payload_json ->> 'defer_reason', 'unknown')"))
+                                       .count
 
       {
         requested: totals[:requested],
         provider_accepted: totals[:accepted],
         provider_rejected: totals[:rejected],
+        deferred: totals[:deferred],
         skipped: totals[:skipped],
         not_correlated: dispatch_scope.where(user_event_id: nil).count,
+        deferred_reasons: deferred_reasons.map { |reason, count| { defer_reason: reason.presence || "unknown", count: count } }
+                                          .sort_by { |row| -row[:count] },
         skips: skips.map { |reason, count| { skip_reason: reason.presence || "unknown", count: count } }
                     .sort_by { |row| -row[:count] },
-        deferrable_skip_reasons: PushDispatch::DEFERRABLE_SKIP_REASONS
+        defer_reasons: PushDispatch::DEFER_REASONS
       }
     end
 
@@ -422,6 +432,7 @@ module Analytics
     SCHEDULER_KEYS = %w[
       first_workout_not_started_2h first_workout_not_started_24h
       scheduled_workout_reminder relationship_daily_job
+      make_pending_retry push_dispatch_deferred
     ].freeze
 
     def schedulers
@@ -440,6 +451,7 @@ module Analytics
           last_run_at: record.last_started_at&.iso8601,
           last_success_at: record.last_succeeded_at&.iso8601,
           last_failure_at: record.last_failed_at&.iso8601,
+          next_expected_at: record.last_succeeded_at && (record.last_succeeded_at + record.expected_interval_seconds.seconds).iso8601,
           last_error_code: record.last_error_code,
           consecutive_failures: record.consecutive_failures,
           duration_ms: record.last_duration_ms,
@@ -466,10 +478,11 @@ module Analytics
           Arel.sql("user_events.make_last_http_status"), Arel.sql("user_events.make_execution_id"),
           Arel.sql("user_events.make_last_error"),
           Arel.sql("push_dispatches.id"), Arel.sql("push_dispatches.status"),
-          Arel.sql("push_dispatches.skip_reason"), Arel.sql("push_dispatches.correlation_id")
+          Arel.sql("push_dispatches.skip_reason"), Arel.sql("push_dispatches.payload_json ->> 'defer_reason'"),
+          Arel.sql("push_dispatches.next_allowed_at"), Arel.sql("push_dispatches.correlation_id")
         )
         .map do |id, name, user_id, origin, created_at, make_status, http_status, execution_id,
-                 make_error, dispatch_id, dispatch_status, skip_reason, correlation_id|
+                 make_error, dispatch_id, dispatch_status, skip_reason, defer_reason, next_allowed_at, correlation_id|
           {
             event_id: id,
             event_name: name,
@@ -484,6 +497,8 @@ module Analytics
             push_dispatch_id: dispatch_id,
             push_status: dispatch_status,
             skip_reason: skip_reason,
+            defer_reason: defer_reason,
+            next_allowed_at: next_allowed_at&.iso8601,
             correlation_id: correlation_id
           }
         end

@@ -125,7 +125,7 @@ module Make
     def user_payload
       payload = {
         id: user.id,
-        timezone: user.time_zone.presence || "America/Sao_Paulo",
+        timezone: CommunicationTime.zone_name_for(user),
         locale: "pt-BR"
       }
       return payload if MakeWebhookEligibility.payload_mode == "minimal"

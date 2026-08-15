@@ -80,12 +80,14 @@ RSpec.describe ScheduledWorkoutReminderEligibility do
     expect(result_for(user).reason).to eq("variable_schedule")
   end
 
-  it "rejects missing and invalid timezone values" do
+  it "falls back to the communication timezone for missing and invalid timezone values" do
     missing_tz, = build_candidate(timezone: nil)
     invalid_tz, = build_candidate(timezone: "Mars/Olympus")
 
-    expect(result_for(missing_tz).reason).to eq("missing_timezone")
-    expect(result_for(invalid_tz).reason).to eq("invalid_timezone")
+    expect(result_for(missing_tz)).to be_eligible
+    expect(result_for(missing_tz).schedule.timezone).to eq("America/Sao_Paulo")
+    expect(result_for(invalid_tz)).to be_eligible
+    expect(result_for(invalid_tz).schedule.timezone).to eq("America/Sao_Paulo")
   end
 
   # "The user asked to train at 07:00 and it is 06:30" is a fact about the

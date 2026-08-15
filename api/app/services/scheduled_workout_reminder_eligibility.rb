@@ -75,10 +75,6 @@ class ScheduledWorkoutReminderEligibility
     return ineligible("variable_schedule") if profile.preferred_workout_period == "variable"
     return ineligible("missing_preferred_workout_time") if profile.preferred_workout_time.blank?
 
-    zone = ScheduledWorkoutReminderSchedule.time_zone_for(user)
-    return ineligible("missing_timezone") if user.time_zone.blank?
-    return ineligible("invalid_timezone") unless zone
-
     return ineligible("workout_completed") if workout_completed_for_plan?(plan)
 
     schedule = schedule_for
@@ -94,7 +90,7 @@ class ScheduledWorkoutReminderEligibility
     reminder_number = sent_count + 1
     eligible(plan:, schedule:, reminder_number:)
   rescue ArgumentError
-    ineligible("invalid_timezone")
+    ineligible("invalid_schedule")
   end
 
   private

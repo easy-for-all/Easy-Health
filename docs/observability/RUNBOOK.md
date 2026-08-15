@@ -6,32 +6,26 @@ Cada cenário: como confirmar, onde olhar, SQL útil, logs úteis, ação inicia
 
 ## Cron necessário
 
-Não instalado automaticamente. Adicionar na VPS com `crontab -e`:
+`observability:check` e limpeza seguem fora do bloco de orquestração:
 
 ```
-*/15 * * * * cd /home/easy/Easy-Health && docker compose -f docker-compose.prod.yml exec -T api bundle exec rake observability:check
-```
-
-Opcionalmente, para reprocessar entregas Make perdidas em restart:
-
-```
-*/30 * * * * cd /home/easy/Easy-Health && docker compose -f docker-compose.prod.yml exec -T api bundle exec rake make_webhook:retry_pending
+*/15 * * * * cd /home/easy/Easy-Health && docker compose -f docker-compose.prod.yml exec -T api bin/rails observability:check
 ```
 
 E limpeza diária (retenção de check results + incidentes órfãos):
 
 ```
-30 4 * * * cd /home/easy/Easy-Health && docker compose -f docker-compose.prod.yml exec -T api bundle exec rake observability:resolve_stale
+30 4 * * * cd /home/easy/Easy-Health && docker compose -f docker-compose.prod.yml exec -T api bin/rails observability:resolve_stale
 ```
 
 Confira o cron existente da réplica BI com `crontab -l` e mantenha `BI_REPLICA_EXPECTED_HOUR` coerente com ele.
 
 ### Bloco gerenciado da orquestração de eventos
 
-As rotinas acima continuam manuais. Os produtores de evento de orquestração
-(lembretes 2h/24h, horário preferido e jornada diária) vivem em um bloco
+As rotinas acima continuam manuais. Os produtores de evento de orquestração,
+retry Make pending e push deferred vivem em um bloco
 **versionado**, instalado por script e delimitado por
-`# >>> easyhealth-orchestration >>>`:
+`# BEGIN EASYHEALTH ORCHESTRATION`:
 
 ```bash
 scripts/cron/install_cron.sh          # DRY RUN (default): mostra o diff, não aplica
@@ -39,14 +33,14 @@ APPLY=1 scripts/cron/install_cron.sh  # aplica
 ```
 
 O script preserva byte a byte tudo que está fora dos marcadores. Se o diff
-mostrar a entrada legada `rails runner "RelationshipDailyJob..."`, substitua-a
-com `MIGRATE_RELATIONSHIP_DAILY=1` — mantê-la junto com
-`orchestration:relationship_daily` rodaria o mesmo job duas vezes por dia.
+mostrar linhas legacy reconhecidas da EasyHealth, ele as remove
+automaticamente para evitar duplicação. `refresh_analytics` e crons externos são
+preservados.
 
 Saúde desses schedulers: heartbeats `first_workout_not_started_2h`,
 `first_workout_not_started_24h`, `scheduled_workout_reminder` e
 `relationship_daily_job`, visíveis em `/admin/events-communications` e via
-`rake orchestration:status`. Detalhes em `docs/event-orchestration.md`.
+`bin/rails orchestration:status`. Detalhes em `docs/event-orchestration.md`.
 
 ---
 
@@ -176,7 +170,7 @@ GROUP BY 1 ORDER BY 2 DESC;
 1. Confirme a configuração: `rake make_webhook:config`.
 2. Backlog acumulado após um deploy é **esperado** (adapter `:async` perde a fila). Reprocesse:
    ```bash
-   docker compose -f docker-compose.prod.yml exec -T api bundle exec rake make_webhook:retry_pending
+   docker compose -f docker-compose.prod.yml exec -T api bin/rails orchestration:retry_pending_make
    ```
 3. Se as entregas voltam a falhar depois do retry, o problema é o endpoint do Make. Veja `make_last_error` em `user_events`.
 
@@ -306,4 +300,4 @@ docker compose -f docker-compose.prod.yml logs api --tail 200
 **Ação inicial:**
 1. Confirmar se foi deploy (esperado) ou OOM/crash.
 2. Se OOM: `dmesg | grep -i oom`.
-3. Reprocessar o que a fila perdeu: `rake make_webhook:retry_pending`.
+3. Reprocessar o que a fila perdeu: `bin/rails orchestration:retry_pending_make`.

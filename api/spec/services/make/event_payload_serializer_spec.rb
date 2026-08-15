@@ -94,7 +94,8 @@ RSpec.describe Make::EventPayloadSerializer do
       activation = {
         plan_id: 1, reminder_local_date: Date.current.iso8601,
         preferred_workout_time: "07:00", reminder_time: "06:30",
-        reminder_due_at: Time.current.iso8601, reminder_lead_minutes: 30,
+        reminder_due_at: Time.current.iso8601, target_workout_at: 30.minutes.from_now.iso8601,
+        reminder_lead_minutes: 30,
         timezone: "America/Sao_Paulo", detected_at: Time.current.iso8601
       }
       payload = payload_for("scheduled_workout_reminder_due", metadata: { activation: activation })
@@ -102,8 +103,17 @@ RSpec.describe Make::EventPayloadSerializer do
       context = payload[:context][:activation]
       expect(context["preferred_workout_time"]).to eq("07:00")
       expect(context["reminder_due_at"]).to be_present
+      expect(context["target_workout_at"]).to be_present
       expect(context["reminder_lead_minutes"]).to eq(30)
       expect(payload[:user][:timezone]).to eq("America/Sao_Paulo")
+    end
+
+    it "uses CommunicationTime for the user timezone" do
+      serializer_user.notification_preferences!.update!(timezone: "Europe/Lisbon")
+
+      payload = payload_for("first_workout_completed", metadata: { workout_session_id: 1 })
+
+      expect(payload[:user][:timezone]).to eq("Europe/Lisbon")
     end
   end
 

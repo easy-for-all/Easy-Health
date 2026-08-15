@@ -20,15 +20,15 @@ RSpec.describe Analytics::EventOrchestration do
     }.merge(attrs))
   end
 
-  def create_dispatch(user_event: nil, status: "provider_accepted", skip_reason: nil, owner: user)
-    PushDispatch.create!(
+  def create_dispatch(user_event: nil, status: "provider_accepted", skip_reason: nil, owner: user, **attrs)
+    PushDispatch.create!({
       user: owner,
       user_event: user_event,
       notification_type: "workout_reminder",
       idempotency_key: SecureRandom.hex(8),
       status: status,
       skip_reason: skip_reason
-    )
+    }.merge(attrs))
   end
 
   describe "period handling" do
@@ -236,6 +236,7 @@ RSpec.describe Analytics::EventOrchestration do
       expect(row[:accepted_by_make]).to eq(1)
       expect(row[:push_requested]).to eq(2)
       expect(row[:provider_accepted]).to eq(1)
+      expect(row[:push_deferred]).to eq(0)
       expect(row[:push_skipped]).to eq(1)
       expect(row[:candidate_channels]).to eq(%w[push])
       expect(row[:last_generated_at]).to be_present
@@ -312,7 +313,9 @@ RSpec.describe Analytics::EventOrchestration do
       event = create_event("user_inactive_3_days", make_delivery_status: "accepted_by_make",
                                                    make_attempts_count: 1, make_last_http_status: 200,
                                                    origin_surface: "backend_scheduler")
-      create_dispatch(user_event: event, status: "skipped", skip_reason: "quiet_hours")
+      create_dispatch(user_event: event, status: "deferred",
+                      payload_json: { "defer_reason" => "quiet_hours" },
+                      next_allowed_at: 1.hour.from_now)
 
       row = described_class.new.call[:recent_events].first
 
@@ -320,8 +323,10 @@ RSpec.describe Analytics::EventOrchestration do
       expect(row[:origin_surface]).to eq("backend_scheduler")
       expect(row[:make_status]).to eq("accepted_by_make")
       expect(row[:make_http_status]).to eq(200)
-      expect(row[:push_status]).to eq("skipped")
-      expect(row[:skip_reason]).to eq("quiet_hours")
+      expect(row[:push_status]).to eq("deferred")
+      expect(row[:skip_reason]).to be_nil
+      expect(row[:defer_reason]).to eq("quiet_hours")
+      expect(row[:next_allowed_at]).to be_present
     end
   end
 

@@ -98,7 +98,7 @@ Códigos possíveis: `invalid_token`, `invalid_audience`, `consent_required`, `a
 
 O caso especial evita que todo deploy acenda o painel inteiro com processos que simplesmente ainda não tiveram sua primeira execução agendada.
 
-Processos monitorados: `relationship_daily_job` (24h), `make_pending_retry` (1h), `make_webhook_delivery` (24h), `stripe_webhook_processing` (24h), `android_analytics_ingestion` (6h), `push_dispatch` (1h), `observability_health_check` (15min), `bi_replica_refresh` (24h).
+Processos monitorados: `relationship_daily_job` (24h), `make_pending_retry` (15min), `push_dispatch_deferred` (15min), `make_webhook_delivery` (24h), `stripe_webhook_processing` (24h), `android_analytics_ingestion` (6h), `push_dispatch` (1h), `observability_health_check` (15min), `bi_replica_refresh` (24h).
 
 ### `repeated_job_failure`
 
@@ -112,7 +112,7 @@ Warning com 3 falhas consecutivas, critical com 5 (`OBSERVABILITY_JOB_FAILURE_WA
 | **Piso de idade** | 30 min (`OBSERVABILITY_MAKE_BACKLOG_AGE_MINUTES`) |
 | **Warning** | > 10 pendentes |
 | **Critical** | > 50 pendentes |
-| **Ação** | `rake make_webhook:retry_pending` — [RUNBOOK 5](RUNBOOK.md#5-make-parou) |
+| **Ação** | `bin/rails orchestration:retry_pending_make` — [RUNBOOK 5](RUNBOOK.md#5-make-parou) |
 
 Fila vazia é saudável, não é falha. O piso de idade existe porque o adapter `:async` legitimamente descarta retries em cada deploy — sem ele o check dispararia a cada release.
 

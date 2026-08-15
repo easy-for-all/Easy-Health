@@ -5,8 +5,8 @@
 # lives on users.marketing_consent and must never be conflated with these flags.
 #
 # The "when the user trains" values (preferred_workout_period / time) are NOT
-# stored here — HealthProfile is the source of truth. This row only mirrors the
-# timezone optionally; users.time_zone is authoritative.
+# stored here — HealthProfile is the source of truth. The timezone here is an
+# explicit notification preference and wins inside CommunicationTime.zone_for.
 class UserNotificationPreferences < ApplicationRecord
   VARIANTS = %w[treatment control].freeze
   DISABLED_REASONS = %w[

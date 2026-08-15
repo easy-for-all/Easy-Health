@@ -6,8 +6,18 @@
 # neither the column set nor `payload_json` may carry one.
 class PushDispatch < ApplicationRecord
   STATUSES = %w[
-    received skipped processing provider_accepted partially_accepted failed opened
+    received deferred skipped processing provider_accepted partially_accepted failed opened
   ].freeze
+
+  ALLOWED_TRANSITIONS = {
+    "received" => %w[deferred skipped processing failed],
+    "deferred" => %w[processing skipped],
+    "processing" => %w[deferred skipped provider_accepted partially_accepted failed],
+    "failed" => %w[deferred skipped processing failed],
+    "provider_accepted" => %w[opened],
+    "partially_accepted" => %w[opened],
+    "opened" => []
+  }.freeze
 
   # Terminal states where a real send already reached FCM — a repeat request
   # with the same idempotency_key must NOT be re-sent (Phase 9).
@@ -16,12 +26,11 @@ class PushDispatch < ApplicationRecord
   SKIP_REASONS = %w[
     orchestration_disabled user_not_found no_preferences global_opt_out category_opt_out
     no_active_token permission_denied duplicate invalid_payload rate_limited
-    frequency_capped cooldown_active quiet_hours
+    frequency_capped cooldown_active stale_after_quiet_hours
   ].freeze
 
-  # The only skip reason that could succeed if retried later. Everything else
-  # is an opt-out, a cap or a bad request.
-  DEFERRABLE_SKIP_REASONS = %w[quiet_hours].freeze
+  DEFER_REASONS = %w[quiet_hours].freeze
+  DEFERRABLE_SKIP_REASONS = [].freeze
 
   belongs_to :user
   # The business event this push was requested for. Nullable: Make may send a
@@ -32,10 +41,30 @@ class PushDispatch < ApplicationRecord
   validates :notification_type, presence: true
   validates :idempotency_key, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
+  validate :status_transition_allowed, if: :will_save_change_to_status?
+
+  scope :deferred_due, ->(now = Time.current) { where(status: "deferred").where(next_allowed_at: ..now) }
 
   # True once FCM already accepted this dispatch for at least one device.
   def delivered?
     DELIVERED_STATUSES.include?(status)
+  end
+
+  def deferred?
+    status == "deferred"
+  end
+
+  def defer_reason
+    payload_json["defer_reason"].presence
+  end
+
+  def mark_deferred!(reason:, next_allowed_at:)
+    update!(
+      status: "deferred",
+      skip_reason: nil,
+      next_allowed_at: next_allowed_at,
+      payload_json: payload_json.merge("defer_reason" => reason)
+    )
   end
 
   # Stamp the open (idempotent). Promotes an accepted dispatch to "opened";
@@ -49,5 +78,16 @@ class PushDispatch < ApplicationRecord
   # is not supposed to contain one in the first place).
   def as_json(options = {})
     super(options.merge(except: Array(options[:except]) + [ :payload_json ]))
+  end
+
+  private
+
+  def status_transition_allowed
+    return unless persisted?
+
+    from = status_in_database
+    return if from.blank? || from == status
+
+    errors.add(:status, "cannot transition from #{from} to #{status}") unless ALLOWED_TRANSITIONS.fetch(from, []).include?(status)
   end
 end

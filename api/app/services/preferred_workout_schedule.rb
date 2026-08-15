@@ -4,13 +4,12 @@
 # Never fires "right now just because the hour already passed": if today's slot
 # is in the past (or within MIN_LEAD), it schedules the next day.
 module PreferredWorkoutSchedule
-  DEFAULT_TZ = "America/Sao_Paulo".freeze
   MIN_LEAD = 60.minutes
 
   module_function
 
   def time_zone_for(user)
-    ActiveSupport::TimeZone[user.time_zone.to_s] || ActiveSupport::TimeZone[DEFAULT_TZ]
+    CommunicationTime.zone_for(user)
   end
 
   # Returns an ActiveSupport::TimeWithZone, or nil if no preferred time is set.

@@ -4,7 +4,8 @@ module Make
   #
   #   flag -> payload validation -> resolve user (by user_id, never token)
   #   -> idempotency -> preferences/opt-out/permission -> resolve tokens
-  #   -> FcmDispatcher -> persist PushDispatch + audit -> structured response.
+  #   -> quiet-hours defer OR FcmDispatcher -> persist PushDispatch + audit
+  #   -> structured response.
   #
   # EasyHealth (not Make) is the source of truth for consent: every send is
   # re-validated here regardless of what Make believes.
@@ -67,9 +68,49 @@ module Make
       new(params:, test_token_valid:).call
     end
 
-    def initialize(params:, test_token_valid: false)
+    def self.dispatch_deferred(limit: 500, now: Time.current)
+      stats = Hash.new(0)
+      PushDispatch.deferred_due(now).order(:next_allowed_at, :id).limit(limit).each do |dispatch|
+        stats[:considered] += 1
+        unless claim_deferred(dispatch)
+          stats[:already_claimed] += 1
+          next
+        end
+
+        outcome = new(params: params_from_dispatch(dispatch), existing_dispatch: dispatch.reload, now: now)
+                  .dispatch_existing
+        stats[outcome] += 1
+      rescue StandardError => e
+        stats[:failed] += 1
+        Rails.logger.warn("[push_dispatch_deferred] dispatch=#{dispatch&.id} error=#{e.class}")
+      end
+      stats
+    end
+
+    def self.claim_deferred(dispatch)
+      PushDispatch.where(id: dispatch.id, status: "deferred")
+                  .update_all(status: "processing", updated_at: Time.current) == 1
+    end
+
+    def self.params_from_dispatch(dispatch)
+      {
+        user_id: dispatch.user_id,
+        event_id: dispatch.event_id,
+        campaign_key: dispatch.campaign_key,
+        notification_type: dispatch.notification_type,
+        title: dispatch.title,
+        body: dispatch.body,
+        route: dispatch.route,
+        correlation_id: dispatch.correlation_id,
+        data: dispatch.payload_json["data"] || {}
+      }
+    end
+
+    def initialize(params:, test_token_valid: false, existing_dispatch: nil, now: nil)
       @params = params || {}
       @test_token_valid = test_token_valid
+      @existing_dispatch = existing_dispatch
+      @now = now
     end
 
     def call
@@ -86,16 +127,55 @@ module Make
       return skip("rate_limited", http_status: :too_many_requests) if rate_limited?(user)
 
       dispatch = resolve_dispatch(user)
-      return duplicate(dispatch) if dispatch.delivered?
+      return duplicate(dispatch) if dispatch.delivered? || dispatch.status == "skipped"
+      return deferred_response(dispatch, user) if dispatch.deferred?
 
-      reason = preference_skip_reason(user) || frequency_skip_reason(user) || timing_skip_reason(user)
+      reason = preference_skip_reason(user) || frequency_skip_reason(user)
       return skip_dispatch(user, dispatch, reason) if reason
+
+      deferred_until = quiet_hours_next_allowed(user)
+      if deferred_until
+        return skip_dispatch(user, dispatch, "stale_after_quiet_hours") if stale_after_quiet_hours?(dispatch, deferred_until)
+
+        return defer_dispatch(user, dispatch, deferred_until)
+      end
 
       perform_dispatch(dispatch, user)
     rescue ActiveRecord::RecordNotUnique
       # Lost a concurrent create race — treat as duplicate.
       existing = PushDispatch.find_by(idempotency_key:)
-      existing ? duplicate(existing) : skip("duplicate")
+      existing ? duplicate_or_deferred(existing) : skip("duplicate")
+    end
+
+    def dispatch_existing
+      dispatch = @existing_dispatch
+      return :missing_dispatch unless dispatch
+
+      user = dispatch.user
+      reason = preference_skip_reason(user) || frequency_skip_reason(user)
+      if reason
+        skip_dispatch(user, dispatch, reason)
+        return :skipped
+      end
+
+      deferred_until = quiet_hours_next_allowed(user)
+      if deferred_until
+        if stale_after_quiet_hours?(dispatch, deferred_until)
+          skip_dispatch(user, dispatch, "stale_after_quiet_hours")
+          return :stale_after_quiet_hours
+        end
+
+        defer_dispatch(user, dispatch, deferred_until)
+        return :deferred
+      end
+
+      if stale_after_quiet_hours?(dispatch, current_time)
+        skip_dispatch(user, dispatch, "stale_after_quiet_hours")
+        return :stale_after_quiet_hours
+      end
+
+      response = perform_dispatch(dispatch, user)
+      response.body[:sent] ? :sent : :failed
     end
 
     private
@@ -170,6 +250,8 @@ module Make
     # --- Idempotency --------------------------------------------------------
 
     def resolve_dispatch(user)
+      return @existing_dispatch if @existing_dispatch
+
       dispatch = PushDispatch.find_or_initialize_by(idempotency_key:)
       return dispatch if dispatch.persisted?
 
@@ -184,7 +266,7 @@ module Make
         route: route,
         correlation_id: correlation_id,
         requested_by: "make",
-        requested_at: Time.current,
+        requested_at: current_time,
         status: "received",
         payload_json: safe_payload
       )
@@ -257,33 +339,39 @@ module Make
 
     # --- Timing (quiet hours) -----------------------------------------------
 
-    # A hard safety gate: EasyHealth will not wake someone at 03:00 even if Make
-    # asks. Unlike every other skip this one is TEMPORARY, so the response says
-    # so (deferred + next_allowed_at) and Make can reschedule instead of losing
-    # the communication. The backend deliberately runs no retry of its own —
-    # deciding whether a late push is still worth sending is the orchestrator's
-    # call, not ours.
-    #
-    # Off by default (PUSH_QUIET_HOURS_ENABLED): nothing in the Make path
-    # enforced quiet hours before, so turning it on is a deliberate rollout once
-    # the scenario knows how to read next_allowed_at.
-    def timing_skip_reason(user)
+    # A hard safety gate: EasyHealth will not wake someone during quiet hours
+    # even if Make asks. This is not terminal: the Make decision is already
+    # persisted as PushDispatch and a backend sweep releases it later.
+    def quiet_hours_next_allowed(user)
       return nil unless PushQuietHours.enabled?
-      return nil if PushQuietHours.allowed?(user: user)
+      return nil if PushQuietHours.allowed?(user: user, at: current_time)
 
-      @quiet_hours_user = user
-      "quiet_hours"
+      PushQuietHours.next_allowed_at(user: user, at: current_time)
     end
 
-    def quiet_hours_extra
-      return {} if @quiet_hours_user.nil?
+    def stale_after_quiet_hours?(dispatch, release_at)
+      return false unless scheduled_workout_reminder_dispatch?(dispatch)
 
-      zone = PushQuietHours.time_zone_for(@quiet_hours_user)
-      {
-        deferred: true,
-        next_allowed_at: PushQuietHours.next_allowed_at(user: @quiet_hours_user).iso8601,
-        user_timezone: zone.tzinfo.name
-      }
+      target = target_workout_at(dispatch)
+      target.present? && release_at >= target
+    end
+
+    def scheduled_workout_reminder_dispatch?(dispatch)
+      dispatch&.user_event&.event_name == ScheduledWorkoutReminderEligibility::EVENT_NAME ||
+        campaign_key == ScheduledWorkoutReminderEligibility::EVENT_NAME ||
+        data_event_name == ScheduledWorkoutReminderEligibility::EVENT_NAME
+    end
+
+    def target_workout_at(dispatch)
+      raw = dispatch&.user_event&.metadata&.dig("activation", "target_workout_at") ||
+            dispatch&.payload_json&.dig("data", "target_workout_at") ||
+            extra_data_source["target_workout_at"] ||
+            extra_data_source[:target_workout_at]
+      return nil if raw.blank?
+
+      Time.zone.parse(raw.to_s)
+    rescue ArgumentError
+      nil
     end
 
     # True only when every one of the five conditions documented on BYPASS_SOURCE
@@ -363,7 +451,7 @@ module Make
     # Persist the skip on the dispatch, emit the funnel analytics, return the
     # structured skip response.
     def skip_dispatch(user, dispatch, reason)
-      dispatch.update!(status: "skipped", skip_reason: reason)
+      dispatch.update!(status: "skipped", skip_reason: reason, next_allowed_at: nil)
       PushJourney.track_dispatch_skipped(
         user: user,
         event_name: data_event_name,
@@ -373,7 +461,12 @@ module Make
           correlation_id: dispatch.correlation_id
         }
       )
-      skip(reason, dispatch: dispatch, extra: reason == "quiet_hours" ? quiet_hours_extra : {})
+      skip(reason, dispatch: dispatch)
+    end
+
+    def defer_dispatch(user, dispatch, next_allowed_at)
+      dispatch.mark_deferred!(reason: "quiet_hours", next_allowed_at: next_allowed_at)
+      deferred_response(dispatch, user)
     end
 
     def data_event_name
@@ -396,8 +489,9 @@ module Make
 
       dispatch.update!(
         status: dispatch_status(result),
-        dispatched_at: Time.current,
-        provider_accepted_at: (result.sent? ? Time.current : nil),
+        dispatched_at: current_time,
+        provider_accepted_at: (result.sent? ? current_time : nil),
+        next_allowed_at: nil,
         tokens_attempted_count: result.tokens_attempted,
         tokens_accepted_count: result.tokens_accepted,
         tokens_rejected_count: result.tokens_rejected,
@@ -499,6 +593,10 @@ module Make
       ActiveModel::Type::Boolean.new.cast(ENV.fetch("MAKE_PUSH_ORCHESTRATION_ENABLED", "false"))
     end
 
+    def current_time
+      @now || Time.current
+    end
+
     # --- Responses ----------------------------------------------------------
 
     def disabled
@@ -518,9 +616,8 @@ module Make
     # `reason` is a deprecated alias of `skip_reason`, kept so existing Make
     # scenarios and dashboards do not break on this change.
     #
-    # `deferred` tells the orchestrator whether retrying later could ever
-    # succeed. It is false for everything except quiet hours, which overrides it
-    # and adds next_allowed_at — an opt-out is permanent, a clock is not.
+    # `deferred` is false here because skips are terminal. Quiet-hours deferral
+    # returns through deferred_response instead and is released by the backend.
     def skip(reason, dispatch: nil, http_status: :ok, extra: {})
       body = {
         status: "skipped",
@@ -548,6 +645,30 @@ module Make
           notification_type: notification_type.presence,
           campaign_key: campaign_key.presence,
           correlation_id: dispatch.correlation_id
+        }.compact
+      )
+    end
+
+    def duplicate_or_deferred(dispatch)
+      return deferred_response(dispatch, dispatch.user) if dispatch.deferred?
+
+      duplicate(dispatch)
+    end
+
+    def deferred_response(dispatch, user)
+      Response.new(
+        http_status: :ok,
+        body: {
+          status: "deferred",
+          sent: false,
+          deferred: true,
+          defer_reason: dispatch.defer_reason || "quiet_hours",
+          dispatch_id: dispatch.id,
+          notification_type: notification_type.presence,
+          campaign_key: campaign_key.presence,
+          correlation_id: dispatch.correlation_id,
+          next_allowed_at: dispatch.next_allowed_at&.iso8601,
+          user_timezone: PushQuietHours.time_zone_for(user).tzinfo.name
         }.compact
       )
     end
