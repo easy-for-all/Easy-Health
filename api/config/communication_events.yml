@@ -33,6 +33,12 @@
 # Push journey V1 push events: first_workout_not_started_2h,
 # first_workout_not_started_24h, scheduled_workout_reminder_due,
 # first_workout_completed, user_inactive_3_days, user_inactive_7_days.
+#
+# Every event in RelationshipEventTracker::EVENTS must be classified: either it
+# has an entry here, or it is declared in config/non_communication_events.yml
+# with the reason it never communicates. An event in neither file is reported as
+# `uncatalogued` (critical) by the admin panel and fails the registry spec —
+# that silence is what kept activation_workout_created out of Make.
 
 # --- Email-only relationship journeys (orchestrated by Make) ---
 user_created:
@@ -93,6 +99,23 @@ plan_created_but_not_used:
   communication_type: activation
 
 # --- Push journey V1 ---
+
+# Anchor of the activation journey, emitted the moment the plan is ready.
+#
+# This is a SIGNAL for Make, not a request to push. Reaching Make does NOT mean
+# it should produce an immediate push: activation_reminder is an engagement
+# category, so a push here consumes the 20h cooldown and would make
+# first_workout_not_started_2h be skipped with cooldown_active two hours later.
+# The Make scenario must receive and route this event WITHOUT an immediate push
+# until that interference with the 2h/24h journey is decided deliberately.
+activation_workout_created:
+  channels:
+    - push
+  communication_type: activation
+  notification_type: activation_reminder
+  route: /workouts/ready
+  engagement: true
+
 first_workout_not_started_2h:
   channels:
     - push

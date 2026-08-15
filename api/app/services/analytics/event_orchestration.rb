@@ -30,6 +30,28 @@ module Analytics
     PROVIDER_ACCEPTED_STATUSES = PushDispatch::DELIVERED_STATUSES
     PROVIDER_REJECTED_STATUSES = %w[failed].freeze
 
+    # make_last_error wins over make_delivery_status: several causes share
+    # status='disabled' and only the error distinguishes them.
+    NOT_SENT_REASON_BUCKETS = {
+      "event_not_orchestration" => "event_not_orchestration",
+      "no_deliverable_channel" => "no_deliverable_channel",
+      "make_webhook_disabled_or_unconfigured" => "webhook_disabled",
+      "suppressed_by_producer" => "suppressed",
+      "user_deleted_or_anonymized" => "user_deleted_or_anonymized",
+      "unknown_communication_event" => "unknown_communication_event",
+      "communication_event_disabled" => "communication_event_disabled"
+    }.freeze
+
+    NOT_SENT_STATUS_BUCKETS = {
+      "pending" => "pending",
+      "sending" => "pending",
+      "retrying" => "retrying",
+      "failed_to_reach_make" => "failed",
+      "dead_letter" => "dead_letter",
+      "skipped" => "skipped",
+      "disabled" => "disabled_without_reason"
+    }.freeze
+
     def initialize(period: nil, start_date: nil, end_date: nil)
       @custom = start_date.present? || end_date.present?
       @period = @custom ? nil : (PERIODS.key?(period.to_s) ? period.to_s : DEFAULT_PERIOD)
@@ -40,6 +62,7 @@ module Analytics
       {
         period: period_payload,
         summary: summary,
+        not_sent_breakdown: not_sent_breakdown,
         by_event: by_event,
         candidate_channels: candidate_channels,
         push_dispatch_results: push_dispatch_results,
@@ -49,7 +72,9 @@ module Analytics
         warnings: warnings,
         catalog: {
           orchestration_events: orchestration_event_names,
-          push_events: safe_push_events
+          push_events: safe_push_events,
+          analytics_only_events: analytics_only_event_names,
+          uncatalogued_events: uncatalogued_event_names
         }
       }
     end
@@ -98,8 +123,44 @@ module Analytics
       []
     end
 
+    def analytics_only_event_names
+      @analytics_only_event_names ||= begin
+        CommunicationEvents.analytics_only_event_names
+      rescue CommunicationEvents::ConfigError
+        []
+      end
+    end
+
+    # Registry events with no decision in either catalog. This is the coverage
+    # bug detector: activation_workout_created sat here, invisible, because the
+    # panel only ever queried events that were already in the catalog.
+    def uncatalogued_event_names
+      @uncatalogued_event_names ||= begin
+        CommunicationEvents.uncatalogued_event_names
+      rescue CommunicationEvents::ConfigError
+        []
+      end
+    end
+
+    # Events the catalog says MUST reach Make. Same scope as before, renamed at
+    # the call sites that care; `scope` is kept as the alias every existing
+    # section already uses.
     def scope
       @scope ||= UserEvent.where(event_name: orchestration_event_names, created_at: range)
+    end
+    alias_method :orchestration_scope, :scope
+
+    # Explicitly classified as never-communication. Counted so the panel can say
+    # how much volume was excluded ON PURPOSE — it must never read as a failure.
+    def analytics_scope
+      @analytics_scope ||= UserEvent.where(event_name: analytics_only_event_names, created_at: range)
+    end
+
+    # Restricted to the explicit list derived from RelationshipEventTracker::EVENTS,
+    # never `where.not(...)` over arbitrary names: event names produced by other
+    # subsystems are not this catalog's business and must not raise false criticals.
+    def uncatalogued_scope
+      @uncatalogued_scope ||= UserEvent.where(event_name: uncatalogued_event_names, created_at: range)
     end
 
     # --- Funnel -------------------------------------------------------------
@@ -127,6 +188,21 @@ module Analytics
           provider_accepted: dispatch[:accepted],
           provider_rejected: dispatch[:rejected],
           push_skipped: dispatch[:skipped],
+
+          # --- Coverage ------------------------------------------------------
+          # "182 generated / 33 accepted / 0 errors" looked healthy while an
+          # event that should have reached Make was silently parked, because the
+          # denominator only ever contained events already in the catalog. These
+          # keys make the denominator explicit and separate the three
+          # populations: expected, excluded on purpose, and undecided.
+          all_events_generated: all_events_generated,
+          orchestration_expected: generated,
+          orchestration_sent: sent,
+          orchestration_not_sent: generated - sent,
+          orchestration_coverage_pct: ratio(sent, generated),
+          analytics_only_events: analytics_scope.count,
+          uncatalogued_events: uncatalogued_scope.count,
+
           rates: {
             generated_to_sent: ratio(sent, generated),
             sent_to_accepted: ratio(accepted, sent),
@@ -134,6 +210,46 @@ module Analytics
           }
         }
       end
+    end
+
+    def all_events_generated
+      @all_events_generated ||= UserEvent.where(created_at: range).count
+    end
+
+    # --- Why an event did not reach Make ------------------------------------
+    #
+    # Grouped by CAUSE, not by status. Several different causes share
+    # make_delivery_status='disabled' and only make_last_error tells them apart;
+    # collapsing them would hide event_not_orchestration — the one that means a
+    # fact nobody catalogued — inside the same bucket as a user who legitimately
+    # withdrew email consent.
+    #
+    # Covers orchestration events AND uncatalogued ones. Events explicitly
+    # classified as never-communication are excluded: they are not failures.
+    def not_sent_breakdown
+      rows = UserEvent
+             .where(created_at: range, event_name: orchestration_event_names + uncatalogued_event_names)
+             .not_sent_to_make
+             .group(:make_delivery_status, :make_last_error, :event_name)
+             .count
+
+      buckets = Hash.new { |hash, key| hash[key] = { reason: key, count: 0, event_names: Set.new } }
+
+      rows.each do |(status, last_error, event_name), count|
+        bucket = buckets[not_sent_bucket(status, last_error)]
+        bucket[:count] += count
+        bucket[:event_names] << event_name
+      end
+
+      buckets.values
+             .map { |bucket| bucket.merge(event_names: bucket[:event_names].to_a.sort) }
+             .sort_by { |bucket| -bucket[:count] }
+    end
+
+    def not_sent_bucket(status, last_error)
+      NOT_SENT_REASON_BUCKETS[last_error.to_s] ||
+        NOT_SENT_STATUS_BUCKETS[status.to_s] ||
+        "unknown"
     end
 
     def ratio(numerator, denominator)
@@ -399,6 +515,18 @@ module Analytics
         list << warning("allowlist_drift", "warning",
                         "Evento só no env, sem entrada no YAML: #{drift.join(', ')}. " \
                         "Configure em communication_events.yml ou remova do env.")
+      end
+
+      # An event with no decision in either catalog. Critical even at zero
+      # volume: the gap is architectural, and it stays invisible precisely while
+      # nobody is generating the event yet.
+      undecided = uncatalogued_event_names
+      if undecided.any?
+        volume = uncatalogued_scope.count
+        list << warning("uncatalogued_event", "critical",
+                        "#{undecided.size} evento(s) do registry sem decisão de orquestração " \
+                        "(#{volume} ocorrência(s) no período): #{undecided.join(', ')}. " \
+                        "Classifique em communication_events.yml ou non_communication_events.yml.")
       end
 
       list

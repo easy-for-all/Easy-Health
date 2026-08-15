@@ -91,10 +91,20 @@ Campos:
 - `origin_surface`: superficie que PRODUZIU o evento (`android`, `web`,
   `backend_scheduler`, `admin`, `unknown`). E outra dimensao que canal: origem
   diz de onde veio o fato, canal diz por onde a comunicacao pode sair.
-- `delivery.channels`: canais candidatos do evento. Valores atuais: `email`,
-  `push`. **Campo estavel** — e o que os cenarios filtram hoje.
-- `delivery.candidate_channels`: mesmo array de `channels`, com o nome que diz o
-  que ele e. Adicionado sem remover `channels`; prefira este em cenarios novos.
+- `delivery.channels`: canais que a EasyHealth DECIDIU EXPOR neste evento, apos o
+  channel routing de orquestracao. Valores atuais: `email`, `push`. **Campo
+  estavel** — e o que os cenarios filtram hoje.
+- `delivery.candidate_channels`: canais que o CATALOGO permite considerar para
+  este evento. Nao depende do estado do usuario: e a intencao de negocio, igual
+  para todo mundo. Os dois arrays coincidem quando nada estreitou o roteamento;
+  divergem, por exemplo, em `user_inactive_7_days` para um usuario sem
+  consentimento de e-mail (`channels: ["push"]`,
+  `candidate_channels: ["push","email"]`).
+
+  `channels` **nao** significa "entregavel agora". Falta de device token,
+  `push_enabled=false` e permissao nao concedida nunca removem `push` de nenhum
+  dos dois arrays — isso e push delivery eligibility, aplicada depois em
+  `POST /api/v1/integrations/make/push_dispatches`.
 - `delivery.communication_type`: bucket editorial (`lifecycle`, `activation`,
   `progress`, `retention`).
 - `delivery.notification_type` / `delivery.route`: espelho do bloco `push`, para

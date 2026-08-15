@@ -1,4 +1,4 @@
-# Push Journey V1 — 5 eventos (Make orquestra a copy)
+# Push Journey V1 — eventos de push (Make orquestra a copy)
 
 Jornada de push simplificada. **Família A (Make) é o único caminho ativo**; a
 Família B interna (`NotificationDelivery` + `PushDispatchService` + cron
@@ -18,13 +18,14 @@ Rails detecta o FATO (cron 15min / controller) — sem filtro de horário
  → atribuição ≤24h após open                  → workout_started/completed_after_push
 ```
 
-## Os 5 eventos
+## Os eventos com canal push
 
 Config técnica em [api/config/communication_events.yml](../api/config/communication_events.yml)
 (fonte única). **A copy (título/corpo/emoji) vive no cenário do Make**, não no Rails.
 
 | event_name | Gatilho (Rails re-checa a condição viva) | channels | notification_type | route | engagement |
 | --- | --- | --- | --- | --- | --- |
+| `activation_workout_created` | 1º plano criado (**signal**, não push imediato) | push | activation_reminder | /workouts/ready | sim |
 | `first_workout_not_started_2h` | ≥2h do 1º plano, sem sessão iniciada | push | activation_reminder | /workouts/ready | sim |
 | `first_workout_not_started_24h` | ≥24h do 1º plano, sem iniciar | push | activation_reminder | /workouts/ready | sim |
 | `first_workout_completed` | conclusão real do 1º treino (1x) | push | progress_update | /workouts | não |
@@ -148,10 +149,16 @@ Manter o job diário de relacionamento (inatividade) num horário comercial (BRT
 
 ## Config manual — Make
 
-5 rotas por `event_name`. Cada rota: filtro `2.event_name = <evento>` → módulo HTTP
+Uma rota por `event_name`. Cada rota: filtro `2.event_name = <evento>` → módulo HTTP
 com o body acima (title/body **fixos no cenário**, um por evento). Bearer =
 `MAKE_PUSH_DISPATCH_TOKEN`. `user_inactive_7_days` mantém também a branch de e-mail.
 Error Handler: retry em 502/429; ignorar 401/422.
+
+**`activation_workout_created` precisa ser aceito sem erro antes do deploy do
+backend**, ainda que a rota faça no-op. Ele é *signal*: por ser
+`activation_reminder` (engagement), um push imediato consome o cooldown de 20h e
+faria `first_workout_not_started_2h` ser pulado com `cooldown_active`. Roteie e
+registre; só decida sobre push imediato depois de resolver essa interferência.
 
 ## Analytics (funil por evento no admin)
 `push_event_eligible` → `push_requested_to_make` → `push_provider_accepted` →

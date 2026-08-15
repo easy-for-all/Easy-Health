@@ -15,13 +15,29 @@ Evento de negócio (ex.: activation_workout_created)
  → Make → POST /api/v1/integrations/make/push_dispatches  (ver make-push-orchestration)
 ```
 
-## Eventos-gatilho de push (já emitidos hoje)
+## Eventos-gatilho
+
+> **Fonte de verdade:** `api/config/communication_events.yml`. A tabela oficial,
+> com canais e `notification_type`, está em
+> [event-orchestration.md](event-orchestration.md#2-catálogo-dos-orchestration-events)
+> e [push-journey-v1.md](push-journey-v1.md). Esta seção é orientação, não
+> catálogo — se divergir, o YAML vence.
 
 | Evento | Onde é emitido | Semântica |
 | --- | --- | --- |
-| `activation_workout_created` | `workout_plans_controller` (tempo real, ao criar plano) | usuário criou o 1º plano — Make aplica delay e manda lembrete |
-| `plan_created_but_not_used` | `relationship_daily_job` / `relationship_backfill_job` (diário, idempotente) | plano existe mas nunca foi usado |
-| `never_created_workout`, `user_inactive_3_days`, `user_inactive_7_days` | jobs de relationship | recuperação/reengajamento |
+| `activation_workout_created` | `workout_plans_controller` (tempo real, ao criar plano) | usuário criou o 1º plano — *signal*, ver aviso abaixo |
+| `first_workout_not_started_2h` / `_24h` | `FirstWorkoutNotStarted{2h,24h}Job` | não iniciou o 1º treino |
+| `scheduled_workout_reminder_due` | `ScheduledWorkoutReminderSchedulerJob` | lembrete no horário preferido |
+| `first_workout_completed` | `WorkoutSessionsController` | 1º treino concluído |
+| `user_inactive_3_days`, `user_inactive_7_days` | `RelationshipDailyJob` | recuperação/reengajamento |
+
+> `activation_workout_created` chegar ao Make **não** significa push imediato.
+> Ele é `activation_reminder` (categoria de engagement): um push imediato consome
+> o cooldown de 20h e faria `first_workout_not_started_2h` ser pulado com
+> `cooldown_active`. O cenário deve receber e rotear o evento sem push imediato
+> até essa interferência ser decidida.
+
+`plan_created_but_not_used` e `never_created_workout` são **e-mail**, não push.
 
 `workout_created_not_started` **não** é um evento emitido — é apenas um nome de
 **segmento** (`user_segments`), calculado por `UserSegmentCalculator`.

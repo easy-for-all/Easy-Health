@@ -16,6 +16,7 @@ RSpec.describe CommunicationEvents do
 
   it "exposes the technical config of the push journey events" do
     expect(described_class.push_events).to match_array(%w[
+      activation_workout_created
       first_workout_not_started_2h first_workout_not_started_24h
       first_workout_completed scheduled_workout_reminder_due
       user_inactive_3_days user_inactive_7_days

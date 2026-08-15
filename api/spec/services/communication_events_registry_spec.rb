@@ -75,6 +75,72 @@ RSpec.describe "communication events registry" do
     expect(keys).to eq(keys.uniq), "chaves duplicadas: #{(keys - keys.uniq).uniq.join(', ')}"
   end
 
+  # --- Exhaustive classification -------------------------------------------
+  #
+  # THE guard this suite was missing. activation_workout_created was in neither
+  # catalog for months: born disabled with make_last_error=event_not_orchestration,
+  # and invisible to the admin panel because the panel only queried events that
+  # were already catalogued. "Nobody decided" is no longer a reachable state.
+  describe "every registry event is classified" do
+    it "leaves no event undecided" do
+      expect(catalog.uncatalogued_event_names).to be_empty,
+        "eventos sem decisão de orquestração: #{catalog.uncatalogued_event_names.join(', ')}. " \
+        "Classifique em communication_events.yml (comunica) ou " \
+        "non_communication_events.yml (nunca comunica, com reason)."
+    end
+
+    it "never classifies an event as both communication and non-communication" do
+      both = catalog.configured_event_names & catalog.analytics_only_event_names
+
+      expect(both).to be_empty, "eventos nos dois catálogos: #{both.join(', ')}"
+    end
+
+    it "accounts for exactly the tracker's event list" do
+      classified = (catalog.orchestration_event_names + catalog.analytics_only_event_names).uniq
+
+      expect(classified.sort).to eq(RelationshipEventTracker::EVENTS.map(&:to_s).sort)
+    end
+
+    it "gives every non-communication event a known reason" do
+      invalid = catalog.analytics_only_event_names.reject do |name|
+        CommunicationEvents::NON_COMMUNICATION_REASONS.include?(catalog.analytics_only_reason_for(name))
+      end
+
+      expect(invalid).to be_empty, "reason inválido em: #{invalid.join(', ')}"
+    end
+
+    it "only lists events the tracker knows how to emit" do
+      unknown = catalog.analytics_only_event_names - RelationshipEventTracker::EVENTS.map(&:to_s)
+
+      expect(unknown).to be_empty
+    end
+
+    it "has no duplicated key in the non-communication catalog" do
+      keys = Rails.root.join("config/non_communication_events.yml").read
+                  .lines.filter_map { |line| line[/\A([a-z0-9_]+):/, 1] }
+
+      expect(keys).to eq(keys.uniq), "chaves duplicadas: #{(keys - keys.uniq).uniq.join(', ')}"
+    end
+
+    it "rejects a non-communication entry with an unknown reason" do
+      allow(catalog).to receive(:analytics_only_event_names).and_call_original
+
+      expect { catalog.send(:validate_non_communication_entry!, "push_sent", { "reason" => "porque_sim" }) }
+        .to raise_error(CommunicationEvents::ConfigError, /reason must be one of/)
+    end
+  end
+
+  # activation_workout_created is the event this whole change exists for. The
+  # assertion is explicit so a future "simplification" that drops it from the
+  # catalog fails here with the reason attached, not in production.
+  it "treats activation_workout_created as an orchestration push event" do
+    expect(catalog.orchestration?("activation_workout_created")).to be(true)
+    expect(catalog.channels_for("activation_workout_created")).to eq(%w[push])
+    expect(catalog.notification_type_for("activation_workout_created")).to eq("activation_reminder")
+    expect(catalog.route_for("activation_workout_created")).to eq("/workouts/ready")
+    expect(catalog.engagement?("activation_workout_created")).to be(true)
+  end
+
   it "keeps a disabled event out of the orchestration set" do
     allow(catalog).to receive(:config_for).and_call_original
     allow(catalog).to receive(:config_for).with("churn_risk")

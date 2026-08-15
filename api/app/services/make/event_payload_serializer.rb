@@ -177,30 +177,46 @@ module Make
       metadata
     end
 
+    # Channels the caller decided to expose. Nil means "no decision was passed
+    # in" — direct callers such as the rake preview task — and falls back to the
+    # catalog. MakeWebhookClient always passes them resolved, so this class
+    # never has to know anything about eligibility.
     def resolved_channels
       if delivery_channels.nil?
-        CommunicationEvents.channels_for(event.event_name)
+        catalog_channels
       else
         CommunicationEvents.validate_event_name!(event.event_name)
         CommunicationEvents.validate_channels!(delivery_channels)
       end
     end
 
-    # Channels come from the override (smoke test) or the canonical config;
-    # communication_type and engagement always come from the canonical config so
-    # Make can route and cap without a second source of truth.
+    def catalog_channels
+      CommunicationEvents.channels_for(event.event_name)
+    end
+
+    # Two different questions, deliberately answered by two different arrays:
     #
-    # `channels` is what the live Make scenario filters on ("contains push") and
-    # is deliberately unchanged. `candidate_channels` is the same array under
-    # the name that says what it means — these are channels this user COULD be
-    # reached on, not channels anything was sent on. notification_type and route
-    # are mirrored here from the push block so a scenario can route without
-    # reaching into a second object; both remain populated.
+    #   candidate_channels — what the CATALOG allows Make to consider for this
+    #                        event. Pure business intent, identical for every
+    #                        user, never narrowed by this person's state.
+    #   channels           — what EasyHealth DECIDED TO EXPOSE for this event
+    #                        after orchestration channel routing (see
+    #                        MakeWebhookClient#channels_for). It is what the
+    #                        live Make scenario filters on.
+    #
+    # `channels` is NOT "deliverable right now". A missing device token, push
+    # disabled or an ungranted permission never remove push from either array:
+    # that is push dispatch eligibility, enforced later by
+    # Make::PushDispatchRequest when Make actually asks for a push.
+    #
+    # communication_type and engagement always come from the canonical config so
+    # Make can route and cap without a second source of truth. notification_type
+    # and route are mirrored here from the push block so a scenario can route
+    # without reaching into a second object; both remain populated.
     def delivery_payload
-      channels = resolved_channels
       payload = {
-        channels: channels,
-        candidate_channels: channels,
+        channels: resolved_channels,
+        candidate_channels: catalog_channels,
         communication_type: CommunicationEvents.communication_type_for(event.event_name),
         notification_type: CommunicationEvents.notification_type_for(event.event_name),
         route: CommunicationEvents.route_for(event.event_name),

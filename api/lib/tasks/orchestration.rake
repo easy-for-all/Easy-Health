@@ -71,6 +71,18 @@ namespace :orchestration do
     puts "\nORCHESTRATION EVENTS (fonte de verdade: config/communication_events.yml)"
     puts CommunicationEvents.orchestration_event_names.join(", ")
 
+    analytics_only = CommunicationEvents.analytics_only_event_names
+    puts "\nNÃO-COMUNICAÇÃO (config/non_communication_events.yml): #{analytics_only.size} evento(s)"
+
+    uncatalogued = CommunicationEvents.uncatalogued_event_names
+    puts "\nUNCATALOGUED (sem decisão em nenhum catálogo)"
+    if uncatalogued.any?
+      puts "  #{uncatalogued.join(', ')}"
+      puts "  → classifique em communication_events.yml ou non_communication_events.yml"
+    else
+      puts "  nenhum"
+    end
+
     drift = MakeWebhookEligibility.allowlist_drift
     puts "\nALLOWLIST DRIFT"
     if drift[:env_only].any?

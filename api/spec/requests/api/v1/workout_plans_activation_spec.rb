@@ -32,6 +32,9 @@ RSpec.describe "Api::V1::WorkoutPlans activation tracking", type: :request do
     expect(event.metadata.dig("workout", "muscle_groups")).to eq([ "biceps" ])
     expect(event.metadata.dig("activation", "has_started_workout")).to eq(false)
     expect(event.metadata.dig("activation", "has_completed_first_workout")).to eq(false)
+    # It is an orchestration event now: it must not be born parked with
+    # event_not_orchestration the way it was in production.
+    expect(event.make_last_error).not_to eq("event_not_orchestration")
   end
 
   it "does not duplicate activation_workout_created on a later regenerate" do

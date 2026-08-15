@@ -123,6 +123,24 @@ RSpec.describe MakeWebhookEligibility do
       end
     end
 
+    # The production case: user 540 on Android, no device token, push off at
+    # every level. The fact must still reach Make — whether it ever becomes a
+    # notification is Make::PushDispatchRequest's call, later.
+    it "keeps activation_workout_created eligible with no token and push disabled" do
+      user.notification_preferences!.update!(push_enabled: false, workout_reminders_enabled: false)
+      expect(user.device_tokens.active).to be_empty
+
+      with_env(make_env) do
+        expect(described_class.orchestration_event?("activation_workout_created")).to be(true)
+        expect(described_class.deliverable_channels(user, "activation_workout_created")).to eq(%w[push])
+        expect(described_class.eligible_for_new_event?(user: user, event_name: "activation_workout_created"))
+          .to be(true)
+        expect(described_class.ineligibility_reason(
+          UserEvent.new(user: user, event_name: "activation_workout_created")
+        )).not_to eq("event_not_orchestration")
+      end
+    end
+
     it "blocks every channel for a deleted or anonymized account" do
       with_env(make_env) do
         expect(described_class.account_valid?(build(:user, deletion_requested_at: Time.current))).to be(false)

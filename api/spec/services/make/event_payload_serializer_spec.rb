@@ -20,11 +20,52 @@ RSpec.describe Make::EventPayloadSerializer do
       expect(payload[:schema_version]).to eq(2)
     end
 
-    it "adds candidate_channels as a synonym of channels" do
+    # candidate_channels and channels answer two different questions. They agree
+    # whenever nothing narrowed the routing, which is the common case.
+    it "reports the catalog channels as candidate_channels" do
       payload = payload_for("user_inactive_7_days", metadata: { last_workout_at: 8.days.ago.iso8601 })
 
-      expect(payload[:delivery][:candidate_channels]).to eq(payload[:delivery][:channels])
       expect(payload[:delivery][:candidate_channels]).to match_array(%w[push email])
+      expect(payload[:delivery][:channels]).to match_array(%w[push email])
+    end
+
+    # candidate_channels is business intent and never depends on this user's
+    # state; channels is what EasyHealth decided to expose after routing.
+    it "keeps candidate_channels intact when routing narrowed the exposed channels" do
+      event = UserEvent.create!(user: serializer_user, event_name: "user_inactive_7_days",
+                                occurred_at: Time.current,
+                                metadata: { last_workout_at: 8.days.ago.iso8601 })
+      payload = described_class.new(event: event, schema_version: 2, delivery_channels: %w[push]).as_json
+
+      expect(payload[:delivery][:channels]).to eq(%w[push])
+      expect(payload[:delivery][:candidate_channels]).to match_array(%w[push email])
+    end
+
+    # The serializer is a pure formatter: it receives resolved channels and never
+    # asks who is deliverable. Putting that question back here is what made the
+    # payload and make_delivery_channels disagree in the first place.
+    it "never consults delivery eligibility" do
+      event = UserEvent.create!(user: serializer_user, event_name: "user_inactive_7_days",
+                                occurred_at: Time.current,
+                                metadata: { last_workout_at: 8.days.ago.iso8601 })
+      # Only after the fixtures exist: creating a user legitimately tracks
+      # user_created, which resolves channels through the tracker.
+      expect(MakeWebhookEligibility).not_to receive(:deliverable_channels)
+
+      described_class.new(event: event, schema_version: 2).as_json
+    end
+
+    # A user with no device token, push disabled and no permission still gets
+    # push in BOTH arrays: that is push dispatch eligibility, decided later.
+    it "keeps push as a channel for a user who cannot receive a push right now" do
+      serializer_user.notification_preferences!.update!(push_enabled: false, workout_reminders_enabled: false)
+      expect(serializer_user.device_tokens.active).to be_empty
+
+      payload = payload_for("activation_workout_created", metadata: { workout_plan_id: 1 })
+
+      expect(payload[:delivery][:candidate_channels]).to eq(%w[push])
+      expect(payload[:delivery][:channels]).to eq(%w[push])
+      expect(payload[:push][:notification_type]).to eq("activation_reminder")
     end
 
     it "mirrors notification_type and route into delivery without emptying the push block" do

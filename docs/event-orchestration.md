@@ -38,8 +38,27 @@ declaração, e um segundo interruptor seria só mais um lugar para divergir.
 | Quero… | Faça |
 |---|---|
 | Adicionar um evento à orquestração | Entrada no YAML (+ nome em `RelationshipEventTracker::EVENTS`) |
+| Declarar que um evento NUNCA comunica | Entrada em `config/non_communication_events.yml` com `reason` |
 | Desligar UM evento | `enabled: false` na entrada |
 | Desligar TUDO | `MAKE_WEBHOOK_ENABLED=false` |
+
+### Todo evento do registry precisa de uma decisão
+
+`config/communication_events.yml` declara o que **é** orquestração;
+`config/non_communication_events.yml` declara o que **deliberadamente não é**, com
+o motivo (`push_telemetry`, `product_analytics`, `internal_audit`,
+`legacy_inactive`, `covered_by_other_event`).
+
+Um evento de `RelationshipEventTracker::EVENTS` que não está em **nenhum** dos
+dois é `uncatalogued`: warning **crítico** no painel admin e falha no
+`communication_events_registry_spec`. Não é formalidade — foi exatamente esse
+estado silencioso que manteve `activation_workout_created` fora do Make por meses,
+porque o painel só media eventos já catalogados. "Ninguém decidiu" deixou de ser
+um estado alcançável.
+
+`CommunicationEvents.validate!` **não** levanta erro por `uncatalogued`: derrubar
+o boot em produção porque alguém adicionou um nome novo seria pior que a lacuna
+que isso reporta. A cobrança acontece em CI e no painel.
 
 `MakeWebhookEligibility.allowed_events` **deriva** dessa lista. `CommunicationEvents`
 é validado no boot e, mais importante, em CI por
@@ -63,6 +82,7 @@ painel admin — é configuração devendo ao YAML.
 
 | Evento | Produtor | Timing | Canais candidatos | Tipo | Idempotência |
 |---|---|---|---|---|---|
+| `activation_workout_created` | `WorkoutPlansController` | ao criar o 1º plano | push | activation | 1 por usuário/plano |
 | `first_workout_not_started_2h` | `FirstWorkoutNotStarted2hJob` | ~15min; âncora 2–26h | push | activation | 1 por âncora `activation_workout_created` |
 | `first_workout_not_started_24h` | `FirstWorkoutNotStarted24hJob` | ~15min; âncora 24–48h | push | activation | 1 por âncora |
 | `scheduled_workout_reminder_due` | `ScheduledWorkoutReminderSchedulerJob` | ~15min; `preferred_workout_time − lead` | push | activation | 1 por usuário/plano/data local; máx. 3 por plano |
@@ -75,8 +95,27 @@ painel admin — é configuração devendo ao YAML.
 `RelationshipEventTracker::EVENTS` e tem context builder, mas **não** tem entrada
 no YAML e não faz parte da jornada. Não reintroduzir.
 
-`activation_workout_created` é **âncora**, não comunicação: não tem entrada no
-YAML e nunca vira push. Ele é o ponto de partida dos lembretes 2h/24h.
+`activation_workout_created` é **âncora E orchestration event**. Ele continua
+sendo o ponto de partida dos lembretes 2h/24h (`FirstWorkoutNotStarted{2h,24h}Job`
+leem esse `UserEvent`) e, desde ago/2026, também é entregue ao Make.
+
+O evento em si **não envia FCM**: ele é um *signal*. O Make pode posteriormente
+solicitar um push via `POST /api/v1/integrations/make/push_dispatches`, e a
+EasyHealth continua sendo a autoridade final sobre consentimento, categoria,
+device token, permission, cooldown, frequency cap e quiet hours.
+
+> **Atenção ao cenário do Make.** `activation_workout_created` é
+> `activation_reminder`, categoria de engagement. Um push imediato nesse evento
+> consome o cooldown de 20h e faria `first_workout_not_started_2h` ser pulado com
+> `cooldown_active` duas horas depois. Enquanto a interferência com a jornada
+> 2h/24h não for decidida, o cenário deve receber e rotear o evento **sem push
+> imediato**.
+
+Histórico: até ago/2026 ele não tinha entrada no YAML e nascia com
+`make_delivery_status=disabled` / `make_last_error=event_not_orchestration`. Como
+o painel admin só consultava eventos já catalogados, a lacuna era invisível — é
+por isso que hoje existe `config/non_communication_events.yml` e a métrica
+`uncatalogued_events`.
 
 ---
 
@@ -97,6 +136,27 @@ marketing, unsubscribe, bounce) barravam eventos **push-only**.
 suprimir o evento. Um usuário sem consentimento de e-mail recebe
 `user_inactive_7_days` com `channels: ["push"]`. Nenhuma proteção de
 consentimento de e-mail foi reduzida.
+
+### `candidate_channels` vs `channels` no payload
+
+Duas perguntas diferentes, dois arrays diferentes:
+
+| Campo | Pergunta que responde | Origem |
+|---|---|---|
+| `delivery.candidate_channels` | o que o **catálogo** permite ao Make considerar | `CommunicationEvents.channels_for` — igual para todo usuário |
+| `delivery.channels` | o que a EasyHealth **decidiu expor** neste evento, após o channel routing | `MakeWebhookEligibility.deliverable_channels`, o mesmo valor persistido em `make_delivery_channels` |
+
+`channels` **não** significa "entregável agora". Falta de device token,
+`push_enabled=false` e permissão não concedida **nunca** removem push de nenhum
+dos dois arrays — isso é *push delivery eligibility*, aplicada depois por
+`Make::PushDispatchRequest`. O único gate que estreita um canal nessa camada é o
+de **e-mail**, porque o Make envia e-mail direto e nenhum callback da EasyHealth
+consegue reaplicar a regra depois.
+
+Quem resolve os canais é `MakeWebhookClient#channels_for` (override de smoke test
+→ `make_delivery_channels` persistido → recálculo para linhas legadas). O
+`Make::EventPayloadSerializer` permanece um formatador puro e não consulta
+elegibilidade — foi essa consulta ausente que fazia payload e banco discordarem.
 
 O Make **não consegue furar** um opt-out: ele só pede; quem envia é o backend.
 
@@ -220,10 +280,11 @@ Nunca `skipped`: é falha de contrato e o admin marca como CRITICAL.
 }
 ```
 
-**Compatibilidade:** `delivery.channels` é exatamente o campo que o cenário Make
-filtra hoje (`contains push`) e permanece idêntico. `candidate_channels` é o
-mesmo array com o nome que diz o que ele é. `notification_type`/`route` foram
-espelhados em `delivery` sem esvaziar o bloco `push`.
+**Compatibilidade:** `delivery.channels` continua sendo o campo que o cenário Make
+filtra hoje (`contains push`). `candidate_channels` responde outra pergunta — ver
+[`candidate_channels` vs `channels`](#candidate_channels-vs-channels-no-payload).
+`notification_type`/`route` foram espelhados em `delivery` sem esvaziar o bloco
+`push`.
 
 ---
 
@@ -307,12 +368,14 @@ se comunica sobre os dois. Isso é explícito na metadata, não implícito:
 Só observabilidade. Copy e campanha continuam no Make; o admin não vira CMS.
 
 - **Funil**: gerados → enviados → aceitos, com taxas como numerador/denominador (denominador zero vira `—`, nunca `0%`).
+- **Cobertura**: `all_events_generated`, `orchestration_expected`, `orchestration_sent`, `orchestration_not_sent`, `orchestration_coverage_pct`, `analytics_only_events`, `uncatalogued_events`. Existe porque "182 gerados / 33 aceitos / 0 erro" parecia saudável enquanto um evento que devia ir ao Make era arquivado com `event_not_orchestration` — o denominador só continha eventos já catalogados. Evento `analytics_only` **nunca** conta como falha de cobertura; `uncatalogued` é crítico.
+- **`not_sent_breakdown`**: por que cada evento não foi enviado, agrupado por **causa**, não por status. Vários motivos compartilham `make_delivery_status='disabled'` e só `make_last_error` os distingue: `event_not_orchestration`, `no_deliverable_channel`, `webhook_disabled`, `suppressed`, `user_deleted_or_anonymized`, `pending`, `retrying`, `failed`, `dead_letter`, `skipped`, `disabled_without_reason`.
 - **Por evento**: o pipeline inteiro por linha, com push correlacionado pela FK.
 - **Canais candidatos** vs **Resultado do push**: blocos separados de propósito. Candidato = elegível (um evento push+email conta nos dois); resultado = o que foi pedido e o que o provider fez. WhatsApp e in-app aparecem como categoria conhecida com zero e rótulo "sem evento configurado" — sem integração fictícia.
 - **Por origem**: `origin_surface`, nunca misturado com canal.
 - **Schedulers**: status, último sucesso, candidatos e eventos criados.
 - **Eventos recentes**: a tabela de debug — evento, origem, status Make, HTTP, dispatch, status do push e motivo do skip, tudo em uma linha.
-- **Alertas**: `orchestration_event_unserializable`, `orchestration_event_dead_letter`, `orchestration_event_disabled` (anormal salvo razão prevista ou webhook globalmente off), `scheduler_stale`, `zero_push_to_make`, `zero_provider_accepted`, `allowlist_drift`, `heartbeat_missing`.
+- **Alertas**: `orchestration_event_unserializable`, `orchestration_event_dead_letter`, `orchestration_event_disabled` (anormal salvo razão prevista ou webhook globalmente off), `scheduler_stale`, `zero_push_to_make`, `zero_provider_accepted`, `allowlist_drift`, `uncatalogued_event` (**crítico**: evento do registry sem decisão em nenhum catálogo), `heartbeat_missing`.
 
 Diagnóstico por CLI: `rake orchestration:status`.
 
