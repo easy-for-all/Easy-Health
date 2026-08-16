@@ -40,27 +40,40 @@ module Make
     RATE_LIMIT_WINDOW = 1.minute
 
     # --- Smoke-test bypass --------------------------------------------------
-    # Production smoke tests need to fire the same event twice in a row, which
-    # the 20h cooldown and the 2-per-7-days cap legitimately block. This bypass
-    # waives ONLY those two frequency rules. Consent (push_enabled), category
-    # opt-out, device permission, active token, route allowlist, payload
-    # validation and Firebase config remain mandatory — they are never bypassed.
+    # A production smoke test needs to fire the same event twice in a row and to
+    # reach FCM at the hour the operator is actually holding the phone. The 20h
+    # cooldown, the 2-per-7-days cap and the quiet-hours deferral all legitimately
+    # block that. This bypass waives ONLY those timing rules, and only as two
+    # separately-requested capabilities:
     #
-    # Five independent conditions must ALL hold, so neither the production Make
-    # scenario (which holds the dispatch bearer but not the test token) nor a
-    # non-admin user can ever reach it:
-    #   1. MAKE_PUSH_TEST_BYPASS_ENABLED explicitly on for the environment;
-    #   2. a dedicated X-Push-Test-Token header matching
+    #   data.bypass_engagement_frequency -> waives cooldown + weekly cap
+    #   data.bypass_quiet_hours          -> sends now instead of deferring
+    #
+    # Consent (push_enabled), category opt-out, device permission, active token,
+    # route allowlist, payload validation, idempotency, endpoint auth and Firebase
+    # config remain mandatory — they are NEVER bypassed.
+    #
+    # One shared credential guards both capabilities. Every condition must hold,
+    # so neither the production Make scenario (which holds the dispatch bearer but
+    # not the test token) nor a non-admin user can ever reach it:
+    #   1. data.source == "manual_push_test";
+    #   2. MAKE_PUSH_TEST_BYPASS_ENABLED explicitly on for the environment;
+    #   3. a dedicated X-Push-Test-Token header matching
     #      MAKE_PUSH_TEST_BYPASS_TOKEN (verified in the controller, distinct
     #      from the dispatch bearer);
-    #   3. data.source == "manual_push_test";
-    #   4. data.bypass_engagement_frequency == true;
-    #   5. the target user is an admin AND on the e-mail allowlist.
+    #   4. the target user is an admin AND on the e-mail allowlist.
+    #
+    # The allowlist is fail-closed: an empty MAKE_PUSH_TEST_BYPASS_EMAILS denies
+    # every bypass, so a stray ENABLED=true cannot open the mechanism on its own.
     BYPASS_SOURCE = "manual_push_test".freeze
     BYPASS_FLAG = "bypass_engagement_frequency".freeze
-    DEFAULT_BYPASS_EMAILS = %w[mail.marcus.reis@gmail.com].freeze
+    BYPASS_QUIET_HOURS_FLAG = "bypass_quiet_hours".freeze
     # Stripped from the outgoing FCM payload — test plumbing, not app data.
-    BYPASS_DATA_KEYS = [ BYPASS_FLAG ].freeze
+    BYPASS_DATA_KEYS = [ BYPASS_FLAG, BYPASS_QUIET_HOURS_FLAG ].freeze
+
+    # What the caller asked for AND was granted. Evaluated once per request.
+    TestBypass = Struct.new(:frequency, :quiet_hours, keyword_init: true)
+    NO_BYPASS = TestBypass.new(frequency: false, quiet_hours: false).freeze
 
     Response = Struct.new(:http_status, :body, keyword_init: true)
 
@@ -321,7 +334,7 @@ module Make
 
     def frequency_skip_reason(user)
       return nil unless engagement_category?
-      return nil if frequency_bypassed?(user)
+      return nil if test_bypass(user).frequency
 
       delivered = PushDispatch
                   .where(user_id: user.id, notification_type: ENGAGEMENT_CATEGORIES,
@@ -344,6 +357,10 @@ module Make
     # persisted as PushDispatch and a backend sweep releases it later.
     def quiet_hours_next_allowed(user)
       return nil unless PushQuietHours.enabled?
+      # Admin smoke test: go straight to the FCM attempt instead of deferring.
+      # The window itself is untouched — this is a dispatch decision, so normal
+      # users keep the full 22:00-07:00 protection.
+      return nil if test_bypass(user).quiet_hours
       return nil if PushQuietHours.allowed?(user: user, at: current_time)
 
       PushQuietHours.next_allowed_at(user: user, at: current_time)
@@ -374,39 +391,51 @@ module Make
       nil
     end
 
-    # True only when every one of the five conditions documented on BYPASS_SOURCE
-    # holds. Memoised because it both gates the frequency rules and is reported
-    # in the response/audit trail.
-    def frequency_bypassed?(user)
-      return @frequency_bypassed unless @frequency_bypassed.nil?
-
-      @frequency_bypassed = evaluate_bypass(user)
+    # Which bypasses this request asked for AND was granted. Memoised because it
+    # gates two different rules (frequency and quiet hours) but must produce
+    # exactly ONE audit trail entry per request.
+    def test_bypass(user)
+      @test_bypass ||= evaluate_test_bypass(user)
     end
 
-    def evaluate_bypass(user)
-      return false unless bypass_requested?
+    def evaluate_test_bypass(user)
+      requested_frequency = bypass_flag_requested?(BYPASS_FLAG)
+      requested_quiet_hours = bypass_flag_requested?(BYPASS_QUIET_HOURS_FLAG)
+
+      # Nothing was asked for: the normal production path, silent by design.
+      return NO_BYPASS unless requested_frequency || requested_quiet_hours
 
       # From here on the caller ASKED for a bypass — every outcome is audited,
-      # including refusals, so an attempt by a non-admin is visible.
-      unless bypass_enabled_for_env?
-        return audit_bypass(user, granted: false, reason: "bypass_disabled_for_env")
-      end
-      unless @test_token_valid
-        return audit_bypass(user, granted: false, reason: "invalid_test_token")
-      end
-      unless bypass_allowed_user?(user)
-        return audit_bypass(user, granted: false, reason: "user_not_allowlisted")
-      end
+      # including refusals, so an attempt by a non-admin is visible. A wrong
+      # source is an ATTEMPT, not a no-op, so it is audited too.
+      denied_reason =
+        if !bypass_source_valid?
+          "invalid_source"
+        elsif !bypass_enabled_for_env?
+          "bypass_disabled_for_env"
+        elsif !@test_token_valid
+          "invalid_test_token"
+        elsif !bypass_allowed_user?(user)
+          "user_not_allowlisted"
+        end
 
-      audit_bypass(user, granted: true, reason: nil)
+      granted = denied_reason.nil?
+      audit_bypass(
+        user, granted: granted, reason: denied_reason,
+        frequency: requested_frequency, quiet_hours: requested_quiet_hours
+      )
+      return NO_BYPASS unless granted
+
+      TestBypass.new(frequency: requested_frequency, quiet_hours: requested_quiet_hours)
     end
 
-    def bypass_requested?
-      raw = extra_data_source[BYPASS_FLAG] || extra_data_source[BYPASS_FLAG.to_sym]
-      return false unless ActiveModel::Type::Boolean.new.cast(raw)
+    def bypass_flag_requested?(flag)
+      raw = extra_data_source[flag] || extra_data_source[flag.to_sym]
+      ActiveModel::Type::Boolean.new.cast(raw) == true
+    end
 
-      source = (extra_data_source["source"] || extra_data_source[:source]).to_s
-      source == BYPASS_SOURCE
+    def bypass_source_valid?
+      (extra_data_source["source"] || extra_data_source[:source]).to_s == BYPASS_SOURCE
     end
 
     def bypass_enabled_for_env?
@@ -420,23 +449,36 @@ module Make
       user.email.to_s.downcase.in?(bypass_allowed_emails)
     end
 
+    # Fail-closed on purpose: there is NO hardcoded default. An unset or empty
+    # MAKE_PUSH_TEST_BYPASS_EMAILS yields an empty list, so no user matches and
+    # every bypass is denied — an operator mistake cannot open the mechanism.
     def bypass_allowed_emails
-      configured = ENV["MAKE_PUSH_TEST_BYPASS_EMAILS"].to_s.split(",").map { |e| e.strip.downcase }.reject(&:blank?)
-      (configured.presence || DEFAULT_BYPASS_EMAILS).map(&:downcase)
+      ENV["MAKE_PUSH_TEST_BYPASS_EMAILS"].to_s.split(",").map { |e| e.strip.downcase }.reject(&:blank?)
     end
 
-    # Every bypass attempt lands in the log AND in user_events. Returns `granted`
-    # so callers can use it as the predicate value directly.
-    def audit_bypass(user, granted:, reason:)
+    # Every bypass attempt lands in the log AND in user_events, exactly once.
+    #
+    # The legacy push_frequency_bypass_* names are kept when frequency is the
+    # only capability requested, so existing dashboards keep working. Anything
+    # involving quiet hours uses the generic push_test_bypass_* names — calling a
+    # quiet-hours bypass a "frequency bypass" would corrupt the observability.
+    #
+    # NEVER logs the FCM token, the X-Push-Test-Token or the dispatch bearer.
+    def audit_bypass(user, granted:, reason:, frequency:, quiet_hours:)
       Rails.logger.warn(
-        "[Make::PushDispatches] engagement frequency bypass #{granted ? 'GRANTED' : 'DENIED'} " \
+        "[Make::PushDispatches] push test bypass #{granted ? 'GRANTED' : 'DENIED'} " \
         "user_id=#{user.id} admin=#{user.admin?} campaign_key=#{campaign_key.presence.inspect} " \
-        "notification_type=#{notification_type} correlation_id=#{correlation_id}#{reason ? " denied_reason=#{reason}" : ''}"
+        "notification_type=#{notification_type} correlation_id=#{correlation_id} " \
+        "bypass_engagement_frequency=#{frequency} bypass_quiet_hours=#{quiet_hours}" \
+        "#{reason ? " denied_reason=#{reason}" : ''}"
       )
       UserEventService.track(
         user: user,
-        event_name: granted ? "push_frequency_bypass_granted" : "push_frequency_bypass_denied",
+        event_name: bypass_event_name(granted: granted, quiet_hours: quiet_hours),
         metadata: {
+          admin: user.admin?,
+          bypass_engagement_frequency: frequency,
+          bypass_quiet_hours: quiet_hours,
           notification_type: notification_type,
           campaign_key: campaign_key.presence,
           correlation_id: correlation_id,
@@ -446,6 +488,11 @@ module Make
         suppress_make_delivery: true
       )
       granted
+    end
+
+    def bypass_event_name(granted:, quiet_hours:)
+      prefix = quiet_hours ? "push_test_bypass" : "push_frequency_bypass"
+      "#{prefix}_#{granted ? 'granted' : 'denied'}"
     end
 
     # Persist the skip on the dispatch, emit the funnel analytics, return the
