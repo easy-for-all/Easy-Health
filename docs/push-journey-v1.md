@@ -99,34 +99,73 @@ Nunca contém `title`, `body` nem token FCM.
 > `category_opt_out` ou `cooldown_active`. Diagnostique com
 > `rake push_journey:diagnose[email]` antes de mexer no body do Make.
 
-## Bypass de frequência para smoke test (produção)
+## Bypass de smoke test (produção)
 
-Dispara os 4 eventos de engajamento em sequência sem esbarrar no cooldown de 20h
-nem no cap semanal. **Só a frequência é dispensada** — consentimento
-(`push_enabled`), opt-out de categoria, permissão do device, token ativo,
-allowlist de rota e Firebase continuam obrigatórios.
+Permite validar o pipeline **real** (`UserEvent → Make → push_dispatches →
+PushDispatch → FCM → Android`) sem esperar o relógio. **Só regras de tempo são
+dispensadas**, e cada uma é pedida separadamente:
 
-As 5 condições precisam valer **ao mesmo tempo**:
+| Flag no `data` | O que dispensa |
+| --- | --- |
+| `bypass_engagement_frequency` | cooldown de 20h + cap de 2/7 dias |
+| `bypass_quiet_hours` | o adiamento (`deferred`) dentro de 22:00–07:00 |
+
+**Nunca** são dispensados: consentimento (`push_enabled`), opt-out de categoria,
+permissão do device, token ativo, allowlist de rota, validação de payload,
+idempotência, Firebase configurado e a autenticação do endpoint.
+
+### Credencial compartilhada
+
+As duas flags usam a **mesma** credencial. Todas as condições precisam valer ao
+mesmo tempo:
 
 | # | Condição |
 | --- | --- |
-| 1 | `MAKE_PUSH_TEST_BYPASS_ENABLED=true` no ambiente |
-| 2 | header `X-Push-Test-Token` batendo com `MAKE_PUSH_TEST_BYPASS_TOKEN` |
-| 3 | `data.source == "manual_push_test"` |
-| 4 | `data.bypass_engagement_frequency == true` |
-| 5 | usuário-alvo é `admin` **e** está em `MAKE_PUSH_TEST_BYPASS_EMAILS` |
+| 1 | `data.source == "manual_push_test"` |
+| 2 | `MAKE_PUSH_TEST_BYPASS_ENABLED=true` no ambiente |
+| 3 | header `X-Push-Test-Token` batendo com `MAKE_PUSH_TEST_BYPASS_TOKEN` |
+| 4 | usuário-alvo é `admin` **e** está em `MAKE_PUSH_TEST_BYPASS_EMAILS` |
+| 5 | a flag correspondente presente e `true` no `data` |
+
+A allowlist é **fail-closed**: `MAKE_PUSH_TEST_BYPASS_EMAILS` vazio nega todo
+bypass, mesmo com `ENABLED=true` e token correto. Não existe default hardcoded.
 
 O token do header é **separado** do Bearer de dispatch: o cenário de produção do
 Make tem só o Bearer, então nunca consegue um bypass mesmo que alguém edite o
-body. Toda tentativa — concedida ou negada — vai para o log e para `user_events`
-(`push_frequency_bypass_granted` / `push_frequency_bypass_denied`).
+body. O `X-Push-Test-Token` só deve ser enviado pelo branch de smoke test do
+cenário, nunca nas chamadas normais.
+
+Toda tentativa — concedida ou negada, inclusive `source` inválido — gera **um**
+registro no log e em `user_events`:
+
+| Caso | Evento |
+| --- | --- |
+| só `bypass_engagement_frequency` | `push_frequency_bypass_granted` / `_denied` |
+| envolve `bypass_quiet_hours` | `push_test_bypass_granted` / `_denied` |
+
+Metadata: `admin`, `bypass_engagement_frequency`, `bypass_quiet_hours`,
+`notification_type`, `campaign_key`, `correlation_id`, `denied_reason`
+(`invalid_source`, `bypass_disabled_for_env`, `invalid_test_token`,
+`user_not_allowlisted`). Nenhum token FCM, header de teste ou Bearer é logado.
+
+As flags são removidas do `data` antes do envio ao FCM — plumbing de teste não
+chega ao device. `source` chega ao app sempre como `"make"`.
+
+### Procedimento em produção
 
 ```env
-# NÃO habilitar por padrão; ligar só durante o smoke test e desligar depois.
-MAKE_PUSH_TEST_BYPASS_ENABLED=false
-MAKE_PUSH_TEST_BYPASS_TOKEN=<segredo, diferente do MAKE_PUSH_DISPATCH_TOKEN>
+# Antes do teste (no .env da VPS):
+MAKE_PUSH_TEST_BYPASS_ENABLED=true
+MAKE_PUSH_TEST_BYPASS_TOKEN=<openssl rand -hex 32, diferente do MAKE_PUSH_DISPATCH_TOKEN>
 MAKE_PUSH_TEST_BYPASS_EMAILS=mail.marcus.reis@gmail.com
+
+# Depois do teste:
+MAKE_PUSH_TEST_BYPASS_ENABLED=false
 ```
+
+Com `ENABLED=false` o mecanismo fica inerte; não é obrigatório remover `TOKEN` e
+`EMAILS`. **Nunca** desligar `PUSH_QUIET_HOURS_ENABLED` nem alterar a janela
+22:00–07:00 para testar — é exatamente isso que o bypass evita.
 
 ## Config manual — VPS (.env)
 

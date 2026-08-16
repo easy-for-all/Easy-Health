@@ -380,10 +380,24 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
         expect(json["sent"]).to be(true)
       end
 
+      # A frequency-only bypass keeps the legacy event name so existing
+      # dashboards and queries do not break.
       it "audits the granted bypass" do
         expect {
           with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
         }.to change { UserEvent.where(event_name: "push_frequency_bypass_granted", user_id: user.id).count }.by(1)
+      end
+
+      it "records both capabilities on the audit event" do
+        with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+
+        metadata = UserEvent.where(event_name: "push_frequency_bypass_granted", user_id: user.id).last.metadata
+        expect(metadata).to include(
+          "admin" => true,
+          "bypass_engagement_frequency" => true,
+          "bypass_quiet_hours" => false
+        )
+        expect(metadata).not_to have_key("denied_reason")
       end
 
       it "does not leak the bypass flag into the FCM data payload" do
@@ -436,11 +450,52 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
         expect(json["skip_reason"]).to eq("cooldown_active")
       end
 
+      # A wrong source is an ATTEMPT at a bypass, not a no-op, so it must be
+      # visible in the audit trail like every other refusal.
+      it "audits a wrong source as invalid_source" do
+        user.update!(admin: true)
+        payload = valid_payload(data: { "source" => "make", "bypass_engagement_frequency" => true })
+        with_bypass_env { post_dispatch(payload, headers: bypass_headers) }
+
+        event = UserEvent.where(event_name: "push_frequency_bypass_denied", user_id: user.id).last
+        expect(event.metadata["denied_reason"]).to eq("invalid_source")
+      end
+
+      # Fail-closed: an operator mistake in the env must not open the mechanism.
+      it "refuses when the e-mail allowlist is empty" do
+        user.update!(admin: true)
+        with_env("MAKE_PUSH_TEST_BYPASS_ENABLED" => "true",
+                 "MAKE_PUSH_TEST_BYPASS_TOKEN" => test_token,
+                 "MAKE_PUSH_TEST_BYPASS_EMAILS" => "") do
+          post_dispatch(bypass_payload, headers: bypass_headers)
+        end
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
       it "audits the refused attempt" do
         expect {
           with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
         }.to change { UserEvent.where(event_name: "push_frequency_bypass_denied", user_id: user.id).count }.by(1)
       end
+
+      it "records both capabilities on a denied audit event" do
+        with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
+
+        metadata = UserEvent.where(event_name: "push_frequency_bypass_denied", user_id: user.id).last.metadata
+        expect(metadata).to include(
+          "admin" => false,
+          "bypass_engagement_frequency" => true,
+          "bypass_quiet_hours" => false,
+          "denied_reason" => "user_not_allowlisted"
+        )
+      end
+    end
+
+    it "does not audit anything when no bypass was requested" do
+      user.update!(admin: true)
+      expect {
+        with_bypass_env { post_dispatch(valid_payload, headers: bypass_headers) }
+      }.not_to change { UserEvent.where(user_id: user.id).where("event_name LIKE '%bypass%'").count }
     end
 
     it "never waives consent: an opted-out admin is still skipped" do
@@ -456,6 +511,259 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       user.device_tokens.each { |t| t.invalidate!("test") }
       with_bypass_env { post_dispatch(bypass_payload, headers: bypass_headers) }
       expect(json["skip_reason"]).to eq("no_active_token")
+    end
+  end
+
+  # The quiet-hours bypass exists so an operator can validate the REAL pipeline
+  # (Make -> dispatch -> FCM -> device) at the hour they are holding the phone.
+  # It runs on the same shared credential as the frequency bypass and waives
+  # nothing else: every example below that is missing one condition must still
+  # defer, and no hard gate is ever skipped.
+  describe "smoke-test quiet-hours bypass" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    let(:test_token) { "push-test-secret" }
+
+    before do
+      create(:device_token, user: user, permission_status: "granted")
+      user.update!(time_zone: "America/Sao_Paulo")
+    end
+
+    # 03:00 in São Paulo — inside the 22:00-07:00 quiet-hours window.
+    def at_night(&block)
+      travel_to(Time.utc(2026, 7, 20, 6, 0), &block)
+    end
+
+    def bypass_payload(overrides = {})
+      valid_payload({ data: { "source" => "manual_push_test", "bypass_quiet_hours" => true } }.merge(overrides))
+    end
+
+    def bypass_headers(token = test_token)
+      auth_headers.merge("X-Push-Test-Token" => token)
+    end
+
+    def with_bypass_env(enabled: "true", emails: nil, token: nil, &block)
+      with_env("PUSH_QUIET_HOURS_ENABLED" => "true",
+               "MAKE_PUSH_TEST_BYPASS_ENABLED" => enabled,
+               "MAKE_PUSH_TEST_BYPASS_TOKEN" => token || test_token,
+               "MAKE_PUSH_TEST_BYPASS_EMAILS" => emails || user.email, &block)
+    end
+
+    # Runs the request at night with the gate on; yields nothing, asserts later.
+    def post_at_night(payload = bypass_payload, headers: bypass_headers, **env)
+      at_night { with_bypass_env(**env) { post_dispatch(payload, headers: headers) } }
+    end
+
+    context "A) when every condition holds" do
+      before { user.update!(admin: true) }
+
+      it "sends immediately instead of deferring" do
+        post_at_night
+
+        expect(response).to have_http_status(:ok)
+        expect(json).to include("status" => "provider_accepted", "sent" => true)
+        expect(json["deferred"]).to be_nil
+        dispatch = PushDispatch.last
+        expect(dispatch.status).to eq("provider_accepted")
+        expect(dispatch.next_allowed_at).to be_nil
+        expect(dispatch.provider_accepted_at).to be_present
+      end
+
+      it "audits under the generic push_test_bypass name, not the frequency one" do
+        expect { post_at_night }
+          .to change { UserEvent.where(event_name: "push_test_bypass_granted", user_id: user.id).count }.by(1)
+        expect(UserEvent.where(event_name: "push_frequency_bypass_granted").count).to eq(0)
+
+        metadata = UserEvent.where(event_name: "push_test_bypass_granted", user_id: user.id).last.metadata
+        expect(metadata).to include(
+          "admin" => true,
+          "bypass_quiet_hours" => true,
+          "bypass_engagement_frequency" => false,
+          "notification_type" => "workout_reminder"
+        )
+      end
+    end
+
+    # B-H: one condition missing at a time. Every case must behave exactly like
+    # a normal user at 03:00 — deferred, never sent.
+    context "when a condition is missing" do
+      def expect_deferred
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        yield
+        expect(json["status"]).to eq("deferred")
+        expect(json["defer_reason"]).to eq("quiet_hours")
+        expect(json["sent"]).to be(false)
+        expect(PushDispatch.last.status).to eq("deferred")
+      end
+
+      it "B) keeps quiet hours for a non-admin user" do
+        expect_deferred { post_at_night }
+      end
+
+      it "C) keeps quiet hours for an admin outside the allowlist" do
+        user.update!(admin: true)
+        expect_deferred { post_at_night(emails: "someone-else@example.com") }
+      end
+
+      it "D) keeps quiet hours when the test token header is absent" do
+        user.update!(admin: true)
+        expect_deferred { post_at_night(headers: auth_headers) }
+      end
+
+      it "E) keeps quiet hours when the test token is wrong" do
+        user.update!(admin: true)
+        expect_deferred { post_at_night(headers: bypass_headers("nope")) }
+      end
+
+      it "F) keeps quiet hours when the environment does not enable the bypass" do
+        user.update!(admin: true)
+        expect_deferred { post_at_night(enabled: "false") }
+      end
+
+      it "G) keeps quiet hours when the source is not manual_push_test" do
+        user.update!(admin: true)
+        payload = valid_payload(data: { "source" => "make", "bypass_quiet_hours" => true })
+        expect_deferred { post_at_night(payload) }
+      end
+
+      it "G) audits a wrong source as a denied attempt" do
+        user.update!(admin: true)
+        payload = valid_payload(data: { "source" => "make", "bypass_quiet_hours" => true })
+        post_at_night(payload)
+
+        event = UserEvent.where(event_name: "push_test_bypass_denied", user_id: user.id).last
+        expect(event.metadata["denied_reason"]).to eq("invalid_source")
+        expect(event.metadata["bypass_quiet_hours"]).to be(true)
+      end
+
+      it "H) keeps quiet hours when the flag is absent" do
+        user.update!(admin: true)
+        expect_deferred { post_at_night(valid_payload(data: { "source" => "manual_push_test" })) }
+      end
+
+      it "H) keeps quiet hours when the flag is explicitly false" do
+        user.update!(admin: true)
+        payload = valid_payload(data: { "source" => "manual_push_test", "bypass_quiet_hours" => false })
+        expect_deferred { post_at_night(payload) }
+      end
+
+      it "H) does not audit when no bypass was requested at all" do
+        user.update!(admin: true)
+        expect { post_at_night(valid_payload) }
+          .not_to change { UserEvent.where(user_id: user.id).where("event_name LIKE '%bypass%'").count }
+      end
+
+      # N) The fail-closed guard: ENABLED=true, correct token and a real admin,
+      # but an empty allowlist. An operator mistake must not open the mechanism.
+      it "N) keeps quiet hours when the e-mail allowlist is empty" do
+        user.update!(admin: true)
+        expect_deferred { post_at_night(emails: "") }
+
+        event = UserEvent.where(event_name: "push_test_bypass_denied", user_id: user.id).last
+        expect(event.metadata["denied_reason"]).to eq("user_not_allowlisted")
+        expect(event.metadata["admin"]).to be(true)
+      end
+    end
+
+    # I-L: a granted bypass waives TIMING only. Consent, category, token and
+    # idempotency stay mandatory.
+    context "with a valid bypass, the hard gates still apply" do
+      before { user.update!(admin: true) }
+
+      it "I) does not waive push_enabled" do
+        user.notification_preferences!.update!(push_enabled: false)
+        post_at_night
+
+        expect(json).to include("skip_reason" => "global_opt_out", "sent" => false)
+        expect(json["deferred"]).to be(false)
+      end
+
+      it "J) does not waive the category opt-out" do
+        user.notification_preferences!.update!(workout_reminders_enabled: false)
+        post_at_night
+
+        expect(json).to include("skip_reason" => "category_opt_out", "sent" => false)
+      end
+
+      it "K) does not waive the active-token requirement" do
+        user.device_tokens.each { |t| t.invalidate!("test") }
+        post_at_night
+
+        expect(json).to include("skip_reason" => "no_active_token", "sent" => false)
+      end
+
+      it "K) does not waive a denied device permission" do
+        user.device_tokens.each { |t| t.update!(permission_status: "denied") }
+        post_at_night
+
+        expect(json).to include("skip_reason" => "permission_denied", "sent" => false)
+      end
+
+      it "L) still honours idempotency_key: the same event sends only once" do
+        payload = bypass_payload(event_id: "evt_bypass_idem")
+
+        post_at_night(payload)
+        expect(json["status"]).to eq("provider_accepted")
+
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        post_at_night(payload)
+
+        expect(json).to include("status" => "duplicate", "sent" => false)
+        expect(PushDispatch.where(idempotency_key: payload[:event_id] +
+          ":workout_not_started_v1:#{user.id}:workout_reminder").count).to eq(1)
+      end
+    end
+
+    # M) Test plumbing must never reach the device.
+    context "M) FCM payload hygiene" do
+      before { user.update!(admin: true) }
+
+      it "strips both bypass flags and never forwards manual_push_test" do
+        captured = nil
+        allow_any_instance_of(FirebasePushService).to receive(:deliver) do |_svc, **kwargs|
+          captured = kwargs[:data]
+          FirebasePushService::Result.new(status: "sent", message_id: "mock/1", invalid_token: false)
+        end
+
+        payload = bypass_payload(
+          data: { "source" => "manual_push_test", "bypass_quiet_hours" => true,
+                  "bypass_engagement_frequency" => true, "workout_id" => "456" }
+        )
+        post_at_night(payload)
+
+        expect(captured).not_to have_key("bypass_quiet_hours")
+        expect(captured).not_to have_key("bypass_engagement_frequency")
+        # `source` keeps its product meaning; the reserved key wins over Make's.
+        expect(captured["source"]).to eq("make")
+        expect(captured.to_json).not_to include("manual_push_test")
+        expect(captured["workout_id"]).to eq("456")   # real data still passes through
+      end
+    end
+
+    context "with both capabilities requested at once" do
+      before do
+        user.update!(admin: true)
+        # Cooldown active AND inside quiet hours: both rules would block.
+        PushDispatch.create!(user: user, notification_type: "workout_reminder", status: "provider_accepted",
+                             idempotency_key: "seed:#{SecureRandom.hex(4)}", dispatched_at: 1.hour.ago)
+      end
+
+      def both_payload
+        valid_payload(data: { "source" => "manual_push_test", "bypass_quiet_hours" => true,
+                              "bypass_engagement_frequency" => true })
+      end
+
+      it "sends, and emits exactly one audit event covering both" do
+        expect { post_at_night(both_payload) }
+          .to change { UserEvent.where(user_id: user.id).where("event_name LIKE '%bypass%'").count }.by(1)
+
+        expect(json).to include("status" => "provider_accepted", "sent" => true)
+        metadata = UserEvent.where(event_name: "push_test_bypass_granted", user_id: user.id).last.metadata
+        expect(metadata).to include(
+          "bypass_engagement_frequency" => true,
+          "bypass_quiet_hours" => true
+        )
+      end
     end
   end
 

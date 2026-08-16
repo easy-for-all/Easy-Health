@@ -188,6 +188,10 @@ push_frequency_bypass_granted:
   reason: internal_audit
 push_frequency_bypass_denied:
   reason: internal_audit
+push_test_bypass_granted:
+  reason: internal_audit
+push_test_bypass_denied:
+  reason: internal_audit
 
 # --- Notification preference changes ----------------------------------------
 # Consent state lives in EasyHealth and is enforced at dispatch time; Make does
