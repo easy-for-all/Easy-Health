@@ -25,6 +25,7 @@ import {
 } from "@/features/auth/auth-analytics";
 import { endAuthAttempt, startAuthAttempt } from "@/shared/lib/auth-attempt";
 import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
+import { navigateExternal, navigateInternal } from "@/shared/lib/app-navigation";
 import {
   authLog,
   describeGoogleAuthError,
@@ -172,7 +173,7 @@ export default function SignUpPage() {
       // mid-flight. `newUser` is the backend's answer, never a guess here.
       await trackSocialLoginCompleted(attempt, outcome.newUser);
       endAuthAttempt();
-      window.location.replace(outcome.redirectPath);
+      navigateInternal(outcome.redirectPath, "replace");
     } catch (err) {
       googleRef.current = false;
       setGoogleLoading(false);
@@ -306,7 +307,7 @@ export default function SignUpPage() {
             session_id,
           });
           trackEvent(EVENTS.CHECKOUT_REDIRECT_OPENED, checkoutEventParams(pending, "signup_pending_plan"));
-          window.location.href = checkout_url;
+          navigateExternal(checkout_url);
         } catch (checkoutError) {
           reportCheckoutException(checkoutError, { plan: pending, source: "signup_pending_plan" });
           trackEvent(EVENTS.CHECKOUT_FAILED, {

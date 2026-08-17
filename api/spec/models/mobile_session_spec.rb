@@ -131,3 +131,86 @@ RSpec.describe MobileSession, type: :model do
     end
   end
 end
+
+RSpec.describe MobileSession, "rotation and expiry policy", type: :model do
+  let(:user) { create(:user) }
+
+  describe "TTL" do
+    it "defaults to 90 days" do
+      described_class.issue_for!(user: user, platform: "ios")
+
+      expect(described_class.last.expires_at).to be_within(1.minute).of(90.days.from_now)
+    end
+
+    it "is configurable" do
+      with_env("MOBILE_SESSION_TTL_DAYS" => "7") do
+        described_class.issue_for!(user: user, platform: "ios")
+      end
+
+      expect(described_class.last.expires_at).to be_within(1.minute).of(7.days.from_now)
+    end
+
+    it "falls back to the default for a nonsense value" do
+      with_env("MOBILE_SESSION_TTL_DAYS" => "zero") do
+        described_class.issue_for!(user: user, platform: "ios")
+      end
+
+      expect(described_class.last.expires_at).to be_within(1.minute).of(90.days.from_now)
+    end
+  end
+
+  describe "re-login on the same device" do
+    it "supersedes the previous session of that installation" do
+      first = described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-1")
+      second = described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-1")
+
+      expect(described_class.authenticate(first)).to be_nil
+      expect(described_class.authenticate(second)).to be_present
+    end
+
+    it "records why it was superseded" do
+      described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-1")
+      described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-1")
+
+      superseded = described_class.where.not(revoked_at: nil).last
+      expect(superseded.revocation_reason).to eq("superseded")
+    end
+
+    # Entrar no iPhone não pode deslogar o iPad.
+    it "leaves other devices of the same user signed in" do
+      iphone = described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-iphone")
+      described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-ipad")
+      described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-ipad")
+
+      expect(described_class.authenticate(iphone)).to be_present
+    end
+
+    it "never touches another user's sessions" do
+      other = create(:user)
+      theirs = described_class.issue_for!(user: other, platform: "ios", installation_id: "inst-1")
+      described_class.issue_for!(user: user, platform: "ios", installation_id: "inst-1")
+
+      expect(described_class.authenticate(theirs)).to be_present
+    end
+  end
+
+  describe "without an installation id" do
+    it "caps how many active sessions a user can accumulate" do
+      (described_class::MAX_ACTIVE_PER_USER + 4).times do
+        described_class.issue_for!(user: user, platform: "ios")
+      end
+
+      expect(described_class.active.where(user_id: user.id).count)
+        .to eq(described_class::MAX_ACTIVE_PER_USER)
+    end
+
+    it "keeps the most recent sessions" do
+      newest = nil
+      (described_class::MAX_ACTIVE_PER_USER + 2).times do
+        newest = described_class.issue_for!(user: user, platform: "ios")
+      end
+
+      expect(described_class.authenticate(newest)).to be_present
+    end
+  end
+end

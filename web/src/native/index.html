@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR" class="h-full antialiased">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover é o que habilita env(safe-area-inset-*), usado pelo
+         AppLayout para não ficar embaixo do notch / Dynamic Island. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Easy Health</title>
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <!--
+      Sem <script> de terceiros aqui de propósito. O RootLayout da Web injeta
+      GTM e Clarity; num app empacotado o caminho de analytics é o Firebase via
+      bridge nativa, e baixar script remoto para executar é justamente o que a
+      App Store 2.5.2 restringe.
+    -->
+  </head>
+  <body class="min-h-full">
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

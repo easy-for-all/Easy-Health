@@ -1,29 +1,30 @@
-import { Preferences } from "@capacitor/preferences";
+import { nativeSessionStorage } from "./native-session-storage";
 
 // Bearer token opaco emitido pelo Rails (ver MobileSession no backend), usado
 // pelos shells nativos que carregam os assets do próprio bundle.
 //
-// Por que isto existe: com bundle local a origem passa a ser
-// capacitor://localhost, e o cookie de sessão do Devise é SameSite=Lax — ele
-// não viaja em requisição cross-site para api.easyhealth.art. Abrir para
-// SameSite=None não resolveria mesmo assim, porque o WKWebView bloqueia cookie
-// de terceiros. Então o app nativo autentica por header.
+// Por que existe: com bundle local a origem passa a ser capacitor://localhost,
+// e o cookie de sessão do Devise é SameSite=Lax — ele não viaja em requisição
+// cross-site para a API. Abrir para SameSite=None não resolveria, porque o
+// WKWebView bloqueia cookie de terceiros por ITP.
 //
-// NÃO se aplica ao shell remoto do Android, que carrega easyhealth.art e
-// portanto é same-site com a API. Lá o cookie continua sendo o caminho, e
-// pedir um token seria criar superfície de XSS sem ganho nenhum.
+// NÃO se aplica ao shell remoto do Android, que carrega easyhealth.art e é
+// same-site com a API. Lá o cookie continua sendo o caminho, e pedir um token
+// seria criar superfície de XSS sem ganho.
+//
+// PERSISTÊNCIA: sempre via nativeSessionStorage (Keychain no iOS). Nunca
+// localStorage, Preferences ou qualquer coisa legível por JS. Em memória o
+// token existe só durante a sessão do app, para o api client montar o header.
 const STORAGE_KEY = "eh_mobile_session";
 
-// O build nativo de bundle local liga esta flag. É deliberadamente build-time
-// e não uma heurística de runtime: "o cookie funciona aqui?" não é algo que dê
-// para descobrir com segurança depois que a primeira requisição já falhou.
+// Build-time e não heurística de runtime: "o cookie funciona aqui?" não é algo
+// que dê para descobrir com segurança depois que a primeira requisição falhou.
 export function usesMobileSessionAuth(): boolean {
   return process.env.NEXT_PUBLIC_NATIVE_LOCAL_BUNDLE === "true";
 }
 
-// api.ts monta os headers de forma síncrona, e o Preferences é assíncrono —
-// mesmo problema que installation.ts resolve com um cache em memória. O valor
-// é lido do disco uma vez no boot e mantido aqui.
+// api.ts monta headers de forma síncrona e o Keychain é assíncrono — mesmo
+// problema que installation.ts resolve com cache em memória.
 let cachedToken: string | null = null;
 let primed = false;
 
@@ -36,11 +37,10 @@ export async function primeMobileSessionToken(): Promise<void> {
   if (primed || !usesMobileSessionAuth()) return;
 
   try {
-    const { value } = await Preferences.get({ key: STORAGE_KEY });
-    cachedToken = value || null;
+    cachedToken = await nativeSessionStorage.get(STORAGE_KEY);
   } catch {
-    // Falha de leitura não é motivo para apagar o que está gravado: o usuário
-    // cai numa tela de login, mas o token continua lá para a próxima tentativa.
+    // Falha de leitura do Keychain não apaga o que está gravado: o usuário cai
+    // numa tela de login, mas o token continua lá para a próxima tentativa.
     cachedToken = null;
   } finally {
     primed = true;
@@ -53,7 +53,7 @@ export async function storeMobileSessionToken(token: string): Promise<void> {
   cachedToken = token;
   primed = true;
   try {
-    await Preferences.set({ key: STORAGE_KEY, value: token });
+    await nativeSessionStorage.set(STORAGE_KEY, token);
   } catch {
     // Segue em memória: a sessão vale para este launch mesmo sem persistir.
   }
@@ -63,21 +63,20 @@ export async function clearMobileSessionToken(): Promise<void> {
   cachedToken = null;
   primed = true;
   try {
-    await Preferences.remove({ key: STORAGE_KEY });
+    await nativeSessionStorage.remove(STORAGE_KEY);
   } catch {
-    // Ignorado de propósito: o servidor já revogou. Um token órfão no disco
-    // não autentica mais nada.
+    // Ignorado: o servidor já revogou, e um token órfão não autentica nada.
   }
 }
 
 // Header de opt-in. Sem ele o servidor não emite token — é o que mantém o
-// bundle web normal fora deste caminho.
+// bundle web fora deste caminho.
 export function mobileSessionIssueHeader(): Record<string, string> {
   return usesMobileSessionAuth() ? { "X-EasyHealth-Mobile-Session": "1" } : {};
 }
 
-// Lê o token de uma resposta de login e o persiste. Sem token na resposta
-// (web, ou shell remoto), não faz nada.
+// Lê o token de uma resposta de login e persiste. Sem token na resposta (web,
+// ou shell remoto), não faz nada.
 export async function captureMobileSessionToken(payload: unknown): Promise<void> {
   if (!usesMobileSessionAuth() || typeof payload !== "object" || payload === null) return;
 

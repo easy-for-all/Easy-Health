@@ -6,6 +6,7 @@ import type { User } from "@/shared/types/user";
 import { isNativeApp } from "@/shared/lib/analytics/context";
 import { identifyUser, resetIdentity } from "@/shared/lib/analytics";
 import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
+import { navigateInternal } from "@/shared/lib/app-navigation";
 import {
   captureMobileSessionToken,
   clearMobileSessionToken,
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const pathname = window.location.pathname;
         if (!publicPaths.some((p) => (p === "/" ? pathname === "/" : pathname.startsWith(p)))) {
-          window.location.replace("/login");
+          navigateInternal("/login", "replace");
         }
       })
       .finally(() => setLoading(false));

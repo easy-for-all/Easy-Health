@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { navigateExternal } from "@/shared/lib/app-navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PublicLayout } from "@/shared/components/public-layout";
@@ -41,7 +42,7 @@ export default function PricingPage() {
         "/api/v1/billing/checkout",
         { plan }
       );
-      window.location.href = checkout_url;
+      navigateExternal(checkout_url);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Erro ao iniciar checkout. Tente novamente.");
       setLoadingPlan(null);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { navigateExternal } from "@/shared/lib/app-navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
@@ -142,7 +143,7 @@ export default function BillingPage() {
         session_id,
       });
       trackEvent(EVENTS.CHECKOUT_REDIRECT_OPENED, checkoutEventParams(plan, "billing"));
-      window.location.href = checkout_url;
+      navigateExternal(checkout_url);
     } catch (e) {
       setError(checkoutErrorMessage(e));
       setRetryCheckoutPlan(plan);
@@ -161,7 +162,7 @@ export default function BillingPage() {
     setRetryCheckoutPlan(null);
     try {
       const { portal_url } = await api.post<{ portal_url: string }>("/api/v1/billing/portal", {});
-      window.location.href = portal_url;
+      navigateExternal(portal_url);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Erro ao abrir portal.");
       setActionLoading(null);

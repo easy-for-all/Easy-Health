@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { navigateInternal } from "@/shared/lib/app-navigation";
 import { ApiError } from "@/shared/lib/api";
 import { AnonApiError } from "@/features/anonymous/anon-api";
 import { EVENTS, trackEvent } from "@/shared/lib/analytics";
@@ -166,14 +167,14 @@ export function usePlanCreationWizard(
       // "Tentar novamente" que o servidor vai recusar de novo, para sempre.
       if (err instanceof AnonApiError && err.isLimitReached) {
         trackEvent("anonymous_plan_limit_reached", { onboarding_flow: mode });
-        window.location.replace("/sign-up?from=anonymous_limit");
+        navigateInternal("/sign-up?from=anonymous_limit", "replace");
         return null;
       }
       // No fluxo autenticado um 401 é sessão expirada. No anônimo é o token que
       // venceu — e mandar para /login ali descartaria um plano que a pessoa
       // acabou de pedir, num fluxo onde ela nem tem conta para entrar.
       if (submitMode === "authenticated" && err instanceof ApiError && err.status === 401) {
-        window.location.replace("/login");
+        navigateInternal("/login", "replace");
         return null;
       }
       setError(err instanceof Error ? err.message : "Erro ao gerar planejamento. Tente novamente.");

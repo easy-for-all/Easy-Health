@@ -2,13 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const store = new Map<string, string>();
 
-vi.mock("@capacitor/preferences", () => ({
-  Preferences: {
-    get: vi.fn(async ({ key }: { key: string }) => ({ value: store.get(key) ?? null })),
-    set: vi.fn(async ({ key, value }: { key: string; value: string }) => {
+// O token vive no Keychain via nativeSessionStorage — nunca em Preferences ou
+// localStorage. Ver native-session-storage.test.ts para o contrato completo.
+vi.mock("@/shared/lib/native-session-storage", () => ({
+  nativeSessionStorage: {
+    get: vi.fn(async (key: string) => store.get(key) ?? null),
+    set: vi.fn(async (key: string, value: string) => {
       store.set(key, value);
     }),
-    remove: vi.fn(async ({ key }: { key: string }) => {
+    remove: vi.fn(async (key: string) => {
       store.delete(key);
     }),
   },

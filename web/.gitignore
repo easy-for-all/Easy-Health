@@ -51,3 +51,7 @@ key.properties
 /releases/
 *.aab
 android-config/.gradle/
+
+# ios — projeto gerado, nunca versionado (mesma regra do android/)
+ios/
+out-native/

@@ -2,6 +2,7 @@ import { api, ApiError } from "./api";
 import { trackEvent } from "./analytics";
 import { isNativeApp } from "./analytics/context";
 import { resolveDeepLink } from "./push-deep-link";
+import { navigateInternal } from "./app-navigation";
 
 // Centralized push service. Responsibilities:
 // - never prompt for permission unless explicitly asked (pre-permission opt-in);
@@ -402,7 +403,7 @@ async function handleActionPerformed(data: Record<string, unknown>): Promise<voi
   lastAction = { path, type: data.type != null ? String(data.type) : null, at: new Date().toISOString() };
   // Carry the delivery id so the target screen can offer "não gostei" feedback.
   const target = deliveryId != null ? `${path}${path.includes("?") ? "&" : "?"}from_push=${deliveryId}` : path;
-  if (typeof window !== "undefined") window.location.assign(target);
+  navigateInternal(target, "push");
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,19 @@
+{
+  "name": "@easyhealth/secure-storage",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Keychain-backed secure storage for the EasyHealth native shell (native side only; the TypeScript wrapper lives in web/src/shared/lib/native-session-storage.ts)",
+  "files": [
+    "ios/",
+    "Package.swift",
+    "EasyhealthSecureStorage.podspec"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  }
+}

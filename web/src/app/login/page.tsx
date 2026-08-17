@@ -25,6 +25,7 @@ import {
 } from "@/features/auth/auth-analytics";
 import { endAuthAttempt, startAuthAttempt } from "@/shared/lib/auth-attempt";
 import { useIsHydrated, useIsNativePlatform } from "@/shared/lib/platform";
+import { navigateExternal, navigateInternal } from "@/shared/lib/app-navigation";
 import { authLog, describeGoogleAuthError, startGoogleAuth } from "@/shared/lib/googleAuth";
 
 const OAUTH_ERROR_MESSAGE_KEYS: Record<string, string> = {
@@ -96,7 +97,7 @@ export default function LoginPage() {
       // mid-flight. `newUser` is the backend's answer, never a guess here.
       await trackSocialLoginCompleted(attempt, outcome.newUser);
       endAuthAttempt();
-      window.location.replace(outcome.redirectPath);
+      navigateInternal(outcome.redirectPath, "replace");
     } catch (err) {
       googleRef.current = false;
       setGoogleLoading(false);
@@ -177,7 +178,7 @@ export default function LoginPage() {
           "/api/v1/billing/checkout",
           { plan: pending }
         );
-        window.location.href = checkout_url;
+        navigateExternal(checkout_url);
       } else {
         router.push("/dashboard");
       }

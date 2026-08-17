@@ -17,7 +17,11 @@ require "digest"
 #
 # Mirrors MobileAuthCode: SHA-256 digest at rest, raw value returned once.
 class MobileSession < ApplicationRecord
-  SESSION_TTL = 90.days
+  DEFAULT_TTL_DAYS = 90
+  # Teto de sessões ativas por usuário quando não há installation_id para
+  # escopar a rotação. Sem ele, um cliente que reautentica em loop acumularia
+  # credenciais válidas indefinidamente.
+  MAX_ACTIVE_PER_USER = 10
   TOKEN_PREFIX = "ehs_".freeze
   TOKEN_BYTES = 32
   PLATFORMS = %w[android ios].freeze
@@ -45,22 +49,62 @@ class MobileSession < ApplicationRecord
 
   scope :active, -> { where(revoked_at: nil).where("expires_at > ?", Time.current) }
 
+  def self.ttl
+    days = ENV.fetch("MOBILE_SESSION_TTL_DAYS", DEFAULT_TTL_DAYS).to_i
+    days = DEFAULT_TTL_DAYS unless days.positive?
+    days.days
+  end
+
   # Returns the raw token. It is not recoverable afterwards — callers must hand
   # it to the client in the same response.
   def self.issue_for!(user:, platform:, installation_id: nil, app_version: nil)
     normalized_platform = normalize_platform!(platform)
     token = "#{TOKEN_PREFIX}#{SecureRandom.urlsafe_base64(TOKEN_BYTES)}"
 
-    create!(
-      user: user,
-      platform: normalized_platform,
-      installation_id: installation_id.presence,
-      app_version: app_version.presence,
-      token_digest: digest(token),
-      expires_at: SESSION_TTL.from_now
-    )
+    transaction do
+      supersede_previous!(user: user, installation_id: installation_id.presence)
+
+      create!(
+        user: user,
+        platform: normalized_platform,
+        installation_id: installation_id.presence,
+        app_version: app_version.presence,
+        token_digest: digest(token),
+        expires_at: ttl.from_now
+      )
+    end
 
     token
+  end
+
+  # Política de rotação, deliberada:
+  #
+  # Reautenticar NO MESMO aparelho substitui a sessão anterior daquele aparelho.
+  # É o comportamento que o usuário espera — ele não criou um segundo acesso, ele
+  # renovou o dele — e evita acumular credenciais válidas esquecidas.
+  #
+  # Reautenticar NÃO derruba os outros aparelhos. Entrar no iPhone não pode
+  # deslogar o iPad: isso seria uma decisão de produto que ninguém pediu, e
+  # transformaria um login rotineiro em perda de sessão alheia.
+  #
+  # Sem installation_id não dá para saber qual aparelho é qual, então cai no teto
+  # global por usuário, mantendo as mais recentes.
+  def self.supersede_previous!(user:, installation_id:)
+    if installation_id.present?
+      active.where(user_id: user.id, installation_id: installation_id)
+            .update_all(revoked_at: Time.current, revocation_reason: "superseded", updated_at: Time.current)
+      return
+    end
+
+    surplus = active.where(user_id: user.id)
+                    .order(created_at: :desc)
+                    .offset(MAX_ACTIVE_PER_USER - 1)
+                    .pluck(:id)
+    return if surplus.empty?
+
+    where(id: surplus).update_all(
+      revoked_at: Time.current, revocation_reason: "superseded", updated_at: Time.current
+    )
   end
 
   # Nil for anything that must not authenticate: unknown, expired, revoked, or
