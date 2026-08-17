@@ -1,5 +1,6 @@
 import { getAnalyticsContext, getCachedInstallationId } from "./analytics/context";
 import { currentAuthAttemptId } from "./auth-attempt";
+import { getCachedMobileSessionToken, mobileSessionIssueHeader } from "./mobile-session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -45,8 +46,26 @@ function authAttemptHeader(): Record<string, string> {
   return attemptId ? { "X-Auth-Attempt-Id": attemptId } : {};
 }
 
+// Bearer token dos shells nativos com bundle local, onde a origem
+// (capacitor://localhost) impede o cookie SameSite=Lax de viajar. Vazio em
+// todo o resto — Web e o shell remoto do Android seguem no cookie via
+// credentials: "include", que continua abaixo sem alteração.
+function mobileSessionHeader(): Record<string, string> {
+  const token = getCachedMobileSessionToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function contextHeaders(): Record<string, string> {
-  return { ...installationHeader(), ...correlationHeaders(), ...authAttemptHeader() };
+  return {
+    ...installationHeader(),
+    ...correlationHeaders(),
+    ...authAttemptHeader(),
+    ...mobileSessionHeader(),
+    // Opt-in de emissão. Vai em toda requisição em vez de só nas de login
+    // porque `api` não recebe headers por chamada — e é inócuo: só os
+    // controllers de auth leem este header, o resto ignora.
+    ...mobileSessionIssueHeader(),
+  };
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;

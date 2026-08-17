@@ -1,5 +1,8 @@
 class ApplicationController < ActionController::API
   include ActionController::Cookies
+  # No-op sem o header Authorization: Bearer ehs_..., então Web e Android
+  # seguem exatamente no caminho de cookie. Ver MobileSessionAuthentication.
+  include MobileSessionAuthentication
 
   before_action :configure_permitted_parameters, if: :devise_controller?
   after_action :set_request_id_header

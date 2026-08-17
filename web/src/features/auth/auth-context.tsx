@@ -6,6 +6,11 @@ import type { User } from "@/shared/types/user";
 import { isNativeApp } from "@/shared/lib/analytics/context";
 import { identifyUser, resetIdentity } from "@/shared/lib/analytics";
 import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
+import {
+  captureMobileSessionToken,
+  clearMobileSessionToken,
+  primeMobileSessionToken,
+} from "@/shared/lib/mobile-session";
 
 interface AuthContextValue {
   user: User | null;
@@ -31,7 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // não é nativo e não há usuário.
     const publicPaths = ["/", "/login", "/sign-up", "/native-entry", "/onboarding", "/plano", "/terms", "/privacy", "/forgot-password", "/reset-password", "/billing/success", "/billing/cancel", "/pricing", "/s/", "/join/", "/delete-account", "/delete-data"];
 
-    api.get<User>("/api/v1/auth/me")
+    // O bearer token vive no Preferences (assíncrono) e api.ts monta headers de
+    // forma síncrona. Carregar para memória ANTES da primeira requisição é o que
+    // impede o app nativo de abrir sempre deslogado.
+    primeMobileSessionToken()
+      .then(() => api.get<User>("/api/v1/auth/me"))
       .then((u) => {
         if (justAuthenticatedRef.current) return;
         setUser(u);
@@ -44,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         void api.delete("/api/v1/auth/sign_out").catch(() => undefined);
+        void clearMobileSessionToken();
 
         document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
         if (window.location.hostname === "easyhealth.art" || window.location.hostname.endsWith(".easyhealth.art")) {
@@ -105,6 +115,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     await ensureInstallationForAuth();
     const u = await api.post<User>("/api/v1/auth/sign_in", { email, password });
+    // Shell nativo com bundle local: guarda o bearer token antes de qualquer
+    // requisição seguinte, que já dependerá dele.
+    await captureMobileSessionToken(u);
     setUser(u);
     justAuthenticatedRef.current = true;
   }
@@ -123,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       privacy_accepted: true,
       marketing_consent: marketingConsent ?? false,
     });
+    await captureMobileSessionToken(u);
     setUser(u);
     justAuthenticatedRef.current = true;
   }
@@ -134,6 +148,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // server-side signout failed; local state still cleared in finally
     } finally {
       document.cookie = "_easy_health_session=; Max-Age=0; path=/; SameSite=Lax";
+      // O servidor já revogou; isto tira o token do disco para o app não
+      // reabrir tentando autenticar com credencial morta.
+      await clearMobileSessionToken();
       setUser(null);
       resetIdentity();
     }

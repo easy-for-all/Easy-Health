@@ -17,7 +17,7 @@ module Api
 
           sign_in(user)
           set_auth_indicator_cookie
-          render json: user_json(user).merge(new_user: new_user?(user)), status: :ok
+          render json: with_mobile_session(user_json(user).merge(new_user: new_user?(user)), user), status: :ok
         rescue MobileAuthCode::InvalidPlatformError
           render json: { error: "Plataforma inválida" }, status: :unprocessable_entity
         rescue MobileAuthCode::InvalidCodeError

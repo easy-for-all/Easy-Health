@@ -10,4 +10,25 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
       methods: [:get, :post, :put, :patch, :delete, :options, :head],
       credentials: true
   end
+
+  # Shells nativos com bundle local. A origem deles não é easyhealth.art, então
+  # eles não caem no bloco acima — e não devem cair.
+  #
+  # credentials: false de propósito. Este caminho se autentica pelo header
+  # Authorization: Bearer ehs_... (ver MobileSessionAuthentication), nunca por
+  # cookie. Marcar false aqui é o que impede que uma origem local passe a
+  # carregar a sessão de cookie do domínio principal, que é exatamente o
+  # afrouxamento que não queremos fazer para viabilizar o app.
+  allow do
+    origins(
+      "capacitor://localhost",  # iOS
+      "ionic://localhost",      # iOS, esquema legado do Capacitor
+      "http://localhost"        # Android com bundle local
+    )
+
+    resource "*",
+      headers: :any,
+      methods: [:get, :post, :put, :patch, :delete, :options, :head],
+      credentials: false
+  end
 end

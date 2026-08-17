@@ -58,7 +58,7 @@ module Api
               installation_linked: installation_link_result&.success == true
             )
           end
-          render json: user_json(user).merge(new_user: fresh_account), status: :ok
+          render json: with_mobile_session(user_json(user).merge(new_user: fresh_account), user), status: :ok
         rescue ::Auth::GoogleIdTokenVerifier::VerificationError => e
           # Message text stays out of the event: an invalid audience and an
           # expired token are different failures and must be told apart by code,

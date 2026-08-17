@@ -19,6 +19,11 @@ class AccountDeletionService
       @user.ai_usage_logs.destroy_all
       @user.avatar.purge_later if @user.avatar.attached?
 
+      # Bearer tokens de shells nativos não morrem com o cookie. Sem isto, um
+      # aparelho com o app instalado continuaria autenticando por até 90 dias
+      # numa conta que o usuário acabou de mandar excluir.
+      MobileSession.revoke_all_for!(@user, reason: "account_deleted")
+
       # Anonymize subscription (keep stripe_subscription_id for legal/compliance
       # reference, clear stripe_customer_id instead of writing a fake id so it
       # never gets reused as a real Stripe customer on a future checkout)

@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { api } from "@/shared/lib/api";
+import { captureMobileSessionToken } from "./mobile-session";
 import { detectPlatform } from "@/shared/lib/analytics/context";
 import { ensureInstallationForAuth } from "@/shared/lib/analytics/installation";
 import type { User } from "@/shared/types/user";
@@ -211,6 +212,9 @@ export async function postGoogleNative(idToken: string, consent?: GoogleConsent)
           }
         : {}),
     });
+    // Nativo com bundle local: sem isto, o login por Google funcionaria uma
+    // única vez e o app abriria deslogado no relaunch seguinte.
+    await captureMobileSessionToken(user);
     const redirectPath = user.new_user ? "/onboarding" : "/dashboard";
     authLog("exchange_success", { userId: user.id, newUser: user.new_user, redirectPath });
     return { user, redirectPath };

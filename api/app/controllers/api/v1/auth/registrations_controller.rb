@@ -30,7 +30,7 @@ module Api
             set_auth_indicator_cookie
             user.reload
             emit_email_auth_succeeded("sign_up", user: user)
-            render json: user_json(user), status: :created
+            render json: with_mobile_session(user_json(user), user), status: :created
           else
             # The messages go to the client and to the logs; the event carries
             # only the category, never a field name or a value the user typed.

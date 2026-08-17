@@ -23,7 +23,7 @@ module Api
             sign_in(user)
             set_auth_indicator_cookie
             emit_email_auth_succeeded("login", user: user)
-            render json: user_json(user), status: :ok
+            render json: with_mobile_session(user_json(user), user), status: :ok
           else
             # One category for both branches, deliberately: telling "no such
             # account" apart from "wrong password" in telemetry is the same
@@ -34,6 +34,15 @@ module Api
         end
 
         def destroy
+          # Um logout que só derruba o cookie deixaria o token do app nativo
+          # valendo por 90 dias no aparelho. Revoga o desta requisição, e todos
+          # os demais do usuário — "sair" tem que significar sair.
+          if user_signed_in?
+            MobileSession.revoke_all_for!(current_user, reason: "user_signout")
+          else
+            current_mobile_session&.revoke!(reason: "user_signout")
+          end
+
           sign_out(current_user) if user_signed_in?
           reset_session
           request.session_options[:drop] = true
