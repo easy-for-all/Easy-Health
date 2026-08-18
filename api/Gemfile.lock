@@ -159,7 +159,7 @@ GEM
       base64 (~> 0.2)
       faraday (>= 1.0, < 3.a)
     google-logging-utils (0.2.0)
-    googleauth (1.17.1)
+    googleauth (1.17.3)
       faraday (>= 1.0, < 3.a)
       google-cloud-env (~> 2.2)
       google-logging-utils (~> 0.1)
@@ -455,7 +455,7 @@ DEPENDENCIES
   debug
   devise
   factory_bot_rails
-  googleauth (~> 1.11)
+  googleauth (~> 1.17)
   image_processing (~> 1.2)
   omniauth-google-oauth2
   omniauth-rails_csrf_protection
