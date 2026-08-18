@@ -53,9 +53,41 @@ cron */15 -> orchestration:run_15min
 - Elegibilidade so bloqueia por regra de NEGOCIO (plano, horario,
   treino concluido, maximo, ja enviado hoje). `push_disabled`, ausencia de
   token e allowlist do Make NAO impedem o evento: sao decididos no dispatch.
-- O evento persiste `activation.target_workout_at`, calculado no momento em que
-  o fato nasce. Esse valor, e nao uma preferencia futura do usuario, decide se
-  um push deferido por quiet hours ficou obsoleto.
+- O evento persiste `activation.reminder_due_at` e `activation.target_workout_at`,
+  calculados no momento em que o fato nasce. Esses valores, e nao uma preferencia
+  futura do usuario, decidem toda a semantica temporal do dispatch.
+
+## Semantica De Entrega No Dispatch
+
+Este lembrete NAO e um push de campanha: ele e consequencia de um horario que o
+usuario escolheu explicitamente. Por isso `Make::PushDispatchRequest` o trata
+diferente dos demais eventos de engajamento.
+
+- **Atravessa quiet hours somente dentro da janela explicita**
+  `reminder_due_at <= agora < target_workout_at`. Adiar um lembrete de 06:30 ate
+  as 07:00 entregaria aviso de um treino que ja comecou. Fora dessa janela quiet
+  hours (22:00-07:00) vale normalmente, e nenhum outro evento e afetado.
+- **Nunca e enviado depois de `target_workout_at`** → `skipped` com
+  `skip_reason = stale_scheduled_reminder`. Vale para redrive, retry e release de
+  deferido. O evento continua existindo e auditavel; so o push e barrado.
+  Nao confundir com `stale_after_quiet_hours`, que e "o fim de quiet hours cairia
+  depois do alvo".
+- **Fora do cooldown de 20h e do cap de 2/7 dias.** O limite da jornada e o
+  proprio `MAXIMUM_REMINDERS = 3`; o cap generico tornaria o terceiro lembrete
+  impossivel.
+- **Nao contamina os outros pushes**: um lembrete entregue e excluido da contagem
+  de cooldown/cap dos demais eventos de engajamento, pela associacao real
+  `push_dispatches.user_event`. Linhas legadas sem `user_event_id` mantem o
+  comportamento antigo (sem migration, sem classificacao historica).
+- **Nada de consentimento e dispensado**: `push_enabled`,
+  `notifications_disabled_at`, `workout_reminders_enabled`, token ativo,
+  `permission_status`, auth do endpoint, validacao de payload e idempotencia
+  continuam obrigatorios. Sem `no_preferences` a linha nunca e criada como opt-in.
+- Se os timestamps nao puderem ser resolvidos, nenhuma excecao e concedida e
+  nenhum horario e inventado a partir de `preferred_workout_time`. A leitura
+  aceita, nessa ordem: `metadata.activation`,
+  `payload_json.context.activation` (snapshot schema v2) e
+  `payload_json.metadata.activation` (cauda schema v1).
 - Se o plano foi criado depois do horario de lembrete do dia, a primeira
   ocorrencia valida fica para o proximo dia.
 - Supressao por inatividade (`inactive_5_days`, 5+ dias sem treino concluido)

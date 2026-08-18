@@ -90,6 +90,12 @@ Nunca contém `title`, `body` nem token FCM.
 - Cooldown mínimo **20h** entre engajamentos → skip `cooldown_active`.
 - Engajamento = `activation_reminder`, `workout_reminder`. **`progress_update`
   (first_workout_completed), `transactional`, `account_security` são isentos.**
+- **`scheduled_workout_reminder_due` também é isento** das duas regras: é
+  consequência de um horário que o usuário escolheu, limitado pelo próprio
+  `MAXIMUM_REMINDERS = 3`. Um lembrete desses entregue **não conta** para o
+  cooldown nem para o cap dos outros pushes (correlação por `user_event`; linhas
+  legadas sem `user_event_id` seguem contando como antes). Ver
+  `docs/scheduled-workout-reminders.md`.
 
 > ⚠️ **Armadilha de smoke test.** `first_workout_completed` é `progress_update`, que
 > é isento de **duas** portas: a frequência acima **e** o opt-out de categoria

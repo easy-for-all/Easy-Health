@@ -172,7 +172,7 @@ module Analytics
           Arel.sql("COUNT(*)"),
           Arel.sql("COUNT(*) FILTER (WHERE #{UserEvent::SENT_TO_MAKE_SQL})"),
           Arel.sql("COUNT(*) FILTER (WHERE make_delivery_status = 'accepted_by_make')"),
-          Arel.sql("COUNT(*) FILTER (WHERE make_delivery_status IN ('#{UserEvent::ERROR_DELIVERY_STATUSES.join("','")}'))"),
+          Arel.sql(ApplicationRecord.sanitize_sql_array([ "COUNT(*) FILTER (WHERE make_delivery_status IN (?))", UserEvent::ERROR_DELIVERY_STATUSES ])),
           Arel.sql("COUNT(DISTINCT user_id)")
         ) || [ 0, 0, 0, 0, 0 ]
 
@@ -267,7 +267,7 @@ module Analytics
         Arel.sql("COUNT(*)"),
         Arel.sql("COUNT(*) FILTER (WHERE #{UserEvent::SENT_TO_MAKE_SQL})"),
         Arel.sql("COUNT(*) FILTER (WHERE make_delivery_status = 'accepted_by_make')"),
-        Arel.sql("COUNT(*) FILTER (WHERE make_delivery_status IN ('#{UserEvent::ERROR_DELIVERY_STATUSES.join("','")}'))"),
+        Arel.sql(ApplicationRecord.sanitize_sql_array([ "COUNT(*) FILTER (WHERE make_delivery_status IN (?))", UserEvent::ERROR_DELIVERY_STATUSES ])),
         Arel.sql("COUNT(*) FILTER (WHERE make_delivery_status = 'disabled')"),
         Arel.sql("COUNT(DISTINCT user_id)"),
         Arel.sql("MAX(created_at)"),
@@ -358,8 +358,8 @@ module Analytics
       @dispatch_totals ||= begin
         row = dispatch_scope.pick(
           Arel.sql("COUNT(*)"),
-          Arel.sql("COUNT(*) FILTER (WHERE status IN ('#{PROVIDER_ACCEPTED_STATUSES.join("','")}'))"),
-          Arel.sql("COUNT(*) FILTER (WHERE status IN ('#{PROVIDER_REJECTED_STATUSES.join("','")}'))"),
+          Arel.sql(ApplicationRecord.sanitize_sql_array([ "COUNT(*) FILTER (WHERE status IN (?))", PROVIDER_ACCEPTED_STATUSES ])),
+          Arel.sql(ApplicationRecord.sanitize_sql_array([ "COUNT(*) FILTER (WHERE status IN (?))", PROVIDER_REJECTED_STATUSES ])),
           Arel.sql("COUNT(*) FILTER (WHERE status = 'deferred')"),
           Arel.sql("COUNT(*) FILTER (WHERE status = 'skipped')")
         ) || [ 0, 0, 0, 0, 0 ]

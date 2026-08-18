@@ -554,27 +554,25 @@ module Analytics
     def auth_outcomes(installation_ids)
       return {} if installation_ids.empty?
 
-      quoted_ids = installation_ids.map { |id| ApplicationRecord.connection.quote(id) }.join(", ")
-      quoted_events = AUTH_OUTCOME_EVENTS.map { |name| ApplicationRecord.connection.quote(name) }.join(", ")
-      cancelled = ApplicationRecord.connection.quote(USER_CANCELLED_CATEGORY)
+      filters = ApplicationRecord.sanitize_sql_array(
+        [ <<~SQL.squish, USER_CANCELLED_CATEGORY, USER_CANCELLED_CATEGORY, AUTH_OUTCOME_EVENTS, installation_ids ]
+          SELECT e.properties->>'installation_id' AS installation_id,
+                 COUNT(*) FILTER (
+                   WHERE e.event_name = 'social_login_failed'
+                     AND e.properties->>'failure_category' = ?
+                 ) AS cancelled,
+                 COUNT(*) FILTER (
+                   WHERE e.event_name IN ('auth_client_error', 'login_failed')
+                      OR (e.event_name = 'social_login_failed'
+                          AND COALESCE(e.properties->>'failure_category', '') <> ?)
+                 ) AS technical
+          FROM product_analytics_events e
+          WHERE e.event_name IN (?)
+            AND e.properties->>'installation_id' IN (?)
+        SQL
+      )
 
-      sql = <<~SQL.squish
-        SELECT e.properties->>'installation_id' AS installation_id,
-               COUNT(*) FILTER (
-                 WHERE e.event_name = 'social_login_failed'
-                   AND e.properties->>'failure_category' = #{cancelled}
-               ) AS cancelled,
-               COUNT(*) FILTER (
-                 WHERE e.event_name IN ('auth_client_error', 'login_failed')
-                    OR (e.event_name = 'social_login_failed'
-                        AND COALESCE(e.properties->>'failure_category', '') <> #{cancelled})
-               ) AS technical
-        FROM product_analytics_events e
-        WHERE e.event_name IN (#{quoted_events})
-          AND e.properties->>'installation_id' IN (#{quoted_ids})
-          #{event_window_clause}
-        GROUP BY 1
-      SQL
+      sql = "#{filters} #{event_window_clause} GROUP BY 1"
 
       ApplicationRecord.connection.select_all(sql).to_a.index_by { |row| row["installation_id"] }
     end

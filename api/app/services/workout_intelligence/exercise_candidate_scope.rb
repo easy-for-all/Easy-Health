@@ -83,7 +83,7 @@ module WorkoutIntelligence
 
     def fav_priority_sql
       if @fav_exercise_ids.any?
-        Arel.sql("CASE WHEN id IN (#{@fav_exercise_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END")
+        Arel.sql(ApplicationRecord.sanitize_sql_array([ "CASE WHEN id IN (?) THEN 0 ELSE 1 END", @fav_exercise_ids.map(&:to_i) ]))
       else
         Arel.sql("1")
       end

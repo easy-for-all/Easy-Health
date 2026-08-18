@@ -1,0 +1,420 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "37344dbc748c9c27c49348279d6e1ec5c6ef4f983574f43ab3aa3b84685f5db3",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/controllers/api/v1/admin_controller.rb",
+      "line": 82,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "WorkoutSession.where(:completion_status => \"completed\").joins(\"INNER JOIN users ON users.id = workout_sessions.user_id\").merge(User.reportable).where(\"#{::Analytics::ReportingTime.local_date_sql(\"workout_sessions.completed_at\")} BETWEEN (#{::Analytics::ReportingTime.local_date_sql(\"users.created_at\")} + #{from_day}) AND (#{::Analytics::ReportingTime.local_date_sql(\"users.created_at\")} + #{to_day})\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::AdminController",
+        "method": "stats"
+      },
+      "user_input": "::Analytics::ReportingTime.local_date_sql(\"workout_sessions.completed_at\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates Analytics::ReportingTime.local_date_sql(...), which builds \"(<column> AT TIME ZONE 'UTC' AT TIME ZONE '<tz>')::date\" from a hardcoded column name supplied at the call site plus the reporting timezone. The timezone comes from ANALYTICS_REPORTING_TIMEZONE (server env, not request data) and is resolved through ActiveSupport::TimeZone, so a value that is not a real zone falls back to the America/Sao_Paulo default and never reaches SQL. No user input is involved. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "ab3617cc85094a1c73a545bdebec7910986ab55bf6324075598ed37b3d748357",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/controllers/api/v1/admin_controller.rb",
+      "line": 442,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "WorkoutSession.group(:user_id).having(\"COUNT(*) #{comparison}\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::AdminController",
+        "method": "users_with_session_count"
+      },
+      "user_input": "comparison",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "`comparison` is never request data. It is a code-supplied SQL fragment chosen from the whitelist in apply_filter in this same controller (the params value only selects which branch runs; the fragment itself is a literal in the source). The surrounding comment documents this invariant. False positive."
+    },
+    {
+      "warning_type": "Redirect",
+      "warning_code": 18,
+      "fingerprint": "38ea36ebd059b9f1ed1329beba6e0c36c33dbb3e1ee95385b4f0487559b4c42a",
+      "check_name": "Redirect",
+      "message": "Possible unprotected redirect",
+      "file": "app/controllers/api/v1/auth/omniauth_callbacks_controller.rb",
+      "line": 85,
+      "link": "https://brakemanscanner.org/docs/warning_types/redirect/",
+      "code": "redirect_to(\"#{ENV.fetch(\"FRONTEND_URL\", \"https://easyhealth.art\")}/mobile-auth/callback?code=#{MobileAuthCode.issue_for!(:user => User.from_omniauth(request.env[\"omniauth.auth\"], :consent => oauth_consent_params, :signup_source => signup_source_from_value(oauth_params[\"platform\"])), :platform => \"android\")}&platform=android\", :allow_other_host => true)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Api::V1::Auth::OmniauthCallbacksController",
+        "method": "handle_google_callback"
+      },
+      "user_input": "MobileAuthCode.issue_for!(:user => User.from_omniauth(request.env[\"omniauth.auth\"], :consent => oauth_consent_params, :signup_source => signup_source_from_value(oauth_params[\"platform\"])), :platform => \"android\")",
+      "confidence": "Weak",
+      "cwe_id": [
+        601
+      ],
+      "note": "Not an open redirect. The host is FRONTEND = ENV.fetch(\"FRONTEND_URL\", \"https://easyhealth.art\"), a server-side environment value fixed at boot - the request cannot influence it. The only dynamic part of the URL is `code`, a one-time code minted server-side by MobileAuthCode.issue_for! for the user who just authenticated, appended as a query parameter and therefore unable to change the redirect target. allow_other_host is required because the frontend is on a different origin than the API. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "a7eb151eba693c588c07c512a223df0e1bad68ad84c7c1122c9dadea584e2a30",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/controllers/concerns/workout_plan_serialization.rb",
+      "line": 134,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ActiveRecord::Base.connection.execute(\"SELECT DISTINCT ON ((elem->>'exercise_id')::integer)\\n  (elem->>'exercise_id')::integer AS exercise_id,\\n  completed_at\\nFROM workout_sessions,\\n  jsonb_array_elements(exercise_logs) AS elem\\nWHERE #{owner_column} = #{owner_id.to_i}\\n  AND status = 'completed'\\n  AND (elem->>'exercise_id')::integer = ANY(ARRAY[#{exercise_ids.map(&:to_i).join(\",\")}])\\nORDER BY (elem->>'exercise_id')::integer, completed_at DESC\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "WorkoutPlanSerialization",
+        "method": "exercise_last_performed"
+      },
+      "user_input": "owner_column",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Both interpolations are code-controlled. `owner_column` comes from owner_session_filter in this file, which returns one of exactly two string literals (\"app_installation_id\" or \"user_id\") chosen by a branch on plan_owner.anonymous? - it is never derived from params. `owner_id` is coerced with .to_i and the exercise id list is built with exercise_ids.map(&:to_i).join(','), so both can only ever produce integers. Rewriting the DISTINCT ON / jsonb_array_elements query into ActiveRecord would not express the same statement, so the coercion is the sanitization here. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "7e107e4b016f26434579209cf7a6a1a625057844a75b93fc55a6fc77278aeb06",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/account_classification.rb",
+      "line": 121,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "relation.where(((internal_domains.map do\n \"users.email ILIKE ?\"\n end << \"LOWER(users.email) IN (#{internal_emails.map do\n \"?\"\n end.join(\", \")})\") << \"users.test_account = TRUE\").join(\" OR \"), *internal_domains.map do\n \"%@#{d}\"\n end)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AccountClassification",
+        "method": "internal_scope"
+      },
+      "user_input": "internal_emails.map do\n \"?\"\n end.join(\", \")",
+      "confidence": "Weak",
+      "cwe_id": [
+        89
+      ],
+      "note": "The interpolated string is clauses.join(\" OR \"), where every element of `clauses` is a literal SQL fragment written in this method (\"users.email ILIKE ?\", a \"LOWER(users.email) IN (...)\" built only from `?` placeholders, and \"users.test_account = TRUE\"). The runtime values travel separately in *binds and are bound by ActiveRecord, never interpolated. The internal domain/email lists come from server configuration, not from requests. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "a0db7336890ec2dde887a3907ba8dd9fb9bd53f6842da5983470ff5bca44a156",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/android_acquisition.rb",
+      "line": 310,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ApplicationRecord.connection.select_all(\"SELECT c.day AS day,\\n       COUNT(*) AS accounts,\\n       COUNT(*) FILTER (WHERE c.created_workout) AS created_workout,\\n       COUNT(*) FILTER (WHERE c.started_workout) AS started_workout,\\n       COUNT(*) FILTER (WHERE c.completed_workout) AS completed_workout,\\n       COUNT(*) FILTER (WHERE c.completed_workout AND NOT c.started_workout)\\n         AS completed_without_started\\nFROM (\\n  SELECT #{ReportingTime.local_date_sql(\"u.created_at\")} AS day,\\n         EXISTS (\\n           SELECT 1 FROM workout_plans wp WHERE wp.user_id = u.id\\n         ) AS created_workout,\\n         EXISTS (\\n           SELECT 1 FROM workout_sessions ws\\n           WHERE ws.user_id = u.id\\n         ) AS started_workout,\\n         EXISTS (\\n           SELECT 1 FROM workout_sessions ws\\n           WHERE ws.user_id = u.id AND ws.completion_status = 'completed'\\n         ) AS completed_workout\\n  FROM users u\\n  WHERE u.id IN (#{AccountClassification.exclude_non_external(User.where(:signup_source => \"android\")).select(:id).to_sql}) AND #{ApplicationRecord.sanitize_sql_array([\"u.created_at >= ? AND u.created_at <= ?\", cohort_window.begin, cohort_window.end])}\\n) c\\nGROUP BY c.day\\nORDER BY c.day DESC\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AndroidAcquisition",
+        "method": "cohort_rows"
+      },
+      "user_input": "ReportingTime.local_date_sql(\"u.created_at\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "The two interpolations are `scope.select(:id).to_sql`, a subquery generated by ActiveRecord from a code-built relation, and `bounds`, which is produced by ApplicationRecord.sanitize_sql_array with the cohort window passed as bind parameters. The day expression comes from ReportingTime.local_date_sql over a hardcoded column. No request data is interpolated. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "34f9f40b44e259fc76285d7fae6edee9c99483176da6b8380bbe4529102b7e0e",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/android_funnel.rb",
+      "line": 252,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "AppInstallation.for_platform(\"android\").where(\"#{numeric_build} >= ?\", min_build)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AndroidFunnel",
+        "method": "instrumented_scope"
+      },
+      "user_input": "numeric_build",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates AppInstallation::NUMERIC_BUILD_SQL, a frozen constant SQL fragment defined in app/models/app_installation.rb (\"CASE WHEN app_build ~ '^[0-9]{1,9}$' THEN app_build::int END\"). No request data reaches the interpolation: the only runtime value is the comparison operand, which is passed as a bind parameter via the `?` placeholder. False positive - Brakeman flags any interpolation into a where() string, including a code-owned constant."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "9cb6c51dc00319efc45202a6151834e2ec47b0fe1aa3cb81f0a81c8984649659",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/android_funnel.rb",
+      "line": 253,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "AppInstallation.for_platform(\"android\").where(\"#{numeric_build} >= ?\", min_build).where(\"#{numeric_build} = ?\", build)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AndroidFunnel",
+        "method": "instrumented_scope"
+      },
+      "user_input": "numeric_build",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates AppInstallation::NUMERIC_BUILD_SQL, a frozen constant SQL fragment defined in app/models/app_installation.rb (\"CASE WHEN app_build ~ '^[0-9]{1,9}$' THEN app_build::int END\"). No request data reaches the interpolation: the only runtime value is the comparison operand, which is passed as a bind parameter via the `?` placeholder. False positive - Brakeman flags any interpolation into a where() string, including a code-owned constant."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "5cd5c214bdca7684ebf143cb85f338244e623aa95b2841855d8280738816ec93",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/android_funnel.rb",
+      "line": 311,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "AppInstallation.for_platform(\"android\").where(:created_at => window).where(\"app_build IS NULL OR btrim(app_build) = '' OR #{numeric_build} IS NULL\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AndroidFunnel",
+        "method": "excluded_build_count"
+      },
+      "user_input": "numeric_build",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates AppInstallation::NUMERIC_BUILD_SQL, a frozen constant SQL fragment defined in app/models/app_installation.rb (\"CASE WHEN app_build ~ '^[0-9]{1,9}$' THEN app_build::int END\"). No request data reaches the interpolation: the only runtime value is the comparison operand, which is passed as a bind parameter via the `?` placeholder. False positive - Brakeman flags any interpolation into a where() string, including a code-owned constant. Here the fragment is used only in an IS NULL / empty-string check, with no operand at all."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "1a154e5be9f71a83ac44179f56885e221e2a1213c76fc5adeebc171ec75d9a06",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/android_funnel.rb",
+      "line": 315,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "AppInstallation.for_platform(\"android\").where(\"#{numeric_build} >= ?\", min_build)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AndroidFunnel",
+        "method": "available_builds"
+      },
+      "user_input": "numeric_build",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates AppInstallation::NUMERIC_BUILD_SQL, a frozen constant SQL fragment defined in app/models/app_installation.rb (\"CASE WHEN app_build ~ '^[0-9]{1,9}$' THEN app_build::int END\"). No request data reaches the interpolation: the only runtime value is the comparison operand, which is passed as a bind parameter via the `?` placeholder. False positive - Brakeman flags any interpolation into a where() string, including a code-owned constant."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "5e2408ca7ca37e7be402568e58ddf8e5d2d587d5b88fb28d4af012aaf53f319a",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/android_funnel.rb",
+      "line": 367,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ApplicationRecord.connection.select_all(\"SELECT e.properties->>'installation_id' AS installation_id,\\n       #{stage_select},\\n       MAX(e.occurred_at) AS last_event_at,\\n       (ARRAY_AGG(e.event_name ORDER BY e.occurred_at DESC))[1] AS last_event_name\\nFROM product_analytics_events e\\nWHERE e.event_name IN (#{quoted_funnel_events})\\n  AND e.properties->>'installation_id' IN (#{cohort_scope.select(:installation_id).to_sql})\\n  #{event_window_clause}\\nGROUP BY 1\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AndroidFunnel",
+        "method": "event_aggregate"
+      },
+      "user_input": "stage_select",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "The interpolations are `quoted_funnel_events` - FUNNEL_EVENTS (a frozen constant in this class) mapped through ApplicationRecord.connection.quote - and `cohort_scope.select(:installation_id).to_sql`, an ActiveRecord-generated subquery. `event_window_clause` builds its fragment with ApplicationRecord.sanitize_sql_array and bind parameters. No request data reaches the statement unquoted. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "90b9ee340ee6e3b028d6f5d646eb533b09b2e392a234b55bf02318c90f14ef91",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/android_funnel.rb",
+      "line": 577,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ApplicationRecord.connection.select_all(\"#{ApplicationRecord.sanitize_sql_array([\"SELECT e.properties->>'installation_id' AS installation_id,\\n       COUNT(*) FILTER (\\n         WHERE e.event_name = 'social_login_failed'\\n           AND e.properties->>'failure_category' = ?\\n       ) AS cancelled,\\n       COUNT(*) FILTER (\\n         WHERE e.event_name IN ('auth_client_error', 'login_failed')\\n            OR (e.event_name = 'social_login_failed'\\n                AND COALESCE(e.properties->>'failure_category', '') <> ?)\\n       ) AS technical\\nFROM product_analytics_events e\\nWHERE e.event_name IN (?)\\n  AND e.properties->>'installation_id' IN (?)\\n\".squish, \"user_cancelled\", \"user_cancelled\", [\"social_login_failed\", \"auth_client_error\", \"login_failed\"], installation_ids])} #{event_window_clause} GROUP BY 1\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::AndroidFunnel",
+        "method": "auth_outcomes"
+      },
+      "user_input": "event_window_clause",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "The statement body is built with ApplicationRecord.sanitize_sql_array and bind parameters for every value (the cancelled category, the event list and the installation ids). The only concatenation left is `event_window_clause`, which is itself produced by ApplicationRecord.sanitize_sql_array with the window bounds as bind parameters, plus the literal \"GROUP BY 1\". Brakeman flags the concatenation without following it into sanitize_sql_array. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "cc6ffd2cba00b4d072ccb517cce286e5aa2f79ff190201e11fe08225227a07ff",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/platform_comparison.rb",
+      "line": 80,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "WorkoutSession.where(:completion_status => \"completed\").where(:user_id => users.where(\"users.created_at <= ?\", 7.days.ago).select(:id)).joins(\"INNER JOIN users ON users.id = workout_sessions.user_id\").where(\"#{ReportingTime.local_date_sql(\"workout_sessions.completed_at\")} BETWEEN (#{ReportingTime.local_date_sql(\"users.created_at\")} + 7) AND (#{ReportingTime.local_date_sql(\"users.created_at\")} + 8)\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::PlatformComparison",
+        "method": "retention_value_d7"
+      },
+      "user_input": "ReportingTime.local_date_sql(\"workout_sessions.completed_at\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates Analytics::ReportingTime.local_date_sql(...), which builds \"(<column> AT TIME ZONE 'UTC' AT TIME ZONE '<tz>')::date\" from a hardcoded column name supplied at the call site plus the reporting timezone. The timezone comes from ANALYTICS_REPORTING_TIMEZONE (server env, not request data) and is resolved through ActiveSupport::TimeZone, so a value that is not a real zone falls back to the America/Sao_Paulo default and never reaches SQL. No user input is involved. False positive."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "d4fd4f2a7afbe1398f5ea6254fb74c12625f428e1ebcfc305a7cb8c64ea28a3f",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/post_onboarding_experiment.rb",
+      "line": 190,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "AppInstallation.for_platform(\"android\").where(\"#{numeric_build} >= ?\", min_build)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::PostOnboardingExperiment",
+        "method": "eligible_scope"
+      },
+      "user_input": "numeric_build",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates AppInstallation::NUMERIC_BUILD_SQL, a frozen constant SQL fragment defined in app/models/app_installation.rb (\"CASE WHEN app_build ~ '^[0-9]{1,9}$' THEN app_build::int END\"). No request data reaches the interpolation: the only runtime value is the comparison operand, which is passed as a bind parameter via the `?` placeholder. False positive - Brakeman flags any interpolation into a where() string, including a code-owned constant."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "35f8628e6b08b74cac8e03a0615ae07bd3f89cd401e6909b31efdf28cbb1f3bd",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/post_onboarding_experiment.rb",
+      "line": 191,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "AppInstallation.for_platform(\"android\").where(\"#{numeric_build} >= ?\", min_build).where(\"#{numeric_build} = ?\", build)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::PostOnboardingExperiment",
+        "method": "eligible_scope"
+      },
+      "user_input": "numeric_build",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Interpolates AppInstallation::NUMERIC_BUILD_SQL, a frozen constant SQL fragment defined in app/models/app_installation.rb (\"CASE WHEN app_build ~ '^[0-9]{1,9}$' THEN app_build::int END\"). No request data reaches the interpolation: the only runtime value is the comparison operand, which is passed as a bind parameter via the `?` placeholder. False positive - Brakeman flags any interpolation into a where() string, including a code-owned constant."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "907ff249c2375923779096b7c75c6bd891b44b808d08d8942a1c8d7e0154bd09",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/post_onboarding_experiment.rb",
+      "line": 253,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ApplicationRecord.connection.select_all(\"SELECT e.properties->>'installation_id' AS installation_id,\\n       MIN(e.occurred_at) AS exposed_at,\\n       (ARRAY_AGG(e.properties->>'variant' ORDER BY e.occurred_at ASC))[1] AS variant,\\n       COUNT(DISTINCT e.properties->>'variant') AS variant_count\\nFROM product_analytics_events e\\nWHERE e.event_name = #{quote(\"experiment_exposed\")}\\n  AND e.properties->>'experiment_key' = #{quote(EXPERIMENT_KEY)}\\n  AND e.properties->>'installation_id' IN (#{cohort_scope.select(:installation_id).to_sql})\\n  #{started_clause(\"e.occurred_at\")}\\n  #{window_clause(\"e.occurred_at\")}\\nGROUP BY 1\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::PostOnboardingExperiment",
+        "method": "exposures"
+      },
+      "user_input": "quote(\"experiment_exposed\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Every interpolated value is either passed through ApplicationRecord.connection.quote (the `quote` helper in this class) or is an ActiveRecord-generated subquery from `.select(:installation_id).to_sql`. Event names and experiment keys are frozen constants in this file; the date clauses come from started_clause/window_clause, which both build their SQL with ApplicationRecord.sanitize_sql_array and bind parameters. No unsanitized request data reaches the statement. False positive - Brakeman does not track values through connection.quote or through relation.to_sql."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "84ec2480233f1c6fda530258e369812ceec1bebd9c069a737812f27e31c1353a",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/post_onboarding_experiment.rb",
+      "line": 312,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ApplicationRecord.connection.select_all(\"SELECT e.properties->>'installation_id' AS installation_id,\\n       e.event_name AS event_name,\\n       e.occurred_at AS occurred_at\\nFROM product_analytics_events e\\nWHERE e.event_name IN (#{OBSERVED_EVENTS.map do\n quote(n)\n end.join(\", \")})\\n  AND e.properties->>'installation_id' IN (#{filtered_exposures.keys.map do\n quote(id)\n end.join(\", \")})\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::PostOnboardingExperiment",
+        "method": "first_event_at"
+      },
+      "user_input": "OBSERVED_EVENTS.map do\n quote(n)\n end.join(\", \")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Both lists are explicitly quoted before interpolation: OBSERVED_EVENTS (a frozen constant built from the METRICS/FUNNELS tables in this file) and `ids`, which are installation ids read back from the database via filtered_exposures.keys - both are mapped through the `quote` helper, i.e. ApplicationRecord.connection.quote. No request data is interpolated unquoted. False positive - Brakeman does not track values through connection.quote."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "7fcf474cdd5dd619e7bd53136bab30050784283f4ff01523e552427063bd6184",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/analytics/post_onboarding_experiment.rb",
+      "line": 398,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ApplicationRecord.connection.select_all(\"SELECT e.properties->>'variant' AS variant,\\n       COUNT(DISTINCT e.properties->>'installation_id') AS total\\nFROM product_analytics_events e\\nWHERE e.event_name = #{quote(\"experiment_assigned\")}\\n  AND e.properties->>'experiment_key' = #{quote(EXPERIMENT_KEY)}\\n  AND e.properties->>'installation_id' IN (#{cohort_scope.select(:installation_id).to_sql})\\n  #{started_clause(\"e.occurred_at\")}\\n  #{window_clause(\"e.occurred_at\")}\\nGROUP BY 1\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Analytics::PostOnboardingExperiment",
+        "method": "assigned_counts"
+      },
+      "user_input": "quote(\"experiment_assigned\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Every interpolated value is either passed through ApplicationRecord.connection.quote (the `quote` helper in this class) or is an ActiveRecord-generated subquery from `.select(:installation_id).to_sql`. Event names and experiment keys are frozen constants in this file; the date clauses come from started_clause/window_clause, which both build their SQL with ApplicationRecord.sanitize_sql_array and bind parameters. No unsanitized request data reaches the statement. False positive - Brakeman does not track values through connection.quote or through relation.to_sql."
+    }
+  ],
+  "updated": "2026-08-18 09:36:44 -0300",
+  "brakeman_version": "8.0.4"
+}
