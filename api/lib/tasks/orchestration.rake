@@ -134,6 +134,7 @@ namespace :orchestration do
     puts "  MAKE_WEBHOOK_ENABLED=#{MakeWebhookEligibility.enabled?}"
     puts "  SCHEDULED_WORKOUT_REMINDER_ENABLED=#{ScheduledWorkoutReminderEligibility.enabled?}"
     puts "  SCHEDULED_WORKOUT_REMINDER_LEAD_MINUTES=#{ScheduledWorkoutReminderSchedule.lead_minutes}"
+    puts "  SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED=#{ScheduledWorkoutReminderSuppression.inactivity_enabled?}"
     puts "  COMMUNICATION_DEFAULT_TIMEZONE=#{CommunicationTime.default_zone_name}"
     puts "  MAKE_PUSH_ORCHESTRATION_ENABLED=#{ENV.fetch('MAKE_PUSH_ORCHESTRATION_ENABLED', 'false')}"
     puts "  PUSH_QUIET_HOURS_ENABLED=#{PushQuietHours.enabled?}"

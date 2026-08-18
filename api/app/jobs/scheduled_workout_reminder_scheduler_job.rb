@@ -54,7 +54,12 @@ class ScheduledWorkoutReminderSchedulerJob < ApplicationJob
     end
 
     @heartbeat_metadata = stats.to_h
-    Rails.logger.info("[ScheduledWorkoutReminderSchedulerJob] #{stats.inspect}")
+    # Once per sweep, never per user: a paused policy should be readable from the
+    # logs without inventing an event for everyone it stopped suppressing.
+    Rails.logger.info(
+      "[ScheduledWorkoutReminderSchedulerJob] #{stats.inspect} " \
+      "inactivity_suppression_enabled=#{ScheduledWorkoutReminderSuppression.inactivity_enabled?}"
+    )
     stats
   end
 

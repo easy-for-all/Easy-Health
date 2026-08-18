@@ -165,6 +165,36 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       expect(json["reason"]).to eq("no_active_token")
     end
 
+    # Pausing the scheduled reminder inactivity policy only stops one producer
+    # rule from erasing the event. Delivery is still decided here, and none of
+    # these opt-outs may loosen because of that flag.
+    describe "with the scheduled reminder inactivity policy paused" do
+      around do |example|
+        with_env("SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED" => "false") { example.run }
+      end
+
+      it "still skips global opt-out with push disabled" do
+        user.notification_preferences.update!(push_enabled: false)
+        create(:device_token, user: user)
+        post_dispatch(valid_payload)
+        expect(json).to include("status" => "skipped", "reason" => "global_opt_out", "sent" => false)
+      end
+
+      it "still skips category opt-out with workout reminders disabled" do
+        user.notification_preferences.update!(workout_reminders_enabled: false)
+        create(:device_token, user: user)
+        post_dispatch(valid_payload)
+        expect(json).to include("status" => "skipped", "reason" => "category_opt_out", "sent" => false)
+      end
+
+      it "still skips global opt-out with notifications_disabled_at present" do
+        user.notification_preferences.update!(notifications_disabled_at: Time.current)
+        create(:device_token, user: user)
+        post_dispatch(valid_payload)
+        expect(json).to include("status" => "skipped", "reason" => "global_opt_out", "sent" => false)
+      end
+    end
+
     it "skips an invalidated token as no_active_token" do
       create(:device_token, user: user).invalidate!("test")
       post_dispatch(valid_payload)
