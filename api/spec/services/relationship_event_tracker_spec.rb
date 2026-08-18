@@ -169,7 +169,8 @@ RSpec.describe RelationshipEventTracker do
     expect(described_class::EVENTS).to include(
       "activation_workout_created", "activation_first_workout_completed",
       "activation_reminder_2h_due", "activation_reminder_24h_due",
-      "scheduled_workout_reminder_due"
+      "scheduled_workout_reminder_due",
+      "scheduled_workout_reminder_suppressed", "scheduled_workout_reminder_resumed"
     )
   end
 

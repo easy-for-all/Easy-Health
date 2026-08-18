@@ -7,6 +7,7 @@ class RelationshipMessageService
   SENSITIVE_KEY_PATTERN = /password|token|secret|authorization|card|stripe|cpf|ssn|cvv|cvc|dsn|api_key|access_key/i
 
   TRACKING_STATUSES = %w[delivered opened clicked].freeze
+  TERMINAL_STATUSES = RelationshipMessage::TERMINAL_STATUSES
 
   def self.record_from_make!(payload:, headers: {})
     new(payload: payload).record!
@@ -31,11 +32,12 @@ class RelationshipMessageService
     assign_attributes(message, user, status)
 
     if message.save
+      reconcile_user_event!(message, status)
       Result.new(success: true, record: message)
     else
       Result.new(success: false, error: message.errors.full_messages.join(", "))
     end
-  rescue => e
+  rescue StandardError => e
     Rails.logger.error("[RelationshipMessageService] #{e.class}: #{e.message}")
     Result.new(success: false, error: "internal_error")
   end
@@ -118,6 +120,13 @@ class RelationshipMessageService
     Time.parse(value.to_s)
   rescue ArgumentError
     nil
+  end
+
+  def reconcile_user_event!(message, status)
+    return unless TERMINAL_STATUSES.include?(status)
+    return unless message.user_event
+
+    Make::UserEventReconciler.from_relationship_message(message)
   end
 
   def sanitize_metadata(metadata)

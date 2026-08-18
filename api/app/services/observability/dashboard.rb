@@ -24,8 +24,8 @@ module Observability
       android_linkage: %w[android_installation_link_rate authenticated_without_installation_link],
       google_auth: %w[google_auth_error_rate google_auth_consent_anomaly],
       jobs_integrations: %w[
-        repeated_job_failure make_delivery_backlog stripe_webhook_failure
-        replica_refresh_stale android_analytics_ingestion_stale
+        repeated_job_failure make_delivery_backlog make_processing_unknown_backlog
+        stripe_webhook_failure replica_refresh_stale android_analytics_ingestion_stale
       ]
     }.freeze
 
@@ -48,6 +48,7 @@ module Observability
       google_auth_consent_anomaly
       repeated_job_failure
       make_delivery_backlog
+      make_processing_unknown_backlog
       stripe_webhook_failure
       android_analytics_ingestion_stale
     ].freeze

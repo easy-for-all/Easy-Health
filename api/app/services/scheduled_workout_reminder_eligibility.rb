@@ -72,6 +72,10 @@ class ScheduledWorkoutReminderEligibility
 
     profile = user.health_profile
     return ineligible("missing_profile") unless profile
+
+    suppression = suppression_for(profile)
+    suppression.resume_if_needed! unless manual?
+
     return ineligible("variable_schedule") if profile.preferred_workout_period == "variable"
     return ineligible("missing_preferred_workout_time") if profile.preferred_workout_time.blank?
 
@@ -86,6 +90,9 @@ class ScheduledWorkoutReminderEligibility
     sent_count = reminder_events_for(plan).count
     return ineligible("maximum_reached", plan:, schedule:) if sent_count >= MAXIMUM_REMINDERS
     return ineligible("already_sent_today", plan:, schedule:) if sent_for_local_date?(plan, schedule.reminder_local_date)
+
+    suppression_result = suppression.suppress_if_needed!(schedule: schedule) unless manual?
+    return ineligible(ScheduledWorkoutReminderSuppression::REASON, plan:, schedule:) if suppression_result&.suppressed?
 
     reminder_number = sent_count + 1
     eligible(plan:, schedule:, reminder_number:)
@@ -109,8 +116,12 @@ class ScheduledWorkoutReminderEligibility
     end
   end
 
+  def suppression_for(profile)
+    ScheduledWorkoutReminderSuppression.new(user: user, health_profile: profile, now: now)
+  end
+
   def workout_completed_for_plan?(plan)
-    completed = user.workout_sessions.where(status: "completed", completion_status: "completed")
+    completed = user.workout_sessions.completed_successfully
     return true if completed.joins(:workout_day).where(workout_days: { workout_plan_id: plan.id }).exists?
 
     completed.where(workout_day_id: nil).where("completed_at >= ?", plan.created_at).exists?

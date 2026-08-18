@@ -58,22 +58,39 @@ RSpec.describe "orchestration tasks" do
   end
 
   describe "orchestration:retry_pending_make" do
-    it "re-drives recent pending Make events and records heartbeat" do
+    it "re-drives recent pending, due retrying, and stale sending Make events" do
       user = create(:user)
       recent = UserEvent.create!(user: user, event_name: "first_workout_completed",
                                  occurred_at: Time.current, make_delivery_status: "pending")
       old = UserEvent.create!(user: user, event_name: "first_workout_completed",
                               occurred_at: Time.current, make_delivery_status: "pending")
       old.update_columns(created_at: 2.hours.ago, updated_at: 2.hours.ago) # rubocop:disable Rails/SkipsModelValidations
+      due_retrying = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                       occurred_at: Time.current, make_delivery_status: "retrying",
+                                       make_next_retry_at: 1.minute.ago)
+      future_retrying = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                          occurred_at: Time.current, make_delivery_status: "retrying",
+                                          make_next_retry_at: 1.hour.from_now)
+      stale_sending = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                        occurred_at: Time.current, make_delivery_status: "sending",
+                                        make_last_attempt_at: 10.minutes.ago)
+      fresh_sending = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                        occurred_at: Time.current, make_delivery_status: "sending",
+                                        make_last_attempt_at: 1.minute.ago)
 
       client = instance_double(MakeWebhookClient)
       allow(MakeWebhookClient).to receive(:new).and_return(client)
-      allow(client).to receive(:deliver).with(recent).and_return(MakeWebhookClient::Result.new(status: "accepted_by_make"))
+      allow(client).to receive(:deliver).and_return(MakeWebhookClient::Result.new(status: "accepted_by_make"))
 
       expect { retry_pending_make.invoke }.to output(/orchestration:retry_pending_make/).to_stdout
 
       expect(client).to have_received(:deliver).with(recent)
+      expect(client).to have_received(:deliver).with(due_retrying)
+      expect(client).to have_received(:deliver).with(stale_sending)
       expect(client).not_to have_received(:deliver).with(old)
+      expect(client).not_to have_received(:deliver).with(future_retrying)
+      expect(client).not_to have_received(:deliver).with(fresh_sending)
+      expect(stale_sending.reload.make_last_error).to eq(MakePendingDeliveryRetry::ABANDONED_SENDING_ERROR)
       expect(ObservabilityHeartbeat.find_by(key: "make_pending_retry").last_succeeded_at).to be_present
     end
   end

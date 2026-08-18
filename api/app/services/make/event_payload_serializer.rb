@@ -48,6 +48,7 @@ module Make
       {
         schema_version: 1,
         event_id: event.id,
+        idempotency_key: idempotency_key,
         event_name: event.event_name,
         occurred_at: event.occurred_at&.iso8601,
         source: event.source,
@@ -65,6 +66,7 @@ module Make
       payload = {
         schema_version: 2,
         event_id: event.id,
+        idempotency_key: idempotency_key,
         event_name: event.event_name,
         occurred_at: event.occurred_at&.iso8601,
         source: SOURCE,
@@ -175,6 +177,10 @@ module Make
         metadata["trigger_source"] = event.source
       end
       metadata
+    end
+
+    def idempotency_key
+      event.idempotency_key.presence || event.id.to_s
     end
 
     # Channels the caller decided to expose. Nil means "no decision was passed

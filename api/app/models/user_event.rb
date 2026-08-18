@@ -9,7 +9,7 @@ class UserEvent < ApplicationRecord
     disabled
     skipped
   ].freeze
-  PROCESSING_STATUSES = %w[unknown received routed filtered completed failed].freeze
+  PROCESSING_STATUSES = %w[unknown received routed filtered completed failed sent skipped].freeze
   ERROR_DELIVERY_STATUSES = %w[failed_to_reach_make dead_letter].freeze
   ACTIVE_DELIVERY_STATUSES = %w[pending sending retrying].freeze
 
@@ -17,6 +17,7 @@ class UserEvent < ApplicationRecord
   # Pushes Make asked for because of this event. nullify on delete keeps the
   # dispatch audit trail even if the event is ever removed.
   has_many :push_dispatches, dependent: :nullify
+  has_many :relationship_messages, dependent: :nullify
 
   validates :event_name, presence: true
   validates :make_delivery_status, inclusion: { in: DELIVERY_STATUSES }

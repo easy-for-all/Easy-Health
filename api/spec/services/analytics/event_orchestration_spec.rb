@@ -224,6 +224,36 @@ RSpec.describe Analytics::EventOrchestration do
     end
   end
 
+  describe "scheduled workout reminder suppression BI" do
+    it "separates current suppression state from transition history" do
+      create(:health_profile, user: user,
+                              scheduled_workout_reminder_suppressed_at: Time.current,
+                              scheduled_workout_reminder_suppression_reason: "inactive_5_days")
+      other = create(:user)
+      create(:health_profile, user: other,
+                              scheduled_workout_reminder_suppressed_at: Time.current,
+                              scheduled_workout_reminder_suppression_reason: "other_policy")
+
+      UserEvent.delete_all
+      create_event("scheduled_workout_reminder_suppressed", metadata: { reason: "inactive_5_days" })
+      create_event("scheduled_workout_reminder_resumed", metadata: { reason: "workout_completed_after_inactivity_suppression" })
+
+      result = described_class.new.call
+      policy = result[:scheduled_workout_reminders]
+
+      expect(policy[:current_suppressed_users]).to eq(1)
+      expect(policy[:current_suppressed_by_reason]).to include(
+        { reason: "inactive_5_days", count: 1 },
+        { reason: "other_policy", count: 1 }
+      )
+      expect(policy[:transitions]).to include(suppressed: 1, resumed: 1)
+      expect(policy[:transitions][:suppressed_by_reason]).to eq([
+        { reason: "inactive_5_days", count: 1 }
+      ])
+      expect(result[:summary][:events_generated]).to eq(0)
+    end
+  end
+
   describe "per event" do
     it "breaks the funnel down by event name with push results" do
       event = create_event("user_inactive_3_days", make_delivery_status: "accepted_by_make", make_attempts_count: 1)

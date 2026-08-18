@@ -16,12 +16,16 @@ module Api
             delivery = find_delivery(payload)
             return render json: { error: "event_delivery_not_found" }, status: :not_found unless delivery
 
-            delivery.update!(
-              make_processing_status: status,
-              make_processing_message: payload[:message],
-              make_execution_id: payload[:execution_id],
-              make_callback_at: Time.current,
-              metadata: callback_metadata(delivery, payload)
+            callback_at = Time.current
+            ::Make::UserEventReconciler.call(
+              user_event: delivery,
+              status: status,
+              message: payload[:message],
+              execution_id: payload[:execution_id],
+              callback_at: callback_at
+            )
+            delivery.reload.update!(
+              metadata: callback_metadata(delivery, payload, callback_at)
             )
 
             render json: { success: true }
@@ -61,7 +65,7 @@ module Api
             UserEvent.find_by(id: event_id, event_name: payload[:event_name].to_s)
           end
 
-          def callback_metadata(delivery, payload)
+          def callback_metadata(delivery, payload, callback_at)
             metadata = delivery.metadata.is_a?(Hash) ? delivery.metadata.deep_dup : {}
             metadata["last_make_callback"] = sanitize_metadata(
               {
@@ -70,7 +74,7 @@ module Api
                 "execution_id" => payload[:execution_id],
                 "occurred_at" => payload[:occurred_at],
                 "message" => payload[:message],
-                "received_at" => Time.current.iso8601
+                "received_at" => callback_at.iso8601
               }.compact
             )
             metadata

@@ -17,6 +17,7 @@ class ScheduledWorkoutReminderSchedulerJob < ApplicationJob
       result = ScheduledWorkoutReminderEligibility.new(user:, now: now).call
       unless result.eligible?
         stats[:skipped] += 1
+        stats[:suppressed] += 1 if result.reason == ScheduledWorkoutReminderSuppression::REASON
         log("skipped", result.to_h)
         notify("skipped", result.to_h)
         next

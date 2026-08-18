@@ -8,6 +8,12 @@ class MakeWebhookDeliveryJob < ApplicationJob
     return unless user_event
     return if user_event.make_delivery_status == "accepted_by_make"
 
+    terminal_message = MakePendingDeliveryRetry.terminal_relationship_message_for(user_event)
+    if terminal_message
+      Make::UserEventReconciler.from_relationship_message(terminal_message, user_event: user_event)
+      return
+    end
+
     if user_event.make_attempts_count.to_i >= MAX_ATTEMPTS
       user_event.update!(
         make_delivery_status: "dead_letter",

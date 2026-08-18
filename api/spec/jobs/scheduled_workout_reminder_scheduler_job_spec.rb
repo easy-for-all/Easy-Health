@@ -19,19 +19,23 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     allow(MakeWebhookDeliveryJob).to receive(:perform_later)
   end
 
-  def build_candidate(preferred_time: "07:00", period: "morning", plan_created_at: now - 1.day)
+  def build_candidate(preferred_time: "07:00", period: "morning", plan_created_at: now - 1.day, preferences: true)
     user = create(:user, marketing_consent: true, time_zone: "America/Sao_Paulo")
     create(:health_profile, user: user, preferred_workout_period: period, preferred_workout_time: preferred_time)
     plan = user.workout_plans.create!(active: true)
     plan.update_columns(created_at: plan_created_at, updated_at: plan_created_at) # rubocop:disable Rails/SkipsModelValidations
     day = plan.workout_days.create!(name: "Treino A", day_of_week: 1, position: 1)
     create(:device_token, user: user, permission_status: "granted")
-    user.notification_preferences!.update!(push_enabled: true, workout_reminders_enabled: true)
+    user.notification_preferences!.update!(push_enabled: true, workout_reminders_enabled: true) if preferences
     [ user, plan, day ]
   end
 
   def reminder_events(user)
     user.user_events.where(event_name: "scheduled_workout_reminder_due")
+  end
+
+  def suppression_events(user)
+    user.user_events.where(event_name: "scheduled_workout_reminder_suppressed")
   end
 
   def create_reminder_event(user, plan, local_date:, reminder_number: 1, status: "accepted_by_make")
@@ -85,6 +89,39 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     expect(reminder_events(user).count).to eq(1)
   end
 
+  it "does not create the due event when inactive suppression is active" do
+    user, = build_candidate
+    user.workout_sessions.create!(
+      status: "completed",
+      completion_status: "completed",
+      completed_at: now - 5.days,
+      duration_minutes: 30
+    )
+
+    stats = described_class.perform_now(now: now)
+
+    expect(reminder_events(user)).to be_empty
+    expect(suppression_events(user).count).to eq(1)
+    expect(stats[:suppressed]).to eq(1)
+    expect(user.health_profile.reload.scheduled_workout_reminder_suppression_reason).to eq("inactive_5_days")
+  end
+
+  it "suppresses inactive users without creating notification preferences" do
+    user, = build_candidate(preferences: false)
+    user.workout_sessions.create!(
+      status: "completed",
+      completion_status: "completed",
+      completed_at: now - 8.days,
+      duration_minutes: 30
+    )
+
+    described_class.perform_now(now: now)
+
+    expect(user.reload.notification_preferences).to be_nil
+    expect(reminder_events(user)).to be_empty
+    expect(suppression_events(user).count).to eq(1)
+  end
+
   it "creates reminder numbers 1, 2 and 3, then never creates reminder 4" do
     user, plan = build_candidate
     create_reminder_event(user, plan, local_date: "2026-07-19", reminder_number: 1)
@@ -98,6 +135,24 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     described_class.perform_now(now: zone.local(2026, 7, 22, 6, 30))
 
     expect(reminder_events(user).count).to eq(3)
+  end
+
+  it "does not alter reminder numbering or dedupe state when suppression blocks a due reminder" do
+    user, plan = build_candidate
+    create_reminder_event(user, plan, local_date: "2026-07-19", reminder_number: 1)
+    create_reminder_event(user, plan, local_date: "2026-07-20", reminder_number: 2)
+    user.workout_sessions.create!(
+      status: "completed",
+      completion_status: "completed",
+      completed_at: now - 8.days,
+      duration_minutes: 30
+    )
+
+    described_class.perform_now(now: now)
+
+    expect(reminder_events(user).count).to eq(2)
+    expect(reminder_events(user).order(:created_at).last.metadata.dig("activation", "reminder_number")).to eq(2)
+    expect(suppression_events(user).count).to eq(1)
   end
 
   it "does not create a replacement event when a previous Make delivery failed" do

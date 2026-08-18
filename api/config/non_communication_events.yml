@@ -150,6 +150,12 @@ activation_reminder_2h_due:
 activation_reminder_24h_due:
   reason: covered_by_other_event # first_workout_not_started_24h
 
+# --- Scheduled reminder policy audit ----------------------------------------
+scheduled_workout_reminder_suppressed:
+  reason: internal_audit
+scheduled_workout_reminder_resumed:
+  reason: internal_audit
+
 # --- Push telemetry ----------------------------------------------------------
 # The outcome of a push Make already asked us to send. Sending it back would be
 # an echo of Make's own decision, and every one of these is written with

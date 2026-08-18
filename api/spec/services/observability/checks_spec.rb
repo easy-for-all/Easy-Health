@@ -202,7 +202,61 @@ RSpec.describe "Observability checks" do
       result = described_class.run.find { |r| r.check_key == "make_delivery_backlog" }
 
       expect(result.status).to eq("healthy")
-      expect(result.explanation).to include("Nenhum evento pendente")
+      expect(result.explanation).to include("Nenhum evento pendente/retrying/sending preso")
+    end
+
+    it "counts due retrying and stale sending Make deliveries as backlog" do
+      user = create(:user)
+      UserEvent.create!(user: user, event_name: "first_workout_completed",
+                        occurred_at: Time.current, make_delivery_status: "retrying",
+                        make_next_retry_at: 1.minute.ago)
+      UserEvent.create!(user: user, event_name: "first_workout_completed",
+                        occurred_at: Time.current, make_delivery_status: "retrying",
+                        make_next_retry_at: 1.hour.from_now)
+      UserEvent.create!(user: user, event_name: "first_workout_completed",
+                        occurred_at: Time.current, make_delivery_status: "sending",
+                        make_last_attempt_at: MakePendingDeliveryRetry::STALE_SENDING_AFTER.ago - 1.minute)
+      UserEvent.create!(user: user, event_name: "first_workout_completed",
+                        occurred_at: Time.current, make_delivery_status: "sending",
+                        make_last_attempt_at: 1.minute.ago)
+
+      with_env("OBSERVABILITY_MAKE_BACKLOG_WARNING" => "1", "OBSERVABILITY_MAKE_BACKLOG_CRITICAL" => "3") do
+        result = described_class.run.find { |r| r.check_key == "make_delivery_backlog" }
+
+        expect(result.status).to eq("warning")
+        expect(result.current_value).to eq(2)
+        expect(result.explanation).to include("retrying_due=1", "sending_stale=1")
+      end
+    end
+
+    it "does not count stale sending with terminal relationship_message as delivery backlog" do
+      user = create(:user)
+      event = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                occurred_at: Time.current, make_delivery_status: "sending",
+                                make_last_attempt_at: MakePendingDeliveryRetry::STALE_SENDING_AFTER.ago - 1.minute)
+      create(:relationship_message, :skipped, user: user, user_event: event, event_name: event.event_name)
+
+      with_env("OBSERVABILITY_MAKE_BACKLOG_WARNING" => "1", "OBSERVABILITY_MAKE_BACKLOG_CRITICAL" => "3") do
+        result = described_class.run.find { |r| r.check_key == "make_delivery_backlog" }
+
+        expect(result.status).to eq("healthy")
+        expect(result.current_value).to eq(0)
+        expect(result.dimensions["sending_terminal_pending_reconciliation"]).to eq(1)
+      end
+    end
+
+    it "reports accepted_by_make events with old unknown processing separately" do
+      user = create(:user)
+      UserEvent.create!(user: user, event_name: "first_workout_completed",
+                        occurred_at: 1.hour.ago, created_at: 1.hour.ago,
+                        make_delivery_status: "accepted_by_make", make_processing_status: "unknown")
+
+      with_env("OBSERVABILITY_MAKE_BACKLOG_WARNING" => "1", "OBSERVABILITY_MAKE_BACKLOG_CRITICAL" => "3") do
+        result = described_class.run.find { |r| r.check_key == "make_processing_unknown_backlog" }
+
+        expect(result.status).to eq("warning")
+        expect(result.current_value).to eq(1)
+      end
     end
 
     it "reports insufficient_data for analytics ingestion below the traffic floor" do

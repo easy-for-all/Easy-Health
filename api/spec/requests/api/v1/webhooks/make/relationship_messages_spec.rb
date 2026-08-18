@@ -69,6 +69,23 @@ RSpec.describe "POST /api/v1/webhooks/make/relationship-message", type: :request
       expect(message.sent_at).to be_present
       expect(message.status).to eq("sent")
     end
+
+    it "reconciles a linked UserEvent from the relationship callback" do
+      event = UserEvent.create!(
+        user: user,
+        event_name: "user_created",
+        occurred_at: Time.current,
+        source: "spec",
+        make_delivery_status: "sending",
+        make_processing_status: "unknown"
+      )
+
+      post_webhook(payload: valid_payload.merge(user_event_id: event.id, status: "skipped"))
+
+      expect(response).to have_http_status(:created)
+      expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+      expect(event.make_processing_status).to eq("skipped")
+    end
   end
 
   describe "idempotency" do

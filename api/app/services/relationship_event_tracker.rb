@@ -72,6 +72,8 @@ class RelationshipEventTracker
     activation_reminder_2h_due
     activation_reminder_24h_due
     scheduled_workout_reminder_due
+    scheduled_workout_reminder_suppressed
+    scheduled_workout_reminder_resumed
     push_scheduled
     push_sent
     push_failed

@@ -43,12 +43,16 @@ namespace :orchestration do
     puts({ task: "orchestration:relationship_daily", at: Time.current.utc.iso8601, stats: stats }.to_json)
   end
 
-  desc "Re-drive recent Make deliveries still pending from the cron sweep"
+  desc "Re-drive Make deliveries dropped by in-process jobs or due for retry"
   task retry_pending_make: :environment do
     Observability::Context.for_task("make_pending_retry") do
       Observability::Heartbeat.track("make_pending_retry") do
+        now = Time.current
         cutoff = 1.hour.ago
-        scope = UserEvent.pending_make_delivery.where("created_at > ?", cutoff)
+        pending = UserEvent.pending_make_delivery.where("created_at > ?", cutoff)
+        scope = MakePendingDeliveryRetry
+                .retriable_scope(pending_scope: pending, now: now)
+                .order(:created_at)
         stats = MakePendingDeliveryRetry.call(scope: scope, batch: true)
 
         puts({ task: "orchestration:retry_pending_make", at: Time.current.utc.iso8601, stats: stats }.to_json)

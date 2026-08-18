@@ -15,6 +15,10 @@ class WorkoutSession < ApplicationRecord
 
   validate :exactly_one_owner
 
+  # Official source for workouts that were effectively completed by the user.
+  scope :completed_successfully, lambda {
+    where(status: "completed", completion_status: "completed").where.not(completed_at: nil)
+  }
   scope :owned_by_installation, ->(installation) { where(app_installation_id: installation) }
 
   validates :status, inclusion: { in: STATUSES }

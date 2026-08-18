@@ -9,18 +9,21 @@ RSpec.describe "make event tasks" do
   let(:preview_task) { Rake::Task["make:preview_event"] }
   let(:test_task) { Rake::Task["make:test_event"] }
   let(:audit_task) { Rake::Task["make_webhook:audit"] }
+  let(:retry_pending_task) { Rake::Task["make_webhook:retry_pending"] }
   let(:user) { create(:user, marketing_consent: true, email: "task-user@example.com") }
 
   before do
     preview_task.reenable
     test_task.reenable
     audit_task.reenable
+    retry_pending_task.reenable
     ENV.delete("CHANNELS")
     ENV.delete("DRY_RUN")
     ENV.delete("CONFIRM_PRODUCTION_MAKE_TEST")
     ENV.delete("EXPECT_DATA")
     ENV.delete("HOURS")
     ENV.delete("LIMIT")
+    ENV.delete("OBSERVABILITY_MAKE_BACKLOG_AGE_MINUTES")
   end
 
   after do
@@ -30,6 +33,7 @@ RSpec.describe "make event tasks" do
     ENV.delete("EXPECT_DATA")
     ENV.delete("HOURS")
     ENV.delete("LIMIT")
+    ENV.delete("OBSERVABILITY_MAKE_BACKLOG_AGE_MINUTES")
   end
 
   it "previews a v2 payload without persisting a user event" do
@@ -109,5 +113,41 @@ RSpec.describe "make event tasks" do
       .to output(/"ok": true.*"event_name": "first_workout_created".*"delivery_status": "accepted_by_make"/m).to_stdout
 
     expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+  end
+
+  it "re-drives old pending, due retrying, and stale sending events" do
+    old_pending = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                    occurred_at: Time.current, make_delivery_status: "pending")
+    old_pending.update_columns(created_at: 2.hours.ago, updated_at: 2.hours.ago) # rubocop:disable Rails/SkipsModelValidations
+    fresh_pending = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                      occurred_at: Time.current, make_delivery_status: "pending")
+    due_retrying = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                     occurred_at: Time.current, make_delivery_status: "retrying",
+                                     make_next_retry_at: 1.minute.ago)
+    future_retrying = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                        occurred_at: Time.current, make_delivery_status: "retrying",
+                                        make_next_retry_at: 1.hour.from_now)
+    stale_sending = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                      occurred_at: Time.current, make_delivery_status: "sending",
+                                      make_last_attempt_at: 10.minutes.ago)
+    fresh_sending = UserEvent.create!(user: user, event_name: "first_workout_completed",
+                                      occurred_at: Time.current, make_delivery_status: "sending",
+                                      make_last_attempt_at: 1.minute.ago)
+
+    client = instance_double(MakeWebhookClient)
+    allow(MakeWebhookClient).to receive(:new).and_return(client)
+    allow(client).to receive(:deliver).and_return(MakeWebhookClient::Result.new(status: "accepted_by_make"))
+
+    with_env("OBSERVABILITY_MAKE_BACKLOG_AGE_MINUTES" => "30", "LIMIT" => "200") do
+      expect { retry_pending_task.invoke }.to output(/Make pending retry/).to_stdout
+    end
+
+    expect(client).to have_received(:deliver).with(old_pending)
+    expect(client).to have_received(:deliver).with(due_retrying)
+    expect(client).to have_received(:deliver).with(stale_sending)
+    expect(client).not_to have_received(:deliver).with(fresh_pending)
+    expect(client).not_to have_received(:deliver).with(future_retrying)
+    expect(client).not_to have_received(:deliver).with(fresh_sending)
+    expect(stale_sending.reload.make_last_error).to eq(MakePendingDeliveryRetry::ABANDONED_SENDING_ERROR)
   end
 end
