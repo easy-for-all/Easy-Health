@@ -47,10 +47,33 @@ RSpec.describe "account:restore" do
     expect(user.subscription.reload.stripe_customer_id).to eq("cus_real123")
   end
 
-  it "aborts when the subscription has no stripe_subscription_id" do
+  it "falls back to searching Stripe by metadata.user_id when stripe_subscription_id is blank" do
+    ENV["USER_ID"] = user.id.to_s
+    ENV["CONFIRM"] = "yes"
+    user.subscription.update!(stripe_subscription_id: nil, stripe_customer_id: "deleted_#{user.id}")
+
+    fallback_customer = double("Stripe::Customer", id: "cus_found789", email: "legacy@example.com", name: "Legacy Name")
+    search_result = double("Stripe::SearchResultObject", data: [fallback_customer])
+    expect(Stripe::Customer).to receive(:search)
+      .with(query: "metadata['user_id']:'#{user.id}'")
+      .and_return(search_result)
+    expect(Stripe::Subscription).not_to receive(:retrieve)
+
+    task.invoke
+    user.reload
+
+    expect(user.anonymized_at).to be_nil
+    expect(user.email).to eq("legacy@example.com")
+    expect(user.subscription.reload.stripe_customer_id).to eq("cus_found789")
+  end
+
+  it "aborts when no Stripe customer is found via subscription id or metadata search" do
     ENV["USER_ID"] = user.id.to_s
     ENV["CONFIRM"] = "yes"
     user.subscription.update!(stripe_subscription_id: nil)
+
+    empty_result = double("Stripe::SearchResultObject", data: [])
+    allow(Stripe::Customer).to receive(:search).and_return(empty_result)
 
     expect { task.invoke }.to raise_error(SystemExit)
   end
