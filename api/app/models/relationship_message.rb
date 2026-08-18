@@ -5,6 +5,7 @@ class RelationshipMessage < ApplicationRecord
   CHANNELS  = %w[email push whatsapp sms in_app].freeze
   PROVIDERS = %w[brevo sendgrid make internal].freeze
   STATUSES  = %w[pending sent failed skipped delivered opened clicked].freeze
+  TERMINAL_STATUSES = %w[sent skipped failed].freeze
 
   validates :event_name, presence: true
   validates :channel,    inclusion: { in: CHANNELS }

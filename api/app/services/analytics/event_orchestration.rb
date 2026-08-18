@@ -68,6 +68,7 @@ module Analytics
         push_dispatch_results: push_dispatch_results,
         by_origin: by_origin,
         schedulers: schedulers,
+        scheduled_workout_reminders: scheduled_workout_reminders,
         recent_events: recent_events,
         warnings: warnings,
         catalog: {
@@ -459,6 +460,60 @@ module Analytics
           events_created: metadata["events_created"] || metadata["event_created"]
         }
       end
+    end
+
+    # Current state is persisted policy state; transitions are audit events.
+    # Keeping them separate prevents a suppression from looking like a generated
+    # communication, dispatch skip, send failure, or provider result.
+    def scheduled_workout_reminders
+      {
+        current_suppressed_users: current_suppressed_users,
+        current_suppressed_by_reason: current_suppressed_by_reason,
+        transitions: scheduled_workout_reminder_transitions
+      }
+    end
+
+    def current_suppressed_users
+      HealthProfile
+        .where(scheduled_workout_reminder_suppression_reason: ScheduledWorkoutReminderSuppression::REASON)
+        .where.not(scheduled_workout_reminder_suppressed_at: nil)
+        .distinct
+        .count(:user_id)
+    end
+
+    def current_suppressed_by_reason
+      HealthProfile
+        .where.not(scheduled_workout_reminder_suppressed_at: nil)
+        .group(:scheduled_workout_reminder_suppression_reason)
+        .count
+        .map { |reason, count| { reason: reason.presence || "unknown", count: count } }
+        .sort_by { |row| -row[:count] }
+    end
+
+    def scheduled_workout_reminder_transitions
+      counts = scheduled_workout_reminder_transition_scope.group(:event_name).count
+      suppressed_by_reason = scheduled_workout_reminder_transition_scope
+        .where(event_name: ScheduledWorkoutReminderSuppression::SUPPRESSED_EVENT_NAME)
+        .group(Arel.sql("metadata ->> 'reason'"))
+        .count
+
+      {
+        suppressed: counts.fetch(ScheduledWorkoutReminderSuppression::SUPPRESSED_EVENT_NAME, 0),
+        resumed: counts.fetch(ScheduledWorkoutReminderSuppression::RESUMED_EVENT_NAME, 0),
+        suppressed_by_reason: suppressed_by_reason
+          .map { |reason, count| { reason: reason.presence || "unknown", count: count } }
+          .sort_by { |row| -row[:count] }
+      }
+    end
+
+    def scheduled_workout_reminder_transition_scope
+      UserEvent.where(
+        event_name: [
+          ScheduledWorkoutReminderSuppression::SUPPRESSED_EVENT_NAME,
+          ScheduledWorkoutReminderSuppression::RESUMED_EVENT_NAME
+        ],
+        created_at: range
+      )
     end
 
     # --- Recent events (drill-down) ----------------------------------------

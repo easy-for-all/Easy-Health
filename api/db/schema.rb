@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_18_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "unaccent"
@@ -562,6 +562,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_120000) do
     t.time "preferred_workout_time"
     t.datetime "preferred_workout_time_updated_at"
     t.jsonb "profiling_prompts_answered", default: {}, null: false
+    t.datetime "scheduled_workout_reminder_suppressed_at"
+    t.jsonb "scheduled_workout_reminder_suppression_metadata", default: {}, null: false
+    t.string "scheduled_workout_reminder_suppression_reason"
     t.text "selected_muscle_groups", default: [], array: true
     t.integer "session_duration_minutes"
     t.string "split_type", default: "ai_choice"
@@ -572,6 +575,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_120000) do
     t.bigint "user_id", null: false
     t.decimal "weight_kg"
     t.string "workout_time_source"
+    t.index ["scheduled_workout_reminder_suppressed_at"], name: "idx_health_profiles_on_swr_suppressed_at", where: "(scheduled_workout_reminder_suppressed_at IS NOT NULL)"
     t.index ["user_id"], name: "index_health_profiles_on_user_id"
   end
 
@@ -587,6 +591,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_120000) do
     t.index ["platform", "expires_at"], name: "index_mobile_auth_codes_on_platform_and_expires_at"
     t.index ["user_id", "used_at"], name: "index_mobile_auth_codes_on_user_id_and_used_at"
     t.index ["user_id"], name: "index_mobile_auth_codes_on_user_id"
+  end
+
+  create_table "mobile_sessions", force: :cascade do |t|
+    t.string "app_version"
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "installation_id"
+    t.datetime "last_used_at"
+    t.string "platform", null: false
+    t.string "revocation_reason"
+    t.datetime "revoked_at"
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["expires_at"], name: "index_mobile_sessions_on_expires_at"
+    t.index ["token_digest"], name: "index_mobile_sessions_on_token_digest", unique: true
+    t.index ["user_id", "revoked_at"], name: "index_mobile_sessions_on_user_id_and_revoked_at"
+    t.index ["user_id"], name: "index_mobile_sessions_on_user_id"
   end
 
   create_table "notification_deliveries", force: :cascade do |t|
@@ -1275,6 +1297,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_120000) do
   add_foreign_key "health_data_points", "users"
   add_foreign_key "health_profiles", "users"
   add_foreign_key "mobile_auth_codes", "users"
+  add_foreign_key "mobile_sessions", "users"
   add_foreign_key "notification_deliveries", "device_tokens", column: "push_device_id"
   add_foreign_key "notification_deliveries", "users"
   add_foreign_key "onboarding_events", "users"

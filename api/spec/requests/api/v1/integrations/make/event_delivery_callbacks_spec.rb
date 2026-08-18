@@ -56,6 +56,7 @@ RSpec.describe "Api::V1::Integrations::Make::EventDeliveryCallbacks", type: :req
     expect(response).to have_http_status(:ok)
     expect(response.parsed_body).to eq("success" => true)
     expect(delivery.reload.make_processing_status).to eq("routed")
+    expect(delivery.make_delivery_status).to eq("accepted_by_make")
     expect(delivery.make_processing_message).to eq("Evento encaminhado")
     expect(delivery.make_execution_id).to eq("make-exec-1")
     expect(delivery.make_callback_at).to be_present
@@ -88,5 +89,15 @@ RSpec.describe "Api::V1::Integrations::Make::EventDeliveryCallbacks", type: :req
 
     expect(response).to have_http_status(:ok)
     expect(delivery.reload.make_processing_status).to eq("filtered")
+  end
+
+  it "reconciles a sending delivery when Make sends a callback" do
+    delivery.update!(make_delivery_status: "sending")
+
+    post path, params: payload(status: "routed").to_json, headers: headers
+
+    expect(response).to have_http_status(:ok)
+    expect(delivery.reload.make_delivery_status).to eq("accepted_by_make")
+    expect(delivery.make_processing_status).to eq("routed")
   end
 end

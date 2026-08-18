@@ -72,6 +72,87 @@ RSpec.describe RelationshipMessageService do
       end
     end
 
+    context "when linked to a UserEvent" do
+      def make_user_event(status: "sending")
+        UserEvent.create!(
+          user: user,
+          event_name: "first_workout_completed",
+          occurred_at: Time.current,
+          source: "spec",
+          make_delivery_status: status,
+          make_processing_status: "unknown",
+          make_last_error: "previous_transport_note"
+        )
+      end
+
+      def call_for_event(event, status, attrs = {})
+        call(
+          {
+            "user_event_id" => event.id,
+            "event_name" => event.event_name,
+            "status" => status,
+            "metadata" => { "make_execution_id" => "exec-#{status}" }
+          }.merge(attrs)
+        )
+      end
+
+      it "reconciles sent as accepted_by_make and processing sent" do
+        event = make_user_event
+
+        call_for_event(event, "sent", "sent_at" => "2026-06-28T15:00:00Z")
+
+        expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+        expect(event.make_processing_status).to eq("sent")
+        expect(event.make_execution_id).to eq("exec-sent")
+        expect(event.make_callback_at).to be_present
+        expect(event.make_last_error).to eq("previous_transport_note")
+      end
+
+      it "reconciles skipped as accepted_by_make and processing skipped" do
+        event = make_user_event
+
+        call_for_event(event, "skipped")
+
+        expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+        expect(event.make_processing_status).to eq("skipped")
+      end
+
+      it "reconciles failed as accepted_by_make and processing failed" do
+        event = make_user_event
+
+        call_for_event(event, "failed", "error_message" => "Make terminal failure")
+
+        expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+        expect(event.make_processing_status).to eq("failed")
+        expect(event.make_processing_message).to eq("Make terminal failure")
+      end
+
+      it "keeps an already accepted UserEvent accepted" do
+        event = make_user_event(status: "accepted_by_make")
+
+        call_for_event(event, "sent")
+
+        expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+        expect(event.make_processing_status).to eq("sent")
+      end
+
+      it "is idempotent for a repeated terminal callback" do
+        event = make_user_event
+        attrs = {
+          "user_event_id" => event.id,
+          "event_name" => event.event_name,
+          "status" => "sent",
+          "metadata" => { "make_execution_id" => "exec-repeat" }
+        }
+
+        call(attrs)
+
+        expect { call(attrs) }.not_to change(RelationshipMessage, :count)
+        expect(event.reload.make_delivery_status).to eq("accepted_by_make")
+        expect(event.make_processing_status).to eq("sent")
+      end
+    end
+
     context "idempotency" do
       it "does not create a duplicate when called twice with the same execution_id" do
         call("status" => "sent")

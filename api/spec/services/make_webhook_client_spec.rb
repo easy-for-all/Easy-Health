@@ -48,11 +48,13 @@ RSpec.describe MakeWebhookClient do
       expect(event.make_delivery_channels).to eq(%w[push])
       expect(event.make_destination).to eq("push-progress")
       expect(captured_request["X-EasyHealth-Event-Id"]).to eq(event.id.to_s)
+      expect(captured_request["X-EasyHealth-Idempotency-Key"]).to eq(event.idempotency_key)
       # Schema 2 is the canonical default now that no env override is set.
       expect(captured_request["X-EasyHealth-Schema-Version"]).to eq("2")
       expect(captured_request["X-EasyHealth-Signature"]).to be_present
       body = JSON.parse(captured_request.body)
       expect(body["schema_version"]).to eq(2)
+      expect(body["idempotency_key"]).to eq(event.idempotency_key)
       expect(body.dig("delivery", "channels")).to eq(%w[push])
       expect(body.dig("user", "email")).to be_nil
     end
@@ -165,6 +167,130 @@ RSpec.describe MakeWebhookClient do
       expect(captured_bodies.size).to eq(2)
       expect(captured_bodies.first).to eq(captured_bodies.second)
       expect(JSON.parse(captured_bodies.second)["schema_version"]).to eq(2)
+    end
+  end
+
+  it "rebuilds an incomplete saved schema 2 snapshot before posting" do
+    captured_body = nil
+    response = Net::HTTPOK.new("1.1", "200", "OK")
+    allow(response).to receive(:body).and_return("ok")
+    http = instance_double(Net::HTTP)
+    user_event = UserEvent.create!(
+      user: user,
+      event_name: "first_workout_completed",
+      occurred_at: Time.current,
+      source: "relationship_daily",
+      metadata: { workout_session_id: 123 },
+      make_delivery_status: "pending"
+    )
+    user_event.update!(
+      payload_json: {
+        "schema_version" => 2,
+        "event_id" => user_event.id,
+        "event_name" => user_event.event_name,
+        "context" => {}
+      }
+    )
+
+    with_env(make_env.merge("MAKE_EVENT_SCHEMA_VERSION" => "2")) do
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request) do |request|
+        captured_body = request.body
+        response
+      end
+
+      result = described_class.new.deliver(user_event)
+
+      body = JSON.parse(captured_body)
+      expect(result).to be_success
+      expect(body.dig("context", "workout_session_id")).to eq(123)
+      expect(body["idempotency_key"]).to eq(user_event.id.to_s)
+      expect(user_event.reload.payload_json.dig("context", "workout_session_id")).to eq(123)
+      expect(user_event.payload_json["idempotency_key"]).to eq(user_event.id.to_s)
+    end
+  end
+
+  it "reuses the same idempotency key across retries" do
+    captured = []
+    response = Net::HTTPInternalServerError.new("1.1", "500", "Error")
+    allow(response).to receive(:body).and_return("broken")
+    http = instance_double(Net::HTTP)
+
+    with_env(make_env) do
+      event.update!(make_delivery_status: "pending")
+      allow(Net::HTTP).to receive(:new).and_return(http)
+      allow(http).to receive(:use_ssl=)
+      allow(http).to receive(:open_timeout=)
+      allow(http).to receive(:read_timeout=)
+      allow(http).to receive(:request) do |request|
+        captured << {
+          header: request["X-EasyHealth-Idempotency-Key"],
+          payload: JSON.parse(request.body)["idempotency_key"]
+        }
+        response
+      end
+
+      described_class.new.deliver(event)
+      described_class.new.deliver(event.reload)
+    end
+
+    expect(captured.size).to eq(2)
+    expect(captured.map { |entry| entry[:header] }).to eq([ event.idempotency_key, event.idempotency_key ])
+    expect(captured.map { |entry| entry[:payload] }).to eq([ event.idempotency_key, event.idempotency_key ])
+    expect(UserEvent.where(id: event.id).count).to eq(1)
+  end
+
+  it "does not post an incomplete saved schema 2 snapshot when it cannot be rebuilt" do
+    user_event = UserEvent.create!(
+      user: user,
+      event_name: "first_workout_completed",
+      occurred_at: Time.current,
+      source: "relationship_daily",
+      metadata: {},
+      make_delivery_status: "pending"
+    )
+    user_event.update!(
+      payload_json: {
+        "schema_version" => 2,
+        "event_id" => user_event.id,
+        "event_name" => user_event.event_name,
+        "context" => {}
+      }
+    )
+
+    with_env(make_env.merge("MAKE_EVENT_SCHEMA_VERSION" => "2")) do
+      expect(Net::HTTP).not_to receive(:new)
+
+      result = described_class.new.deliver(user_event)
+
+      expect(result.status).to eq("retrying")
+      expect(user_event.reload.make_delivery_status).to eq("retrying")
+      expect(user_event.make_attempts_count).to eq(1)
+      expect(user_event.make_last_error).to eq("missing_required_context")
+      expect(user_event.make_last_http_status).to be_nil
+    end
+  end
+
+  it "records a generic pre-POST exception without leaving the event sending" do
+    client = described_class.new
+
+    with_env(make_env) do
+      event.update!(make_delivery_status: "pending")
+      allow(client).to receive(:signature_for).and_raise(JSON::GeneratorError, "unexpected serialization failure")
+      expect(Net::HTTP).not_to receive(:new)
+
+      result = client.deliver(event)
+
+      expect(result.status).to eq("retrying")
+      expect(event.reload.make_delivery_status).to eq("retrying")
+      expect(event.make_attempts_count).to eq(1)
+      expect(event.make_last_error_class).to eq("JSON::GeneratorError")
+      expect(event.make_last_error_message).to eq("unexpected serialization failure")
+      expect(event.make_next_retry_at).to be_present
+      expect(event.make_last_http_status).to be_nil
     end
   end
 

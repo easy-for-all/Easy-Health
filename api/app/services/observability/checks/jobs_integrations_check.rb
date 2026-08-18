@@ -11,6 +11,7 @@ module Observability
     #   stale_heartbeat                 (one per registered process)
     #   repeated_job_failure
     #   make_delivery_backlog
+    #   make_processing_unknown_backlog
     #   stripe_webhook_failure
     #   replica_refresh_stale
     #   android_analytics_ingestion_stale
@@ -21,7 +22,7 @@ module Observability
 
       def call
         heartbeat_results +
-          [ repeated_failure_result, make_backlog_result, stripe_failure_result,
+          [ repeated_failure_result, make_backlog_result, make_processing_unknown_result, stripe_failure_result,
             replica_result, analytics_ingestion_result ]
       end
 
@@ -116,8 +117,17 @@ module Observability
       def make_backlog_result
         age = config.make_backlog_age_minutes
         cutoff = now - age.minutes
+        stale_sending_cutoff = now - MakePendingDeliveryRetry::STALE_SENDING_AFTER
+        terminal_ids = MakePendingDeliveryRetry.terminal_relationship_user_event_ids
+        stale_sending = UserEvent.where(make_delivery_status: "sending").where(make_last_attempt_at: ..stale_sending_cutoff)
 
-        stuck = UserEvent.pending_make_delivery.where(created_at: ..cutoff).count
+        counts = {
+          pending: UserEvent.pending_make_delivery.where(created_at: ..cutoff).where.not(id: terminal_ids).count,
+          retrying_due: UserEvent.where(make_delivery_status: "retrying").where(make_next_retry_at: ..now).where.not(id: terminal_ids).count,
+          sending_stale: stale_sending.where.not(id: terminal_ids).count,
+          sending_terminal_pending_reconciliation: stale_sending.where(id: terminal_ids).count
+        }
+        stuck = counts.except(:sending_terminal_pending_reconciliation).values.sum
 
         status =
           if stuck >= config.make_backlog_critical
@@ -130,12 +140,15 @@ module Observability
 
         explanation =
           if stuck.zero?
-            "Nenhum evento pendente além de #{age} min."
+            "Nenhum evento pendente/retrying/sending preso."
           elsif status == Observability::CheckResult::HEALTHY
-            "#{stuck} evento(s) pendente(s) há mais de #{age} min, abaixo do limite de " \
+            "#{stuck} evento(s) Make preso(s), abaixo do limite de " \
             "#{config.make_backlog_warning}. Backlog normal."
           else
-            "#{stuck} evento(s) pendente(s) há mais de #{age} min aguardando entrega ao Make. " \
+            "#{stuck} evento(s) aguardando entrega ao Make. " \
+            "pending=#{counts[:pending]}, retrying_due=#{counts[:retrying_due]}, " \
+            "sending_stale=#{counts[:sending_stale]}, " \
+            "sending_terminal_pending_reconciliation=#{counts[:sending_terminal_pending_reconciliation]}. " \
             "Remediação: bin/rails orchestration:retry_pending_make."
           end
 
@@ -146,8 +159,51 @@ module Observability
           threshold_value: config.make_backlog_warning,
           sample_size: stuck,
           unit: "count",
+          dimensions: counts,
           explanation: explanation,
-          definition: "user_events com make_delivery_status='pending' criados há mais de #{age} min",
+          definition: "user_events pending há mais de #{age} min, retrying vencidos " \
+                      "ou sending sem relationship_message terminal há mais de #{MakePendingDeliveryRetry::STALE_SENDING_AFTER.inspect}",
+          window_ended_at: now
+        )
+      end
+
+      def make_processing_unknown_result
+        age = config.make_backlog_age_minutes
+        cutoff = now - age.minutes
+        stale = UserEvent
+                .where(make_delivery_status: "accepted_by_make", make_processing_status: "unknown")
+                .where(created_at: ..cutoff)
+                .count
+
+        status =
+          if stale >= config.make_backlog_critical
+            Observability::CheckResult::CRITICAL
+          elsif stale >= config.make_backlog_warning
+            Observability::CheckResult::WARNING
+          else
+            Observability::CheckResult::HEALTHY
+          end
+
+        explanation =
+          if stale.zero?
+            "Nenhum evento aceito pelo Make aguardando processamento há mais de #{age} min."
+          elsif status == Observability::CheckResult::HEALTHY
+            "#{stale} evento(s) aceito(s) pelo Make ainda com processamento unknown, abaixo do limite de " \
+            "#{config.make_backlog_warning}."
+          else
+            "#{stale} evento(s) accepted_by_make ainda com make_processing_status=unknown há mais de #{age} min. " \
+            "Verifique callbacks do Make e relacionamento com relationship_messages."
+          end
+
+        Observability::CheckResult.new(
+          check_key: "make_processing_unknown_backlog",
+          status: status,
+          current_value: stale,
+          threshold_value: config.make_backlog_warning,
+          sample_size: stale,
+          unit: "count",
+          explanation: explanation,
+          definition: "user_events accepted_by_make com make_processing_status='unknown' criados há mais de #{age} min",
           window_ended_at: now
         )
       end

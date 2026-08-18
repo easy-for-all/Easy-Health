@@ -87,25 +87,30 @@ namespace :make_webhook do
   # "pending" forever. Nothing re-drives them today. This task is that sweeper,
   # and it carries the "make_pending_retry" heartbeat so its own silence is
   # detectable — see docs/observability/RUNBOOK.md.
-  desc "Re-drive Make deliveries stuck in pending (dropped by an in-process queue restart)"
+  desc "Re-drive Make deliveries stuck in pending/sending or due for retry"
   task retry_pending: :environment do
     Observability::Context.for_task("make_pending_retry") do
       Observability::Heartbeat.track("make_pending_retry") do
+        now = Time.current
         age_minutes = Observability::Config.make_backlog_age_minutes
         limit = Integer(ENV.fetch("LIMIT", "200"), exception: false) || 200
 
-        stuck = UserEvent.pending_make_delivery
-                         .where(created_at: ..age_minutes.minutes.ago)
-                         .order(:created_at)
-                         .limit(limit)
+        pending = UserEvent.pending_make_delivery.where(created_at: ..age_minutes.minutes.ago)
+        stuck = MakePendingDeliveryRetry
+                .retriable_scope(pending_scope: pending, now: now)
+                .order(:created_at)
+                .limit(limit)
 
         stats = MakePendingDeliveryRetry.call(scope: stuck, batch: false)
 
         puts "\n=== Make pending retry ==="
-        puts "  older than    : #{age_minutes} min"
+        puts "  pending older than : #{age_minutes} min"
         puts "  considered    : #{stats[:considered]}"
         puts "  delivered     : #{stats[:delivered]}"
         puts "  failed        : #{stats[:failed]}"
+        puts "  recovered sending: #{stats[:recovered_sending]}"
+        puts "  reconciled terminal: #{stats[:reconciled_terminal]}"
+        puts "  already claimed: #{stats[:already_claimed]}"
         puts ""
         stats
       end
@@ -216,7 +221,7 @@ end
 
 namespace :make do
   desc "Preview a Make event payload without persisting or sending. Usage: bin/rails \"make:preview_event[email,event_name]\" [CHANNELS=email,push]"
-  task :preview_event, [:email, :event_name] => :environment do |_task, args|
+  task :preview_event, [ :email, :event_name ] => :environment do |_task, args|
     user = make_resolve_exact_user!(args[:email])
     event_name = make_validate_event_name!(args[:event_name])
     channels = make_resolve_channels!(event_name, ENV["CHANNELS"])
@@ -237,7 +242,7 @@ namespace :make do
   end
 
   desc "Create and optionally send a test event to Make. Usage: bin/rails \"make:test_event[email,event_name]\" [CHANNELS=email,push] [DRY_RUN=true]"
-  task :test_event, [:email, :event_name] => :environment do |_task, args|
+  task :test_event, [ :email, :event_name ] => :environment do |_task, args|
     user = make_resolve_exact_user!(args[:email])
     event_name = make_validate_event_name!(args[:event_name])
     channels = make_resolve_channels!(event_name, ENV["CHANNELS"])

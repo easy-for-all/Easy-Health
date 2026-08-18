@@ -68,6 +68,26 @@ RSpec.describe WorkoutSession, type: :model do
     end
   end
 
+  describe ".completed_successfully" do
+    it "only includes fully completed sessions with a completed timestamp" do
+      completed = user.workout_sessions.create!(
+        status: "completed",
+        completion_status: "completed",
+        completed_at: Time.current,
+        duration_minutes: 30
+      )
+      user.workout_sessions.create!(status: "in_progress")
+      user.workout_sessions.create!(
+        status: "completed",
+        completion_status: "completed_partial",
+        completed_at: Time.current,
+        duration_minutes: 30
+      )
+
+      expect(described_class.completed_successfully).to contain_exactly(completed)
+    end
+  end
+
   describe "skipped_exercises" do
     it "stores and retrieves skipped_exercises as JSONB" do
       skipped = [ { "exercise_id" => 1, "name" => "Supino", "planned_sets" => 3 } ]

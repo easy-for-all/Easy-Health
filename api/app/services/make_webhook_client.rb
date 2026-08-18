@@ -28,6 +28,9 @@ class MakeWebhookClient
   end
 
   def deliver(user_event, delivery_channels: nil)
+    attempt_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    attempt_registered = false
+
     unless MakeWebhookEligibility.deliverable?(user_event)
       reason = MakeWebhookEligibility.ineligibility_reason(user_event)
       user_event.update!(
@@ -53,13 +56,13 @@ class MakeWebhookClient
       return Result.new(status: "skipped", error: skip_reason)
     end
 
-    attempt_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    register_attempt(user_event, delivery_channels)
-
     payload = payload_for(user_event, delivery_channels: delivery_channels)
     body_json = JSON.generate(payload)
     timestamp = Time.current.utc.iso8601
     signature = signature_for(user_event.id, timestamp, body_json)
+
+    register_attempt(user_event, delivery_channels)
+    attempt_registered = true
 
     log_prepared(user_event, payload)
     response = post(body_json, headers_for(user_event, timestamp, signature, schema_version_for(payload)))
@@ -73,11 +76,14 @@ class MakeWebhookClient
       mark_http_failure(user_event, response, duration_ms)
     end
   rescue Make::EventPayloadSerializer::IncompleteEventError => e
-    mark_contract_failure(user_event, e, attempt_started_at)
+    mark_contract_failure(user_event, e, attempt_started_at,
+                          attempt_registered: attempt_registered, delivery_channels: delivery_channels)
   rescue Net::OpenTimeout, Net::ReadTimeout => e
-    mark_exception(user_event, e, attempt_started_at)
-  rescue => e
-    mark_exception(user_event, e, attempt_started_at)
+    mark_exception(user_event, e, attempt_started_at,
+                   attempt_registered: attempt_registered, delivery_channels: delivery_channels)
+  rescue StandardError => e
+    mark_exception(user_event, e, attempt_started_at,
+                   attempt_registered: attempt_registered, delivery_channels: delivery_channels)
   end
 
   private
@@ -94,9 +100,10 @@ class MakeWebhookClient
   # perform_later can run before the creating transaction commits. One retry
   # covers that race; after it, the failure is permanent and burning the
   # remaining attempts would only hide it.
-  def mark_contract_failure(user_event, error, attempt_started_at)
+  def mark_contract_failure(user_event, error, attempt_started_at, attempt_registered:, delivery_channels:)
     missing_fields = error.message[/fields=(\S+)/, 1].to_s
-    retriable = user_event.make_attempts_count.to_i <= 1
+    attempts = result_attempts_count(user_event, attempt_registered)
+    retriable = attempts <= 1
     status = retriable ? "retrying" : "dead_letter"
 
     Rails.logger.error(
@@ -107,20 +114,22 @@ class MakeWebhookClient
         user_id: user_event.user_id,
         error_code: "missing_required_context",
         missing_fields: missing_fields,
-        attempts: user_event.make_attempts_count,
+        attempts: attempts,
         status: status,
         timestamp: Time.current.utc.iso8601
       }.to_json
     )
 
-    user_event.update!(
+    user_event.update!(unregistered_attempt_attrs(user_event, delivery_channels, attempt_registered).merge(
       make_delivery_status: status,
+      make_last_http_status: nil,
+      make_last_response_body: nil,
       make_last_error: "missing_required_context",
       make_last_error_class: error.class.name,
       make_last_error_message: error.message.to_s.first(1000),
       make_next_retry_at: retriable ? 1.minute.from_now : nil,
       make_delivery_duration_ms: duration_ms_since(attempt_started_at)
-    )
+    ))
 
     Result.new(status: status, error: "missing_required_context")
   end
@@ -230,12 +239,13 @@ class MakeWebhookClient
     Result.new(status: status, error: error)
   end
 
-  def mark_exception(user_event, exception, attempt_started_at)
-    status = retry_available?(user_event) ? "retrying" : "failed_to_reach_make"
-    next_retry_at = status == "retrying" ? Time.current + self.class.retry_backoff_for(user_event.make_attempts_count) : nil
+  def mark_exception(user_event, exception, attempt_started_at, attempt_registered: true, delivery_channels: nil)
+    attempts = result_attempts_count(user_event, attempt_registered)
+    status = retry_available_for_attempts?(attempts) ? "retrying" : "failed_to_reach_make"
+    next_retry_at = status == "retrying" ? Time.current + self.class.retry_backoff_for(attempts) : nil
     error = "#{exception.class}: #{exception.message}"
 
-    user_event.update!(
+    user_event.update!(unregistered_attempt_attrs(user_event, delivery_channels, attempt_registered).merge(
       make_delivery_status: status,
       make_last_http_status: nil,
       make_last_response_body: nil,
@@ -244,13 +254,34 @@ class MakeWebhookClient
       make_last_error_message: exception.message.to_s.first(1000),
       make_delivery_duration_ms: duration_ms_since(attempt_started_at),
       make_next_retry_at: next_retry_at
-    )
+    ))
     log_delivery(user_event)
     Result.new(status: status, error: error)
   end
 
   def retry_available?(user_event)
-    user_event.make_attempts_count.to_i < max_attempts
+    retry_available_for_attempts?(user_event.make_attempts_count.to_i)
+  end
+
+  def retry_available_for_attempts?(attempts)
+    attempts < max_attempts
+  end
+
+  def result_attempts_count(user_event, attempt_registered)
+    attempt_registered ? user_event.make_attempts_count.to_i : user_event.make_attempts_count.to_i + 1
+  end
+
+  def unregistered_attempt_attrs(user_event, delivery_channels, attempt_registered)
+    return {} if attempt_registered
+
+    now = Time.current
+    {
+      make_attempts_count: user_event.make_attempts_count.to_i + 1,
+      make_first_attempt_at: user_event.make_first_attempt_at || now,
+      make_last_attempt_at: now,
+      make_delivery_channels: channels_for(user_event, delivery_channels),
+      make_destination: destination_for(user_event, delivery_channels)
+    }
   end
 
   def duration_ms_since(started_at)
@@ -287,6 +318,7 @@ class MakeWebhookClient
       "Content-Type" => "application/json",
       "X-EasyHealth-Event-Id" => user_event.id.to_s,
       "X-EasyHealth-Event-Name" => user_event.event_name,
+      "X-EasyHealth-Idempotency-Key" => idempotency_key_for(user_event),
       "X-EasyHealth-Schema-Version" => schema_version.to_s,
       "X-EasyHealth-Timestamp" => timestamp,
       "X-EasyHealth-Signature" => signature
@@ -303,7 +335,11 @@ class MakeWebhookClient
 
   def payload_for(user_event, delivery_channels: nil)
     snapshot = payload_snapshot(user_event)
-    return snapshot if snapshot && delivery_channels.nil?
+    if snapshot && delivery_channels.nil? && valid_payload_snapshot?(user_event, snapshot)
+      payload = payload_with_idempotency_key(user_event, snapshot)
+      persist_payload_json(user_event, payload)
+      return payload
+    end
 
     payload = Make::EventPayloadSerializer.new(
       event: user_event,
@@ -312,8 +348,9 @@ class MakeWebhookClient
       # case where resolution yields nothing.
       delivery_channels: channels_for(user_event, delivery_channels).presence
     ).as_json
+    payload = payload_with_idempotency_key(user_event, payload)
 
-    user_event.update!(payload_json: JSON.parse(JSON.generate(payload)))
+    persist_payload_json(user_event, payload)
     payload
   end
 
@@ -335,9 +372,41 @@ class MakeWebhookClient
     payload = user_event.payload_json
     return unless payload.is_a?(Hash)
     return unless [ 1, 2 ].include?(payload["schema_version"].to_i)
-    return unless payload["event_id"].present?
+    return unless payload["event_id"].to_s == user_event.id.to_s
 
     payload
+  end
+
+  def valid_payload_snapshot?(user_event, payload)
+    return true unless payload["schema_version"].to_i == 2
+
+    required = Make::EventPayloadSerializer::REQUIRED_CONTEXT.fetch(user_event.event_name.to_s, [])
+    return true if required.empty?
+
+    context = (payload["context"] || payload[:context] || {}).with_indifferent_access
+    required.none? { |field| context[field].blank? }
+  end
+
+  def payload_with_idempotency_key(user_event, payload)
+    payload = payload.deep_dup
+    key = idempotency_key_for(user_event)
+
+    if payload.key?("idempotency_key")
+      payload["idempotency_key"] = key
+    else
+      payload[:idempotency_key] = key
+    end
+
+    payload
+  end
+
+  def persist_payload_json(user_event, payload)
+    normalized = JSON.parse(JSON.generate(payload))
+    user_event.update!(payload_json: normalized) unless user_event.payload_json == normalized
+  end
+
+  def idempotency_key_for(user_event)
+    user_event.idempotency_key.presence || user_event.id.to_s
   end
 
   def schema_version_for(payload)

@@ -74,6 +74,63 @@ RSpec.describe ScheduledWorkoutReminderEligibility do
     expect(result_for(user)).to be_eligible
   end
 
+  describe "inactivity suppression" do
+    it "allows reminders when the last completed workout is 4d23h59 ago" do
+      user, = build_candidate
+      user.workout_sessions.create!(
+        status: "completed",
+        completion_status: "completed",
+        completed_at: now - 5.days + 1.minute,
+        duration_minutes: 30
+      )
+
+      result = result_for(user)
+
+      expect(result).to be_eligible
+      expect(user.health_profile.reload.scheduled_workout_reminder_suppressed_at).to be_nil
+    end
+
+    it "suppresses reminders when the last completed workout is exactly 5 days ago" do
+      user, = build_candidate
+      user.workout_sessions.create!(
+        status: "completed",
+        completion_status: "completed",
+        completed_at: now - 5.days,
+        duration_minutes: 30
+      )
+
+      result = result_for(user)
+
+      expect(result).not_to be_eligible
+      expect(result.reason).to eq("inactive_5_days")
+      expect(user.health_profile.reload.scheduled_workout_reminder_suppression_reason).to eq("inactive_5_days")
+    end
+
+    it "suppresses reminders when the last completed workout is 8 days ago" do
+      user, = build_candidate
+      user.workout_sessions.create!(
+        status: "completed",
+        completion_status: "completed",
+        completed_at: now - 8.days,
+        duration_minutes: 30
+      )
+
+      result = result_for(user)
+
+      expect(result).not_to be_eligible
+      expect(result.reason).to eq("inactive_5_days")
+    end
+
+    it "does not suppress users who never completed a workout" do
+      user, = build_candidate
+
+      result = result_for(user)
+
+      expect(result).to be_eligible
+      expect(user.health_profile.reload.scheduled_workout_reminder_suppressed_at).to be_nil
+    end
+  end
+
   it "rejects variable schedules" do
     user, = build_candidate(period: "variable", preferred_time: nil)
 
