@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # workflow_run roda no HEAD do branch por padrão, não no commit que
           # disparou o deploy. Sem isto o AAB publicado poderia ser de um commit
