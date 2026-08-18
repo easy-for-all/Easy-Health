@@ -79,3 +79,10 @@ google-play-service-account.json
 
 # Android push diagnostics reports (may contain masked device logs)
 scripts/android/reports/
+
+# iOS generated artifacts
+web/ios/
+web/out-native/
+**/DerivedData/
+*.xcuserstate
+xcuserdata/
