@@ -75,6 +75,9 @@ RSpec.describe ScheduledWorkoutReminderEligibility do
   end
 
   describe "inactivity suppression" do
+    # The policy is paused by default; these examples describe it turned on.
+    around { |ex| with_env("SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED" => "true") { ex.run } }
+
     it "allows reminders when the last completed workout is 4d23h59 ago" do
       user, = build_candidate
       user.workout_sessions.create!(
@@ -128,6 +131,36 @@ RSpec.describe ScheduledWorkoutReminderEligibility do
 
       expect(result).to be_eligible
       expect(user.health_profile.reload.scheduled_workout_reminder_suppressed_at).to be_nil
+    end
+  end
+
+  describe "inactivity suppression paused" do
+    around { |ex| with_env("SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED" => "false") { ex.run } }
+
+    it "stays eligible after eight days without a completed workout" do
+      user, = build_candidate
+      user.workout_sessions.create!(
+        status: "completed",
+        completion_status: "completed",
+        completed_at: now - 8.days,
+        duration_minutes: 30
+      )
+
+      result = result_for(user)
+
+      expect(result).to be_eligible
+      expect(user.health_profile.reload.scheduled_workout_reminder_suppressed_at).to be_nil
+      expect(user.user_events.where(event_name: "scheduled_workout_reminder_suppressed")).to be_empty
+    end
+
+    it "stays eligible when an inactivity suppression is already persisted" do
+      user, = build_candidate
+      user.health_profile.update_columns( # rubocop:disable Rails/SkipsModelValidations
+        scheduled_workout_reminder_suppressed_at: now - 10.days,
+        scheduled_workout_reminder_suppression_reason: ScheduledWorkoutReminderSuppression::REASON
+      )
+
+      expect(result_for(user)).to be_eligible
     end
   end
 

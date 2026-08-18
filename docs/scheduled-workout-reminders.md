@@ -58,6 +58,18 @@ cron */15 -> orchestration:run_15min
   um push deferido por quiet hours ficou obsoleto.
 - Se o plano foi criado depois do horario de lembrete do dia, a primeira
   ocorrencia valida fica para o proximo dia.
+- Supressao por inatividade (`inactive_5_days`, 5+ dias sem treino concluido)
+  esta PAUSADA por decisao de produto:
+  `SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED` tem default `false`. Com
+  ela desligada nenhuma suppression nova e criada, nenhum
+  `scheduled_workout_reminder_suppressed` e emitido, `resume_if_needed!` nao
+  escreve nem emite, e uma suppression antiga de inatividade deixa de bloquear
+  o lembrete mesmo antes de limpar a linha. Um `suppression_reason` de outra
+  politica continua bloqueando. Voltar para `true` restaura a politica inteira:
+  o codigo estrutural nao foi removido.
+- Pausar a supressao NAO libera push. `push_enabled`,
+  `workout_reminders_enabled`, `notifications_disabled_at`, token ativo,
+  permissao e frequency caps continuam decididos no dispatch.
 
 ## Configuracao
 
@@ -70,7 +82,19 @@ MAKE_WEBHOOK_SECRET=secret
 MAKE_EVENT_SCHEMA_VERSION=2
 MAKE_PUSH_ORCHESTRATION_ENABLED=true
 SCHEDULED_WORKOUT_REMINDER_LEAD_MINUTES=30
+SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED=false
 ```
+
+Limpeza opcional do estado antigo de inatividade (DRY RUN por padrao, e em
+producao exige `CONFIRM_PRODUCTION_SCHEDULED_WORKOUT_INACTIVITY_CLEAR=true`):
+
+```bash
+bin/rails scheduled_workout_reminders:clear_inactivity_suppressions
+DRY_RUN=false bin/rails scheduled_workout_reminders:clear_inactivity_suppressions
+```
+
+Limpa apenas `scheduled_workout_reminder_suppressed_at`, `_reason` e
+`_metadata`. Nenhuma preferencia ou horario e alterado.
 
 `MAKE_WEBHOOK_ALLOWED_EVENTS` nao e mais necessario: a fonte de verdade e
 `config/communication_events.yml`, que ja lista `scheduled_workout_reminder_due`.

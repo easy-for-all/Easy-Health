@@ -15,6 +15,12 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
 
   around { |ex| with_env(scheduled_reminder_make_env) { ex.run } }
 
+  # The inactivity policy is paused by default; examples that describe it turned
+  # on opt in explicitly instead of relying on whatever the default happens to be.
+  around(:each, :inactivity_suppression_on) do |ex|
+    with_env("SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED" => "true") { ex.run }
+  end
+
   before do
     allow(MakeWebhookDeliveryJob).to receive(:perform_later)
   end
@@ -89,7 +95,8 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     expect(reminder_events(user).count).to eq(1)
   end
 
-  it "does not create the due event when inactive suppression is active" do
+  it "does not create the due event when inactive suppression is active",
+     :inactivity_suppression_on do
     user, = build_candidate
     user.workout_sessions.create!(
       status: "completed",
@@ -106,7 +113,8 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     expect(user.health_profile.reload.scheduled_workout_reminder_suppression_reason).to eq("inactive_5_days")
   end
 
-  it "suppresses inactive users without creating notification preferences" do
+  it "suppresses inactive users without creating notification preferences",
+     :inactivity_suppression_on do
     user, = build_candidate(preferences: false)
     user.workout_sessions.create!(
       status: "completed",
@@ -120,6 +128,28 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     expect(user.reload.notification_preferences).to be_nil
     expect(reminder_events(user)).to be_empty
     expect(suppression_events(user).count).to eq(1)
+  end
+
+  # The reason the policy was paused: a long-inactive user with a preferred time
+  # is exactly who the reminder is for.
+  it "creates the due event for a long-inactive user while the policy is paused" do
+    user, = build_candidate(preferred_time: "07:00")
+    user.workout_sessions.create!(
+      status: "completed",
+      completion_status: "completed",
+      completed_at: now - 20.days,
+      duration_minutes: 30
+    )
+
+    stats = with_env("SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED" => "false") do
+      described_class.perform_now(now: now)
+    end
+
+    expect(stats[:event_created]).to eq(1)
+    expect(stats[:suppressed]).to eq(0)
+    expect(reminder_events(user).count).to eq(1)
+    expect(suppression_events(user)).to be_empty
+    expect(user.health_profile.reload.scheduled_workout_reminder_suppressed_at).to be_nil
   end
 
   it "creates reminder numbers 1, 2 and 3, then never creates reminder 4" do
@@ -137,7 +167,8 @@ RSpec.describe ScheduledWorkoutReminderSchedulerJob, type: :job do
     expect(reminder_events(user).count).to eq(3)
   end
 
-  it "does not alter reminder numbering or dedupe state when suppression blocks a due reminder" do
+  it "does not alter reminder numbering or dedupe state when suppression blocks a due reminder",
+     :inactivity_suppression_on do
     user, plan = build_candidate
     create_reminder_event(user, plan, local_date: "2026-07-19", reminder_number: 1)
     create_reminder_event(user, plan, local_date: "2026-07-20", reminder_number: 2)

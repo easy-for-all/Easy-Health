@@ -40,6 +40,33 @@ namespace :scheduled_workout_reminders do
     puts JSON.pretty_generate(JSON.parse(JSON.generate(payload)))
   end
 
+  desc "Clear suppressions caused only by the inactivity policy. DRY RUN by default; use DRY_RUN=false to write"
+  task clear_inactivity_suppressions: :environment do
+    dry_run = ActiveModel::Type::Boolean.new.cast(ENV.fetch("DRY_RUN", "true"))
+    scheduled_workout_reminder_guard_production_inactivity_clear! unless dry_run
+
+    scope = HealthProfile.where(
+      scheduled_workout_reminder_suppression_reason: ScheduledWorkoutReminderSuppression::INACTIVITY_REASONS
+    )
+    found = scope.count
+
+    # Only the three audit columns. No callbacks, so no preference, schedule or
+    # opt-out field can be touched from here.
+    cleared = if dry_run
+      0
+    else
+      scope.update_all( # rubocop:disable Rails/SkipsModelValidations
+        scheduled_workout_reminder_suppressed_at: nil,
+        scheduled_workout_reminder_suppression_reason: nil,
+        scheduled_workout_reminder_suppression_metadata: {},
+        updated_at: Time.current
+      )
+    end
+
+    puts "[scheduled_workout_reminders:clear_inactivity_suppressions] " \
+         "dry_run=#{dry_run} found=#{found} cleared=#{cleared}"
+  end
+
   def scheduled_workout_reminder_parse_now(value)
     return Time.current if value.blank?
 
@@ -67,5 +94,12 @@ namespace :scheduled_workout_reminders do
     return if ActiveModel::Type::Boolean.new.cast(ENV.fetch("CONFIRM_PRODUCTION_SCHEDULED_WORKOUT_REMINDER_MANUAL_TEST", "false"))
 
     abort("Refusing production manual test without CONFIRM_PRODUCTION_SCHEDULED_WORKOUT_REMINDER_MANUAL_TEST=true")
+  end
+
+  def scheduled_workout_reminder_guard_production_inactivity_clear!
+    return unless Rails.env.production?
+    return if ActiveModel::Type::Boolean.new.cast(ENV.fetch("CONFIRM_PRODUCTION_SCHEDULED_WORKOUT_INACTIVITY_CLEAR", "false"))
+
+    abort("Refusing production inactivity suppression cleanup without CONFIRM_PRODUCTION_SCHEDULED_WORKOUT_INACTIVITY_CLEAR=true")
   end
 end

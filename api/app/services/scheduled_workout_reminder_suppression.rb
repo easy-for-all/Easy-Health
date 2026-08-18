@@ -5,6 +5,10 @@ class ScheduledWorkoutReminderSuppression
   RESUME_REASON = "workout_completed_after_inactivity_suppression".freeze
   THRESHOLD_DAYS = 5
 
+  # Reasons that belong to the inactivity policy. While the policy is paused, a
+  # suppression carrying any of them is treated as if it were not there.
+  INACTIVITY_REASONS = [ REASON ].freeze
+
   Result = Struct.new(
     :suppressed,
     :transitioned,
@@ -22,6 +26,15 @@ class ScheduledWorkoutReminderSuppression
     end
   end
 
+  # Kill switch for the whole inactivity policy. Default false: after deploy the
+  # policy is already paused, with no production variable to set. Turning it on
+  # restores the previous behaviour untouched.
+  def self.inactivity_enabled?
+    ActiveModel::Type::Boolean.new.cast(
+      ENV.fetch("SCHEDULED_WORKOUT_INACTIVITY_SUPPRESSION_ENABLED", "false")
+    )
+  end
+
   def initialize(user:, health_profile:, now: Time.current)
     @user = user
     @health_profile = health_profile
@@ -29,6 +42,8 @@ class ScheduledWorkoutReminderSuppression
   end
 
   def suppress_if_needed!(schedule:)
+    return paused_result unless self.class.inactivity_enabled?
+
     health_profile.with_lock do
       health_profile.reload
       last_completed = last_completed_workout_at
@@ -61,6 +76,8 @@ class ScheduledWorkoutReminderSuppression
   end
 
   def resume_if_needed!
+    return paused_result unless self.class.inactivity_enabled?
+
     health_profile.with_lock do
       health_profile.reload
       suppressed_at = health_profile.scheduled_workout_reminder_suppressed_at
@@ -103,6 +120,16 @@ class ScheduledWorkoutReminderSuppression
   private
 
   attr_reader :user, :health_profile, :now
+
+  # Policy paused: a read-only path. Nothing is written, nothing is emitted, and
+  # an inactivity suppression already on the row stops blocking the reminder —
+  # no cleanup needed first. A reason belonging to some other policy still
+  # counts: we paused one policy, not every one of them.
+  def paused_result
+    reason = health_profile.scheduled_workout_reminder_suppression_reason
+
+    result(suppressed: reason.present? && INACTIVITY_REASONS.exclude?(reason))
+  end
 
   def inactive?(last_completed)
     last_completed.present? && last_completed <= now - THRESHOLD_DAYS.days
