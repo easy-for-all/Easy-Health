@@ -915,7 +915,12 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
       expect(json["sent"]).to be(true)
     end
 
-    it "skips a 07:00 workout reminder made stale by quiet hours" do
+    # A scheduled reminder may cross quiet hours, but ONLY inside the explicit
+    # reminder_due_at -> target_workout_at window. This event carries no
+    # reminder_due_at, so there is no window to grant the exception on and the
+    # conservative behaviour stands: deferring would release at 07:00, which is
+    # already the workout time.
+    it "skips a 07:00 workout reminder with no explicit window, made stale by quiet hours" do
       event = user.user_events.create!(
         event_name: "scheduled_workout_reminder_due",
         occurred_at: Time.current,
@@ -962,6 +967,439 @@ RSpec.describe "Api::V1::Integrations::Make::PushDispatches", type: :request do
 
       expect(json["sent"]).to be(true)
       expect(PushDispatch.last.status).to eq("provider_accepted")
+    end
+  end
+
+  # Regression suite for the user 529 incident. A scheduled workout reminder is
+  # the consequence of a time the USER picked (07:00 workout, reminder 06:30),
+  # so it obeys different timing rules from a campaign push:
+  #
+  #   6609 — redrived 39h late and still delivered  -> stale_scheduled_reminder
+  #   7113 — deferred by quiet hours onto its own target -> may cross instead
+  #   7604 — blocked by the cooldown 6609 consumed  -> exempt from cooldown/cap
+  #
+  # None of that waives consent: every guard below still applies.
+  describe "scheduled workout reminder" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    let!(:token) { create(:device_token, user: user, permission_status: "granted") }
+    let(:zone) { ActiveSupport::TimeZone["America/Sao_Paulo"] }
+    let(:due_at) { zone.local(2026, 7, 20, 6, 30) }
+    let(:target_at) { zone.local(2026, 7, 20, 7, 0) }
+
+    before { user.update!(time_zone: "America/Sao_Paulo") }
+
+    # The real shape produced by ScheduledWorkoutReminderEventEmitter: the event
+    # is born at reminder time carrying both instants.
+    def scheduled_event(activation: nil, payload_json: {}, occurred_at: due_at)
+      activation ||= { reminder_due_at: due_at.iso8601, target_workout_at: target_at.iso8601 }
+      user.user_events.create!(
+        event_name: "scheduled_workout_reminder_due",
+        occurred_at: occurred_at,
+        metadata: { campaign: "first_workout_scheduled_reminder_v1", activation: activation },
+        payload_json: payload_json
+      )
+    end
+
+    # notification_type/route mirror config/communication_events.yml, and Make
+    # echoes the numeric event_id back on the dispatch call.
+    def scheduled_payload(event, overrides = {})
+      valid_payload({
+        event_id: event.id.to_s,
+        notification_type: "activation_reminder",
+        campaign_key: "scheduled_workout_reminder_due",
+        route: "/workouts/ready",
+        data: { "event_name" => "scheduled_workout_reminder_due" }
+      }.merge(overrides))
+    end
+
+    def seed_delivered(dispatched_at:, user_event: nil, notification_type: "activation_reminder")
+      PushDispatch.create!(
+        user: user, user_event: user_event, notification_type: notification_type,
+        status: "provider_accepted", idempotency_key: "seed:#{SecureRandom.hex(4)}",
+        dispatched_at: dispatched_at
+      )
+    end
+
+    def seed_delivered_scheduled(dispatched_at:)
+      seed_delivered(dispatched_at: dispatched_at, user_event: scheduled_event(occurred_at: dispatched_at))
+    end
+
+    def dispatch_at(time, payload, quiet_hours: "true")
+      travel_to(time) do
+        with_env("PUSH_QUIET_HOURS_ENABLED" => quiet_hours) { post_dispatch(payload) }
+      end
+    end
+
+    describe "quiet hours inside the explicit window" do
+      # Event 7113: the user asked to train at 07:00 and the product warns at
+      # 06:30. Deferring to 07:00 delivers a reminder for a workout that has
+      # already started, so inside the window quiet hours step aside.
+      it "delivers a 06:30 reminder for a 07:00 workout during quiet hours" do
+        event = scheduled_event
+
+        dispatch_at(due_at, scheduled_payload(event))
+
+        expect(json).to include("status" => "provider_accepted", "sent" => true)
+        expect(json["skip_reason"]).to be_nil
+        expect(json["deferred"]).to be_nil.or be(false)
+        dispatch = PushDispatch.last
+        expect(dispatch.status).to eq("provider_accepted")
+        expect(dispatch.skip_reason).to be_nil
+      end
+
+      it "still delivers on the last minute before the workout" do
+        event = scheduled_event
+
+        dispatch_at(target_at - 1.minute, scheduled_payload(event))
+
+        expect(json["sent"]).to be(true)
+      end
+
+      # Before reminder_due_at there is no window yet, so nothing is waived and
+      # the existing timing behaviour is preserved untouched.
+      it "grants no quiet-hours exception before the reminder is due" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        event = scheduled_event
+
+        dispatch_at(due_at - 30.minutes, scheduled_payload(event))
+
+        expect(json["sent"]).to be(false)
+        expect(json["status"]).to eq("skipped")
+        expect(json["skip_reason"]).to eq("stale_after_quiet_hours")
+      end
+
+      it "leaves quiet hours in place for a non-scheduled push at the same hour" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+
+        dispatch_at(due_at, valid_payload)
+
+        expect(json["status"]).to eq("deferred")
+        expect(json["defer_reason"]).to eq("quiet_hours")
+      end
+    end
+
+    describe "freshness gate" do
+      # Event 6609: born 16/08 06:30, first delivery attempt stuck, redriven
+      # 17/08 21:30 and delivered ~39h late. 21:30 is outside quiet hours, so
+      # nothing but this gate stands between the redrive and FCM.
+      it "skips a redrive attempted after the workout started" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        event = scheduled_event
+
+        dispatch_at(target_at + 1.day + 14.hours + 30.minutes, scheduled_payload(event))
+
+        expect(json).to include(
+          "status" => "skipped", "skip_reason" => "stale_scheduled_reminder", "sent" => false
+        )
+        dispatch = PushDispatch.last
+        expect(dispatch.status).to eq("skipped")
+        expect(dispatch.skip_reason).to eq("stale_scheduled_reminder")
+        expect(dispatch.dispatched_at).to be_nil
+        expect(dispatch.provider_accepted_at).to be_nil
+      end
+
+      # What actually protects a real redrive is the correlation to the event,
+      # not a string Make happens to send. Here campaign_key and data name
+      # something else entirely and the gate must still hold.
+      it "recognises the reminder through the UserEvent alone" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        event = scheduled_event
+        payload = scheduled_payload(
+          event, campaign_key: "generic_campaign_v1", data: { "workout_id" => "456" }
+        )
+
+        dispatch_at(target_at + 1.day, payload)
+
+        dispatch = PushDispatch.last
+        expect(dispatch.user_event_id).to eq(event.id)
+        expect(dispatch.skip_reason).to eq("stale_scheduled_reminder")
+        expect(dispatch.dispatched_at).to be_nil
+      end
+
+      it "skips exactly at the workout time" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        event = scheduled_event
+
+        dispatch_at(target_at, scheduled_payload(event))
+
+        expect(json["skip_reason"]).to eq("stale_scheduled_reminder")
+      end
+
+      # A 09:00 workout asked for at 06:00: still inside quiet hours and before
+      # the 08:30 window, so it defers to 07:00 — legitimately, since 07:00 is
+      # before the workout. If the release sweep then runs late, the row must
+      # NOT be sent: by 10:00 the workout has already started.
+      it "skips a deferred row whose release sweep ran after the workout time" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        event = scheduled_event(
+          activation: {
+            reminder_due_at: zone.local(2026, 7, 20, 8, 30).iso8601,
+            target_workout_at: zone.local(2026, 7, 20, 9, 0).iso8601
+          }
+        )
+        dispatch_at(zone.local(2026, 7, 20, 6, 0), scheduled_payload(event))
+        expect(json["status"]).to eq("deferred")
+
+        travel_to(zone.local(2026, 7, 20, 10, 0)) do
+          stats = Make::PushDispatchRequest.dispatch_deferred(now: Time.current)
+          expect(stats[:skipped]).to eq(1)
+        end
+
+        dispatch = PushDispatch.last
+        expect(dispatch.status).to eq("skipped")
+        expect(dispatch.skip_reason).to eq("stale_scheduled_reminder")
+        expect(dispatch.dispatched_at).to be_nil
+      end
+
+      # No target means no basis to judge staleness. Nothing is invented and no
+      # exception is granted: the conservative path stands.
+      it "neither crashes nor waives anything when target_workout_at is missing" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        event = scheduled_event(activation: { reminder_due_at: due_at.iso8601 })
+
+        dispatch_at(due_at, scheduled_payload(event))
+
+        expect(response).to have_http_status(:ok)
+        expect(json["sent"]).to be(false)
+        expect(json["status"]).to eq("deferred")
+        expect(json["skip_reason"]).to be_nil
+      end
+
+      it "ignores an unparseable target instead of blowing up" do
+        event = scheduled_event(
+          activation: { reminder_due_at: due_at.iso8601, target_workout_at: "not-a-time" }
+        )
+
+        dispatch_at(due_at, scheduled_payload(event), quiet_hours: "false")
+
+        expect(response).to have_http_status(:ok)
+        expect(json["sent"]).to be(true)
+      end
+    end
+
+    # The schema-2 snapshot MakeWebhookClient persists is a canonical source in
+    # its own right: if metadata is missing the instants but the snapshot has
+    # them, the gates must NOT go blind and let a stale push through.
+    describe "timestamps read from the persisted schema-2 payload" do
+      def snapshot_event
+        scheduled_event(
+          activation: { reminder_number: 1 },
+          payload_json: {
+            "schema_version" => 2,
+            "context" => {
+              "activation" => {
+                "reminder_due_at" => due_at.iso8601,
+                "target_workout_at" => target_at.iso8601
+              }
+            }
+          }
+        )
+      end
+
+      it "recognises the delivery window" do
+        dispatch_at(due_at, scheduled_payload(snapshot_event))
+
+        expect(json["sent"]).to be(true)
+      end
+
+      it "recognises a stale redrive" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+
+        dispatch_at(target_at + 1.day + 14.hours, scheduled_payload(snapshot_event))
+
+        expect(json["skip_reason"]).to eq("stale_scheduled_reminder")
+      end
+
+      it "falls back to the schema-1 metadata block in the snapshot" do
+        expect_any_instance_of(FirebasePushService).not_to receive(:deliver)
+        event = scheduled_event(
+          activation: { reminder_number: 1 },
+          payload_json: {
+            "schema_version" => 1,
+            "metadata" => { "activation" => { "target_workout_at" => target_at.iso8601 } }
+          }
+        )
+
+        dispatch_at(target_at + 1.day, scheduled_payload(event))
+
+        expect(json["skip_reason"]).to eq("stale_scheduled_reminder")
+      end
+    end
+
+    describe "engagement cooldown and weekly cap" do
+      # Event 7604: the late delivery of 6609 at 21:30 consumed the 20h cooldown
+      # and silenced the next morning's reminder.
+      it "is not blocked by an engagement push delivered 9 hours earlier" do
+        event = scheduled_event
+
+        travel_to(due_at) do
+          seed_delivered(dispatched_at: 9.hours.ago)
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(scheduled_payload(event)) }
+        end
+
+        expect(json["sent"]).to be(true)
+        expect(json["skip_reason"]).to be_nil
+      end
+
+      # MAXIMUM_REMINDERS = 3 is the journey's own limit; the generic 2-per-7-days
+      # cap would make the third reminder unreachable.
+      it "delivers the third reminder of the journey" do
+        event = scheduled_event
+
+        travel_to(due_at) do
+          seed_delivered_scheduled(dispatched_at: 2.days.ago)
+          seed_delivered_scheduled(dispatched_at: 1.day.ago)
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(scheduled_payload(event)) }
+        end
+
+        expect(json["sent"]).to be(true)
+        expect(ScheduledWorkoutReminderEligibility::MAXIMUM_REMINDERS).to eq(3)
+      end
+
+      it "does not spend another engagement push's cooldown" do
+        travel_to(zone.local(2026, 7, 20, 10, 0)) do
+          seed_delivered_scheduled(dispatched_at: 1.hour.ago)
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+        end
+
+        expect(json["sent"]).to be(true)
+      end
+
+      it "does not spend another engagement push's weekly cap" do
+        travel_to(zone.local(2026, 7, 20, 10, 0)) do
+          seed_delivered_scheduled(dispatched_at: 2.days.ago)
+          seed_delivered_scheduled(dispatched_at: 3.days.ago)
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+        end
+
+        expect(json["sent"]).to be(true)
+      end
+
+      # The exemption is surgical: an ordinary engagement push delivered an hour
+      # ago must still hold the cooldown for everybody else.
+      it "keeps the cooldown for an ordinary engagement push" do
+        travel_to(zone.local(2026, 7, 20, 10, 0)) do
+          seed_delivered(dispatched_at: 1.hour.ago)
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+        end
+
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+
+      it "keeps the weekly cap for an ordinary engagement push" do
+        travel_to(zone.local(2026, 7, 20, 10, 0)) do
+          seed_delivered(dispatched_at: 2.days.ago)
+          seed_delivered(dispatched_at: 3.days.ago)
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+        end
+
+        expect(json["skip_reason"]).to eq("frequency_capped")
+      end
+
+      # A legacy row cannot be classified after the fact, so it keeps counting
+      # exactly as it does today. No migration, no historical guessing.
+      it "keeps counting a delivered row with no correlated event" do
+        travel_to(zone.local(2026, 7, 20, 10, 0)) do
+          seed_delivered(dispatched_at: 1.hour.ago, user_event: nil)
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") { post_dispatch(valid_payload) }
+        end
+
+        expect(json["skip_reason"]).to eq("cooldown_active")
+      end
+    end
+
+    # Timing is the ONLY thing this change relaxes. Every consent guard below is
+    # evaluated with a reminder sitting inside its valid window.
+    describe "consent guards are never waived" do
+      def dispatch_in_window
+        dispatch_at(due_at, scheduled_payload(scheduled_event))
+      end
+
+      it "skips no_preferences when the user never completed the consent flow" do
+        user.notification_preferences&.destroy!
+        user.reload
+
+        dispatch_in_window
+
+        expect(json["skip_reason"]).to eq("no_preferences")
+      end
+
+      it "skips global_opt_out when push is disabled" do
+        user.notification_preferences!.update!(push_enabled: false)
+
+        dispatch_in_window
+
+        expect(json["skip_reason"]).to eq("global_opt_out")
+      end
+
+      it "skips global_opt_out when notifications were disabled" do
+        user.notification_preferences!.update!(notifications_disabled_at: Time.current)
+
+        dispatch_in_window
+
+        expect(json["skip_reason"]).to eq("global_opt_out")
+      end
+
+      it "skips category_opt_out when workout reminders are off" do
+        user.notification_preferences!.update!(workout_reminders_enabled: false)
+
+        dispatch_in_window
+
+        expect(json["skip_reason"]).to eq("category_opt_out")
+      end
+
+      it "skips no_active_token when no device is registered" do
+        user.device_tokens.destroy_all
+
+        dispatch_in_window
+
+        expect(json["skip_reason"]).to eq("no_active_token")
+      end
+
+      it "skips permission_denied when the device refused notifications" do
+        token.update!(permission_status: "denied")
+
+        dispatch_in_window
+
+        expect(json["skip_reason"]).to eq("permission_denied")
+      end
+
+      it "rejects an invalid payload" do
+        dispatch_at(due_at, scheduled_payload(scheduled_event, title: ""))
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json["skip_reason"]).to eq("invalid_payload")
+      end
+
+      it "rejects an unauthenticated request" do
+        event = scheduled_event
+        travel_to(due_at) do
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") do
+            post_dispatch(scheduled_payload(event), headers: auth_headers("wrong-token"))
+          end
+        end
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it "sends only once for the same event, campaign, user and type" do
+        expect_any_instance_of(FirebasePushService).to receive(:deliver).once.and_return(
+          FirebasePushService::Result.new(status: "sent", message_id: "mock/1", invalid_token: false)
+        )
+        event = scheduled_event
+        payload = scheduled_payload(event)
+
+        travel_to(due_at) do
+          with_env("PUSH_QUIET_HOURS_ENABLED" => "true") do
+            post_dispatch(payload)
+            post_dispatch(payload)
+          end
+        end
+
+        expect(json["status"]).to eq("duplicate")
+        expect(PushDispatch.where(user_id: user.id).count).to eq(1)
+      end
     end
   end
 

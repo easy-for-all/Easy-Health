@@ -180,9 +180,19 @@ usa `skip_reason`: o backend guarda a decisão/copy/campanha em `PushDispatch` e
 um sweep próprio libera depois de `next_allowed_at`. Skips continuam terminais
 (`global_opt_out`, `no_active_token`, `stale_after_quiet_hours`, etc.).
 
-Para `scheduled_workout_reminder_due`, se o fim de quiet hours for igual ou
-posterior ao `activation.target_workout_at` persistido quando o evento nasceu, o
-dispatch vira `skipped/stale_after_quiet_hours` e não envia lembrete obsoleto.
+Para `scheduled_workout_reminder_due` existem **dois** motivos distintos, que não
+devem ser confundidos:
+
+- `stale_scheduled_reminder` — no momento da tentativa o `current_time` já é
+  igual ou posterior ao `activation.target_workout_at`. O conteúdo perdeu a
+  validade; nem redrive, nem retry, nem release de deferred pode chegar ao FCM.
+- `stale_after_quiet_hours` — o push ainda é válido agora, mas o **fim** de quiet
+  hours cairia igual ou depois do `target_workout_at`, então adiar não adianta.
+
+Dentro da janela explícita `activation.reminder_due_at → target_workout_at` esse
+lembrete atravessa quiet hours em vez de ser adiado: o horário foi escolhido pelo
+usuário. Fora dela, quiet hours vale normalmente. Detalhes em
+`docs/scheduled-workout-reminders.md`.
 
 ---
 

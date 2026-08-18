@@ -78,7 +78,8 @@ Chave = `event_id + campaign_key + user_id + notification_type` (derivada do cor
 ```
 `skip_reason` ∈ `orchestration_disabled`, `user_not_found`, `global_opt_out`,
 `category_opt_out`, `no_active_token`, `permission_denied`, `cooldown_active`,
-`frequency_capped`, `rate_limited`, `invalid_payload`, `duplicate`.
+`frequency_capped`, `rate_limited`, `invalid_payload`, `duplicate`,
+`stale_after_quiet_hours`, `stale_scheduled_reminder`.
 `user_not_found` volta como skip neutro (200) de propósito, para não permitir
 enumeração de usuários. `dispatch_id` só aparece quando a linha chegou a ser
 criada (skips anteriores à persistência não têm id).

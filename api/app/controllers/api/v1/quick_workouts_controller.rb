@@ -248,8 +248,7 @@ module Api
           # Quando o usuário escolheu grupos no seletor, restringe a musculação a eles.
           scope = scope.where(muscle_group: muscle_groups) if exercise_type == "musculacao" && explicit_groups
           scope = apply_location_filter(scope, location)
-          fav_priority = fav_ids.any? ? Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END") : Arel.sql("1")
-          scope = scope.order(fav_priority, gif_presence_order, :id)
+          scope = scope.order(fav_priority_order(fav_ids), gif_presence_order, :id)
           scope.limit(exercise_count).to_a
         else
           chosen = []
@@ -257,8 +256,7 @@ module Api
           muscle_groups.each do |group|
             group_scope = Exercise.browseable.where(exercise_type: "musculacao", muscle_group: group)
             group_scope = apply_location_filter(group_scope, location)
-            fav_priority = fav_ids.any? ? Arel.sql("CASE WHEN id IN (#{fav_ids.map(&:to_i).join(',')}) THEN 0 ELSE 1 END") : Arel.sql("1")
-            group_scope = group_scope.order(fav_priority, gif_presence_order, :id).limit(per_group)
+            group_scope = group_scope.order(fav_priority_order(fav_ids), gif_presence_order, :id).limit(per_group)
             chosen.concat(group_scope.to_a)
             break if chosen.size >= exercise_count
           end
@@ -276,6 +274,12 @@ module Api
 
       def gif_presence_order
         Arel.sql("CASE WHEN gif_url LIKE '/exercise-images/gifdotreino/%.gif' THEN 0 ELSE 1 END")
+      end
+
+      def fav_priority_order(fav_ids)
+        return Arel.sql("1") if fav_ids.empty?
+
+        Arel.sql(ApplicationRecord.sanitize_sql_array([ "CASE WHEN id IN (?) THEN 0 ELSE 1 END", fav_ids.map(&:to_i) ]))
       end
 
       def workout_name(modality, groups, difficulty)

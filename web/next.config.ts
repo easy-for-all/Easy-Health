@@ -4,6 +4,17 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const internalApiUrl = process.env.NEXT_INTERNAL_API_URL;
 
+// O browser fala com a API cross-origin (api.easyhealth.art), então ela precisa
+// estar explicitamente no connect-src. Derivado do mesmo build arg que o client
+// usa em runtime para não divergir em staging; o literal é só o fallback de prod.
+const apiOrigin = (() => {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_API_URL ?? "").origin;
+  } catch {
+    return "https://api.easyhealth.art";
+  }
+})();
+
 const securityHeaders = [
   // Prevents HTTPS downgrade attacks
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
@@ -27,11 +38,34 @@ const securityHeaders = [
       `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.clarity.ms https://scripts.clarity.ms https://googleads.g.doubleclick.net`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://www.google.com https://www.google.com.br https://*.googletagmanager.com https://googleads.g.doubleclick.net https://c.clarity.ms https://api.easyhealth.art https://*.amazonaws.com",
-      `connect-src 'self' https: https://www.google-analytics.com https://googleads.g.doubleclick.net https://*.sentry.io https://*.clarity.ms${process.env.NODE_ENV === "development" ? " http://localhost:*" : ""}`,
+      // Sem o `https:` genérico que existia aqui: ele liberava QUALQUER host HTTPS
+      // e tornava decorativa a allowlist ao lado. A lista abaixo é montada a
+      // partir dos destinos realmente usados pelo client.
+      [
+        "connect-src 'self'",
+        apiOrigin,
+        // GA4 usa endpoints regionais (region1.google-analytics.com etc.).
+        "https://www.google-analytics.com https://*.google-analytics.com",
+        "https://www.googletagmanager.com",
+        // Conversões do Google Ads.
+        "https://googleads.g.doubleclick.net https://www.google.com https://www.google.com.br",
+        "https://*.sentry.io",
+        "https://*.clarity.ms",
+        // Beacon do Cloudflare Web Analytics, injetado na borda (o script já
+        // está liberado em script-src).
+        "https://cloudflareinsights.com",
+        process.env.NODE_ENV === "development" ? "http://localhost:*" : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
       "font-src 'self'",
       "worker-src blob: 'self'",
       "object-src 'none'",
       "frame-ancestors 'none'",
+      // Impede que uma <base> injetada reescreva a resolução de URLs relativas.
+      "base-uri 'self'",
+      // Impede que um form injetado poste para host externo.
+      "form-action 'self'",
     ].join("; "),
   },
 ];

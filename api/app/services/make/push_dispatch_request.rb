@@ -3,7 +3,8 @@ module Make
   # template); this service is the technical gate + sender:
   #
   #   flag -> payload validation -> resolve user (by user_id, never token)
-  #   -> idempotency -> preferences/opt-out/permission -> resolve tokens
+  #   -> rate limit -> idempotency -> preferences/opt-out/permission
+  #   -> scheduled-reminder freshness -> engagement frequency
   #   -> quiet-hours defer OR FcmDispatcher -> persist PushDispatch + audit
   #   -> structured response.
   #
@@ -20,7 +21,9 @@ module Make
     REMINDER_CATEGORIES = %w[workout_reminder activation_reminder].freeze
 
     # Engagement categories subject to the frequency cap + cooldown. progress_update
-    # (first_workout_completed), transactional and account_security are exempt.
+    # (first_workout_completed), transactional and account_security are exempt,
+    # and so is scheduled_workout_reminder_due — a time the user picked, capped
+    # by its own MAXIMUM_REMINDERS instead.
     ENGAGEMENT_CATEGORIES = %w[activation_reminder workout_reminder].freeze
     ENGAGEMENT_WEEKLY_CAP = 2
     ENGAGEMENT_WEEKLY_WINDOW = 7.days
@@ -143,10 +146,10 @@ module Make
       return duplicate(dispatch) if dispatch.delivered? || dispatch.status == "skipped"
       return deferred_response(dispatch, user) if dispatch.deferred?
 
-      reason = preference_skip_reason(user) || frequency_skip_reason(user)
+      reason = skip_reason_for(user, dispatch)
       return skip_dispatch(user, dispatch, reason) if reason
 
-      deferred_until = quiet_hours_next_allowed(user)
+      deferred_until = quiet_hours_next_allowed(user, dispatch)
       if deferred_until
         return skip_dispatch(user, dispatch, "stale_after_quiet_hours") if stale_after_quiet_hours?(dispatch, deferred_until)
 
@@ -165,13 +168,17 @@ module Make
       return :missing_dispatch unless dispatch
 
       user = dispatch.user
-      reason = preference_skip_reason(user) || frequency_skip_reason(user)
+      # The freshness gate inside skip_reason_for already covers "the workout
+      # has started" for a scheduled reminder released late, with the reason
+      # that says so (stale_scheduled_reminder). The operational result stays
+      # :skipped — the specific motive lives on the row and in the audit event.
+      reason = skip_reason_for(user, dispatch)
       if reason
         skip_dispatch(user, dispatch, reason)
         return :skipped
       end
 
-      deferred_until = quiet_hours_next_allowed(user)
+      deferred_until = quiet_hours_next_allowed(user, dispatch)
       if deferred_until
         if stale_after_quiet_hours?(dispatch, deferred_until)
           skip_dispatch(user, dispatch, "stale_after_quiet_hours")
@@ -180,11 +187,6 @@ module Make
 
         defer_dispatch(user, dispatch, deferred_until)
         return :deferred
-      end
-
-      if stale_after_quiet_hours?(dispatch, current_time)
-        skip_dispatch(user, dispatch, "stale_after_quiet_hours")
-        return :stale_after_quiet_hours
       end
 
       response = perform_dispatch(dispatch, user)
@@ -312,6 +314,18 @@ module Make
       { "route" => route, "campaign_key" => campaign_key.presence, "data" => extra_data }.compact
     end
 
+    # --- Skip chain ---------------------------------------------------------
+
+    # The order every path (fresh request and deferred release) evaluates:
+    # consent first, then whether a scheduled reminder is still valid content,
+    # then the engagement frequency rules. Quiet hours come after this, in the
+    # caller, because they defer rather than skip.
+    def skip_reason_for(user, dispatch)
+      preference_skip_reason(user) ||
+        scheduled_reminder_freshness_skip_reason(dispatch) ||
+        frequency_skip_reason(user, dispatch)
+    end
+
     # --- Preferences / opt-out ---------------------------------------------
 
     def preference_skip_reason(user)
@@ -332,18 +346,40 @@ module Make
 
     # --- Frequency (engagement only, reuses push_dispatches) ----------------
 
-    def frequency_skip_reason(user)
+    def frequency_skip_reason(user, dispatch)
       return nil unless engagement_category?
+      # A scheduled reminder is the consequence of a time the USER picked, not
+      # of a campaign we decided to run. Its own journey limit
+      # (ScheduledWorkoutReminderEligibility::MAXIMUM_REMINDERS = 3) is enforced
+      # where the event is born; the generic 2-per-7-days cap would make the
+      # third reminder impossible, and the 20h cooldown would let an unrelated
+      # push silence the hour the user asked to be woken at.
+      return nil if scheduled_workout_reminder_dispatch?(dispatch)
       return nil if test_bypass(user).frequency
 
       delivered = PushDispatch
                   .where(user_id: user.id, notification_type: ENGAGEMENT_CATEGORIES,
                          status: PushDispatch::DELIVERED_STATUSES)
+                  .where.not(id: scheduled_reminder_dispatch_ids(user))
 
       return "cooldown_active" if delivered.where("dispatched_at > ?", ENGAGEMENT_COOLDOWN.ago).exists?
       return "frequency_capped" if delivered.where("dispatched_at > ?", ENGAGEMENT_WEEKLY_WINDOW.ago).count >= ENGAGEMENT_WEEKLY_CAP
 
       nil
+    end
+
+    # A delivered scheduled reminder spends NOBODY's quota — not its own, and
+    # not another engagement push's. Correlation goes through the real
+    # association, never the campaign text Make is free to version.
+    #
+    # INNER JOIN on purpose: a legacy row with no user_event_id cannot be
+    # classified after the fact, so it stays out of this list and keeps counting
+    # exactly as it does today. No migration, no historical guessing.
+    def scheduled_reminder_dispatch_ids(user)
+      PushDispatch.where(user_id: user.id)
+                  .joins(:user_event)
+                  .where(user_events: { event_name: ScheduledWorkoutReminderEligibility::EVENT_NAME })
+                  .select(:id)
     end
 
     def engagement_category?
@@ -355,17 +391,22 @@ module Make
     # A hard safety gate: EasyHealth will not wake someone during quiet hours
     # even if Make asks. This is not terminal: the Make decision is already
     # persisted as PushDispatch and a backend sweep releases it later.
-    def quiet_hours_next_allowed(user)
+    def quiet_hours_next_allowed(user, dispatch)
       return nil unless PushQuietHours.enabled?
       # Admin smoke test: go straight to the FCM attempt instead of deferring.
       # The window itself is untouched — this is a dispatch decision, so normal
       # users keep the full 22:00-07:00 protection.
       return nil if test_bypass(user).quiet_hours
+      return nil if scheduled_reminder_delivery_window?(dispatch)
       return nil if PushQuietHours.allowed?(user: user, at: current_time)
 
       PushQuietHours.next_allowed_at(user: user, at: current_time)
     end
 
+    # The generic rule: deferring this push past quiet hours would release it
+    # after the workout was supposed to start, so there is nothing left to
+    # remind about. Distinct from stale_scheduled_reminder, which is about the
+    # target having ALREADY passed at the moment of the attempt.
     def stale_after_quiet_hours?(dispatch, release_at)
       return false unless scheduled_workout_reminder_dispatch?(dispatch)
 
@@ -373,21 +414,78 @@ module Make
       target.present? && release_at >= target
     end
 
+    # --- Scheduled workout reminder ----------------------------------------
+    #
+    # This reminder is not a campaign: it exists because the user explicitly
+    # chose a workout time, and the product warns them a lead time before it.
+    # That gives it two exceptions no other push gets (crossing quiet hours
+    # inside its own window, and ignoring the engagement cooldown/cap) and one
+    # extra restriction (it is never delivered after the workout time).
+    #
+    # Consent, opt-out, active token and permission are NEVER waived.
+
     def scheduled_workout_reminder_dispatch?(dispatch)
       dispatch&.user_event&.event_name == ScheduledWorkoutReminderEligibility::EVENT_NAME ||
         campaign_key == ScheduledWorkoutReminderEligibility::EVENT_NAME ||
         data_event_name == ScheduledWorkoutReminderEligibility::EVENT_NAME
     end
 
+    # "Your workout starts in 30 minutes" stops being true at the workout time.
+    # A late redrive — Make stuck for hours, a backend retry, a deferred row
+    # released the next evening — must NEVER reach FCM. The event stays on
+    # record and auditable; only the push is stopped.
+    def scheduled_reminder_freshness_skip_reason(dispatch)
+      return nil unless scheduled_workout_reminder_dispatch?(dispatch)
+
+      target = target_workout_at(dispatch)
+      return nil if target.blank?
+
+      "stale_scheduled_reminder" if current_time >= target
+    end
+
+    # The only window where quiet hours step aside: between the moment the
+    # reminder became due and the workout itself. Before it, quiet hours apply
+    # normally; at or after the target, the freshness gate has already skipped.
+    # Both timestamps are required — with no explicit window there is no
+    # exception to grant.
+    def scheduled_reminder_delivery_window?(dispatch)
+      return false unless scheduled_workout_reminder_dispatch?(dispatch)
+
+      due = scheduled_reminder_due_at(dispatch)
+      target = target_workout_at(dispatch)
+      return false if due.blank? || target.blank?
+
+      current_time >= due && current_time < target
+    end
+
     def target_workout_at(dispatch)
-      raw = dispatch&.user_event&.metadata&.dig("activation", "target_workout_at") ||
-            dispatch&.payload_json&.dig("data", "target_workout_at") ||
-            extra_data_source["target_workout_at"] ||
-            extra_data_source[:target_workout_at]
+      activation_time(dispatch, "target_workout_at")
+    end
+
+    def scheduled_reminder_due_at(dispatch)
+      activation_time(dispatch, "reminder_due_at")
+    end
+
+    # Timezone-aware instants ALREADY persisted when the fact was born. Never
+    # recomputed from preferred_workout_time: the user may have changed it since,
+    # and this reminder is about the time that was true back then.
+    #
+    # Ordered from the most canonical source to the most fragile. `metadata` is
+    # what the emitter writes; `payload_json.context.activation` is the schema-2
+    # snapshot MakeWebhookClient persisted when delivering the event (with
+    # `payload_json.metadata` covering the schema-1 tail). Only then do the
+    # values that merely travelled in the request count.
+    def activation_time(dispatch, key)
+      event = dispatch&.user_event
+      raw = event&.metadata&.dig("activation", key) ||
+            event&.payload_json&.dig("context", "activation", key) ||
+            event&.payload_json&.dig("metadata", "activation", key) ||
+            dispatch&.payload_json&.dig("data", key) ||
+            extra_data_source[key] || extra_data_source[key.to_sym]
       return nil if raw.blank?
 
       Time.zone.parse(raw.to_s)
-    rescue ArgumentError
+    rescue ArgumentError, TypeError
       nil
     end
 

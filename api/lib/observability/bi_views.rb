@@ -53,19 +53,21 @@ module Observability
 
     def drop!
       view_names.reverse.map do |name|
-        ActiveRecord::Base.connection.execute(%(DROP VIEW IF EXISTS "#{name}"))
+        ActiveRecord::Base.connection.execute("DROP VIEW IF EXISTS #{ActiveRecord::Base.connection.quote_table_name(name)}")
         name
       end
     end
 
     # @return [Array<String>] view names actually present in the database
     def verify!
-      ActiveRecord::Base.connection.select_values(<<~SQL.squish)
-        SELECT viewname FROM pg_views
-        WHERE schemaname = ANY (current_schemas(false))
-          AND LEFT(viewname, #{PREFIX.length}) = '#{PREFIX}'
-        ORDER BY viewname
-      SQL
+      ActiveRecord::Base.connection.select_values(
+        ActiveRecord::Base.sanitize_sql_array([ <<~SQL.squish, PREFIX.length, PREFIX ])
+          SELECT viewname FROM pg_views
+          WHERE schemaname = ANY (current_schemas(false))
+            AND LEFT(viewname, ?) = ?
+          ORDER BY viewname
+        SQL
+      )
     end
 
     def ready?(name)

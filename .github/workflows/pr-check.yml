@@ -223,3 +223,100 @@ jobs:
       # are fixed. The job reports today; it starts gating once the suite is green.
       - run: bundle exec rspec
         continue-on-error: true
+
+  # Os quatro jobs abaixo vieram de api/.github/workflows/ci.yml, que o GitHub
+  # nunca executou: Actions só lê .github/workflows/ da RAIZ do repositório, e
+  # api/ não é submódulo. Brakeman, bundler-audit e RuboCop ficaram inertes desde
+  # que foram criados. Todos são bloqueantes de propósito — cada um tem baseline
+  # ou correção que os deixa verdes hoje.
+  brakeman:
+    name: Brakeman
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: api
+
+      # --ensure-ignore-notes recusa entrada em config/brakeman.ignore sem
+      # justificativa escrita; --ensure-no-obsolete-ignore-entries recusa entrada
+      # que não corresponde mais a nenhum warning. Juntas, impedem que o ignore
+      # vire depósito silencioso.
+      - name: Scan for Rails security vulnerabilities
+        run: |
+          bundle exec brakeman --no-pager \
+            --ensure-ignore-notes \
+            --ensure-no-obsolete-ignore-entries
+
+  bundler-audit:
+    name: Bundler Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: api
+
+      - name: Scan gems for known CVEs
+        run: bundle exec bundler-audit check --update
+
+  rubocop:
+    name: RuboCop
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    env:
+      RUBOCOP_CACHE_ROOT: tmp/rubocop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: api
+
+      - name: Prepare RuboCop cache
+        uses: actions/cache@v4
+        env:
+          DEPENDENCIES_HASH: ${{ hashFiles('api/.ruby-version', 'api/.rubocop.yml', 'api/.rubocop_todo.yml', 'api/Gemfile.lock') }}
+        with:
+          path: api/tmp/rubocop
+          key: rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-${{ github.ref_name == github.event.repository.default_branch && github.run_id || 'default' }}
+          restore-keys: |
+            rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
+
+      # Bloqueante sobre o baseline de .rubocop_todo.yml: a dívida existente está
+      # congelada lá, então só violação NOVA quebra o job.
+      - name: Lint Ruby for consistent style
+        run: bundle exec rubocop -f github
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - name: Scan npm dependencies for known CVEs
+        run: npm audit --audit-level=high

@@ -1,0 +1,24 @@
+version: 2
+
+# Monorepo: cada ecossistema vive num subdiretório próprio. O Dependabot só lê
+# este arquivo na RAIZ do repositório — a versão anterior morava em
+# api/.github/dependabot.yml e por isso nunca abriu um PR sequer.
+updates:
+  - package-ecosystem: bundler
+    directory: "/api"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  # Actions são referenciadas pelos workflows da raiz.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10

@@ -35,15 +35,17 @@ class BlockUsageMetricsService
   end
 
   def users_who_trained_composite_block
-    ActiveRecord::Base.connection.execute(<<~SQL.squish).count
+    sql = ApplicationRecord.sanitize_sql_array([ <<~SQL.squish, WorkoutBlock::MULTI_EXERCISE_TYPES ])
       SELECT DISTINCT workout_sessions.user_id
       FROM workout_sessions, jsonb_array_elements(exercise_logs) AS elem
-      WHERE (elem->>'block_type') = ANY(ARRAY[#{quoted_multi_exercise_types}])
+      WHERE (elem->>'block_type') = ANY(ARRAY[?])
     SQL
+
+    ActiveRecord::Base.connection.execute(sql).count
   end
 
   def completion_rate_by_block_type
-    rows = ActiveRecord::Base.connection.execute(<<~SQL.squish)
+    sql = ApplicationRecord.sanitize_sql_array([ <<~SQL.squish, WorkoutBlock::MULTI_EXERCISE_TYPES ])
       SELECT block_type, status, COUNT(DISTINCT session_id) AS session_count
       FROM (
         SELECT DISTINCT
@@ -51,10 +53,12 @@ class BlockUsageMetricsService
           workout_sessions.status AS status,
           elem->>'block_type' AS block_type
         FROM workout_sessions, jsonb_array_elements(exercise_logs) AS elem
-        WHERE (elem->>'block_type') = ANY(ARRAY[#{quoted_multi_exercise_types}])
+        WHERE (elem->>'block_type') = ANY(ARRAY[?])
       ) sessions_by_block_type
       GROUP BY block_type, status
     SQL
+
+    rows = ActiveRecord::Base.connection.execute(sql)
 
     totals = Hash.new { |h, k| h[k] = { completed: 0, total: 0 } }
     rows.each do |row|
@@ -67,9 +71,5 @@ class BlockUsageMetricsService
     totals.transform_values do |v|
       v[:total].zero? ? 0.0 : ((v[:completed].to_f / v[:total]) * 100).round(1)
     end
-  end
-
-  def quoted_multi_exercise_types
-    WorkoutBlock::MULTI_EXERCISE_TYPES.map { |t| ActiveRecord::Base.connection.quote(t) }.join(",")
   end
 end

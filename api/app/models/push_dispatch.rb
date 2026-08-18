@@ -23,10 +23,15 @@ class PushDispatch < ApplicationRecord
   # with the same idempotency_key must NOT be re-sent (Phase 9).
   DELIVERED_STATUSES = %w[provider_accepted partially_accepted opened].freeze
 
+  # stale_scheduled_reminder and stale_after_quiet_hours are NOT synonyms:
+  #   stale_scheduled_reminder  — target_workout_at has already passed, so the
+  #                               content lost its validity (late redrive).
+  #   stale_after_quiet_hours   — the quiet-hours release would land after the
+  #                               target, so deferring is pointless.
   SKIP_REASONS = %w[
     orchestration_disabled user_not_found no_preferences global_opt_out category_opt_out
     no_active_token permission_denied duplicate invalid_payload rate_limited
-    frequency_capped cooldown_active stale_after_quiet_hours
+    frequency_capped cooldown_active stale_after_quiet_hours stale_scheduled_reminder
   ].freeze
 
   DEFER_REASONS = %w[quiet_hours].freeze
