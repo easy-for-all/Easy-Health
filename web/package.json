@@ -34,7 +34,7 @@
     "@sentry/nextjs": "^10.65.0",
     "@swc/helpers": "^0.5.21",
     "canvas-confetti": "^1.9.4",
-    "capacitor-native-settings": "^8.1.0",
+    "capacitor-native-settings": "^8.2.0",
     "framer-motion": "^12.40.0",
     "html-to-image": "^1.11.13",
     "next": "16.3.1",
