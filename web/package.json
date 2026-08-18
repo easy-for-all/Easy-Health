@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@capacitor-firebase/analytics": "^8.3.0",
-    "@capacitor-firebase/crashlytics": "^8.3.0",
+    "@capacitor-firebase/crashlytics": "^8.4.0",
     "@capacitor-firebase/performance": "^8.3.0",
     "@capacitor/android": "^8.4.1",
     "@capacitor/app": "^8.1.0",
