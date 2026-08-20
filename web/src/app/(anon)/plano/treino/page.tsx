@@ -84,6 +84,17 @@ function AnonymousWorkoutContent() {
       });
     }
 
+    // Degrau comparável com /workout/today, que tem séries e esta tela não.
+    // Só na transição para marcado: desmarcar é correção, não conclusão.
+    if (!done.has(exercise.workout_day_exercise_id)) {
+      trackEvent("workout_exercise_completed", {
+        source: "anonymous",
+        workout_day_id: day?.id ?? undefined,
+        workout_day_exercise_id: exercise.workout_day_exercise_id,
+        exercise_id: exercise.exercise_id,
+      });
+    }
+
     setDone((previous) => {
       const next = new Set(previous);
       if (next.has(exercise.workout_day_exercise_id)) {

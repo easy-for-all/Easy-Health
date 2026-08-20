@@ -48,6 +48,22 @@ ENV NEXT_PUBLIC_ANDROID_POST_ONBOARDING_AB_STARTED_AT=${NEXT_PUBLIC_ANDROID_POST
 ARG NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED=true
 ENV NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED=${NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED}
 
+# Crashlytics do app Android. Faltava ARG/ENV aqui, então firebase.ts resolvia
+# FIREBASE_CRASHLYTICS_ENABLED=false em TODO bundle Docker, independente do .env
+# do servidor — a mesma classe de falha do bloco acima. Isto controla só o bridge
+# JS (setEnabled/setUserId/recordException); a coleta nativa de crashes e ANRs vem
+# do plugin Capacitor + plugin Gradle e não depende desta flag.
+# Default false: torna a configuração explícita sem ligar coleta silenciosamente.
+# Produção liga com NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED=true no .env.
+ARG NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED=false
+ENV NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED=${NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED}
+
+RUN case "$NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED" in \
+      true)  echo "Firebase Crashlytics (bridge JS): LIGADO neste build" ;; \
+      false) echo "Firebase Crashlytics (bridge JS): desligado neste build" ;; \
+      *) echo "ERROR: NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED='$NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED' (esperado 'true' ou 'false')" && exit 1 ;; \
+    esac
+
 # Só "true" ou "false". Um vazio ou um "True"/"1" resolveriam silenciosamente
 # para desligado, que é a falha que este guard existe para tornar impossível.
 RUN case "$NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED" in \

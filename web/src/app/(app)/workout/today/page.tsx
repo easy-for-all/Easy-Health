@@ -21,6 +21,13 @@ import { trackEvent, trackOnce, EVENTS } from "@/shared/lib/analytics";
 import { getGymSafeImageUrl } from "@/shared/utils/exercise-image";
 import { relativeDate } from "@/shared/utils/relative-date";
 import { historyWeight } from "@/features/workout/use-exercise-history";
+import {
+  buildSetCompletion,
+  setCompletionKey,
+  hasExerciseProgress,
+  completedSetCount,
+  type ExerciseKind,
+} from "@/features/workout/set-completion";
 import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 import { useCoach } from "@/features/coach/coach-context";
 import { AgentOrb } from "@/shared/components/agent-orb";
@@ -69,6 +76,12 @@ const MUSCLE_COLORS: Record<string, string> = {
 
 function isCardio(ex: WorkoutDayExercise) { return usesTimerScreen(ex); }
 function isTimed(ex: WorkoutDayExercise)  { return usesRecoveryScreen(ex); }
+// Ordem igual à de completionData: timed é checado antes de cardio.
+function exerciseKindOf(ex: WorkoutDayExercise): ExerciseKind {
+  if (isTimed(ex)) return "timed";
+  if (isCardio(ex)) return "cardio";
+  return "strength";
+}
 function isInterval(ex: WorkoutDayExercise) { return workoutEngine(ex) === "interval"; }
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -144,7 +157,10 @@ function WorkoutTodayContent() {
   const { startTime, elapsedSeconds, beginSession, endSession, saveRestEnd, getRestEnd } = useWorkoutSession();
   const [restAlert, setRestAlert] = useState(false);
   const [exerciseRuntime, setExerciseRuntime] = useState<Record<number, ExerciseRuntime>>({});
-  const [weightError, setWeightError] = useState(false);
+  // Guards de deduplicação, com escopo de UMA execução — resetados em
+  // startWorkout(). Ver handleSetDone e finishExercise.
+  const lastCompletedSetKeyRef = useRef<string | null>(null);
+  const reportedExerciseCompletionsRef = useRef<Set<number>>(new Set());
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showSwapChoice, setShowSwapChoice] = useState(false);
   const [infoModalExercise, setInfoModalExercise] = useState<WorkoutDayExercise | null>(null);
@@ -491,6 +507,14 @@ function WorkoutTodayContent() {
 
   function startWorkout() {
     unlockAudio();
+    // Nova execução explícita: os guards de deduplicação valem por execução, não
+    // por montagem do componente — e esta tela não desmonta entre uma execução e
+    // outra. Sem este reset, reiniciar o mesmo treino (comportamento já visto em
+    // produção, mesma sessão e mesmo workout_day_id) deixaria a segunda execução
+    // parcialmente muda: o mesmo par (exercício, série) e os exercícios já
+    // reportados seriam tratados como repetição de clique.
+    lastCompletedSetKeyRef.current = null;
+    reportedExerciseCompletionsRef.current.clear();
     if (day) {
       // Clicked to start (distinct from workout_started = session created).
       trackEvent("workout_start_clicked", {
@@ -629,32 +653,33 @@ function WorkoutTodayContent() {
     const exercise = day.exercises[currentIndex];
     const state = runtimeFor(exerciseRuntime, exercise);
 
-    const currentWeight = state.weight_by_set[currentSet - 1];
-    if (!isCardio(exercise) && !currentWeight) {
-      setWeightError(true);
-      return;
-    }
-    setWeightError(false);
-    const currentWeightNumber = Number(currentWeight) || 0;
+    const { repsBySet, weightBySet, hasWeight, currentWeightNumber } =
+      buildSetCompletion(state, currentSet, exercise.reps);
+
+    // A INTENÇÃO explícita do usuário, antes de qualquer coisa que possa impedir
+    // a conclusão. É o que separa "nunca tentou" de "tentou e não passou" — dois
+    // casos que antes deixavam exatamente o mesmo rastro (nenhum).
+    // Fica ANTES da guarda de reentrância de propósito: uma segunda tentativa é
+    // um fato do usuário e deve ser contada; o que não pode duplicar é a conclusão.
+    trackEvent(EVENTS.EXERCISE_SET_COMPLETION_ATTEMPTED, {
+      workout_day_id: day.id ?? undefined,
+      workout_day_exercise_id: exercise.workout_day_exercise_id,
+      exercise_id: exercise.exercise_id,
+      set_number: currentSet,
+      planned_sets: state.planned_sets,
+      has_weight: hasWeight,
+      is_cardio: isCardio(exercise),
+      source: "workout_today",
+    });
+
+    // Duplo toque no mesmo frame executa este handler duas vezes com o mesmo
+    // currentSet do closure. Guarda por IDENTIDADE, não por tempo: a próxima
+    // série tem chave diferente, então nenhum toque legítimo é bloqueado.
+    const completionKey = setCompletionKey(exercise.workout_day_exercise_id, currentSet);
+    if (lastCompletedSetKeyRef.current === completionKey) return;
+    lastCompletedSetKeyRef.current = completionKey;
+
     const previousReferenceWeight = Number(exercise.last_weight_kg) || 0;
-
-    const repsBySet = [...state.reps_by_set];
-    repsBySet[currentSet - 1] ||= exercise.reps;
-
-    const weightBySet = [...state.weight_by_set];
-    if (currentSet < state.planned_sets && !weightBySet[currentSet]) {
-      const isCurrentWarmup = state.warmup_by_set?.[currentSet - 1] ?? false;
-      if (!isCurrentWarmup) {
-        weightBySet[currentSet] = currentWeight;
-      } else {
-        // warmup: restore last non-warmup weight so the next normal set is not contaminated
-        const lastNormalWeight = state.weight_by_set
-          .filter((_, i) => !(state.warmup_by_set?.[i]))
-          .filter(Boolean)
-          .at(-1);
-        weightBySet[currentSet] = lastNormalWeight ?? "";
-      }
-    }
 
     updateRuntime(exercise.workout_day_exercise_id, { reps_by_set: repsBySet, weight_by_set: weightBySet });
     trackEvent(EVENTS.EXERCISE_SET_COMPLETED, {
@@ -662,6 +687,7 @@ function WorkoutTodayContent() {
       workout_day_exercise_id: exercise.workout_day_exercise_id,
       set_number: currentSet,
       current_weight: currentWeightNumber,
+      has_weight: hasWeight,
       source: "workout_today",
     });
     if (!isCurrentWarmupSet(state, currentSet) && previousReferenceWeight > 0 && currentWeightNumber > previousReferenceWeight) {
@@ -850,6 +876,42 @@ function WorkoutTodayContent() {
     if (!day?.exercises) return;
     const exercise = day.exercises[currentIndex];
     updateRuntime(exercise.workout_day_exercise_id, { feeling });
+
+    // Degrau comparável com a superfície anônima, que não tem séries: UM evento
+    // por exercício individual concluído.
+    //
+    // Num bloco composto este handler roda uma vez SÓ, no último membro — A1 de
+    // um superset é inteiramente executado e nunca chega aqui. Emitir só pelo
+    // `exercise` atual faria o evento significar "1 exercício" no anônimo e
+    // "1 bloco de até 3" aqui, com o mesmo nome. Por isso o escopo é o bloco.
+    const group = currentBlockLocation ? blocks[currentBlockLocation.groupIndex] : null;
+    const completedScope =
+      group && isMultiExerciseBlock(group.blockType) && group.exercises.length > 1
+        ? group.exercises
+        : [exercise];
+
+    for (const member of completedScope) {
+      // O exercício atual chegou aqui por ação explícita do usuário — é o
+      // equivalente exato de marcar o checkbox na tela anônima. Os demais
+      // membros do bloco foram concluídos nas rodadas anteriores, confirmados
+      // pelo mesmo critério que decide `skipped_exercises` no payload salvo.
+      const isCurrent = member.workout_day_exercise_id === exercise.workout_day_exercise_id;
+      if (!isCurrent && !hasExerciseProgress(exerciseKindOf(member), runtimeFor(exerciseRuntime, member))) {
+        continue;
+      }
+      // Dedupe APENAS de analytics: um duplo toque no chip de feeling não pode
+      // multiplicar os eventos do bloco. Não altera o fluxo do treino, então o
+      // bug pré-existente de pular exercício segue visível em vez de mascarado.
+      if (reportedExerciseCompletionsRef.current.has(member.workout_day_exercise_id)) continue;
+      reportedExerciseCompletionsRef.current.add(member.workout_day_exercise_id);
+
+      trackEvent(EVENTS.WORKOUT_EXERCISE_COMPLETED, {
+        workout_day_id: day.id ?? undefined,
+        workout_day_exercise_id: member.workout_day_exercise_id,
+        exercise_id: member.exercise_id,
+        source: "workout_today",
+      });
+    }
 
     if (currentIndex < day.exercises.length - 1) {
       const state = runtimeFor(exerciseRuntime, exercise);
@@ -1333,20 +1395,22 @@ function WorkoutTodayContent() {
                 const weightStep = weightVal >= 60 ? 5 : weightVal >= 20 ? 2.5 : 1;
                 const weightDisplay = weightVal > 0 ? `${weightVal} kg` : "— kg";
                 return (
-                  <div className={`rounded-xl p-3 text-center ${weightError ? "bg-red-950/30 ring-1 ring-red-500/60" : "bg-slate-900/60"}`}>
+                  <div className="rounded-xl bg-slate-900/60 p-3 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => { setWeightError(false); updateCurrentSetWeight(exercise, String(Math.max(0, +(weightVal - weightStep).toFixed(2)))); }}
+                        onClick={() => updateCurrentSetWeight(exercise, String(Math.max(0, +(weightVal - weightStep).toFixed(2))))}
                         className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-slate-400"
                       >-</button>
+                      {/* "— kg" apagado é o incentivo a informar a carga. NÃO é
+                          bloqueio: concluir a série sem peso é permitido, e o
+                          peso ausente é gravado como ausente. */}
                       <p className={`min-w-14 text-xl font-bold ${weightVal > 0 ? "text-white" : "text-slate-600"}`}>{weightDisplay}</p>
                       <button
-                        onClick={() => { setWeightError(false); updateCurrentSetWeight(exercise, String(+(weightVal + weightStep).toFixed(2))); }}
+                        onClick={() => updateCurrentSetWeight(exercise, String(+(weightVal + weightStep).toFixed(2)))}
                         className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-slate-400"
                       >+</button>
                     </div>
                     <p className="mt-1 text-xs text-slate-400">peso · +{weightStep} kg</p>
-                    {weightError && <p className="mt-0.5 text-xs text-red-400">Informe o peso</p>}
                   </div>
                 );
               })()}
@@ -2513,9 +2577,9 @@ function DoneScreen({
 
       if (isCardioEx || isTimedEx) {
         plannedSets += 1;
-        const hasData = isTimedEx
-          ? (state.elapsed_seconds ?? 0) > 0
-          : (state.duration_minutes ?? 0) > 0;
+        // Mesma regra usada por finishExercise para emitir
+        // workout_exercise_completed — definição única, ver set-completion.ts.
+        const hasData = hasExerciseProgress(exerciseKindOf(ex), state);
         if (hasData) completedSets += 1;
         else if (idx > maxReached) skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: 1, muscle_group: ex.muscle_group, block_type: ex.block_type ?? "single", block_id: ex.block_id ?? null });
         return;
@@ -2529,7 +2593,7 @@ function DoneScreen({
         return;
       }
 
-      const doneCount = state.reps_by_set.filter((r, i) => r > 0 || Number(state.weight_by_set[i]) > 0).length;
+      const doneCount = completedSetCount(state);
       completedSets += Math.min(doneCount, ps);
       if (doneCount === 0) {
         skipped.push({ exercise_id: ex.exercise_id, name: ex.name, planned_sets: ps, muscle_group: ex.muscle_group, block_type: ex.block_type ?? "single", block_id: ex.block_id ?? null });

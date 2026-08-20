@@ -105,6 +105,20 @@ assert_web_client_id() {
   esac
 }
 
+# O encanamento do DSN sempre existiu (ARG/ENV no Dockerfile, build arg no
+# compose) — o que faltava era alguem checar se o valor estava no .env do
+# servidor. Em 15-16/08 nao estava, os deploys saíram com bundle sem DSN, e
+# quando foi preciso classificar um incidente nao havia Sentry para consultar.
+# Presenca apenas. O valor NUNCA e impresso: e segredo e o proprio filtro do
+# Sentry trata "dsn" como chave sensivel.
+assert_sentry_dsn() {
+  log "Validando NEXT_PUBLIC_SENTRY_DSN no .env"
+  local val
+  val="$(grep -E '^NEXT_PUBLIC_SENTRY_DSN=' .env 2>/dev/null | head -1 | cut -d= -f2-)"
+  [ -n "$val" ] || fail "NEXT_PUBLIC_SENTRY_DSN ausente/vazia no .env de producao — o bundle sairia sem monitoramento de erros no cliente"
+  log "NEXT_PUBLIC_SENTRY_DSN present: yes"
+}
+
 # Exige 200 E db:true. "Container running" não é deploy bem sucedido: o
 # incidente de 04/08 teve container de pé o tempo todo — o que estava morto era
 # o Rails atrás dele, e o Cloudflare traduzia isso em 502 para o usuário.
@@ -205,6 +219,8 @@ if [ -f ".env" ]; then
 fi
 
 assert_web_client_id
+
+assert_sentry_dsn
 
 copy_exercise_images
 
