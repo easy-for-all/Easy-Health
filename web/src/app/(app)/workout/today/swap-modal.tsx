@@ -150,20 +150,29 @@ export function SwapModal({
   const [noMoreOptions, setNoMoreOptions] = useState(false);
   const [noMoreMessage, setNoMoreMessage] = useState<string | null>(null);
   const [lastIntent, setLastIntent] = useState<Record<string, unknown> | null>(null);
+  const [swapPendingExerciseId, setSwapPendingExerciseId] = useState<number | null>(null);
+  const [swapError, setSwapError] = useState<string | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swapPendingRef = useRef(false);
 
   function trackShownIds(data: ExerciseOption[]) {
     setShownIds((prev) => new Set([...prev, ...data.map((d) => d.id)]));
   }
 
   const openSwapFetch = useCallback(async (wde: WorkoutDayExercise, additionalExcludes: number[] = []) => {
-    const excludeIds = [...new Set([wde.exercise_id, ...allWorkoutExerciseIds, ...additionalExcludes])].join(",");
-    const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
-    const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${excludeIds}`);
-    setAlternatives(data);
-    trackShownIds(data);
-    setNoMoreOptions(data.length === 0 && additionalExcludes.length > 0);
-    setInitialLoading(false);
+    try {
+      const excludeIds = [...new Set([wde.exercise_id, ...allWorkoutExerciseIds, ...additionalExcludes])].join(",");
+      const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
+      const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&exclude_ids=${excludeIds}`);
+      setAlternatives(data);
+      trackShownIds(data);
+      setNoMoreOptions(data.length === 0 && additionalExcludes.length > 0);
+    } catch {
+      setAlternatives([]);
+      setNoMoreOptions(false);
+    } finally {
+      setInitialLoading(false);
+    }
   }, [allWorkoutExerciseIds]);
 
   const fetchFavorites = useCallback(async (wde: WorkoutDayExercise) => {
@@ -173,6 +182,8 @@ export function SwapModal({
       const query = wde.muscle_group ? `muscle_group=${wde.muscle_group}` : `exercise_type=${wde.exercise_type}`;
       const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${query}&only_favorites=true&exclude_ids=${excludeIds}`);
       setAlternatives(data);
+    } catch {
+      setAlternatives([]);
     } finally {
       setFavoritesLoading(false);
     }
@@ -181,6 +192,12 @@ export function SwapModal({
   useEffect(() => {
     openSwapFetch(exercise);
   }, [exercise, openSwapFetch]);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, []);
 
   const fetchByName = useCallback(async (name: string, additionalExcludes: number[] = []) => {
     setSearchLoading(true);
@@ -197,6 +214,9 @@ export function SwapModal({
       if (data.length === 0 && additionalExcludes.length > 0) {
         setNoMoreOptions(true);
       }
+    } catch {
+      setAlternatives([]);
+      setNoMoreOptions(false);
     } finally {
       setSearchLoading(false);
     }
@@ -219,6 +239,8 @@ export function SwapModal({
       if (filter.exercise_type) params.set("exercise_type", filter.exercise_type);
       const data = await api.get<ExerciseOption[]>(`/api/v1/exercises?${params.toString()}`);
       setAlternatives(data);
+    } catch {
+      setAlternatives([]);
     } finally {
       setSearchLoading(false);
     }
@@ -244,6 +266,10 @@ export function SwapModal({
       } else {
         trackShownIds(result.exercises);
       }
+    } catch {
+      setAlternatives([]);
+      setNoMoreOptions(true);
+      setNoMoreMessage("Não foi possível buscar alternativas. Tente novamente.");
     } finally {
       setSearchLoading(false);
     }
@@ -286,16 +312,32 @@ export function SwapModal({
     }
   }
 
-  async function sendSuggestionFeedback(exerciseId: number, eventType: string) {
+  function sendSuggestionFeedback(exerciseId: number, eventType: string) {
+    void api.post(`/api/v1/exercises/${exerciseId}/suggestion_feedback`, {
+      event_type:          eventType,
+      current_exercise_id: exercise.exercise_id,
+      intent_text:         swapSearch,
+      parsed_intent:       lastIntent ?? {},
+    }).catch(() => {
+      // non-critical telemetry
+    });
+  }
+
+  async function handleSafeSwap(replacementId: number) {
+    if (swapPendingRef.current) return;
+
+    swapPendingRef.current = true;
+    setSwapPendingExerciseId(replacementId);
+    setSwapError(null);
+    sendSuggestionFeedback(replacementId, "suggestion_accepted");
+
     try {
-      await api.post(`/api/v1/exercises/${exerciseId}/suggestion_feedback`, {
-        event_type:          eventType,
-        current_exercise_id: exercise.exercise_id,
-        intent_text:         swapSearch,
-        parsed_intent:       lastIntent ?? {},
-      });
+      await onSwap(exercise.workout_day_exercise_id, replacementId);
     } catch {
-      // non-critical — ignore failures silently
+      setSwapError("Não foi possível trocar o exercício. Verifique sua conexão e tente novamente.");
+    } finally {
+      swapPendingRef.current = false;
+      setSwapPendingExerciseId(null);
     }
   }
 
@@ -452,8 +494,9 @@ export function SwapModal({
           {aiSuggestions.map((alt) => (
             <button
               key={`ai-${alt.id}`}
-              onClick={() => onSwap(exercise.workout_day_exercise_id, alt.id)}
-              className="mb-2 mt-2 flex w-full gap-3 rounded-lg border border-primary-200 bg-white p-3 text-left hover:bg-primary-100"
+              onClick={() => handleSafeSwap(alt.id)}
+              disabled={swapPendingExerciseId !== null}
+              className="mb-2 mt-2 flex w-full gap-3 rounded-lg border border-primary-200 bg-white p-3 text-left hover:bg-primary-100 disabled:cursor-wait disabled:opacity-60"
             >
               <SmartImage src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)} fallbackSrc={exerciseFallback(alt)} alt={alt.name} className="h-12 w-16 rounded-md object-cover" />
               <div>
@@ -581,6 +624,12 @@ export function SwapModal({
         </div>
 
         {/* Lista de alternativas */}
+        {swapError && (
+          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-300">
+            {swapError}
+          </p>
+        )}
+
         {searchLoading ? (
           <div className="space-y-2.5">
             {[1, 2, 3].map((i) => (
@@ -639,11 +688,9 @@ export function SwapModal({
             return (
               <div key={alt.id} className="mb-2.5 flex w-full items-center gap-1">
                 <button
-                  onClick={async () => {
-                    await sendSuggestionFeedback(alt.id, "suggestion_accepted");
-                    onSwap(exercise.workout_day_exercise_id, alt.id);
-                  }}
-                  className="flex flex-1 gap-3 rounded-xl border border-gray-100 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                  onClick={() => handleSafeSwap(alt.id)}
+                  disabled={swapPendingExerciseId !== null}
+                  className="flex flex-1 gap-3 rounded-xl border border-gray-100 p-3 text-left hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-700 dark:hover:bg-gray-800"
                 >
                   <SmartImage
                     src={getGymSafeImageUrl(alt) ?? exerciseFallback(alt)}
@@ -668,10 +715,14 @@ export function SwapModal({
                     {alt.reason && (
                       <p className="mt-1 text-xs text-gray-400 leading-snug">{alt.reason}</p>
                     )}
+                    {swapPendingExerciseId === alt.id && (
+                      <p className="mt-1 text-xs font-semibold text-primary-500">Trocando...</p>
+                    )}
                   </div>
                 </button>
                 <button
                   onClick={() => toggleFavorite(alt.id, !!alt.is_favorite)}
+                  disabled={swapPendingExerciseId !== null}
                   className="shrink-0 px-2 py-3 text-lg"
                   title={alt.is_favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
                 >

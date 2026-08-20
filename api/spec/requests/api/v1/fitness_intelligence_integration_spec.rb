@@ -36,7 +36,7 @@ RSpec.describe "Fitness intelligence integration", type: :request do
     expect(user.reload.fitness_profile.metadata["last_recalculation_source"]).to eq("workout_completed")
   end
 
-  it "refreshes the profile when an exercise is favorited" do
+  it "refreshes the profile from the favorite recalibration job" do
     create(:health_profile, user: user)
     FitnessIntelligence::ProfileBuilder.new(user).call(source: "spec_setup")
     exercise = Exercise.create!(
@@ -49,6 +49,11 @@ RSpec.describe "Fitness intelligence integration", type: :request do
     post "/api/v1/exercises/#{exercise.id}/favorite"
 
     expect(response).to have_http_status(:ok)
+    expect(user.reload.favorite_exercises).to contain_exactly(exercise)
+    expect(user.fitness_profile.metadata["last_recalculation_source"]).to eq("spec_setup")
+
+    RecalibrateFitnessProfileJob.perform_now(user.id, source: "favorite_exercise_added")
+
     profile = user.reload.fitness_profile
     expect(profile.preferred_exercises).to include(exercise.id)
     expect(profile.metadata["last_recalculation_source"]).to eq("favorite_exercise_added")
