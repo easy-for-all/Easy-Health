@@ -6,7 +6,6 @@ module Api
       def create
         exercise = Exercise.browseable.find(params[:id])
         current_user.user_favorite_exercises.find_or_create_by!(exercise: exercise)
-        FitnessIntelligence.recalculate_safely(user: current_user, source: "favorite_exercise_added")
         render json: { favorited: true }
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Exercise not found" }, status: :not_found
@@ -15,7 +14,6 @@ module Api
       def destroy
         fav = current_user.user_favorite_exercises.find_by(exercise_id: params[:id])
         fav&.destroy
-        FitnessIntelligence.recalculate_safely(user: current_user, source: "favorite_exercise_removed")
         render json: { favorited: false }
       end
 
