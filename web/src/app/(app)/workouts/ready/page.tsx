@@ -6,6 +6,7 @@ import { api } from "@/shared/lib/api";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import { UpgradeGate } from "@/shared/components/upgrade-gate";
 import { trackOnboardingEvent } from "@/shared/lib/onboarding-tracking";
+import { trackEvent, trackOnce } from "@/shared/lib/analytics";
 import { AgentOrb } from "@/shared/components/agent-orb";
 import { AITrainerBubble } from "@/shared/components/ai-trainer";
 import { ConfettiBurst, GlowPulse } from "@/shared/components/motion";
@@ -66,6 +67,20 @@ function WorkoutReadyContent() {
       trackOnboardingEvent("activation_ready_screen_viewed", {
         metadata: { workout_plan_id: p?.id ?? null, workout_day_id: resolvedDay?.id ?? null },
       });
+
+      // Esta tela MOSTRA o treino criado (nome, exercícios, grupos musculares),
+      // então ela é uma visualização de treino — mesma semântica de
+      // /plano/pronto, que já emitia. Sem isto, quem via o treino aqui e não dava
+      // mais um toque até /workout/today era contado no funil como "nunca viu o
+      // treino". Gated em resolvedDay: sem treino resolvido não houve visualização.
+      // activation_ready_screen_viewed acima continua — é outro pipeline.
+      if (resolvedDay) {
+        trackOnce("workout_viewed:ready", "workout_viewed", {
+          source: "workouts_ready",
+          workout_plan_id: p?.id ?? undefined,
+          workout_day_id: resolvedDay.id ?? undefined,
+        });
+      }
     }
     load();
   }, []);
@@ -98,6 +113,10 @@ function WorkoutReadyContent() {
   function handleStart() {
     trackOnboardingEvent("activation_start_clicked", {
       metadata: { workout_plan_id: plan?.id ?? null, workout_day_id: day?.id ?? null },
+    });
+    trackEvent("workout_start_clicked", {
+      source: "workouts_ready",
+      workout_day_id: day?.id ?? undefined,
     });
     router.push(day?.id ? `/workout/today?day=${day.id}` : "/workout/today");
   }

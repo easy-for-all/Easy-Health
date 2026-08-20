@@ -130,6 +130,89 @@ ProductAnalyticsEvent.where("properties->>'installation_id' = ?", id).order(:occ
 | `workout_first_exercise_started` | 1º exercício iniciado | `exercise_sessions` / progresso |
 | `workout_completed` | concluído válido | `completion_status = "completed"` |
 
+> **Entre `workout_started` e `workout_first_exercise_started` existe a tela de
+> aquecimento.** Em `/workout/today`, `startWorkout()` leva a `phase = "warmup"`;
+> `workout_first_exercise_started` só dispara quando `phase === "exercising"`, ou
+> seja, **depois do "Estou pronto →"**. Quem inicia e não passa do aquecimento
+> aparece no funil como "iniciou e não chegou ao primeiro exercício" — o degrau
+> perdido é a tela de aquecimento, não o exercício. Não há evento próprio para
+> essa transição; ao ler esse intervalo, não a interprete como desistência
+> diante do exercício.
+
+## Duas superfícies de execução — o funil NÃO é universal
+
+Existem duas telas onde um treino é executado, e elas têm unidades diferentes.
+Ler as duas no mesmo funil produz zeros que são artefato de instrumentação, não
+comportamento.
+
+| | Autenticada | Anônima |
+|---|---|---|
+| Rota | `/workout/today` | `/plano/treino` |
+| `source` | `workout_today` | `anonymous` |
+| Unidade | exercício → **série** → peso → reps | exercício com checkbox |
+| `exercise_set_completed` | sim | **impossível — não existe série** |
+| `workout_started` | clique deliberado | `useEffect` a cada montagem |
+
+`exercise_set_completed` **não serve como degrau universal**: na tela anônima ele
+nunca poderá existir. Sintetizá-lo a partir de um checkbox seria fabricar dado.
+
+> **`workout_exercise_completed` conta exercícios individuais nas duas
+> superfícies.** Na anônima, um por checkbox marcado. Na autenticada, um por
+> exercício concluído — inclusive dentro de blocos compostos: `finishExercise`
+> roda uma vez só, no último membro do bloco, então a emissão percorre os membros
+> e usa o mesmo critério que decide `skipped_exercises` no payload salvo
+> (`hasExerciseProgress`, em `features/workout/set-completion.ts`). Um superset de
+> 3 exercícios concluídos produz 3 eventos. Exercício pulado ou nunca alcançado
+> não emite.
+
+**Funil cross-surface** (o único comparável):
+
+```
+workout_created → workout_viewed → workout_start_clicked → workout_started
+→ workout_first_exercise_started → workout_exercise_completed → workout_completed
+```
+
+**Detalhado, só `source = workout_today`** — é onde peso, séries e progressão de
+carga podem ser investigados:
+
+```
+workout_first_exercise_started → exercise_set_completion_attempted
+→ exercise_set_completed → workout_exercise_completed → workout_completed
+```
+
+**Detalhado, só `source = anonymous`:**
+
+```
+workout_first_exercise_started → workout_exercise_completed → workout_completed
+```
+
+Sempre segmente por `properties->>'source'` antes de comparar etapas.
+
+## `workout_viewed` — semântica canônica
+
+**"O usuário visualizou conteúdo concreto do treino criado"** — e não "entrou em
+`/workout/today`". Qualquer tela que mostre o treino gerado (nome, exercícios,
+grupos musculares) emite, com `source` próprio:
+
+| `source` | Tela |
+|---|---|
+| `workouts_ready` | `/workouts/ready` — destino padrão pós-onboarding autenticado |
+| `anonymous_ready` | `/plano/pronto` — equivalente da variante `open_app` |
+| `workout_today` | `/workout/today` — execução |
+
+Uma pessoa pode emitir mais de um numa jornada: os funis contam **instalações
+distintas**, não eventos, então isso não infla nenhuma etapa.
+
+`activation_ready_screen_viewed` é outra coisa e continua existindo — vive no
+pipeline `onboarding_events`, com objetivo e painel próprios.
+
+> **Descontinuidade conhecida:** `/workouts/ready` não emitia `workout_viewed`,
+> enquanto `/plano/pronto` emitia. Enquanto isso durou, a métrica
+> "1º treino visualizado" do painel post-onboarding esteve **enviesada a favor
+> da variante `open_app`** por instrumentação, não por comportamento — e quem via
+> o treino na ready screen sem prosseguir era contado como "nunca viu o treino".
+> Leituras que atravessem a data da correção não são comparáveis.
+
 ## Versionamento
 
 Mudança incompatível no schema de um evento → incrementar `version` na YAML (e no

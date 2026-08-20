@@ -3,7 +3,7 @@
 import { useAuth } from "@/features/auth/auth-context";
 
 export function useSubscription() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const bs = user?.billing_status ?? null;
 
   const isProUser = bs?.paid === true;
@@ -24,6 +24,9 @@ export function useSubscription() {
   const canAccessWorkout = hasActiveAccess;
 
   return {
+    // A sessão ainda não foi resolvida. Sem isto, todo consumidor lê o estado
+    // inicial (user null) como "não tem acesso" e decide antes da resposta.
+    loading,
     billingStatus: bs,
     isProUser,
     isBillingActive,

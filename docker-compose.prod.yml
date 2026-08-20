@@ -71,6 +71,10 @@ services:
         # derrubando o guard do Dockerfile. Assim, ausência no .env => true, e a
         # única forma de desligar é `NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED=false`.
         NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED: ${NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED:-true}
+        # Crashlytics é OUTRA decisão que Analytics: default false para não ligar
+        # coleta por efeito colateral. Ligar exige a linha explícita no .env do
+        # servidor E um rebuild — NEXT_PUBLIC_* é inlined no build.
+        NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED: ${NEXT_PUBLIC_FIREBASE_CRASHLYTICS_ENABLED:-false}
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
     ports:
       - "3000:3000"

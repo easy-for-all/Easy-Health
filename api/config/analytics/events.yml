@@ -101,9 +101,20 @@ events:
   workout_started:          { version: 1, sinks: [server, ga4, clarity] }
   workout_first_exercise_started: { version: 1, sinks: [server, ga4] }
   exercise_weight_changed:  { version: 1, sinks: [server, ga4] }
+  # A TENTATIVA explícita de concluir a série, emitida antes de qualquer
+  # validação que possa dar return. Sem ela, "chegou ao exercício e nunca tentou"
+  # e "clicou em Feito e foi barrado" produzem exatamente o mesmo rastro:
+  # workout_first_exercise_started seguido de nada. Só existe na superfície
+  # autenticada (/workout/today) — a anônima não tem conceito de série.
+  exercise_set_completion_attempted: { version: 1, sinks: [server, ga4] }
   exercise_set_completed:   { version: 1, sinks: [server, ga4] }
   exercise_load_progressed: { version: 1, sinks: [server, ga4] }
-  workout_exercise_completed:     { version: 1, sinks: [ga4] }
+  # server sink: é o ÚNICO degrau pós-primeiro-exercício comparável entre as duas
+  # superfícies de execução. /workout/today tem séries e emite
+  # exercise_set_completed; /plano/treino tem apenas um checkbox por exercício e
+  # nunca poderá emiti-lo. Usar exercise_set_completed como degrau universal
+  # contava a segunda superfície como zero por construção.
+  workout_exercise_completed:     { version: 1, sinks: [server, ga4] }
   workout_abandoned:        { version: 1, sinks: [server, ga4, clarity] }
   workout_completed:        { version: 1, sinks: [server, ga4] }
   workout_repeated:         { version: 1, sinks: [server, ga4] }

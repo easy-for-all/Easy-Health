@@ -13,7 +13,13 @@ interface UpgradeGateProps {
 }
 
 export function UpgradeGate({ children }: UpgradeGateProps) {
-  const { hasActiveAccess, accessLocked } = useSubscription();
+  const { hasActiveAccess, accessLocked, loading } = useSubscription();
+
+  // AuthProvider começa com user null e só resolve depois de /auth/me. Decidir
+  // aqui antes disso mostrava o paywall a TODO cold start — inclusive a quem
+  // paga — e emitia um paywall_viewed que nunca correspondeu a um paywall real.
+  // Nenhuma regra de acesso muda: só se espera a resposta antes de aplicá-la.
+  if (loading) return null;
 
   if (accessLocked) return <TrialExpiredPaywall />;
   if (!hasActiveAccess) return <UpgradeBanner />;
