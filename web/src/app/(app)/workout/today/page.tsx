@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api, ApiError } from "@/shared/lib/api";
+import { safeSession } from "@/shared/lib/safe-storage";
 import { LoadingScreen } from "@/shared/components/loading-screen";
 import type { WorkoutDay, WorkoutDayExercise, WorkoutPlan, WorkoutSession } from "@/shared/types/workout";
 import { WARMUP_BY_TYPE, COOLDOWN_BY_TYPE } from "./warmup-data";
@@ -266,7 +267,7 @@ function WorkoutTodayContent() {
 
     // Handle quick workout: day data was pre-generated and stored in sessionStorage
     if (quickParam === "1") {
-      const raw = sessionStorage.getItem("wk_quick_day");
+      const raw = safeSession.get("wk_quick_day");
       if (!raw) {
         router.replace("/workout/quick");
         return;
@@ -337,9 +338,9 @@ function WorkoutTodayContent() {
         }
       } else {
         // Restore active workout session if user navigated away mid-workout
-        const storedStartTs = sessionStorage.getItem("wk_start_ts");
-        const storedDayId = sessionStorage.getItem("wk_day_id");
-        const storedPhase = sessionStorage.getItem("wk_phase") as Phase | null;
+        const storedStartTs = safeSession.get("wk_start_ts");
+        const storedDayId = safeSession.get("wk_day_id");
+        const storedPhase = safeSession.get("wk_phase") as Phase | null;
 
         if (storedStartTs && storedDayId && storedPhase && storedPhase !== "done" && storedPhase !== "pre_done" && storedPhase !== "choose") {
           try {

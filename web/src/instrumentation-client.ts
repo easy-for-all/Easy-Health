@@ -3,6 +3,7 @@
 // is set, so local/dev without a DSN is unaffected. Errors here never bubble.
 import * as Sentry from "@sentry/nextjs";
 import { getAnalyticsContext } from "@/shared/lib/analytics/context";
+import { safeLocal, safeSession } from "@/shared/lib/safe-storage";
 
 const DSN = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
@@ -22,6 +23,13 @@ try {
       platform: ctx.platform,
       app_surface: ctx.app_surface,
       app_version: ctx.app_version ?? "unknown",
+      // Blocked storage is a real segment of production traffic (it is what
+      // white-screened the landing in RUBY-RAILS-K), and it is invisible unless
+      // tagged. Reported per store: browsers block them independently, and an
+      // "unknown" app_version above is usually this. Nothing before these tags
+      // touches storage outside a try/catch.
+      local_storage_available: safeLocal.isAvailable() ? "yes" : "no",
+      session_storage_available: safeSession.isAvailable() ? "yes" : "no",
     });
   }
 } catch {

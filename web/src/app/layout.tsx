@@ -42,8 +42,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className="h-full antialiased" suppressHydrationWarning>
       <head>
-        {/* Apply saved theme before first paint to prevent flash */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');})();` }} />
+        {/* Apply saved theme before first paint to prevent flash. The try/catch is
+            not optional: reading localStorage raises SecurityError when the browser
+            blocks storage for the document, and without a saved theme there is
+            simply no flash to prevent. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();` }} />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png" />
         <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />

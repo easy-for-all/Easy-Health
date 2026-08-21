@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/shared/lib/api";
+import { safeSession } from "@/shared/lib/safe-storage";
 import { AITrainerAvatar, AITrainerBubble } from "@/shared/components/ai-trainer";
 import type { WorkoutDay } from "@/shared/types/workout";
 import { ModalityPicker, type Modality } from "./modality-picker";
@@ -81,7 +82,11 @@ export default function QuickWorkoutPage() {
         // Só quando força e o usuário escolheu grupos (senão o backend decide).
         muscle_groups: modality === "musculacao" && muscle.count > 0 ? muscle.selectedList : undefined,
       });
-      sessionStorage.setItem("wk_quick_day", JSON.stringify(data.day));
+      // safeSession never throws: a storage failure here used to land in the
+      // catch below and show "workout generation failed" for a workout the API
+      // had already created. With storage blocked the in-memory fallback still
+      // carries the handoff to /workout/today (same document).
+      safeSession.set("wk_quick_day", JSON.stringify(data.day));
       router.push("/workout/today?quick=1");
     } catch {
       setGenerating(false);
